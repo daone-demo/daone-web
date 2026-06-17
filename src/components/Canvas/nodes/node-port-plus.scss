@@ -1,0 +1,42 @@
+.node-port-plus {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1.5px solid #6b7280;
+  border-radius: 50%;
+  background: #2a2a30;
+  color: #f3f4f6;
+  font-size: 15px;
+  line-height: 1;
+  cursor: crosshair;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition:
+    opacity 0.15s,
+    background 0.15s,
+    border-color 0.15s;
+
+  .image-node:hover &,
+  .image-node--selected &,
+  .video-node:hover &,
+  .video-node--selected &,
+  .image-gen-node:hover &,
+  .image-gen-node--selected &,
+  .text-node:hover &,
+  .text-node--selected & {
+    opacity: 1;
+  }
+
+  &:hover {
+    border-color: #6b7cff;
+    background: #3d3d45;
+    opacity: 1;
+  }
+}

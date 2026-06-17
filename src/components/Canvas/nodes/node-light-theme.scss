@@ -1,0 +1,290 @@
+.text-node--light {
+  color: #111827;
+
+  .text-node__title {
+    color: #6b7280;
+  }
+
+  .text-node__title-icon {
+    background: #e5e7eb;
+    color: #374151;
+  }
+
+  .text-node__body {
+    border-color: #e5e7eb;
+    background: #fff;
+  }
+
+  .text-node__hero-icon span {
+    background: #9ca3af;
+  }
+
+  .text-node__skeleton span {
+    background: linear-gradient(90deg, #eef0f3 25%, #e2e5ea 50%, #eef0f3 75%);
+    background-size: 200% 100%;
+  }
+
+  .text-node__gen-pill {
+    border-color: #e5e7eb;
+    background: #fff;
+    color: #6b7280;
+  }
+
+  .text-node__try {
+    color: #9ca3af;
+  }
+
+  .text-node__action {
+    color: #374151;
+
+    &:hover {
+      background: #f3f4f6;
+    }
+  }
+
+  .text-node__action-icon {
+    background: #e5e7eb;
+  }
+
+  .text-node__format {
+    border-bottom-color: #e5e7eb;
+    background: #f9fafb;
+  }
+
+  .text-node__format-btn {
+    color: #374151;
+
+    &:hover {
+      background: #e5e7eb;
+    }
+  }
+
+  .text-node__format-divider {
+    background: #e5e7eb;
+  }
+
+  .text-node__editor {
+    color: #333333;
+  }
+
+  .node-port-plus {
+    border-color: #d1d5db;
+    background: #fff;
+    color: #374151;
+
+    &:hover {
+      background: #f3f4f6;
+    }
+  }
+}
+
+.image-node--light {
+  color: #111827;
+
+  .image-node__title {
+    color: #6b7280;
+  }
+
+  .image-node__size {
+    color: #9ca3af;
+  }
+
+  .image-node__title-icon {
+    background: #e5e7eb;
+  }
+
+  .image-node__body {
+    border-color: #e5e7eb;
+    background: #fff;
+  }
+
+  .image-node__scale-btn {
+    border-color: #e5e7eb;
+    background: rgba(255, 255, 255, 0.92);
+    color: #374151;
+
+    &:hover,
+    &.image-node__scale-btn--active {
+      background: #f3f4f6;
+    }
+  }
+
+  .image-node__preview {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .node-port-plus {
+    border-color: #d1d5db;
+    background: #fff;
+    color: #374151;
+
+    &:hover {
+      background: #f3f4f6;
+    }
+  }
+}
+
+.video-node--light {
+  color: #111827;
+
+  .video-node__title {
+    color: #6b7280;
+  }
+
+  .video-node__play {
+    background: #e5e7eb;
+    color: #374151;
+  }
+
+  .video-node__size {
+    color: #9ca3af;
+  }
+
+  .video-node__upload-btn {
+    border-color: #e5e7eb;
+    background: #fff;
+    color: #374151;
+  }
+
+  .video-node__body {
+    border-color: #e5e7eb;
+    background: #fff;
+  }
+
+  .video-node__body--media {
+    color: #6b7280;
+  }
+
+  .video-node__player,
+  .video-node__video {
+    background: #f3f4f6;
+  }
+
+  .video-node__empty {
+    color: #6b7280;
+
+    &:hover {
+      color: #374151;
+    }
+  }
+
+  .video-node__hero-play {
+    background: rgba(0, 0, 0, 0.06);
+    color: #6b7280;
+  }
+
+  .video-node__try {
+    color: #9ca3af;
+  }
+
+  .video-node__action {
+    color: #374151;
+
+    &:hover {
+      background: #f3f4f6;
+    }
+  }
+
+  .video-node__action-icon {
+    background: #e5e7eb;
+  }
+
+  .node-port-plus {
+    border-color: #d1d5db;
+    background: #fff;
+    color: #374151;
+
+    &:hover {
+      background: #f3f4f6;
+    }
+  }
+}
+
+.image-gen-node--light {
+  color: #111827;
+
+  .image-gen-node__upload-btn {
+    border-color: #e5e7eb;
+    background: #fff;
+    color: #374151;
+
+    &:hover {
+      background: #f3f4f6;
+    }
+  }
+
+  .image-gen-node__title {
+    color: #6b7280;
+  }
+
+  .image-gen-node__title-icon {
+    background: #e5e7eb;
+    color: #374151;
+  }
+
+  .image-gen-node__status {
+    color: #6b7280;
+  }
+
+  .image-gen-node__body {
+    border-color: #e5e7eb;
+    background: #fff;
+  }
+
+  .image-gen-node__preview {
+    background: #f3f4f6;
+  }
+
+  .image-gen-node__placeholder-icon {
+    border-color: #cbd5e1;
+
+    &::before {
+      border-left-color: #94a3b8;
+      border-bottom-color: #94a3b8;
+    }
+
+    &::after {
+      background: #94a3b8;
+    }
+  }
+
+  .image-gen-node__try {
+    color: #9ca3af;
+  }
+
+  .image-gen-node__action {
+    color: #374151;
+
+    &:hover {
+      background: #f3f4f6;
+    }
+  }
+
+  .image-gen-node__action-icon {
+    background: #e5e7eb;
+  }
+
+  .image-gen-node__hd-hint {
+    color: #9ca3af;
+  }
+
+  .node-port-plus {
+    border-color: #d1d5db;
+    background: #fff;
+    color: #374151;
+
+    &:hover {
+      background: #f3f4f6;
+    }
+  }
+}
+
+.text-node--light,
+.image-node--light,
+.video-node--light,
+.image-gen-node--light {
+  .canvas-node__delete {
+    color: #9ca3af;
+  }
+}

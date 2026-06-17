@@ -1,0 +1,88 @@
+.canvas-node__delete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    background 0.15s,
+    color 0.15s;
+
+  .text-node:hover &,
+  .image-node:hover &,
+  .video-node:hover &,
+  .text-node--selected &,
+  .image-node--selected &,
+  .video-node--selected &,
+  .text-node:focus-within &,
+  .image-node:focus-within &,
+  .video-node:focus-within & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    opacity: 1;
+  }
+}
+
+.canvas-node__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+/* 浮动删除按钮：用于没有标题栏的节点状态（选择器/未上传/视频），保证所有节点均可删除 */
+.canvas-node__delete-float {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: rgba(17, 24, 39, 0.55);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    background 0.15s;
+
+  .text-node:hover &,
+  .image-node:hover &,
+  .video-node:hover &,
+  .image-gen-node:hover &,
+  .text-node--selected &,
+  .image-node--selected &,
+  .video-node--selected &,
+  .image-gen-node--selected & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.9);
+    opacity: 1;
+  }
+}
