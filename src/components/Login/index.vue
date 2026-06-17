@@ -104,6 +104,10 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import api from '@/services/api';
+
+
+console.log('api', api)
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -116,8 +120,8 @@ const emit = defineEmits<{
   'privacy-policy': []
 }>()
 
-const phone = ref('')
-const smsCode = ref('')
+const phone = ref('13396578061')
+const smsCode = ref('000000');
 const codeCountdown = ref(0)
 const codeSending = ref(false)
 
@@ -160,19 +164,20 @@ async function sendCode() {
   codeSending.value = true
   emit('send-code', phone.value.trim())
   try {
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    await api.querySmsCode({ phone: phone.value.trim(), scene: 'login' })
     startCountdown()
   } finally {
     codeSending.value = false
   }
 }
 
-function submitLogin() {
+async function submitLogin() {
   if (!canSubmit.value) return
-  emit('submit', {
-    phone: phone.value.trim(),
-    code: smsCode.value.trim(),
-  })
+  await api.postSmsLogin({ phone: phone.value.trim(), code: smsCode.value.trim() })
+  // emit('submit', {
+  //   phone: phone.value.trim(),
+  //   code: smsCode.value.trim(),
+  // })
 }
 
 function lockBodyScroll(locked: boolean) {

@@ -11,7 +11,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'https://www.daoneai.com/api/v1',
         changeOrigin: true,
       },
     },
@@ -39,6 +39,8 @@ export default defineConfig({
       '@views': path.resolve(__dirname, 'src/views'),
       '@stores': path.resolve(__dirname, 'src/stores'),
       '@utils': path.resolve(__dirname, 'src/utils'),
+      '@services': path.resolve(__dirname, 'src/services'),
+      '@types': path.resolve(__dirname, 'src/types'),
     },
   },
 })
