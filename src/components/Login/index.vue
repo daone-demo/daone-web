@@ -121,7 +121,7 @@ const emit = defineEmits<{
 }>()
 
 const phone = ref('13396578061')
-const smsCode = ref('000000');
+const smsCode = ref('123456');
 const codeCountdown = ref(0)
 const codeSending = ref(false)
 

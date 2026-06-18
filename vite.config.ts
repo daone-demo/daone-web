@@ -11,7 +11,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'https://www.daoneai.com/api/v1',
+        target: 'https://www.daoneai.com',
         changeOrigin: true,
       },
     },
