@@ -130,7 +130,14 @@ const onDoAction = (key: string) => {
   api.getCurrentUser()
     .then((res: any) => {
       if (res.id) {
-        router.push({ name: key })
+        if (key=== 'createOrEdit') {
+          api.createProject({ title: '新项目' }).then((res: any) => {
+            router.push({ name: 'createOrEdit', params: { id: res.id } })
+          })
+        }
+        else {
+          router.push({ name: key })
+        }
       } else {
         openLoginModal()
       }

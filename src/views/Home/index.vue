@@ -119,8 +119,9 @@
 
 <script setup lang="ts">
 import { MoreOutlined } from '@ant-design/icons-vue'
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import api from '@/services/api';
 import {
   HOME_INSPIRATION_CATEGORIES,
   HOME_INSPIRATION_ITEMS,
@@ -154,6 +155,20 @@ function openProject(id: string) {
 const openInspiration = (id: string) => {
   router.push({ name: 'createOrEdit', params: { id } })
 }
+
+const onLoadProjects = async () => {
+  let params = {
+    page: 1,
+    pageSize: 10,
+  }
+  const res = await api.getProjects(params);
+  console.log('res', res);
+}
+
+onMounted(()=>{
+  onLoadProjects();
+});
+
 </script>
 
 <style scoped lang="scss">

@@ -165,7 +165,8 @@
 <script setup lang="ts">
 import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
-import type { CanvasBgTheme } from '../canvasTheme'
+import type { CanvasBgTheme } from '../canvasTheme';
+import api from '@/services/api';
 
 export type CanvasProjectItem = {
   id: string
@@ -209,5 +210,5 @@ const emit = defineEmits<{
   'open-combo': []
   'user-menu-action': [key: UserMenuKey]
   logout: []
-}>()
+}>();
 </script>

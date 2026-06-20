@@ -455,7 +455,8 @@ import {
   VIDEO_GEN_TAB_IMAGE_RULES,
 } from './videoGen'
 import { setSharedCanvasBgTheme } from './useCanvasBgTheme'
-import { useCanvasKeyboard } from './composables/useCanvasKeyboard'
+import { useCanvasKeyboard } from './composables/useCanvasKeyboard';
+import api from '@/services/api';
 
 const emit = defineEmits<{
   'focus-chat': []
@@ -4051,6 +4052,25 @@ onBeforeUnmount(() => {
   graph.value?.dispose()
   graph.value = null
 })
+
+const openNewProject = () => {
+  api.createProject({ title: '新项目' }).then((res: any) => {
+    // router.push({ name: 'createOrEdit', params: { id: res.id } })
+  })
+}
+
+const onLoadProjects = async () => {
+  let params = {
+    page: 1,
+    pageSize: 10,
+  }
+  const res = await api.getProjects(params);
+  console.log('res', res);
+}
+
+onMounted(()=>{
+  onLoadProjects();
+});
 </script>
 
 <style lang="scss">
