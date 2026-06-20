@@ -11,7 +11,7 @@
             type="button"
             class="app-sidebar__btn app-sidebar__btn--primary"
             title="新建"
-            @click="router.push({ name: 'createOrEdit' })"
+            @click="onDoAction('createOrEdit')"
           >
             <span class="app-sidebar__icon app-sidebar__icon--plus" aria-hidden="true" />
           </button>
@@ -39,7 +39,7 @@
             class="app-sidebar__btn"
             :class="{ 'app-sidebar__btn--active': route.name === 'project' }"
             title="项目"
-            @click="router.push({ name: 'project' })"
+            @click="onDoAction('project')"
           >
             <span class="app-sidebar__icon app-sidebar__icon--folder" aria-hidden="true" />
           </button>
@@ -53,7 +53,7 @@
             class="app-sidebar__btn"
             :class="{ 'app-sidebar__btn--active': route.name === 'userInfo' }"
             title="个人主页"
-            @click="router.push({ name: 'userInfo' })"
+            @click="onDoAction('userInfo')"
           >
             <!-- <span class="app-sidebar__icon app-sidebar__icon--user" aria-hidden="true" /> -->
             <i class="iconfont icon-user" style="font-size: 18px;" />
@@ -94,8 +94,10 @@ import Combo from '@components/Combo/index.vue';
 import { useModalStore } from '@stores/useModal';
 import Login from '@components/Login/index.vue';
 
-import { useRoute, useRouter } from 'vue-router'
-import { nextTick, watch, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router';
+import { nextTick, onMounted, onUnmounted, watch, ref } from 'vue';
+import api from '@/services/api';
+import { bindOnUnauthorized, resetAuthRedirecting, unbindOnUnauthorized } from '@/utils/request';
 
 const modalStore = useModalStore()
 const showNav = ref(true)
@@ -105,6 +107,37 @@ const router = useRouter()
 
 function openLoginModal() {
   modalStore.openModal('login')
+}
+
+onMounted(() => {
+  bindOnUnauthorized(openLoginModal)
+})
+
+onUnmounted(() => {
+  unbindOnUnauthorized()
+})
+
+watch(
+  () => modalStore.loginVisible,
+  (visible) => {
+    if (!visible) {
+      resetAuthRedirecting()
+    }
+  },
+)
+
+const onDoAction = (key: string) => {
+  api.getCurrentUser()
+    .then((res: any) => {
+      if (res.id) {
+        router.push({ name: key })
+      } else {
+        openLoginModal()
+      }
+    })
+    .catch(() => {
+      // 401 时 request 拦截器已通过 bindOnUnauthorized 打开登录弹窗
+    })
 }
 
 watch(

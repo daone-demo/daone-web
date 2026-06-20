@@ -104,12 +104,17 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import api from '@/services/api';
+import api from '@/services/api'
+import { useUserInfo, type UserInfo } from '@/stores/useUserInfo'
 
-
-console.log('api', api)
+interface SmsLoginResult {
+  token: string
+  expiresInSeconds: number
+  user: UserInfo
+}
 
 const open = defineModel<boolean>('open', { default: false })
+const userInfoStore = useUserInfo()
 
 const emit = defineEmits<{
   close: []
@@ -128,8 +133,7 @@ const codeSending = ref(false)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 /** 演示用微信登录二维码（内联 SVG，无需外网） */
-const wechatQrUrl =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='148' height='148' viewBox='0 0 148 148'%3E%3Crect width='148' height='148' fill='%23fff'/%3E%3Cg fill='%23111827'%3E%3Crect x='12' y='12' width='36' height='36' rx='4'/%3E%3Crect x='100' y='12' width='36' height='36' rx='4'/%3E%3Crect x='12' y='100' width='36' height='36' rx='4'/%3E%3Crect x='20' y='20' width='20' height='20' fill='%23fff'/%3E%3Crect x='108' y='20' width='20' height='20' fill='%23fff'/%3E%3Crect x='20' y='108' width='20' height='20' fill='%23fff'/%3E%3Crect x='26' y='26' width='8' height='8'/%3E%3Crect x='114' y='26' width='8' height='8'/%3E%3Crect x='26' y='114' width='8' height='8'/%3E%3C/g%3E%3Cg fill='%23111827'%3E%3Crect x='56' y='12' width='8' height='8'/%3E%3Crect x='72' y='12' width='8' height='8'/%3E%3Crect x='64' y='20' width='8' height='8'/%3E%3Crect x='80' y='28' width='8' height='8'/%3E%3Crect x='56' y='36' width='8' height='8'/%3E%3Crect x='88' y='44' width='8' height='8'/%3E%3Crect x='12' y='56' width='8' height='8'/%3E%3Crect x='28' y='56' width='8' height='8'/%3E%3Crect x='44' y='64' width='8' height='8'/%3E%3Crect x='60' y='56' width='8' height='8'/%3E%3Crect x='76' y='64' width='8' height='8'/%3E%3Crect x='92' y='56' width='8' height='8'/%3E%3Crect x='108' y='64' width='8' height='8'/%3E%3Crect x='124' y='56' width='8' height='8'/%3E%3Crect x='52' y='72' width='8' height='8'/%3E%3Crect x='68' y='80' width='8' height='8'/%3E%3Crect x='84' y='72' width='8' height='8'/%3E%3Crect x='100' y='88' width='8' height='8'/%3E%3Crect x='56' y='96' width='8' height='8'/%3E%3Crect x='72' y='104' width='8' height='8'/%3E%3Crect x='88' y='112' width='8' height='8'/%3E%3Crect x='104' y='104' width='8' height='8'/%3E%3Crect x='120' y='112' width='8' height='8'/%3E%3Crect x='64' y='120' width='8' height='8'/%3E%3C/g%3E%3C/svg%3E"
+const wechatQrUrl = ref('');
 
 const phoneValid = computed(() => /^1\d{10}$/.test(phone.value.trim()))
 
@@ -159,6 +163,19 @@ function startCountdown(seconds = 60) {
   }, 1000)
 }
 
+const onLoadWeChatCode = () => {
+  api.createWechatQrSession()
+    .then((res:any)=>{
+      console.log('res', res)
+      wechatQrUrl.value = res.qrCodeUrl
+    })
+    .catch(err=>{
+      console.error('err', err)
+    })
+}
+
+onLoadWeChatCode();
+
 async function sendCode() {
   if (!phoneValid.value || codeCountdown.value > 0) return
   codeSending.value = true
@@ -173,11 +190,16 @@ async function sendCode() {
 
 async function submitLogin() {
   if (!canSubmit.value) return
-  await api.postSmsLogin({ phone: phone.value.trim(), code: smsCode.value.trim() })
-  // emit('submit', {
-  //   phone: phone.value.trim(),
-  //   code: smsCode.value.trim(),
-  // })
+
+  const loginData = {
+    phone: phone.value.trim(),
+    code: smsCode.value.trim(),
+  }
+  const result = await api.postSmsLogin<SmsLoginResult>(loginData)
+
+  userInfoStore.setSession(result.token, result.user)
+  emit('submit', loginData)
+  close()
 }
 
 function lockBodyScroll(locked: boolean) {

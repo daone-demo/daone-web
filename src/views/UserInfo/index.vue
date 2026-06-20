@@ -3,21 +3,21 @@
     <div class="user-info__content">
       <section class="user-info__profile-card">
         <div class="user-info__profile-main">
-          <img class="user-info__avatar" :src="profileState.avatar" :alt="profileState.name" />
+          <img class="user-info__avatar" :src="profileState.avatarUrl" :alt="profileState.nickname" />
           <div class="user-info__profile-text">
             <div class="user-info__name-row">
-              <h1 class="user-info__name">{{ profileState.name }}</h1>
+              <h1 class="user-info__name">{{ profileState.nickname }}</h1>
               <span class="user-info__vip-badge">
                 <span class="user-info__vip-icon" aria-hidden="true" />
                 VIP
               </span>
-              <span class="user-info__plan">{{ USER_PROFILE.plan }}</span>
+              <!-- <span class="user-info__plan">{{ USER_PROFILE.plan }}</span> -->
             </div>
-            <p class="user-info__phone">{{ profileState.phone }}</p>
+            <p class="user-info__phone">{{ profileState.phoneMasked }}</p>
           </div>
         </div>
 
-        <div class="user-info__switch-account">
+        <!-- <div class="user-info__switch-account">
           <img
             class="user-info__switch-avatar"
             :src="USER_PROFILE.previousAccount.avatar"
@@ -28,7 +28,7 @@
             <span class="user-info__switch-label">切换前账号</span>
             <span class="user-info__switch-name">{{ USER_PROFILE.previousAccount.name }}</span>
           </div>
-        </div>
+        </div> -->
 
         <button type="button" class="user-info__edit-btn" @click="openEditProfileModal">
           <span class="user-info__edit-icon" aria-hidden="true" />
@@ -54,7 +54,7 @@
           <div class="user-info__form-grid">
             <div class="user-info__field">
               <label class="user-info__label">会员信息</label>
-              <div class="user-info__input">{{ USER_PROFILE.memberId }}</div>
+              <div class="user-info__input">{{ profileState.id }}</div>
             </div>
 
             <div class="user-info__field">
@@ -75,7 +75,7 @@
             <div class="user-info__field">
               <label class="user-info__label">可用积分</label>
               <div class="user-info__input user-info__input--with-inline-btn">
-                <span>{{ USER_PROFILE.availablePoints.toLocaleString('en-US') }}</span>
+                <span>{{ profileState?.points?.available || 0 }}</span>
                 <button 
                   type="button" class="user-info__recharge-btn"
                   @click="openComboModal"
@@ -94,7 +94,7 @@
             <div class="user-info__field">
               <label class="user-info__label">手机号</label>
               <div class="user-info__input user-info__input--with-link">
-                <span>{{ profileState.phone }}</span>
+                <span>{{ profileState.phoneMasked }}</span>
                 <button type="button" class="user-info__link-btn">修改</button>
               </div>
             </div>
@@ -343,7 +343,7 @@
 
         <form class="user-info__edit-form" @submit.prevent="saveEditProfile">
           <div class="user-info__edit-avatar-wrap">
-            <img class="user-info__edit-avatar" :src="profileState.avatar" :alt="editProfileForm.nickname" />
+            <img class="user-info__edit-avatar" :src="editProfileForm.avatarUrl" />
           </div>
 
           <div class="user-info__edit-field">
@@ -353,7 +353,7 @@
 
           <div class="user-info__edit-field">
             <label class="user-info__edit-label">手机号</label>
-            <input v-model="editProfileForm.phone" class="user-info__edit-input" type="text" />
+            <input v-model="editProfileForm.phone" class="user-info__edit-input" type="text" readonly />
           </div>
 
           <div class="user-info__edit-field">
@@ -366,7 +366,7 @@
             />
           </div>
 
-          <div class="user-info__edit-field">
+          <!-- <div class="user-info__edit-field">
             <label class="user-info__edit-label">登录密码（留空则不修改）</label>
             <div class="user-info__edit-password-wrap">
               <input
@@ -388,7 +388,7 @@
                 />
               </button>
             </div>
-          </div>
+          </div> -->
 
           <footer class="user-info__edit-footer">
             <button type="button" class="user-info__edit-cancel" @click="closeEditProfileModal">取消</button>
@@ -402,7 +402,7 @@
 
 <script setup lang="ts">
 import { useModalStore } from '@stores/useModal';
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import {
   BILL_STATUS_LABEL,
   POINTS_LOG_ACTION_LABEL,
@@ -416,6 +416,8 @@ import {
   type PointsLogFilterKey,
   type UserInfoTabKey,
 } from './userInfoData'
+
+import api from '@/services/api';
 const modalStore = useModalStore()
 
 type InvoiceHeaderType = 'personal' | 'enterprise'
@@ -433,7 +435,7 @@ const invoiceForm = ref({
   bankAccount: '',
   address: '',
 })
-const profileState = ref({
+const profileState = ref<any>({
   name: USER_PROFILE.name,
   phone: USER_PROFILE.phone,
   email: USER_PROFILE.email,
@@ -445,8 +447,9 @@ const editProfileForm = ref({
   nickname: '',
   phone: '',
   email: '',
-  password: '',
-})
+  avatarUrl: '',
+});
+const page = ref(1);
 
 const filteredPointsLog = computed(() => {
   if (pointsFilter.value === 'all') {
@@ -500,10 +503,10 @@ function submitInvoice() {
 
 function openEditProfileModal() {
   editProfileForm.value = {
-    nickname: profileState.value.name,
-    phone: profileState.value.phone,
+    nickname: profileState.value.nickname,
+    phone: profileState.value.phoneMasked,
     email: profileState.value.email,
-    password: '',
+    avatarUrl: profileState.value.avatarUrl,
   }
   showEditPassword.value = false
   showEditProfileModal.value = true
@@ -513,15 +516,37 @@ function closeEditProfileModal() {
   showEditProfileModal.value = false
 }
 
+/** 保存编辑资料 */
 function saveEditProfile() {
-  profileState.value = {
-    ...profileState.value,
-    name: editProfileForm.value.nickname.trim() || profileState.value.name,
-    phone: editProfileForm.value.phone.trim() || profileState.value.phone,
-    email: editProfileForm.value.email.trim(),
-  }
+  api.updateCurrentUser({
+    avatarUrl: editProfileForm.value.avatarUrl,
+    nickname: editProfileForm.value.nickname,
+    // email: profileState.value.email,
+  }).then((res:any)=>{
+    onLoadUserInfo();
+  })
   closeEditProfileModal()
 }
+
+/** 加载用户资料 */
+const onLoadUserInfo = async () => {
+  const res = await api.getCurrentUser();
+  profileState.value = res;
+}
+
+const onLoadPoints = async () => {
+  let params = {
+    page: page.value,
+    pageSize: 10,
+  }
+  const res = await api.getPointsLedger(params);
+  console.log('res', res);
+}
+
+onMounted(()=>{
+  onLoadUserInfo();
+  onLoadPoints();
+});
 </script>
 
 <style scoped lang="scss">
