@@ -1,7 +1,7 @@
 <template>
   <aside
     class="chat-panel"
-    :class="{ 'chat-panel--collapsed': collapsed, 'chat-panel--active': isActive }"
+    :class="{ 'chat-panel--collapsed': collapsed, 'chat-panel--active': isActive, 'chat-panel--dark': isDarkTheme }"
     aria-label="对话面板"
   >
     <header class="chat-panel__header">
@@ -181,6 +181,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useCanvasBgTheme } from '@/components/Canvas/useCanvasBgTheme'
 import type { ChatAttachment, ChatMessage, ChatSendPayload } from './chatTypes'
 import { CHAT_TIPS } from './chatTypes'
 
@@ -219,6 +220,9 @@ const inputPlaceholder = computed(() =>
 )
 
 const canSend = computed(() => Boolean(message.value.trim() || attachments.value.length))
+
+const { isLightTheme } = useCanvasBgTheme()
+const isDarkTheme = computed(() => !isLightTheme.value)
 
 function createAttachment(file: File): ChatAttachment {
   return {
@@ -817,5 +821,150 @@ defineExpose({
   width: 40px;
   height: 40px;
   cursor: pointer;
+}
+
+/* Dark theme overrides */
+.chat-panel--dark {
+  border-left-color: #2e2e34;
+  background: #1a1a1e;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
+
+  .chat-panel__header {
+    border-bottom-color: #2e2e34;
+  }
+
+  .chat-panel__title {
+    color: #f3f4f6;
+  }
+
+  .chat-panel__icon-btn {
+    color: #d1d5db;
+
+    &:hover {
+      background: #2a2a30;
+    }
+  }
+
+  .chat-panel__icon {
+    &--plus {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23d1d5db' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M8 3v10M3 8h10'/%3E%3C/svg%3E");
+    }
+
+    &--history {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23d1d5db' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z'/%3E%3Cpath d='M8 5.5V8l1.5 1.5'/%3E%3C/svg%3E");
+    }
+
+    &--collapse {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23d1d5db' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 4H4v6M6 8h6'/%3E%3C/svg%3E");
+    }
+
+    &--expand {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23d1d5db' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 4h6v6M10 8H4'/%3E%3C/svg%3E");
+    }
+  }
+
+  .chat-panel__greeting {
+    color: #f3f4f6;
+  }
+
+  .chat-panel__sub-greeting {
+    color: #9ca3af;
+  }
+
+  .chat-panel__skill-btn {
+    border-color: #3d3d45;
+    background: #252528;
+    color: #e5e7eb;
+
+    &:hover {
+      border-color: #4b4b55;
+      background: #2a2a30;
+    }
+  }
+
+  .chat-panel__hint {
+    color: #6b7280;
+  }
+
+  .chat-panel__message-text {
+    color: #e5e7eb;
+  }
+
+  .chat-panel__message-tip {
+    color: #6b7280;
+  }
+
+  .chat-panel__composer {
+    .panel__composer_box {
+      border-color: #2e2e34;
+    }
+  }
+
+  .chat-panel__input {
+    background: #1a1a1e;
+    color: #f3f4f6;
+
+    &::placeholder {
+      color: #6b7280;
+    }
+  }
+
+  .chat-panel__meta-btn {
+    color: #9ca3af;
+
+    &:hover {
+      color: #f3f4f6;
+    }
+  }
+
+  .chat-panel__auto-btn {
+    color: #d1d5db;
+
+    &:hover {
+      background: #2a2a30;
+    }
+  }
+
+  .chat-panel__caret {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' fill='none' stroke='%239ca3af' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 3.5 5 6l2.5-2.5'/%3E%3C/svg%3E");
+  }
+
+  .chat-panel__auto-menu {
+    border-color: #2e2e34;
+    background: #1e1e22;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+
+  .chat-panel__auto-item {
+    color: #e5e7eb;
+
+    &:hover,
+    &--active {
+      background: #2a2a30;
+      color: #f3f4f6;
+    }
+  }
+
+  .chat-panel__send {
+    background: #4b5563;
+
+    &:hover:not(:disabled) {
+      background: #6b7280;
+    }
+  }
+
+  .chat-panel__stop {
+    background: #374151;
+
+    &:hover {
+      background: #4b5563;
+    }
+  }
+
+  .chat-panel__expand {
+    &:hover {
+      background: #2a2a30;
+    }
+  }
 }
 </style>

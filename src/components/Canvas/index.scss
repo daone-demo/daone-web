@@ -54,6 +54,62 @@
         background-color: #e8eaed;
       }
     }
+
+    .canvas__toolbar--left {
+      .canvas__tool-btn:hover {
+        background: #f3f4f6;
+        color: #111827;
+      }
+
+      .canvas__tool-btn--active {
+        background: #e5e7eb;
+        color: #111827;
+      }
+    }
+  }
+
+  /* ---- Dark-theme overrides for brand-bar children ---- */
+  &:not(.canvas--bg-light) {
+    .canvas__brand-project {
+      background: #333;
+      border-color: #4a4a52;
+      color: #e5e7eb;
+
+      &:hover,
+      &--active {
+        background: #3d3d45;
+        border-color: #555;
+      }
+    }
+
+    .canvas__brand-add {
+      background: #333;
+      border-color: #4a4a52;
+      color: #e5e7eb;
+
+      &:hover {
+        background: #3d3d45;
+      }
+    }
+
+    .canvas__brand-icon-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .canvas__brand-divider {
+      background: #4a4a52;
+    }
+
+    .canvas__hint-link {
+      border-color: #4a4a52;
+      background: #2a2a2e;
+      color: #e5e7eb;
+
+      &:hover {
+        border-color: #555;
+        background: #333;
+      }
+    }
   }
 }
 
@@ -939,6 +995,23 @@
 
   &:hover {
     background: #f9fafb;
+  }
+}
+
+.canvas:not(.canvas--bg-light) .canvas__element-select {
+  border-color: #3d3d45;
+  background: rgba(30, 30, 34, 0.98);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+
+  .canvas__element-select-btn,
+  .canvas__element-select-exit {
+    border-color: #4a4a52;
+    background: #2a2a2e;
+    color: #e5e7eb;
+
+    &:hover {
+      background: #333;
+    }
   }
 }
 
