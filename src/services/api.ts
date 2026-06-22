@@ -29,15 +29,65 @@ export interface ProjectUpdateRequest {
   title?: string
 }
 
+export interface CanvasSnapshotMeta {
+  projectId?: string
+  projectName?: string
+  canvasBgTheme?: string
+  gridVisible?: boolean
+  panMode?: boolean
+  showMinimap?: boolean
+}
+
+export interface CanvasSnapshotViewport {
+  zoom?: number
+  translateX?: number
+  translateY?: number
+  scrollLeft?: number
+  scrollTop?: number
+}
+
+export interface CanvasSnapshotGraph {
+  cells?: JsonObject[]
+  [key: string]: unknown
+}
+
+export interface CanvasSnapshotSummary {
+  nodeCount?: number
+  edgeCount?: number
+}
+
+/** 画布快照，对应接口文档 canvasData 字段。 */
+export interface CanvasData {
+  version?: number
+  savedAt?: string
+  meta?: CanvasSnapshotMeta
+  viewport?: CanvasSnapshotViewport
+  graph?: CanvasSnapshotGraph
+  summary?: CanvasSnapshotSummary
+}
+
+/** PUT /projects/{projectId}/canvas 请求体。 */
 export interface CanvasSaveRequest {
+  /** 客户端当前画布版本，用于乐观锁校验。 */
   revision: number
-  saveType?: string
-  canvasData: {
-    schemaVersion?: number
-    nodes?: JsonObject[]
-    edges?: JsonObject[]
-    viewport?: { x?: number; y?: number; zoom?: number }
-  }
+  /** 保存类型，默认 MANUAL。 */
+  saveType?: 'MANUAL' | 'AUTO' | string
+  /** 画布快照 JSON 数据。 */
+  canvasData: CanvasData
+}
+
+/** GET /projects/{projectId}/canvas 响应 data。 */
+export interface ProjectCanvasResponse {
+  projectId: string
+  revision: number
+  canvasData: CanvasData
+  canvas: CanvasData
+  updatedAt: string
+}
+
+/** PUT /projects/{projectId}/canvas 响应 data。 */
+export interface CanvasSaveResponse extends ProjectCanvasResponse {
+  savedAt: string
 }
 
 export interface ShareCreateRequest {
@@ -278,12 +328,12 @@ const api = {
     return http.delete(`/projects/${pathId(projectId)}`)
   },
   /** 获取指定项目的当前画布数据。 */
-  getProjectCanvas<T = unknown>(projectId: Id) {
-    return http.get<T>(`/projects/${pathId(projectId)}/canvas`)
+  getProjectCanvas(projectId: Id) {
+    return http.get<ProjectCanvasResponse>(`/projects/${pathId(projectId)}/canvas`)
   },
   /** 保存指定项目的画布数据。 */
-  saveProjectCanvas<T = unknown>(projectId: Id, data: CanvasSaveRequest) {
-    return http.put<T>(`/projects/${pathId(projectId)}/canvas`, data)
+  saveProjectCanvas(projectId: Id, data: CanvasSaveRequest) {
+    return http.put<CanvasSaveResponse>(`/projects/${pathId(projectId)}/canvas`, data)
   },
   /** 分页查询指定项目的历史版本。 */
   getProjectVersions<T = unknown>(projectId: Id, params?: PageQuery) {

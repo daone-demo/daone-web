@@ -1528,6 +1528,21 @@ function handleSaveCanvas() {
     project.saved = true
   }
 
+  if (!activeProjectId.value) {
+    console.warn('[Canvas] skip remote save: missing projectId')
+    return
+  }
+
+  void api.saveProjectCanvas(activeProjectId.value, {
+    revision: 1,
+    saveType: 'MANUAL',
+    canvasData: snapshot,
+  }).then((res) => {
+    console.info('[Canvas] saved to server', res)
+  }).catch((error) => {
+    console.error('[Canvas] save to server failed', error)
+  })
+
   console.info('[Canvas] saved snapshot', snapshot)
 }
 

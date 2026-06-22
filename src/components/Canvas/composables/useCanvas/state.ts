@@ -60,7 +60,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showProjectMenu = ref(false)
   const showUserMenu = ref(false)
   const canvasProjects = ref([...CANVAS_PROJECTS])
-  const activeProjectId = ref('draft-2')
+  const activeProjectId = ref('')
+  const canvasRevision = ref(0)
   const showAddMenu = ref(false)
   const showConnectMenu = ref(false)
   const connectMenuPos = ref({ left: 0, top: 0 })
@@ -169,6 +170,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showUserMenu,
     canvasProjects,
     activeProjectId,
+    canvasRevision,
     showAddMenu,
     showConnectMenu,
     connectMenuPos,

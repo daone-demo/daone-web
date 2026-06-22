@@ -19,9 +19,10 @@ import {
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, findIncomingImageNode, mockImg2Prompt, mockTextGenerate, syncTextNodeImageSource,
   createMinimap, destroyMinimap, runUploadSimulation, getCanvasSnapshot, saveCanvasSnapshotToStorage,
-  createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
+  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
   useCanvasKeyboard, api, exampleImage,
 } from './sharedImports'
+import type { ProjectCanvasResponse } from '@/services/api'
 import type {
   CanvasNodeData, ImageSourceRef, NodeKind, TextFormatCommand,
   ImageGenTask, ConnectMenuKey, CanvasGraph, CanvasSnapshot, TextEditorApi, UserMenuKey,
@@ -60,6 +61,7 @@ export function registerCore(bind: CanvasBindings) {
     showUserMenu,
     canvasProjects,
     activeProjectId,
+    canvasRevision,
     showAddMenu,
     showConnectMenu,
     connectMenuPos,
@@ -128,6 +130,7 @@ export function registerCore(bind: CanvasBindings) {
 let canvasHistory: ReturnType<typeof createCanvasHistory> | null = null
 let historyPushTimer: ReturnType<typeof setTimeout> | null = null
 let scrollerScrollTarget: HTMLElement | null = null
+let pendingProjectCanvas: ProjectCanvasResponse | null = null
 
 function toggleUserMenu() {
   showUserMenu.value = !showUserMenu.value
@@ -1364,12 +1367,83 @@ function selectProject(projectId: string) {
   closeProjectMenu()
 }
 
+function upsertCanvasProject(id: string, name: string, saved = true) {
+  const item = canvasProjects.value.find((project) => project.id === id)
+  if (item) {
+    item.name = name
+    item.saved = saved
+    return
+  }
+  canvasProjects.value.unshift({ id, name, saved })
+}
+
+function applyProjectCanvasPayload(payload: ProjectCanvasResponse) {
+  const g = graph.value
+  if (!g) return false
+
+  const canvasData = payload.canvasData ?? payload.canvas
+  if (!canvasData) return false
+
+  activeProjectId.value = payload.projectId
+  canvasRevision.value = payload.revision
+
+  const snapshot = normalizeCanvasSnapshot(canvasData, {
+    projectId: payload.projectId,
+    projectName: canvasData.meta?.projectName ?? '未命名创作',
+  })
+
+  upsertCanvasProject(payload.projectId, snapshot.meta.projectName, true)
+
+  if (snapshot.meta.canvasBgTheme === 'dark' || snapshot.meta.canvasBgTheme === 'light') {
+    canvasBgTheme.value = snapshot.meta.canvasBgTheme
+  }
+  gridVisible.value = snapshot.meta.gridVisible
+  panMode.value = snapshot.meta.panMode
+  showMinimap.value = snapshot.meta.showMinimap
+  applyCanvasBgTheme(g, canvasBgTheme.value, gridVisible.value)
+
+  applyCanvasSnapshot(g, snapshot)
+
+  getScroller(g)?.togglePanning(panMode.value)
+  setRubberbandEnabled(!panMode.value)
+  if (showMinimap.value) {
+    setupMinimap()
+  } else {
+    teardownMinimap()
+  }
+
+  syncNodeCount()
+  syncZoom()
+  canvasHistory?.seed(g)
+  syncHistoryState()
+
+  nextTick(() => {
+    syncAllNodeSizes(g)
+    refreshCanvasNodeViews(g)
+    ensureInfiniteCanvasArea(g)
+    syncViewportNodeVisibility()
+    updateNodeToolbar()
+  })
+
+  return true
+}
+
+function loadProjectCanvas(payload: ProjectCanvasResponse) {
+  pendingProjectCanvas = payload
+  const loaded = applyProjectCanvasPayload(payload)
+  if (loaded) {
+    pendingProjectCanvas = null
+  }
+  return loaded
+}
+
 function handleSaveCanvas() {
   const g = graph.value
   if (!g) return
 
+  const projectId = activeProjectId.value
   const snapshot: CanvasSnapshot = getCanvasSnapshot(g, {
-    projectId: activeProjectId.value,
+    projectId,
     projectName: currentProjectName.value,
     canvasBgTheme: canvasBgTheme.value,
     gridVisible: gridVisible.value,
@@ -1379,12 +1453,31 @@ function handleSaveCanvas() {
 
   saveCanvasSnapshotToStorage(snapshot)
 
-  const project = canvasProjects.value.find((item) => item.id === activeProjectId.value)
+  const project = canvasProjects.value.find((item) => item.id === projectId)
   if (project) {
-    project.saved = true
+    project.saved = false
   }
 
   console.info('[Canvas] saved snapshot', snapshot)
+
+  if (!projectId) {
+    console.warn('[Canvas] skip remote save: missing projectId')
+    return
+  }
+
+  void api.saveProjectCanvas(projectId, {
+    revision: canvasRevision.value,
+    saveType: 'MANUAL',
+    canvasData: snapshot,
+  }).then((res) => {
+    canvasRevision.value = res.revision
+    if (project) {
+      project.saved = true
+    }
+    console.info('[Canvas] saved to server', res)
+  }).catch((error) => {
+    console.error('[Canvas] save to server failed', error)
+  })
 }
 
 function handleExportCanvas() {
@@ -3510,6 +3603,11 @@ onMounted(() => {
     refreshCanvasNodeViews(instance)
     ensureInfiniteCanvasArea(instance, { recenter: true })
     syncViewportNodeVisibility()
+
+    if (pendingProjectCanvas) {
+      applyProjectCanvasPayload(pendingProjectCanvas)
+      pendingProjectCanvas = null
+    }
   })
 
   if (showMinimap.value) {
@@ -3597,9 +3695,14 @@ const onLoadProjects = async () => {
   console.log('res', res);
 }
 
-onMounted(()=>{
-  onLoadProjects();
-});
+onMounted(() => {
+  void onLoadProjects()
+
+  const routeProjectId = router.currentRoute.value.params.id
+  if (typeof routeProjectId === 'string' && routeProjectId.trim()) {
+    activeProjectId.value = routeProjectId
+  }
+})
   return {
     activeGroupSelection,
     addFromMenu,
@@ -3681,6 +3784,7 @@ onMounted(()=>{
     handleOpenVideoGenPromptBar,
     handleRedo,
     handleSaveCanvas,
+    loadProjectCanvas,
     handleTextPickerAction,
     handleTidyCanvas,
     handleUndo,

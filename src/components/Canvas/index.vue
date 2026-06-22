@@ -295,6 +295,7 @@ import CanvasShortcutsBackdrop from './panels/CanvasShortcutsBackdrop.vue'
 import CanvasHiddenFileInput from './panels/CanvasHiddenFileInput.vue'
 import { useCanvas } from './composables/useCanvas'
 import { ref } from 'vue'
+import type { ProjectCanvasResponse } from '@/services/api'
 
 const emit = defineEmits<{
   'focus-chat': []
@@ -307,6 +308,15 @@ const nodeOverlaysRef = ref<InstanceType<typeof CanvasNodeOverlays> | null>(null
 const fileInputComponentRef = ref<InstanceType<typeof CanvasHiddenFileInput> | null>(null)
 const bottomLeftDockRef = ref<InstanceType<typeof CanvasBottomLeftDock> | null>(null)
 const textExpandEditorComponentRef = ref<InstanceType<typeof CanvasTextExpandEditor> | null>(null)
+
+const canvasRuntime = useCanvas(emit, {
+  canvasRef,
+  graphRef,
+  nodeOverlaysRef,
+  fileInputComponentRef,
+  bottomLeftDockRef,
+  textExpandEditorComponentRef,
+})
 
 const {
   TEXT_EDITOR_PLACEHOLDER,
@@ -485,19 +495,18 @@ const {
   addImageFromFile,
   addImagesFromFiles,
   getNodeCount,
-} = useCanvas(emit, {
-  canvasRef,
-  graphRef,
-  nodeOverlaysRef,
-  fileInputComponentRef,
-  bottomLeftDockRef,
-  textExpandEditorComponentRef,
-})
+} = canvasRuntime
 
 defineExpose({
   addImageFromFile,
   addImagesFromFiles,
   getNodeCount,
+  loadProjectCanvas(payload: ProjectCanvasResponse) {
+    const load = (canvasRuntime as {
+      loadProjectCanvas?: (payload: ProjectCanvasResponse) => boolean
+    }).loadProjectCanvas
+    return load?.(payload) ?? false
+  },
 })
 </script>
 

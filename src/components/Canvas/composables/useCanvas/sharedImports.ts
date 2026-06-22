@@ -81,7 +81,8 @@ export {
 } from '../../textPrompt'
 export { createMinimap, destroyMinimap } from '../../minimap'
 export { runUploadSimulation } from '../../upload'
-export { getCanvasSnapshot, saveCanvasSnapshotToStorage, type CanvasSnapshot } from '../../canvasSnapshot'
+export { getCanvasSnapshot, saveCanvasSnapshotToStorage, normalizeCanvasSnapshot, type CanvasSnapshot } from '../../canvasSnapshot'
+export { applyCanvasSnapshot } from '../../canvasHistory'
 export { createCanvasHistory } from '../../canvasHistory'
 export {
   disconnectImageFromVideo,

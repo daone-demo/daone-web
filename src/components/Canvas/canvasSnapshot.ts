@@ -72,6 +72,36 @@ export function getCanvasSnapshot(graph: Graph, meta: CanvasSnapshotMeta): Canva
   }
 }
 
+export function normalizeCanvasSnapshot(
+  data: Partial<CanvasSnapshot>,
+  fallback: Pick<CanvasSnapshotMeta, 'projectId' | 'projectName'>,
+): CanvasSnapshot {
+  return {
+    version: 1,
+    savedAt: data.savedAt ?? new Date().toISOString(),
+    meta: {
+      projectId: data.meta?.projectId ?? fallback.projectId,
+      projectName: data.meta?.projectName ?? fallback.projectName,
+      canvasBgTheme: data.meta?.canvasBgTheme ?? 'light',
+      gridVisible: data.meta?.gridVisible ?? false,
+      panMode: data.meta?.panMode ?? false,
+      showMinimap: data.meta?.showMinimap ?? false,
+    },
+    viewport: {
+      zoom: data.viewport?.zoom ?? 1,
+      translateX: data.viewport?.translateX ?? 0,
+      translateY: data.viewport?.translateY ?? 0,
+      scrollLeft: data.viewport?.scrollLeft ?? 0,
+      scrollTop: data.viewport?.scrollTop ?? 0,
+    },
+    graph: data.graph ?? { cells: [] },
+    summary: {
+      nodeCount: data.summary?.nodeCount ?? 0,
+      edgeCount: data.summary?.edgeCount ?? 0,
+    },
+  }
+}
+
 export function getCanvasSnapshotStorageKey(projectId: string) {
   return `design-canvas:${projectId}`
 }
