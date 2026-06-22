@@ -131,7 +131,7 @@ const onDoAction = (key: string) => {
     .then((res: any) => {
       if (res.id) {
         if (key=== 'createProject') {
-          api.createProject({ title: '新项目' }).then((res: any) => {
+          api.createProject({ title: `新项目-${Date.now()}` }).then((res: any) => {
             router.push({ name: 'createProject', params: { id: res.id } })
           })
         }
