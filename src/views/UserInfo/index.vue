@@ -522,7 +522,7 @@ function saveEditProfile() {
     avatarUrl: editProfileForm.value.avatarUrl,
     nickname: editProfileForm.value.nickname,
     // email: profileState.value.email,
-  }).then((res:any)=>{
+  }).then(() => {
     onLoadUserInfo();
   })
   closeEditProfileModal()

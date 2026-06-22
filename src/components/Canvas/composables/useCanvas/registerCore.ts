@@ -1387,7 +1387,7 @@ function applyProjectCanvasPayload(payload: ProjectCanvasResponse) {
   activeProjectId.value = payload.projectId
   canvasRevision.value = payload.revision
 
-  const snapshot = normalizeCanvasSnapshot(canvasData, {
+  const snapshot = normalizeCanvasSnapshot(canvasData as Partial<CanvasSnapshot>, {
     projectId: payload.projectId,
     projectName: canvasData.meta?.projectName ?? '未命名创作',
   })

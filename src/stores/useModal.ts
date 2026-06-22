@@ -7,6 +7,7 @@ export type ModalKey = 'login' | 'combo' | 'updateProjectName'
 type ModalPayloadMap = {
   login: undefined
   combo: undefined
+  updateProjectName: undefined
 }
 
 export const useModalStore = defineStore('modal', () => {
@@ -16,7 +17,7 @@ export const useModalStore = defineStore('modal', () => {
     updateProjectName: false,
   })
 
-  const payload = ref<Partial<{ [K in ModalKey]: ModalPayloadMap[K] }>>({})
+  const payload = ref<Partial<ModalPayloadMap>>({})
 
   const activeKeys = computed(() =>
     (Object.keys(visible.value) as ModalKey[]).filter((key) => visible.value[key]),
@@ -84,7 +85,7 @@ export const useModalStore = defineStore('modal', () => {
   }
 
   function getPayload<K extends ModalKey>(key: K): ModalPayloadMap[K] | undefined {
-    return payload.value[key]
+    return payload.value[key] as ModalPayloadMap[K] | undefined
   }
 
   function toggleModal<K extends ModalKey>(key: K, data?: ModalPayloadMap[K]) {
