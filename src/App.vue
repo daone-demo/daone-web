@@ -11,7 +11,7 @@
             type="button"
             class="app-sidebar__btn app-sidebar__btn--primary"
             title="新建"
-            @click="onDoAction('createOrEdit')"
+            @click="onDoAction('createProject')"
           >
             <span class="app-sidebar__icon app-sidebar__icon--plus" aria-hidden="true" />
           </button>
@@ -130,9 +130,9 @@ const onDoAction = (key: string) => {
   api.getCurrentUser()
     .then((res: any) => {
       if (res.id) {
-        if (key=== 'createOrEdit') {
+        if (key=== 'createProject') {
           api.createProject({ title: '新项目' }).then((res: any) => {
-            router.push({ name: 'createOrEdit', params: { id: res.id } })
+            router.push({ name: 'createProject', params: { id: res.id } })
           })
         }
         else {
@@ -150,7 +150,7 @@ const onDoAction = (key: string) => {
 watch(
   () => route.name,
   (name) => {
-    showNav.value = name !== 'createOrEdit'
+    showNav.value = name !== 'createProject' && name !== 'projectDetail'
   },
   { immediate: true },
 )

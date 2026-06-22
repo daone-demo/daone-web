@@ -158,15 +158,15 @@ function formatCount(value: number) {
 }
 
 function openNewProject() {
-  router.push({ name: 'createOrEdit' })
+  router.push({ name: 'createProject' })
 }
 
 function openProject(id: string) {
-  router.push({ name: 'createOrEdit', params: { id } })
+  router.push({ name: 'projectDetail', params: { id } })
 }
 
 const openInspiration = (id: string) => {
-  router.push({ name: 'createOrEdit', params: { id } })
+  router.push({ name: 'projectDetail', params: { id } })
 }
 
 const onLoadProjects = async () => {
@@ -185,10 +185,17 @@ const openUpdateProjectName = (id: string, name: string) => {
   modalStore.openModal('updateProjectName')
 }
 
+/**
+ * Refresh projects list
+ */
 const onRefreshProjects = () => {
   onLoadProjects();
 }
 
+/**
+ * Open delete project modal
+ * @param id Project id
+ */
 const openDeleteProject = (id: string) => {
   Modal.confirm({
     title: '确定要删除此项目吗？',

@@ -15,12 +15,12 @@ const router = createRouter({
     },
     {
       path: '/project/:id',
-      name: 'createOrEdit',
+      name: 'projectDetail',
       component: () => import('@views/CreateOrEdit/index.vue'),
     },
     {
       path: '/create',
-      name: 'createOrEdit',
+      name: 'createProject',
       component: () => import('@views/CreateOrEdit/index.vue'),
     },
     {
