@@ -60,6 +60,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     TextFormatToolbar: typeof import('./components/Canvas/TextFormatToolbar.vue')['default']
     TextNode: typeof import('./components/Canvas/nodes/TextNode.vue')['default']
+    UpdateProjectName: typeof import('./components/UpdateProjectName/index.vue')['default']
     VideoDialoguePanel: typeof import('./components/Canvas/VideoDialoguePanel.vue')['default']
     VideoFramesPanel: typeof import('./components/Canvas/VideoFramesPanel.vue')['default']
     VideoGenModelPicker: typeof import('./components/Canvas/VideoGenModelPicker.vue')['default']

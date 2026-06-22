@@ -25,14 +25,14 @@
           </div>
 
           <div
-            v-for="project in recentProjects"
+            v-for="project in recentProjects as any"
             :key="project.id"
             class="home__project-card"
             @click="openProject(project.id)"
           >
             <span class="home__project-cover" aria-hidden="true" />
             <div class="flexBox">
-              <span class="home__project-name">{{ project.name }}</span>
+              <span class="home__project-name">{{ project.title }}</span>
               <div class="home__project-actions">
                 <a-dropdown :trigger="['click']">
                   <a-button type="default" @click.stop.prevent>
@@ -40,13 +40,13 @@
                   </a-button>
                   <template #overlay>
                     <a-menu class="home__project-menu">
-                      <a-menu-item @click.stop>
+                      <a-menu-item @click="openUpdateProjectName(project.id, project.title)">
                         <template #icon>
                           <i class="iconfont icon-zhongmingming" />
                         </template>
                         重命名
                       </a-menu-item>
-                      <a-menu-item danger @click.stop>
+                      <a-menu-item danger @click="openDeleteProject(project.id)">
                         <template #icon>
                           <i class="iconfont icon-shanchu1" />
                         </template>
@@ -57,7 +57,7 @@
                 </a-dropdown>
               </div>
             </div>
-            <span class="home__project-meta">更新于 {{ project.updatedAt }}</span>
+            <span class="home__project-meta">更新于 {{ dayjs(project.updatedAt).format('YYYY-MM-DD HH:mm:ss') }}</span>
           </div>
         </div>
       </section>
@@ -115,22 +115,35 @@
       </section>
     </div>
   </div>
+  <UpdateProjectName
+    v-model:open="modalStore.updateProjectNameVisible"
+    :project-id="projectId"
+    @submit="onRefreshProjects"
+  />
 </template>
 
 <script setup lang="ts">
-import { MoreOutlined } from '@ant-design/icons-vue'
-import { computed, ref, onMounted } from 'vue'
+import { ExclamationCircleFilled, MoreOutlined } from '@ant-design/icons-vue'
+import { computed, createVNode, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api';
 import {
   HOME_INSPIRATION_CATEGORIES,
   HOME_INSPIRATION_ITEMS,
-  HOME_RECENT_PROJECTS,
   type HomeInspirationCategory,
 } from './homeData'
+import dayjs from 'dayjs';
+import UpdateProjectName from '@components/UpdateProjectName/index.vue';
+import { Modal } from 'ant-design-vue';
+
+import { useModalStore } from '@stores/useModal';
+const modalStore = useModalStore();
 
 const router = useRouter()
-const recentProjects = HOME_RECENT_PROJECTS
+const projectId = ref('');
+const projectName = ref('');
+// const recentProjects = HOME_RECENT_PROJECTS
+const recentProjects = ref([]);
 const activeCategory = ref<HomeInspirationCategory>('all')
 
 const filteredInspiration = computed(() => {
@@ -161,8 +174,32 @@ const onLoadProjects = async () => {
     page: 1,
     pageSize: 10,
   }
-  const res = await api.getProjects(params);
+  const res:any = await api.getProjects(params);
+  recentProjects.value = res.records;
   console.log('res', res);
+}
+
+const openUpdateProjectName = (id: string, name: string) => {
+  projectId.value = id;
+  projectName.value = name;
+  modalStore.openModal('updateProjectName')
+}
+
+const onRefreshProjects = () => {
+  onLoadProjects();
+}
+
+const openDeleteProject = (id: string) => {
+  Modal.confirm({
+    title: '确定要删除此项目吗？',
+    icon: createVNode(ExclamationCircleFilled),
+    content: '删除后将无法恢复，请谨慎操作。',
+    onOk() {
+      return api.deleteProject(id).then(() => {
+        onRefreshProjects()
+      })
+    },
+  })
 }
 
 onMounted(()=>{

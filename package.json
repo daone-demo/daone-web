@@ -16,6 +16,7 @@
     "@antv/x6-vue-shape": "^2.1.2",
     "ant-design-vue": "4.x",
     "axios": "^1.18.0",
+    "dayjs": "^1.11.21",
     "pinia": "^3.0.4",
     "sass": "^1.100.0",
     "vue": "^3.5.34",
