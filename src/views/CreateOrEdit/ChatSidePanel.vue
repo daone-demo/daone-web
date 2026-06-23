@@ -184,6 +184,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCanvasBgTheme } from '@/components/Canvas/useCanvasBgTheme'
 import type { ChatAttachment, ChatMessage, ChatSendPayload } from './chatTypes'
 import { CHAT_TIPS } from './chatTypes'
+import { useSSE } from '@/hooks/useSSE';
 
 const skills = [
   '有声书',
