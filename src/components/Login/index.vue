@@ -67,7 +67,7 @@
               </button>
             </section>
 
-            <div class="login-modal__divider" aria-hidden="true" />
+            <!-- <div class="login-modal__divider" aria-hidden="true" />
 
             <section class="login-modal__scan">
               <h3 class="login-modal__col-title">微信扫码登录</h3>
@@ -82,7 +82,7 @@
                 />
               </div>
               <p class="login-modal__scan-hint">使用微信扫码快捷登录</p>
-            </section>
+            </section> -->
           </div>
 
           <footer class="login-modal__footer">
@@ -163,18 +163,18 @@ function startCountdown(seconds = 60) {
   }, 1000)
 }
 
-const onLoadWeChatCode = () => {
-  api.createWechatQrSession()
-    .then((res:any)=>{
-      // console.log('res', res)
-      wechatQrUrl.value = res.qrCodeUrl
-    })
-    .catch(err=>{
-      console.error('err', err)
-    })
-}
+// const onLoadWeChatCode = () => {
+//   api.createWechatQrSession()
+//     .then((res:any)=>{
+//       // console.log('res', res)
+//       wechatQrUrl.value = res.qrCodeUrl
+//     })
+//     .catch(err=>{
+//       console.error('err', err)
+//     })
+// }
 
-onLoadWeChatCode();
+// onLoadWeChatCode();
 
 async function sendCode() {
   if (!phoneValid.value || codeCountdown.value > 0) return
