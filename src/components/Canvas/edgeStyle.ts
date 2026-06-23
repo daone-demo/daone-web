@@ -1,30 +1,58 @@
 import type { Edge, Graph } from '@antv/x6'
 
-/** 画布连线主色（电流输出效果） */
-export const FLOW_EDGE_COLOR = '#6b7cff'
-export const FLOW_EDGE_SELECTED_COLOR = '#f97316'
+/** 选中连线高亮色 */
+export const FLOW_EDGE_SELECTED_COLOR = '#6b7cff'
+/** 拖拽预览端点圆点 */
+export const FLOW_EDGE_PREVIEW_DOT_COLOR = '#6b7cff'
 
-const FLOW_EDGE_DASH = '12 7'
+/** @deprecated 保留兼容，实际颜色由主题驱动 */
+export const FLOW_EDGE_COLOR = '#787f8a'
 
-export function getFlowEdgeLineAttrs(stroke = FLOW_EDGE_COLOR, selected = false) {
+let canvasEdgeStroke = FLOW_EDGE_COLOR
+
+export function setCanvasEdgeStroke(color: string) {
+  canvasEdgeStroke = color
+}
+
+export function getCanvasEdgeStroke() {
+  return canvasEdgeStroke
+}
+
+type CanvasGraphLike = Graph & { __connectPreviewEdgeId?: string }
+
+function isPreviewEdge(graph: Graph, edge: Edge) {
+  return (graph as CanvasGraphLike).__connectPreviewEdgeId === edge.id
+}
+
+export function getFlowEdgeLineAttrs(
+  stroke = canvasEdgeStroke,
+  selected = false,
+  preview = false,
+) {
+  const color = selected ? FLOW_EDGE_SELECTED_COLOR : stroke
   return {
-    stroke,
-    strokeWidth: selected ? 3.5 : 2.5,
+    stroke: color,
+    strokeWidth: selected ? 2 : 1.5,
     strokeLinecap: 'round' as const,
-    strokeDasharray: FLOW_EDGE_DASH,
-    targetMarker: {
-      name: 'block' as const,
-      width: 10,
-      height: 8,
-      fill: stroke,
-      stroke,
-    },
+    targetMarker: preview
+      ? {
+          name: 'circle' as const,
+          r: 5,
+          fill: FLOW_EDGE_PREVIEW_DOT_COLOR,
+          stroke: '#ffffff',
+          strokeWidth: 1.5,
+        }
+      : null,
   }
 }
 
-export function getFlowEdgeAttrs(stroke = FLOW_EDGE_COLOR, selected = false) {
+export function getFlowEdgeAttrs(
+  stroke = canvasEdgeStroke,
+  selected = false,
+  preview = false,
+) {
   return {
-    line: getFlowEdgeLineAttrs(stroke, selected),
+    line: getFlowEdgeLineAttrs(stroke, selected, preview),
     wrap: {
       strokeWidth: 16,
       stroke: 'transparent',
@@ -34,24 +62,34 @@ export function getFlowEdgeAttrs(stroke = FLOW_EDGE_COLOR, selected = false) {
   }
 }
 
+/** 拖拽连线预览：浅灰曲线 + 端点蓝色圆点 */
+export function getPreviewEdgeAttrs() {
+  return getFlowEdgeAttrs(canvasEdgeStroke, false, true)
+}
+
 export function applyFlowEdgeStyle(
   graph: Graph,
   edge: Edge,
   selected = false,
 ) {
-  edge.setAttrs(getFlowEdgeAttrs(FLOW_EDGE_COLOR, selected))
+  const preview = isPreviewEdge(graph, edge)
+  edge.setAttrs(getFlowEdgeAttrs(canvasEdgeStroke, selected, preview))
   const view = graph.findViewByCell(edge)
   if (!view) return
-  if (selected) {
-    view.addClass('canvas-edge--selected')
-  } else {
-    view.removeClass('canvas-edge--selected')
-  }
+  view.removeClass('canvas-edge--selected')
+  view.removeClass('canvas-edge--preview')
+  if (selected) view.addClass('canvas-edge--selected')
+  if (preview) view.addClass('canvas-edge--preview')
 }
 
-export function syncEdgeSelectionHighlight(graph: Graph, selectedEdgeId = '') {
+export function syncEdgeSelectionHighlight(
+  graph: Graph,
+  selectedEdgeId = '',
+  hoveredEdgeId = '',
+) {
   graph.getEdges().forEach((edge) => {
-    applyFlowEdgeStyle(graph, edge, edge.id === selectedEdgeId)
+    const highlighted = edge.id === selectedEdgeId || edge.id === hoveredEdgeId
+    applyFlowEdgeStyle(graph, edge, highlighted)
   })
 }
 

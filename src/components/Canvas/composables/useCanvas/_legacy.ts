@@ -214,6 +214,11 @@ const videoGenActiveTab = ref('text2video')
 const selectedNodeId = ref('')
 const selectedNodeIds = ref<string[]>([])
 const selectedEdgeId = ref('')
+const edgeDeleteBtnPos = ref({ left: 0, top: 0 })
+const showEdgeDeleteButton = computed(() => false)
+function handleEdgeDeletePointerEnter() {}
+function handleEdgeDeletePointerLeave() {}
+function removeHoveredEdge() {}
 const pendingUploadNodeId = ref('')
 const fileInputAccept = ref('image/*,video/*')
 const fileInputMultiple = ref(true)
@@ -3825,6 +3830,7 @@ onMounted(()=>{
     dismissOneCanvasLayer,
     downloadSelectedTextNode,
     duplicateSelectedNodes,
+    edgeDeleteBtnPos,
     elementSelectReturnNodeId,
     endSpacePan,
     enterElementSelectMode,
@@ -3858,6 +3864,8 @@ onMounted(()=>{
     handleBlankDblClick,
     handleEdgeClick,
     handleEdgeConnected,
+    handleEdgeDeletePointerEnter,
+    handleEdgeDeletePointerLeave,
     handleExportCanvas,
     handleGroupAddToToolbox,
     handleGroupBatchDownload,
@@ -3971,6 +3979,7 @@ onMounted(()=>{
     recenterToNodes,
     refreshPromptSourcePreviews,
     removeConnectPreviewEdge,
+    removeHoveredEdge,
     removeNodeById,
     removePromptImageSource,
     removeSelectedEdge,
@@ -4000,6 +4009,7 @@ onMounted(()=>{
     showAssetsPanel,
     showBackToNodesBanner,
     showConnectMenu,
+    showEdgeDeleteButton,
     showElementSelectMode,
     showGroupToolbar,
     showHistoryPanel,

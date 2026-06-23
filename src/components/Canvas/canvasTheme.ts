@@ -1,5 +1,5 @@
 import type { Graph } from '@antv/x6'
-import { applyFlowEdgeStyle } from './edgeStyle'
+import { applyFlowEdgeStyle, setCanvasEdgeStroke } from './edgeStyle'
 
 export type CanvasBgTheme = 'dark' | 'light'
 
@@ -18,7 +18,7 @@ const CANVAS_BG_THEMES: Record<CanvasBgTheme, CanvasBgThemeMeta> = {
     pageBg: '#141416',
     graphBg: '#141416',
     gridColor: '#2a2a30',
-    edgeStroke: '#e5e7eb',
+    edgeStroke: '#787f8a',
     minimapBg: '#1a1a1e',
   },
   light: {
@@ -26,7 +26,7 @@ const CANVAS_BG_THEMES: Record<CanvasBgTheme, CanvasBgThemeMeta> = {
     pageBg: '#e8eaed',
     graphBg: '#e8eaed',
     gridColor: '#b8bcc4',
-    edgeStroke: '#6b7280',
+    edgeStroke: '#c8ccd2',
     minimapBg: '#e8eaed',
   },
 }
@@ -43,6 +43,7 @@ export function getDefaultEdgeStroke() {
 
 export function syncGraphThemeDefaults(theme: CanvasBgTheme) {
   defaultEdgeStroke = getCanvasBgThemeMeta(theme).edgeStroke
+  setCanvasEdgeStroke(defaultEdgeStroke)
 }
 
 type ScrollerPlugin = {

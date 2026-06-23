@@ -32,7 +32,7 @@ export {
   resolveConnectSpawnPoint,
 } from '../../nodeConnect'
 export { detachEdgeRelation, isPersistedEdge } from '../../edgeRelations'
-export { syncEdgeSelectionHighlight } from '../../edgeStyle'
+export { syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs } from '../../edgeStyle'
 export {
   addCanvasNode,
   bindGraphInteraction,
@@ -55,6 +55,7 @@ export {
   getNodeToolbarPosition,
   getNodeSize,
   getScroller,
+  getEdgeDeleteButtonPosition,
   graphLocalToContainerOffset,
   refreshCanvasNodeViews,
   syncAllNodeSizes,

@@ -19,7 +19,7 @@ export const BIND_KEYS = [
   'promptText', 'activePickerNodeId', 'activeImageGenPromptNodeId', 'imageGenPromptText',
   'imageGenSeed', 'imageGenSourcePreviewUrl', 'imageGenSubmitting', 'activeVideoGenPromptNodeId',
   'videoGenPromptText', 'videoNum', 'videoGenActiveTab', 'selectedNodeId', 'selectedNodeIds',
-  'selectedEdgeId', 'pendingUploadNodeId', 'fileInputAccept', 'fileInputMultiple',
+  'selectedEdgeId', 'hoveredEdgeId', 'edgeDeleteBtnPos', 'pendingUploadNodeId', 'fileInputAccept', 'fileInputMultiple',
   'isCanvasFileDragOver', 'canvasFileDragDepth', 'pendingUploadFilter', 'toolbarPos',
   'multiSelectToolbarPos', 'groupToolbarPos', 'groupOverlayBox', 'dialoguePos', 'promptPos',
   'imageGenPromptPos', 'videoGenPromptPos', 'videoGenPromptDragOffset', 'showElementSelectMode',

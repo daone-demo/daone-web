@@ -738,45 +738,60 @@
     cursor: pointer;
   }
 
-  /* 连线电流输出：虚线沿路径流动 + 蓝色辉光 */
+  /* 连线：浅灰细实线 + 水平贝塞尔曲线（与 liblib 画布一致） */
   .x6-edge path:nth-child(2) {
-    stroke: #6b7cff;
-    stroke-width: 2.5;
     stroke-linecap: round;
-    stroke-dasharray: 12 7;
-    animation: canvas-edge-flow 0.45s linear infinite;
-    filter: drop-shadow(0 0 3px rgba(107, 124, 255, 0.95))
-      drop-shadow(0 0 8px rgba(107, 124, 255, 0.4));
+    transition: stroke 0.15s ease, stroke-width 0.15s ease;
   }
 
   .x6-edge.canvas-edge--selected path:nth-child(2) {
-    stroke: #f97316;
-    stroke-width: 3.5;
-    animation: none;
-    filter: drop-shadow(0 0 4px rgba(249, 115, 22, 0.95))
-      drop-shadow(0 0 10px rgba(249, 115, 22, 0.45));
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .x6-edge path:nth-child(2) {
-      animation: none;
-      stroke-dasharray: none;
-    }
+    stroke: #6b7cff;
+    stroke-width: 2;
   }
 }
 
-@keyframes canvas-edge-flow {
-  to {
-    stroke-dashoffset: -38;
+.canvas__edge-delete-btn {
+  position: absolute;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 50%;
+  background: #fff;
+  color: #6b7280;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  transform: translate(-50%, -50%);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+
+  &:hover {
+    background: #fef2f2;
+    border-color: rgba(239, 68, 68, 0.28);
+    box-shadow: 0 2px 10px rgba(239, 68, 68, 0.18);
   }
 }
 
-.canvas--bg-light .canvas__graph {
-  .x6-edge path:nth-child(2) {
-    stroke: #5b6ef5;
-    filter: drop-shadow(0 0 3px rgba(91, 110, 245, 0.85))
-      drop-shadow(0 0 6px rgba(91, 110, 245, 0.35));
-  }
+.canvas__edge-delete-btn-icon {
+  width: 14px;
+  height: 14px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' viewBox='0 0 16 16'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.3' d='M3 4.5h10M6.5 4.5V3.5h3v1M5 4.5l.6 8h4.8l.6-8M6.8 6.5v4M9.2 6.5v4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.canvas__edge-delete-btn:hover .canvas__edge-delete-btn-icon {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' viewBox='0 0 16 16'%3E%3Cpath stroke='%23ef4444' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.3' d='M3 4.5h10M6.5 4.5V3.5h3v1M5 4.5l.6 8h4.8l.6-8M6.8 6.5v4M9.2 6.5v4'/%3E%3C/svg%3E");
+}
+
+.canvas__edge-delete-btn--light {
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
 }
 
 .canvas--file-dragover .canvas__graph {

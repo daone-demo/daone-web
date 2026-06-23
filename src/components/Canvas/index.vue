@@ -61,6 +61,15 @@
       @merge-storyboard="handleMergeStoryboardGroup"
     />
 
+    <CanvasEdgeDeleteButton
+      v-if="showEdgeDeleteButton"
+      :position="edgeDeleteBtnPos"
+      :is-light="canvasBgTheme === 'light'"
+      @delete="removeHoveredEdge"
+      @pointer-enter="handleEdgeDeletePointerEnter"
+      @pointer-leave="handleEdgeDeletePointerLeave"
+    />
+
     <CanvasGroupOverlay
       v-if="showGroupToolbar && groupOverlayBox"
       :box="groupOverlayBox"
@@ -280,6 +289,7 @@ import CanvasAddMenu from './panels/CanvasAddMenu.vue'
 import CanvasAssetsPanel from './panels/CanvasAssetsPanel.vue'
 import CanvasNodeToolbar from './panels/CanvasNodeToolbar.vue'
 import CanvasMultiSelectToolbar from './panels/CanvasMultiSelectToolbar.vue'
+import CanvasEdgeDeleteButton from './panels/CanvasEdgeDeleteButton.vue'
 import CanvasGroupOverlay from './panels/CanvasGroupOverlay.vue'
 import CanvasGroupToolbar from './panels/CanvasGroupToolbar.vue'
 import CanvasElementSelectBar from './panels/CanvasElementSelectBar.vue'
@@ -345,6 +355,7 @@ const {
   currentProjectName,
   dialoguePos,
   duplicateSelectedNodes,
+  edgeDeleteBtnPos,
   exitElementSelectMode,
   fileInputAccept,
   fileInputMultiple,
@@ -354,6 +365,8 @@ const {
   groupOverlayBox,
   groupToolbarPos,
   handleExportCanvas,
+  handleEdgeDeletePointerEnter,
+  handleEdgeDeletePointerLeave,
   handleGroupAddToToolbox,
   handleGroupBatchDownload,
   handleGroupExecute,
@@ -422,6 +435,7 @@ const {
   promptSubmitting,
   promptText,
   recenterToNodes,
+  removeHoveredEdge,
   removePromptImageSource,
   resetVideoHdPanel,
   returnFromElementSelect,
@@ -431,6 +445,7 @@ const {
   showAssetsPanel,
   showBackToNodesBanner,
   showConnectMenu,
+  showEdgeDeleteButton,
   showElementSelectMode,
   showGroupToolbar,
   showHistoryPanel,

@@ -9,12 +9,12 @@ import {
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
   spawnCroppedImageNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
   getConnectMenuPosition, getLinkedSpawnPoint, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
-  syncEdgeSelectionHighlight, addCanvasNode, bindGraphInteraction, createGraph,
+  syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, hasVisibleNodesInViewport,
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
   getNodeVideoGenPromptPosition, getNodePromptPosition, getNodeSidePanelPosition, getNodeTextDownloadPosition,
   getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition, getNodeToolbarPosition,
-  getNodeSize, getScroller, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes,
+  getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, findIncomingImageNode, mockImg2Prompt, mockTextGenerate, syncTextNodeImageSource,
@@ -86,6 +86,8 @@ export function registerCore(bind: CanvasBindings) {
     selectedNodeId,
     selectedNodeIds,
     selectedEdgeId,
+    hoveredEdgeId,
+    edgeDeleteBtnPos,
     pendingUploadNodeId,
     fileInputAccept,
     fileInputMultiple,
@@ -1670,7 +1672,10 @@ function handleEdgeConnected({
       linkImageSourceFromEdge(g, edge, target)
     } else {
       g.removeEdge(edge.id)
+      return
     }
+    edge.setAttrs(getFlowEdgeAttrs())
+    applyFlowEdgeStyle(g, edge)
     return
   }
 
@@ -1687,6 +1692,8 @@ function handleEdgeConnected({
   if (!releasePoint) return
 
   canvasGraph.__connectPreviewEdgeId = edge.id
+  edge.setAttrs(getPreviewEdgeAttrs())
+  applyFlowEdgeStyle(g, edge)
   openConnectMenu(source as Node, releasePoint)
 }
 
@@ -2143,7 +2150,7 @@ function syncSelectionFromGraph() {
 
   if (ids.length > 0) {
     selectedEdgeId.value = ''
-    syncEdgeSelectionHighlight(g, '')
+    clearEdgeHoverState()
     const primaryId = ids[ids.length - 1]
     const cell = g.getCellById(primaryId)
     if (cell?.isNode()) {
@@ -2174,11 +2181,78 @@ function selectGraphNodes(target: Node | string | (Node | string)[]) {
   syncSelectionFromGraph()
 }
 
+function syncEdgeHighlight() {
+  const g = graph.value
+  if (!g) return
+  syncEdgeSelectionHighlight(g, selectedEdgeId.value, hoveredEdgeId.value)
+}
+
+let edgeHoverLeaveTimer = 0
+
+function updateEdgeDeleteButtonPosition() {
+  const g = graph.value
+  const root = canvasRef.value
+  const id = hoveredEdgeId.value
+  if (!g || !root || !id) return
+
+  const edge = g.getCellById(id)
+  if (!edge?.isEdge() || !isPersistedEdge(edge as Edge)) {
+    hoveredEdgeId.value = ''
+    return
+  }
+
+  edgeDeleteBtnPos.value = getEdgeDeleteButtonPosition(g, edge as Edge, root)
+}
+
+function clearEdgeHoverState() {
+  window.clearTimeout(edgeHoverLeaveTimer)
+  hoveredEdgeId.value = ''
+  syncEdgeHighlight()
+}
+
+function handleEdgeMouseEnter({ edge }: { edge: Edge }) {
+  if (!isPersistedEdge(edge)) return
+
+  window.clearTimeout(edgeHoverLeaveTimer)
+  hoveredEdgeId.value = edge.id
+  syncEdgeHighlight()
+  updateEdgeDeleteButtonPosition()
+}
+
+function handleEdgeMouseLeave() {
+  window.clearTimeout(edgeHoverLeaveTimer)
+  edgeHoverLeaveTimer = window.setTimeout(() => {
+    hoveredEdgeId.value = ''
+    syncEdgeHighlight()
+  }, 120)
+}
+
+function handleEdgeDeletePointerEnter() {
+  window.clearTimeout(edgeHoverLeaveTimer)
+}
+
+function handleEdgeDeletePointerLeave() {
+  handleEdgeMouseLeave()
+}
+
+function removeHoveredEdge() {
+  const id = hoveredEdgeId.value
+  if (!id) return
+
+  selectedEdgeId.value = id
+  hoveredEdgeId.value = ''
+  removeSelectedEdge()
+}
+
+const showEdgeDeleteButton = computed(
+  () => Boolean(hoveredEdgeId.value),
+)
+
 function clearEdgeSelection() {
   const g = graph.value
   if (!g || !selectedEdgeId.value) return
   selectedEdgeId.value = ''
-  syncEdgeSelectionHighlight(g, '')
+  syncEdgeHighlight()
 }
 
 function handleEdgeClick({ edge, e }: { edge: Edge; e?: MouseEvent }) {
@@ -2195,7 +2269,7 @@ function handleEdgeClick({ edge, e }: { edge: Edge; e?: MouseEvent }) {
   syncNodeSelectionHighlight([])
 
   selectedEdgeId.value = edge.id
-  syncEdgeSelectionHighlight(g, edge.id)
+  syncEdgeHighlight()
   updateNodeToolbar()
 }
 
@@ -2217,7 +2291,7 @@ function removeSelectedEdge() {
 
   g.removeEdge(edgeId)
   selectedEdgeId.value = ''
-  syncEdgeSelectionHighlight(g, '')
+  clearEdgeHoverState()
 
   if (relation?.targetId === activePickerNodeId.value) {
     loadPromptBarContext(relation.targetId)
@@ -2881,7 +2955,8 @@ function resetCanvasInteractionState() {
   closeTextExpand()
   exitElementSelectMode()
   syncNodeSelectionHighlight([])
-  if (graph.value) syncEdgeSelectionHighlight(graph.value, '')
+  selectedEdgeId.value = ''
+  clearEdgeHoverState()
 }
 
 function dismissOneCanvasLayer() {
@@ -2979,6 +3054,10 @@ function dismissOneCanvasLayer() {
   }
   if (showElementSelectMode.value) {
     exitElementSelectMode()
+    return true
+  }
+  if (hoveredEdgeId.value) {
+    clearEdgeHoverState()
     return true
   }
   if (selectedEdgeId.value) {
@@ -3463,6 +3542,7 @@ const { altVoiceTimer, bindKeyboard, unbindKeyboard, endSpacePan } = useCanvasKe
 
 function onScrollerScroll() {
   updateNodeToolbar()
+  updateEdgeDeleteButtonPosition()
   syncViewportNodeVisibility()
 }
 
@@ -3520,11 +3600,13 @@ onMounted(() => {
     syncZoom(sx)
     requestAnimationFrame(() => {
       updateNodeToolbar()
+      updateEdgeDeleteButtonPosition()
       syncViewportNodeVisibility()
     })
   })
   instance.on('translate', () => {
     updateNodeToolbar()
+    updateEdgeDeleteButtonPosition()
     syncViewportNodeVisibility()
   })
   instance.on('node:moving', ({ node }) => {
@@ -3533,6 +3615,7 @@ onMounted(() => {
       updateGroupToolbarPosition()
     }
     updateNodeToolbar()
+    updateEdgeDeleteButtonPosition()
   })
   instance.on('node:moved', () => {
     groupMoveState.anchorId = ''
@@ -3544,6 +3627,8 @@ onMounted(() => {
   instance.on('node:removed', syncNodeCount)
   instance.on('node:click', handleNodeClick)
   instance.on('edge:click', handleEdgeClick)
+  instance.on('edge:mouseenter', handleEdgeMouseEnter)
+  instance.on('edge:mouseleave', handleEdgeMouseLeave)
   instance.on('selection:changed', () => {
     const g = graph.value
     if (!g) {
@@ -3672,6 +3757,7 @@ async function addImagesFromFiles(files: File[]) {
 onBeforeUnmount(() => {
   unbindKeyboard()
   if (historyPushTimer) clearTimeout(historyPushTimer)
+  if (edgeHoverLeaveTimer) window.clearTimeout(edgeHoverLeaveTimer)
   if (altVoiceTimer.value) clearTimeout(altVoiceTimer.value)
   endSpacePan()
   canvasHistory = null
@@ -3927,6 +4013,11 @@ onMounted(() => {
     updatePromptBarPosition,
     updateTextFormatToolbarPosition,
     updateVideoGenPromptBarPosition,
+    edgeDeleteBtnPos,
+    showEdgeDeleteButton,
+    handleEdgeDeletePointerEnter,
+    handleEdgeDeletePointerLeave,
+    removeHoveredEdge,
     uploadFileToCanvasNode,
     videoGenSourceRefs,
     waitForNodeUploadDone,

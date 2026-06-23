@@ -1,11 +1,11 @@
-import { Graph, Shape, type Node, type TransformManager } from '@antv/x6'
+import { Graph, Shape, type Edge, type Node, type TransformManager } from '@antv/x6'
 import { Scroller } from '@antv/x6-plugin-scroller'
 import '@antv/x6-plugin-scroller/es/index.css'
 import { Selection } from '@antv/x6-plugin-selection'
 import '@antv/x6-plugin-selection/es/index.css'
 import { register } from '@antv/x6-vue-shape'
 import { getDefaultEdgeStroke } from './canvasTheme'
-import { bindFlowEdgeInteraction, FLOW_EDGE_COLOR, getFlowEdgeAttrs } from './edgeStyle'
+import { bindFlowEdgeInteraction, getFlowEdgeAttrs, getPreviewEdgeAttrs } from './edgeStyle'
 import { canOpenConnectMenu } from './nodeConnect'
 import '@antv/x6-vue-shape'
 import TextNode from './nodes/TextNode.vue'
@@ -107,6 +107,29 @@ export function graphLocalToContainerOffset(
     left: client.x - containerRect.left,
     top: client.y - containerRect.top,
   }
+}
+
+type EdgeViewLike = {
+  getPointAtRatio?: (ratio: number) => { x: number; y: number }
+}
+
+/** 连线几何中点（图坐标），优先取路径 50% 位置 */
+export function getEdgeMidpointLocal(graph: Graph, edge: Edge) {
+  const view = graph.findViewByCell(edge) as EdgeViewLike | null
+  if (view?.getPointAtRatio) {
+    return view.getPointAtRatio(0.5)
+  }
+  return edge.getBBox().getCenter()
+}
+
+/** 连线删除按钮在 .canvas 容器内的定位 */
+export function getEdgeDeleteButtonPosition(
+  graph: Graph,
+  edge: Edge,
+  container: HTMLElement,
+) {
+  const mid = getEdgeMidpointLocal(graph, edge)
+  return graphLocalToContainerOffset(graph, mid.x, mid.y, container)
 }
 
 /** 节点在容器坐标系下的屏幕包围盒（缩放后真实像素） */
@@ -478,23 +501,16 @@ export function createGraph(container: HTMLElement): CanvasGraph {
       allowLoop: false,
       allowMulti: false,
       highlight: true,
-      connector: { name: 'smooth' },
+      connector: { name: 'smooth', args: { direction: 'H' } },
       connectionPoint: 'boundary',
       router: { name: 'normal' },
       createEdge(this: Graph, args) {
         const source = args?.sourceCell
-        const useFlow =
+        const usePreview =
           source?.isNode() && canOpenConnectMenu(source)
-        const stroke = useFlow ? FLOW_EDGE_COLOR : getDefaultEdgeStroke()
 
         return new Shape.Edge({
-          attrs: useFlow ? getFlowEdgeAttrs(stroke) : {
-            line: {
-              stroke,
-              strokeWidth: 2,
-              targetMarker: { name: 'block', width: 10, height: 8 },
-            },
-          },
+          attrs: usePreview ? getPreviewEdgeAttrs() : getFlowEdgeAttrs(getDefaultEdgeStroke()),
           zIndex: 0,
         })
       },

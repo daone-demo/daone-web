@@ -87,6 +87,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const selectedNodeId = ref('')
   const selectedNodeIds = ref<string[]>([])
   const selectedEdgeId = ref('')
+  const hoveredEdgeId = ref('')
+  const edgeDeleteBtnPos = ref({ left: 0, top: 0 })
   const pendingUploadNodeId = ref('')
   const fileInputAccept = ref('image/*,video/*')
   const fileInputMultiple = ref(true)
@@ -196,6 +198,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     selectedNodeId,
     selectedNodeIds,
     selectedEdgeId,
+    hoveredEdgeId,
+    edgeDeleteBtnPos,
     pendingUploadNodeId,
     fileInputAccept,
     fileInputMultiple,

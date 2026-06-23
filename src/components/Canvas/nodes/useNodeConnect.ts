@@ -1,7 +1,7 @@
 import { inject, ref } from 'vue'
 import type { Node } from '@antv/x6'
 import type { CanvasGraph } from '../graph'
-import { getFlowEdgeAttrs } from '../edgeStyle'
+import { getFlowEdgeAttrs, getPreviewEdgeAttrs } from '../edgeStyle'
 import type { CanvasNodeData } from '../constants'
 import {
   canImageNodeAcceptIncoming,
@@ -46,7 +46,7 @@ export function useNodeConnect() {
     const edge = g.addEdge({
       source: { cell: sourceId, port: 'right' },
       target: { x: local.x, y: local.y },
-      attrs: getFlowEdgeAttrs(),
+      attrs: getPreviewEdgeAttrs(),
       zIndex: 0,
     })
     activeEdgeId = edge.id
@@ -82,6 +82,7 @@ export function useNodeConnect() {
         }
 
         edge.setTarget({ cell: targetNode.id, port: 'left' })
+        edge.setAttrs(getFlowEdgeAttrs())
         ;(g as CanvasGraph).__connectPreviewEdgeId = ''
         ;(g as CanvasGraph).__onNodeEdgeLinked?.(targetNode.id, node.id)
         return
@@ -89,6 +90,7 @@ export function useNodeConnect() {
 
       ;(g as CanvasGraph).__connectPreviewEdgeId = edge.id
       edge.setTarget(point)
+      edge.setAttrs(getPreviewEdgeAttrs())
       const openMenu = (g as CanvasGraph).__openConnectMenu
       openMenu?.(sourceId, point)
     }
