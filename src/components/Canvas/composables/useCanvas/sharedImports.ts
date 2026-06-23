@@ -61,7 +61,7 @@ export {
   type CanvasGraph,
 } from '../../graph'
 export { applyCanvasBgTheme, getCanvasBgThemeMeta } from '../../canvasTheme'
-export { layoutNodesInGroup, tidyCanvas, tidyNodes } from '../../layout'
+export { layoutNodesInGroup, tidyCanvas, tidyNodes, type GroupLayoutDirection } from '../../layout'
 export {
   assignGroupId,
   expandSelectionToGroup,

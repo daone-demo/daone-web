@@ -85,7 +85,7 @@ import {
   getCanvasBgThemeMeta,
   type CanvasBgTheme,
 } from '../../canvasTheme'
-import { layoutNodesInGroup, tidyCanvas, tidyNodes } from '../../layout'
+import { layoutNodesInGroup, tidyCanvas, tidyNodes, type GroupLayoutDirection } from '../../layout'
 import {
   assignGroupId,
   expandSelectionToGroup,
@@ -1504,7 +1504,7 @@ function onZoomMenuAction(
 }
 
 function selectProject(projectId: string) {
-  activeProjectId.value = projectId
+  activeProjectId.value = projectId;
   closeProjectMenu()
 }
 
@@ -3265,7 +3265,7 @@ function handleUngroup() {
   scheduleHistoryPush()
 }
 
-function handleGroupLayout() {
+function handleGroupLayout(direction: GroupLayoutDirection = 'horizontal') {
   const g = graph.value
   const group = activeGroupSelection.value
   if (!g || !group) return
@@ -3273,7 +3273,7 @@ function handleGroupLayout() {
   const nodes = group.nodeIds
     .map((id) => g.getCellById(id))
     .filter((cell): cell is Node => cell != null && cell.isNode())
-  layoutNodesInGroup(nodes, 'horizontal')
+  layoutNodesInGroup(nodes, direction)
   updateNodeToolbar()
   scheduleHistoryPush()
 }

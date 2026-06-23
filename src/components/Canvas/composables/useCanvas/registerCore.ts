@@ -22,6 +22,7 @@ import {
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
   useCanvasKeyboard, api, exampleImage,
 } from './sharedImports'
+import type { GroupLayoutDirection } from './sharedImports'
 import type { ProjectCanvasResponse } from '@/services/api'
 import type {
   CanvasNodeData, ImageSourceRef, NodeKind, TextFormatCommand,
@@ -3199,7 +3200,7 @@ function handleUngroup() {
   scheduleHistoryPush()
 }
 
-function handleGroupLayout() {
+function handleGroupLayout(direction: GroupLayoutDirection = 'horizontal') {
   const g = graph.value
   const group = activeGroupSelection.value
   if (!g || !group) return
@@ -3207,7 +3208,7 @@ function handleGroupLayout() {
   const nodes = group.nodeIds
     .map((id) => g.getCellById(id))
     .filter((cell): cell is Node => cell != null && cell.isNode())
-  layoutNodesInGroup(nodes, 'horizontal')
+  layoutNodesInGroup(nodes, direction)
   updateNodeToolbar()
   scheduleHistoryPush()
 }

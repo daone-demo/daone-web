@@ -118,11 +118,11 @@ export function tidyNodes(graph: Graph, nodes: Node[]) {
   }
 }
 
-export type GroupLayoutDirection = 'horizontal' | 'vertical'
+export type GroupLayoutDirection = 'grid' | 'horizontal' | 'vertical'
 
 const GROUP_GAP = 24
 
-/** 组内整理：在组锚点处按水平或垂直方向排列节点 */
+/** 组内整理：在组锚点处按宫格、水平或垂直方向排列节点 */
 export function layoutNodesInGroup(
   nodes: Node[],
   direction: GroupLayoutDirection = 'horizontal',
@@ -136,12 +136,39 @@ export function layoutNodesInGroup(
       if (Math.abs(pa.y - pb.y) < 48) return pa.x - pb.x
       return pa.y - pb.y
     }
-    if (Math.abs(pa.x - pb.x) < 48) return pa.y - pb.y
-    return pa.x - pb.x
+    if (direction === 'vertical') {
+      if (Math.abs(pa.x - pb.x) < 48) return pa.y - pb.y
+      return pa.x - pb.x
+    }
+    if (Math.abs(pa.y - pb.y) < 48) return pa.x - pb.x
+    return pa.y - pb.y
   })
 
   const anchorX = Math.min(...nodes.map((node) => node.getPosition().x))
   const anchorY = Math.min(...nodes.map((node) => node.getPosition().y))
+
+  if (direction === 'grid') {
+    const cols = Math.max(1, Math.ceil(Math.sqrt(sorted.length)))
+    let x = anchorX
+    let y = anchorY
+    let rowMaxH = 0
+    let col = 0
+
+    sorted.forEach((node) => {
+      const { width, height } = node.getSize()
+      if (col >= cols) {
+        col = 0
+        x = anchorX
+        y += rowMaxH + GROUP_GAP
+        rowMaxH = 0
+      }
+      node.position(x, y)
+      x += width + GROUP_GAP
+      rowMaxH = Math.max(rowMaxH, height)
+      col += 1
+    })
+    return
+  }
 
   let x = anchorX
   let y = anchorY

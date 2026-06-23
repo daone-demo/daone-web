@@ -25,7 +25,7 @@
           </div>
 
           <div
-            v-for="project in recentProjects as any"
+            v-for="project in recentProjects"
             :key="project.id"
             class="home__project-card"
             @click="openProject(project.id)"
@@ -125,6 +125,7 @@
 <script setup lang="ts">
 import { ExclamationCircleFilled, MoreOutlined } from '@ant-design/icons-vue'
 import { computed, createVNode, onMounted, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import api from '@/services/api';
 import {
@@ -137,13 +138,14 @@ import UpdateProjectName from '@components/UpdateProjectName/index.vue';
 import { Modal } from 'ant-design-vue';
 
 import { useModalStore } from '@stores/useModal';
+import { useProject } from '@stores/useProject';
 const modalStore = useModalStore();
+const projectStore = useProject();
+const { projects: recentProjects } = storeToRefs(projectStore);
 
 const router = useRouter()
 const projectId = ref('');
 const projectName = ref('');
-// const recentProjects = HOME_RECENT_PROJECTS
-const recentProjects = ref([]);
 const activeCategory = ref<HomeInspirationCategory>('all')
 
 const filteredInspiration = computed(() => {
@@ -171,14 +173,8 @@ const openInspiration = (id: string) => {
   router.push({ name: 'projectDetail', params: { id } })
 }
 
-const onLoadProjects = async () => {
-  let params = {
-    page: 1,
-    pageSize: 10,
-  }
-  const res:any = await api.getProjects(params);
-  recentProjects.value = res.records;
-  console.log('res', res);
+const onLoadProjects = () => {
+  return projectStore.loadProjects({ page: 1, pageSize: 10 })
 }
 
 const openUpdateProjectName = (id: string, name: string) => {
