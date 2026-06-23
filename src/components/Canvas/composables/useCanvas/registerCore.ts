@@ -24,6 +24,7 @@ import {
 } from './sharedImports'
 import type { GroupLayoutDirection } from './sharedImports'
 import type { ProjectCanvasResponse } from '@/services/api'
+import type { Project } from '@/stores/useProject'
 import type {
   CanvasNodeData, ImageSourceRef, NodeKind, TextFormatCommand,
   ImageGenTask, ConnectMenuKey, CanvasGraph, CanvasSnapshot, TextEditorApi, UserMenuKey,
@@ -169,7 +170,7 @@ function handleLogout() {
 
 const zoomPercent = computed(() => `${Math.round(zoomLevel.value * 100)}%`)
 const currentProjectName = computed(
-  () => canvasProjects.value.find((project) => project.id === activeProjectId.value)?.name ?? '未命名创作',
+  () => canvasProjects.value.find((project) => project.id === activeProjectId.value)?.title ?? '未命名创作',
 )
 const canvasBgThemeLabel = computed(
   () => getCanvasBgThemeMeta(canvasBgTheme.value).label,
@@ -1370,14 +1371,33 @@ function selectProject(projectId: string) {
   closeProjectMenu()
 }
 
-function upsertCanvasProject(id: string, name: string, saved = true) {
+async function onLoadProjects() {
+  try {
+    const res = await api.getProjects<Project>({
+      page: 1,
+      pageSize: 10,
+    })
+    canvasProjects.value = res.records
+  } catch (error) {
+    console.error('[Canvas] load projects failed', error)
+  }
+}
+
+function upsertCanvasProject(id: string, title: string, saved = true) {
   const item = canvasProjects.value.find((project) => project.id === id)
   if (item) {
-    item.name = name
+    item.title = title
     item.saved = saved
     return
   }
-  canvasProjects.value.unshift({ id, name, saved })
+  const now = new Date().toISOString()
+  canvasProjects.value.unshift({
+    id,
+    title,
+    saved,
+    createdAt: now,
+    updatedAt: now,
+  })
 }
 
 function applyProjectCanvasPayload(payload: ProjectCanvasResponse) {
@@ -1460,8 +1480,6 @@ function handleSaveCanvas() {
   if (project) {
     project.saved = false
   }
-
-  console.info('[Canvas] saved snapshot', snapshot)
 
   if (!projectId) {
     console.warn('[Canvas] skip remote save: missing projectId')
@@ -3560,6 +3578,13 @@ function unbindScrollerScrollListener() {
 }
 
 onMounted(() => {
+  void onLoadProjects()
+
+  const routeProjectId = router.currentRoute.value.params.id
+  if (typeof routeProjectId === 'string' && routeProjectId.trim()) {
+    activeProjectId.value = routeProjectId
+  }
+
   if (!graphRef.value) return
 
   const instance = createGraph(graphRef.value) as CanvasGraph
@@ -3773,23 +3798,6 @@ const openNewProject = () => {
   })
 }
 
-const onLoadProjects = async () => {
-  let params = {
-    page: 1,
-    pageSize: 10,
-  }
-  const res = await api.getProjects(params);
-  console.log('res', res);
-}
-
-onMounted(() => {
-  void onLoadProjects()
-
-  const routeProjectId = router.currentRoute.value.params.id
-  if (typeof routeProjectId === 'string' && routeProjectId.trim()) {
-    activeProjectId.value = routeProjectId
-  }
-})
   return {
     activeGroupSelection,
     addFromMenu,

@@ -1,7 +1,6 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import type { Graph } from '@antv/x6'
 import {
-  CANVAS_PROJECTS,
   type ImageSourceRef,
   type NodeKind,
   type VideoHdMagnification,
@@ -9,9 +8,13 @@ import {
 import { refreshCanvasNodeViews } from '../../graph'
 import { setSharedCanvasBgTheme } from '../../useCanvasBgTheme'
 import type { CanvasBgTheme } from '../../canvasTheme'
+import type { Project } from '@/stores/useProject'
 import type { CanvasDomRefs, CanvasEmit } from './types'
 
 export type UploadFilter = 'image' | 'video' | 'any'
+
+/** 画布顶栏项目列表项：后端 Project + 本地保存状态 */
+export type CanvasProjectListItem = Project & { saved?: boolean }
 
 export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const {
@@ -59,7 +62,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const isRecenteringToNodes = ref(false)
   const showProjectMenu = ref(false)
   const showUserMenu = ref(false)
-  const canvasProjects = ref([...CANVAS_PROJECTS])
+  const canvasProjects = ref<CanvasProjectListItem[]>([])
   const activeProjectId = ref('')
   const canvasRevision = ref(0)
   const showAddMenu = ref(false)

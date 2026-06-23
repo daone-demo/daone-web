@@ -4,6 +4,8 @@
       ref="canvasRef"
       @focus-chat="focusChatPanel"
       @add-to-chat="onAddToChat"
+      :projects-list="projectsList"
+      @new-project="onNewProject"
     />
     <ChatSidePanel
       ref="chatPanelRef"
@@ -29,9 +31,19 @@ type CanvasExpose = {
   loadProjectCanvas: (payload: ProjectCanvasResponse) => boolean
 }
 
+type CanvasProjectItem = {
+  id: string
+  title: string
+  coverAssetId: string | null
+  coverUrl: string | null
+  revision: number
+  createdAt: string
+  updatedAt: string
+}
+
 const route = useRoute();
 const projectId = route.params.id as string;
-
+const projectsList = ref<CanvasProjectItem[]>([]);
 const chatPanelCollapsed = ref(true)
 const canvasRef = ref<InstanceType<typeof Canvas> & CanvasExpose | null>(null)
 const chatPanelRef = ref<InstanceType<typeof ChatSidePanel> | null>(null)
@@ -72,7 +84,7 @@ function onNewChat() {
  */
 const onLoadProject = async () => {
   const res = await api.getProject(projectId);
-  console.log('res', res);
+  // console.log('res', res);
 }
 
 /**
@@ -88,10 +100,21 @@ const onLoadProjectCanvas = async () => {
   }
 }
 
+const onLoadProjects = async () => {
+  const res = await api.getProjects({ page: 1, pageSize: 10 });
+  projectsList.value = res.records as CanvasProjectItem[];
+}
+
+const onNewProject = async () => {
+  const res = await api.createProject({ title: `新项目-${Date.now()}` });
+  projectsList.value.push(res as CanvasProjectItem);
+}
+
 onMounted(() => {
   if (projectId && projectId.trim() !== '') {
     onLoadProject();
     onLoadProjectCanvas();
+    onLoadProjects();
   }
 });
 </script>

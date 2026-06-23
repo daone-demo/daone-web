@@ -20,7 +20,7 @@
       :credits="canvasCredits"
       :show-project-menu="showProjectMenu"
       :show-user-menu="showUserMenu"
-      :projects="canvasProjects"
+      :projects="projectsList"
       :active-project-id="activeProjectId"
       :user-name="userMenuName"
       :user-role="userMenuRole"
@@ -37,6 +37,7 @@
       @open-combo="openComboModal"
       @user-menu-action="handleUserMenuAction"
       @logout="handleLogout"
+      @new-project="emit('new-project')"
     />
 
     <div ref="graphRef" class="canvas__graph" />
@@ -309,7 +310,8 @@ import type { ProjectCanvasResponse } from '@/services/api'
 
 const emit = defineEmits<{
   'focus-chat': []
-  'add-to-chat': [payload: { previewUrl: string; fileName: string }]
+  'add-to-chat': [payload: { previewUrl: string; fileName: string }],
+  'new-project': []
 }>()
 
 const canvasRef = ref<HTMLElement | null>(null)
@@ -342,7 +344,6 @@ const {
   canvasBgTheme,
   canvasBgThemeLabel,
   canvasCredits,
-  canvasProjects,
   clearImageDialoguePreview,
   closeHistoryPanel,
   closeImageCrop,
@@ -523,6 +524,20 @@ defineExpose({
     return load?.(payload) ?? false
   },
 })
+
+export type CanvasProjectItem = {
+  id: string
+  title: string
+  coverAssetId: string | null
+  coverUrl: string | null
+  revision: number
+  createdAt: string
+  updatedAt: string
+}
+
+defineProps<{
+  projectsList: CanvasProjectItem[]
+}>()
 </script>
 
 <style lang="scss">

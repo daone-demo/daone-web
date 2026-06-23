@@ -47,12 +47,12 @@
               :class="{ 'canvas__project-doc--active': project.id === activeProjectId }"
               aria-hidden="true"
             />
-            <i
+            <!-- <i
               class="canvas__project-status"
               :class="project.saved ? 'canvas__project-status--saved' : 'canvas__project-status--unsaved'"
               aria-hidden="true"
-            />
-            <span class="canvas__project-name">{{ project.name }}</span>
+            /> -->
+            <span class="canvas__project-name">{{ project.title }}</span>
             <span
               v-if="project.id === activeProjectId"
               class="canvas__project-check"
@@ -61,7 +61,14 @@
           </button>
         </div>
       </div>
-      <button type="button" class="canvas__brand-add" title="新建">+</button>
+      <button
+        type="button"
+        class="canvas__brand-add"
+        title="新建"
+        @click="emit('new-project')"
+      >
+        +
+      </button>
       <span class="canvas__brand-divider" aria-hidden="true" />
       <div class="canvas__brand-group">
         <button
@@ -169,8 +176,12 @@ import type { CanvasBgTheme } from '../canvasTheme';
 
 export type CanvasProjectItem = {
   id: string
-  name: string
-  saved: boolean
+  title: string
+  coverAssetId: string | null
+  coverUrl: string | null
+  revision: number
+  createdAt: string
+  updatedAt: string
 }
 
 const USER_MENU_ITEMS = [
@@ -209,5 +220,6 @@ const emit = defineEmits<{
   'open-combo': []
   'user-menu-action': [key: UserMenuKey]
   logout: []
+  'new-project': []
 }>();
 </script>
