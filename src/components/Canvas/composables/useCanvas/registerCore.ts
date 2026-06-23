@@ -1367,6 +1367,19 @@ function onZoomMenuAction(
 }
 
 function selectProject(projectId: string) {
+  if (projectId === activeProjectId.value) {
+    closeProjectMenu()
+    return
+  }
+
+  const route = router.currentRoute.value
+  if (route.params.id !== projectId) {
+    router.replace({
+      name: route.name ?? undefined,
+      params: { ...route.params, id: projectId },
+    })
+  }
+
   activeProjectId.value = projectId
   closeProjectMenu()
 }

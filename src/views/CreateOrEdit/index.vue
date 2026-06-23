@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
 import type { Node } from '@antv/x6';
 import Canvas from '@/components/Canvas/index.vue';
 import ChatSidePanel from './ChatSidePanel.vue';
@@ -54,7 +54,6 @@ type CanvasProjectItem = {
 }
 
 const route = useRoute();
-const projectId = route.params.id as string;
 const projectsList = ref<CanvasProjectItem[]>([]);
 const chatPanelCollapsed = ref(true)
 const canvasRef = ref<InstanceType<typeof Canvas> & CanvasExpose | null>(null)
@@ -94,9 +93,12 @@ function onNewChat() {
 /**
  * Load project canvas
  */
-const onLoadProjectCanvas = async () => {
+const onLoadProjectCanvas = async (id?: string) => {
+  const targetId = (id ?? route.params.id) as string
+  if (!targetId?.trim()) return
+
   try {
-    const res = await api.getProjectCanvas(projectId)
+    const res = await api.getProjectCanvas(targetId)
     await nextTick()
     canvasRef.value?.loadProjectCanvas(res)
   } catch (error) {
@@ -133,11 +135,18 @@ const onRefreshProjects = () => {
   onLoadProjects();
 }
 
+watch(
+  () => route.params.id,
+  (newId) => {
+    if (typeof newId === 'string' && newId.trim()) {
+      void onLoadProjectCanvas(newId)
+    }
+  },
+  { immediate: true },
+)
+
 onMounted(() => {
-  if (projectId && projectId.trim() !== '') {
-    onLoadProjectCanvas();
-    onLoadProjects();
-  }
+  void onLoadProjects()
 });
 </script>
 

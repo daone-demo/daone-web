@@ -13,7 +13,7 @@
           :class="{ 'canvas__brand-project--active': showProjectMenu }"
           @click="emit('toggle-project-menu')"
         >
-          <span class="canvas__brand-project-name">{{ currentProjectName }}</span>
+          <span class="canvas__brand-project-name">{{ displayProjectName }}</span>
           <span class="canvas__brand-project-arrow" aria-hidden="true" />
         </button>
         <div
@@ -55,12 +55,12 @@
             <span class="canvas__project-name">{{ project.title }}</span>
             <i
               class="iconfont icon-zhongmingming"
-              @click="emit('rename-project', project.id, project.title)"
+              @click.stop="emit('rename-project', project.id, project.title)"
             />
             <i
               class="iconfont icon-shanchu1"
               v-if="project.id !== activeProjectId"
-              @click="emit('delete-project', project.id)"
+              @click.stop="emit('delete-project', project.id)"
             />
             <span
               v-if="project.id === activeProjectId"
@@ -179,6 +179,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
 import type { CanvasBgTheme } from '../canvasTheme';
@@ -201,7 +202,7 @@ const USER_MENU_ITEMS = [
 
 export type UserMenuKey = (typeof USER_MENU_ITEMS)[number]['key']
 
-defineProps<{
+const props = defineProps<{
   canvasBgTheme: CanvasBgTheme
   currentProjectName: string
   canUndo: boolean
@@ -215,6 +216,12 @@ defineProps<{
   userRole: string
   userPoints: number
 }>()
+
+const displayProjectName = computed(
+  () => props.projects.find((project) => project.id === props.activeProjectId)?.title
+    ?? props.currentProjectName
+    ?? '未命名创作',
+)
 
 const emit = defineEmits<{
   'go-home': []
