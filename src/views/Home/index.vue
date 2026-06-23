@@ -117,7 +117,8 @@
   </div>
   <UpdateProjectName
     v-model:open="modalStore.updateProjectNameVisible"
-    :project-id="projectId"
+    v-model:project-id="projectId"
+    v-model:project-name="projectName"
     @submit="onRefreshProjects"
   />
 </template>

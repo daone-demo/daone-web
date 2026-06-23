@@ -32,8 +32,11 @@ import { computed, ref, watch } from 'vue'
 import api from '@/services/api'
 const title = ref('');
 const submitUpdateProjectName = () => {
-  api.updateProject(projectId.value, { title: title.value }).then(() => {
-    emit('submit', { projectId: projectId.value, title: title.value })
+  const nextTitle = title.value.trim()
+  const currentProjectId = projectId.value
+  api.updateProject(currentProjectId, { title: nextTitle }).then(() => {
+    emit('submit', { projectId: currentProjectId, title: nextTitle })
+    title.value = ''
     close()
   })
 }
@@ -60,9 +63,12 @@ function lockBodyScroll(locked: boolean) {
 
 watch(open, (visible) => {
   lockBodyScroll(visible)
-  if (!visible) {
-    projectName.value = ''
+  if (visible) {
+    title.value = projectName.value
+    return
   }
+  title.value = ''
+  projectName.value = ''
 })
 </script>
 

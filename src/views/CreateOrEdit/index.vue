@@ -6,12 +6,20 @@
       @add-to-chat="onAddToChat"
       :projects-list="projectsList"
       @new-project="onNewProject"
+      @rename-project="onRenameProject"
+      @delete-project="onDeleteProject"
     />
     <ChatSidePanel
       ref="chatPanelRef"
       v-model:collapsed="chatPanelCollapsed"
       @send="onChatSend"
       @new-chat="onNewChat"
+    />
+    <UpdateProjectName
+      v-model:open="modalStore.updateProjectNameVisible"
+      v-model:project-id="project_Id"
+      v-model:project-name="projectName"
+      @submit="onRefreshProjects"
     />
   </div>
 </template>
@@ -24,7 +32,11 @@ import ChatSidePanel from './ChatSidePanel.vue';
 import type { ChatSendPayload } from './chatTypes';
 import { useRoute } from 'vue-router';
 import api, { type ProjectCanvasResponse } from '@/services/api';
+import { useModalStore } from '@stores/useModal';
+const modalStore = useModalStore();
 
+const projectName = ref('');
+const project_Id = ref('');
 type CanvasExpose = {
   addImagesFromFiles: (files: File[]) => Promise<Node[]>
   getNodeCount: () => number
@@ -80,14 +92,6 @@ function onNewChat() {
 }
 
 /**
- * Load project
- */
-const onLoadProject = async () => {
-  const res = await api.getProject(projectId);
-  // console.log('res', res);
-}
-
-/**
  * Load project canvas
  */
 const onLoadProjectCanvas = async () => {
@@ -110,9 +114,27 @@ const onNewProject = async () => {
   projectsList.value.push(res as CanvasProjectItem);
 }
 
+const onRenameProject = async (projectId: string, name: string) => {
+  project_Id.value = projectId;
+  projectName.value = name;
+  modalStore.openModal('updateProjectName');
+  onLoadProjects();
+}
+
+const onDeleteProject = async (projectId: string) => {
+  const res:any = await api.deleteProject(projectId);
+  onLoadProjects();
+}
+
+/**
+ * Refresh projects list
+ */
+const onRefreshProjects = () => {
+  onLoadProjects();
+}
+
 onMounted(() => {
   if (projectId && projectId.trim() !== '') {
-    onLoadProject();
     onLoadProjectCanvas();
     onLoadProjects();
   }

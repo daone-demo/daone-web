@@ -7,8 +7,8 @@
             :key="tab.key"
             type="button"
             class="project-panel__tab"
-            :class="{ 'project-panel__tab--active': activeTab === tab.key }"
-            @click="activeTab = tab.key"
+            :class="{ 'project-panel__tab--active': scope === tab.key }"
+            @click="onChangeScope(tab.key)"
           >
             {{ tab.label }}
           </button>
@@ -23,46 +23,13 @@
     </header>
     <section class="project-panel">
       <div class="project-panel__body">
-        <div v-if="activeTab === 'recommend'" class="project-panel__grid">
+        <div v-if="list.length > 0" class="project-panel__grid">
           <button
-            v-for="file in displayFiles"
-            :key="file.id"
             type="button"
-            class="project-card"
-            :class="`project-card--${file.type}`"
+            class="project-card project-card--upload"
+            @click="triggerUpload"
+            v-if="scope === 'FILES'"
           >
-            <img
-              v-if="file.type === 'image' && file.image"
-              class="project-card__image"
-              :src="file.image"
-              alt=""
-              loading="lazy"
-            />
-            <span v-else-if="file.type === 'scribble'" class="project-card__scribble" aria-hidden="true" />
-            <span v-else-if="file.type === 'green'" class="project-card__green" aria-hidden="true" />
-          </button>
-        </div>
-        <div v-if="activeTab === 'material'" class="project-panel__grid">
-          <button
-            v-for="file in displayFiles"
-            :key="file.id"
-            type="button"
-            class="project-card"
-            :class="`project-card--${file.type}`"
-          >
-            <img
-              v-if="file.type === 'image' && file.image"
-              class="project-card__image"
-              :src="file.image"
-              alt=""
-              loading="lazy"
-            />
-            <span v-else-if="file.type === 'scribble'" class="project-card__scribble" aria-hidden="true" />
-            <span v-else-if="file.type === 'green'" class="project-card__green" aria-hidden="true" />
-          </button>
-        </div>
-        <div v-if="activeTab === 'files'" class="project-panel__grid">
-          <button type="button" class="project-card project-card--upload" @click="triggerUpload">
             <span class="project-card__upload-icon" aria-hidden="true">+</span>
             <span class="project-card__upload-label">上传图片</span>
             <input
@@ -75,25 +42,22 @@
             />
           </button>
           <button
-            v-for="file in displayFiles"
+            v-for="file in list"
             :key="file.id"
             type="button"
             class="project-card"
             :class="`project-card--${file.type}`"
           >
             <img
-              v-if="file.type === 'image' && file.image"
               class="project-card__image"
-              :src="file.image"
+              :src="file.previewUrl"
               alt=""
               loading="lazy"
             />
-            <span v-else-if="file.type === 'scribble'" class="project-card__scribble" aria-hidden="true" />
-            <span v-else-if="file.type === 'green'" class="project-card__green" aria-hidden="true" />
           </button>
         </div>
         <div v-else class="project-panel__empty">
-          <p>{{ emptyTabText }}</p>
+          <p>暂无内容</p>
         </div>
       </div>
     </section>
@@ -101,19 +65,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { PROJECT_FILES, PROJECT_TABS, type ProjectFileItem, type ProjectTabKey } from './projectData'
+import { ref, onMounted } from 'vue'
+import { PROJECT_TABS, type ProjectFileItem } from './projectData'
+import api from '@/services/api';
 
-const activeTab = ref<ProjectTabKey>('files')
 const uploadInputRef = ref<HTMLInputElement | null>(null)
 const uploadedFiles = ref<ProjectFileItem[]>([])
-
-const displayFiles = computed(() => [...uploadedFiles.value, ...PROJECT_FILES])
-
-const emptyTabText = computed(() => {
-  const tab = PROJECT_TABS.find((item) => item.key === activeTab.value)
-  return tab ? `${tab.label}内容即将上线` : '暂无内容'
-})
+const scope = ref('RECOMMENDED');
+const page = ref(1);
+const list = ref<any[]>([]);
 
 function triggerUpload() {
   uploadInputRef.value?.click()
@@ -132,6 +92,27 @@ function handleUploadChange(event: Event) {
 
   input.value = ''
 }
+
+const onChangeScope = (key: string) => {
+  scope.value = key;
+  page.value = 1;
+  onLoadAssets();
+}
+
+const onLoadAssets = () => {
+  api.getAssets({
+    scope: scope.value,
+    pageSize: 50,
+    page: 1,
+  }).then((res: any) => {
+    console.log('res', res);
+    list.value = res.records;
+  })
+}
+
+onMounted(()=>{
+  onLoadAssets();
+})
 </script>
 
 <style scoped lang="scss">

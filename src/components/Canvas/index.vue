@@ -38,6 +38,8 @@
       @user-menu-action="handleUserMenuAction"
       @logout="handleLogout"
       @new-project="emit('new-project')"
+      @rename-project="emit('rename-project', $event)"
+      @delete-project="emit('delete-project', $event)"
     />
 
     <div ref="graphRef" class="canvas__graph" />
@@ -312,6 +314,8 @@ const emit = defineEmits<{
   'focus-chat': []
   'add-to-chat': [payload: { previewUrl: string; fileName: string }],
   'new-project': []
+  'rename-project': [projectId: string, name: string],
+  'delete-project': [projectId: string],
 }>()
 
 const canvasRef = ref<HTMLElement | null>(null)

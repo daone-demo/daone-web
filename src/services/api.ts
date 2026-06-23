@@ -234,6 +234,8 @@ export interface AssetListQuery extends PageQuery {
   type?: string
   source?: string
   keyword?: string
+  pageSize?: number
+  page?: number
 }
 
 export interface GenerationTaskListQuery extends PageQuery {
