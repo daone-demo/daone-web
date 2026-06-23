@@ -124,7 +124,7 @@ const onRenameProject = async (projectId: string, name: string) => {
 }
 
 const onDeleteProject = async (projectId: string) => {
-  const res:any = await api.deleteProject(projectId);
+  await api.deleteProject(projectId);
   onLoadProjects();
 }
 

@@ -539,8 +539,7 @@ const onLoadPoints = async () => {
     page: page.value,
     pageSize: 10,
   }
-  const res = await api.getPointsLedger(params);
-  // console.log('res', res);
+  await api.getPointsLedger(params);
 }
 
 onMounted(()=>{

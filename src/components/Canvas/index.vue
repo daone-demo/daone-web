@@ -38,7 +38,7 @@
       @user-menu-action="handleUserMenuAction"
       @logout="handleLogout"
       @new-project="emit('new-project')"
-      @rename-project="emit('rename-project', $event)"
+      @rename-project="(projectId, name) => emit('rename-project', projectId, name)"
       @delete-project="emit('delete-project', $event)"
     />
 

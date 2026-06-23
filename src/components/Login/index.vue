@@ -132,9 +132,6 @@ const codeSending = ref(false)
 
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
-/** 演示用微信登录二维码（内联 SVG，无需外网） */
-const wechatQrUrl = ref('');
-
 const phoneValid = computed(() => /^1\d{10}$/.test(phone.value.trim()))
 
 const canSubmit = computed(
