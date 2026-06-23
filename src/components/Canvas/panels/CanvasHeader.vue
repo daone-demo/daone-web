@@ -53,6 +53,8 @@
               aria-hidden="true"
             /> -->
             <span class="canvas__project-name">{{ project.title }}</span>
+            <i class="iconfont icon-zhongmingming" />
+            <i class="iconfont icon-shanchu1" v-if="project.id !== activeProjectId" />
             <span
               v-if="project.id === activeProjectId"
               class="canvas__project-check"
