@@ -9,6 +9,7 @@ import {
 } from '@/utils/request'
 
 export const USER_INFO_KEY = 'daone_user_info'
+export const POINT_ACCOUNT_KEY = 'daone_point_account'
 
 /** 当前登录用户信息，额外的后端字段也会被保留。 */
 export interface UserInfo {
@@ -20,6 +21,12 @@ export interface UserInfo {
   status?: string
   createdAt?: string
   [key: string]: unknown
+}
+
+export interface PointAccount {
+  available: number
+  frozen: number
+  grantedTotal: number
 }
 
 function readStoredUserInfo(): UserInfo | null {
@@ -37,9 +44,25 @@ function readStoredUserInfo(): UserInfo | null {
   }
 }
 
+function readStoredPointAccount(): PointAccount | null {
+  const value = localStorage.getItem(POINT_ACCOUNT_KEY)
+  if (!value) return null
+
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return parsed !== null && typeof parsed === 'object'
+      ? parsed as PointAccount
+      : null
+  } catch {
+    localStorage.removeItem(POINT_ACCOUNT_KEY)
+    return null
+  }
+}
+
 export const useUserInfo = defineStore('userInfo', () => {
   /** 用户 token，与 Axios 请求层共用同一个 localStorage key。 */
   const token = ref(getToken() ?? '')
+  const pointAccount = ref<PointAccount | null>(readStoredPointAccount())
 
   /** 当前用户资料。 */
   const userInfo = ref<UserInfo | null>(readStoredUserInfo())
@@ -59,6 +82,15 @@ export const useUserInfo = defineStore('userInfo', () => {
       persistToken(nextToken)
     } else {
       removeToken()
+    }
+  }
+
+  function setPointAccount(value: PointAccount | null) {
+    pointAccount.value = value
+    if (value) {
+      localStorage.setItem(POINT_ACCOUNT_KEY, JSON.stringify(value))
+    } else {
+      localStorage.removeItem(POINT_ACCOUNT_KEY)
     }
   }
 
@@ -103,6 +135,7 @@ export const useUserInfo = defineStore('userInfo', () => {
   }
 
   return {
+    pointAccount,
     token,
     userInfo,
     isLoggedIn,
@@ -113,6 +146,7 @@ export const useUserInfo = defineStore('userInfo', () => {
     setSession,
     clearUserInfo,
     clearSession,
+    setPointAccount
   }
 })
 

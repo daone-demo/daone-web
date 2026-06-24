@@ -105,7 +105,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import api from '@/services/api'
-import { useUserInfo, type UserInfo } from '@/stores/useUserInfo'
+import { useUserInfo, type UserInfo, type PointAccount } from '@/stores/useUserInfo'
 
 interface SmsLoginResult {
   token: string
@@ -195,12 +195,20 @@ async function submitLogin() {
   const result = await api.postSmsLogin<SmsLoginResult>(loginData)
 
   userInfoStore.setSession(result.token, result.user)
+  onLoadUserPoint();
   emit('submit', loginData)
   close()
 }
 
 function lockBodyScroll(locked: boolean) {
   document.body.style.overflow = locked ? 'hidden' : ''
+}
+
+const onLoadUserPoint = async () => {
+  api.getPointsAccount()
+    .then((res:any)=>{
+      userInfoStore.setPointAccount(res)
+    })
 }
 
 watch(open, (visible) => {

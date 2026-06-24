@@ -121,16 +121,32 @@
           :class="{ 'canvas__header-pill--active': showUserMenu }"
           @click="emit('toggle-user-menu')"
         >
-          <span class="canvas__header-pill-icon canvas__header-pill-icon--star" aria-hidden="true" />
-          <span class="canvas__header-credits-value">{{ credits }}</span>
+          <img
+            v-if="userInfoStore.userInfo?.avatarUrl"
+            :src="userInfoStore.userInfo?.avatarUrl ?? ''"
+            class="canvas__header-avatar"
+            aria-hidden="true"
+          />
+          <span
+            class="canvas__header-pill-icon canvas__header-pill-icon--star"
+            aria-hidden="true"
+            v-else
+          />
+          <span class="canvas__header-credits-value">{{ userInfoStore?.pointAccount?.available || 0 }}</span>
           <span class="canvas__header-avatar" aria-hidden="true" />
         </button>
 
         <div v-if="showUserMenu" class="canvas__user-menu" @mousedown.stop>
           <button type="button" class="canvas__user-menu-profile" @click="emit('go-user-center')">
-            <span class="canvas__user-menu-avatar" aria-hidden="true" />
+            <img
+              v-if="userInfoStore.userInfo?.avatarUrl"
+              :src="userInfoStore.userInfo?.avatarUrl ?? ''"
+              class="canvas__header-avatar"
+              aria-hidden="true"
+            />
+            <span class="canvas__user-menu-avatar" aria-hidden="true"  v-else />
             <span class="canvas__user-menu-profile-main">
-              <span class="canvas__user-menu-name">{{ userName }}</span>
+              <span class="canvas__user-menu-name">{{ userInfoStore.userInfo?.nickname }}</span>
               <span class="canvas__user-menu-badge">
                 <span class="canvas__user-menu-vip" aria-hidden="true">VIP</span>
                 {{ userRole }}
@@ -142,7 +158,7 @@
           <div class="canvas__user-menu-balance">
             <span class="canvas__user-menu-balance-left">
               <span class="canvas__user-menu-balance-icon" aria-hidden="true" />
-              <span class="canvas__user-menu-balance-value">{{ userPoints }}</span>
+              <span class="canvas__user-menu-balance-value">{{ userInfoStore?.pointAccount?.available || 0 }}</span>
             </span>
             <button type="button" class="canvas__user-menu-buy" @click="emit('open-combo')">
               购买
@@ -183,6 +199,9 @@ import { computed } from 'vue'
 import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
 import type { CanvasBgTheme } from '../canvasTheme';
+import { useUserInfo } from '@/stores/useUserInfo';
+
+const userInfoStore = useUserInfo();
 
 export type CanvasProjectItem = {
   id: string
@@ -240,4 +259,7 @@ const emit = defineEmits<{
   'rename-project': [projectId: string, name: string],
   'delete-project': [projectId: string],
 }>();
+
+console.log('userInfoStore', userInfoStore.userInfo?.nickname);
+
 </script>
