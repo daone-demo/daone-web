@@ -135,7 +135,7 @@
             </div>
 
             <button
-              v-if="isProcessing"
+              v-if="isStreaming || isProcessing"
               type="button"
               class="chat-panel__stop"
               title="停止"
@@ -148,10 +148,10 @@
               v-else
               type="button"
               class="chat-panel__send"
-              :disabled="!canSend"
+              @click="sendMessage"
+              :disabled="!canSend || isStreaming || isProcessing"
               title="发送"
               aria-label="发送"
-              @click="sendMessage"
             >
               <span class="chat-panel__send-icon" aria-hidden="true" />
             </button>
@@ -184,6 +184,21 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCanvasBgTheme } from '@/components/Canvas/useCanvasBgTheme'
 import type { ChatAttachment, ChatMessage, ChatSendPayload } from './chatTypes'
 import { CHAT_TIPS } from './chatTypes'
+import { useSSE } from '@/hooks/useSSE'
+import { getToken } from '@/utils/request'
+
+const API_BASE = import.meta.env.DEV
+  ? '/api/v1'
+  : import.meta.env.VITE_API_BASE_URL || '/api/v1'
+
+const { loading, connected, connect, close } = useSSE()
+const isStreaming = computed(() => loading.value || connected.value)
+
+const AUTO_MODE_MODELS: Record<string, string> = {
+  Auto: 'gpt5.5',
+  Fast: 'gpt5.5',
+  Quality: 'Codex',
+}
 
 const skills = [
   '有声书',
@@ -305,8 +320,80 @@ function scrollMessagesToBottom() {
   })
 }
 
+function resolveModel(mode: string) {
+  return AUTO_MODE_MODELS[mode] ?? 'gpt5.5'
+}
+
+function parseChatChunk(data: string): string {
+  try {
+    const parsed = JSON.parse(data) as {
+      choices?: Array<{ delta?: { content?: string } }>
+    }
+    return parsed.choices?.[0]?.delta?.content ?? ''
+  } catch {
+    return data
+  }
+}
+
+function buildApiMessages() {
+  return messages.value
+    .filter((item) => item.text.trim())
+    .map((item) => ({
+      role: item.role,
+      content: item.text.trim(),
+    }))
+}
+
+function startChatStream() {
+  const assistantId = `msg-${Date.now()}-assistant`
+  messages.value.push({
+    id: assistantId,
+    role: 'assistant',
+    text: '',
+  })
+  scrollMessagesToBottom()
+
+  const token = getToken()
+  void connect({
+    url: `${API_BASE}/provider/chat/completions`,
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: {
+      model: resolveModel(autoMode.value),
+      messages: buildApiMessages(),
+      stream: true,
+    },
+    onMessage(data) {
+      console.log('data', data);
+      const chunk = parseChatChunk(data)
+      if (!chunk) return
+
+      const assistant = messages.value.find((item) => item.id === assistantId)
+      if (!assistant) return
+
+      assistant.text += chunk
+      scrollMessagesToBottom()
+    },
+    onDone() {
+      scrollMessagesToBottom()
+    },
+    onError(err) {
+      const assistant = messages.value.find((item) => item.id === assistantId)
+      if (!assistant) return
+
+      if (!assistant.text.trim()) {
+        assistant.text = '请求失败，请稍后重试。'
+      }
+
+      const errorMessage = err instanceof Error ? err.message : '未知错误'
+      assistant.tip = errorMessage
+      scrollMessagesToBottom()
+    },
+  })
+}
+
 function sendMessage() {
-  if (isProcessing.value || !canSend.value) return
+  if (isStreaming.value || isProcessing.value || !canSend.value) return
 
   const text = message.value.trim()
   const payloadAttachments = attachments.value.map((item) => ({ ...item }))
@@ -329,9 +416,14 @@ function sendMessage() {
   clearAttachments()
   scrollMessagesToBottom()
   emit('send', { text, attachments: payloadAttachments })
+
+  if (text) {
+    startChatStream()
+  }
 }
 
 function stopProcessing() {
+  close()
   isProcessing.value = false
 }
 
@@ -344,6 +436,7 @@ function endProcessing() {
 }
 
 function startNewChat() {
+  close()
   isActive.value = false
   isProcessing.value = false
   sessionTitle.value = 'New Chat'
@@ -370,6 +463,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onDocumentMouseDown, true)
+  close()
   clearAttachments()
 })
 

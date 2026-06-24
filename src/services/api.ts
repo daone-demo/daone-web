@@ -251,6 +251,30 @@ export interface OrderListQuery extends PageQuery {
   status?: string
 }
 
+export interface GenerateImageRequest {
+  model: string
+  prompt: string
+  n: number
+  size: string
+  stream: boolean
+}
+
+export interface GenerateVideoRequest {
+  model: string
+  prompt: string
+  imageUrl: string
+  duration: number
+  aspectRatio: string
+  resolution: string
+  stream: boolean
+  providerBody: JsonObject
+}
+
+export interface CallToolRequest {
+  imageUrl: string
+  parameters: JsonObject
+}
+
 const pathId = (value: string) => encodeURIComponent(value)
 
 // request.ts 的业务基地址是 /api/v1；后台接口则位于 /api/admin/v1。
@@ -524,77 +548,21 @@ const api = {
   getHome<T = unknown>(categoryCode?: string) {
     return http.get<T>('/home', { params: categoryCode ? { categoryCode } : undefined })
   },
-
-  
-
-  // Admin
-  /** 后台分页查询用户列表。 */
-  getAdminUsers<T = unknown>(params?: PageQuery) {
-    return http.get<PageResult<T>>('/admin/v1/users', adminConfig({ params }))
+  /** 生成图片。 */
+  generateImage<T = unknown>(data: GenerateImageRequest) {
+    return http.post<T>('/provider/images/generations', data)
   },
-  /** 后台修改指定用户的启用状态。 */
-  updateAdminUserStatus<T = unknown>(userId: Id, data: AdminUserStatusRequest) {
-    return http.patch<T>(`/admin/v1/users/${pathId(userId)}/status`, data, adminConfig())
+  /** 生成图片。 */
+  generateVideo<T = unknown>(data: GenerateVideoRequest) {
+    return http.post<T>('/provider/videos/generations', data)
   },
-  /** 后台人工增加或扣减指定用户的积分。 */
-  adjustAdminUserPoints<T = unknown>(userId: Id, data: AdminPointAdjustmentRequest) {
-    return http.post<T>(`/admin/v1/users/${pathId(userId)}/point-adjustments`, data, adminConfig())
+  /** 查询工具白名单。 */
+  getTools<T = unknown>() {
+    return http.get<T>('/provider/tools')
   },
-  /** 后台分页查询订单，可按订单状态筛选。 */
-  getAdminOrders<T = unknown>(params?: OrderListQuery) {
-    return http.get<PageResult<T>>('/admin/v1/orders', adminConfig({ params }))
-  },
-  /** 后台获取全部套餐配置。 */
-  getAdminPlans<T = unknown>() {
-    return http.get<T>('/admin/v1/plans', adminConfig())
-  },
-  /** 后台创建套餐。 */
-  createAdminPlan<T = unknown>(data: AdminPlanSaveRequest) {
-    return http.post<T>('/admin/v1/plans', data, adminConfig())
-  },
-  /** 后台修改指定套餐。 */
-  updateAdminPlan<T = unknown>(planCode: string, data: AdminPlanSaveRequest) {
-    return http.put<T>(`/admin/v1/plans/${pathId(planCode)}`, data, adminConfig())
-  },
-  /** 后台修改指定套餐的启用状态。 */
-  updateAdminPlanStatus<T = unknown>(planCode: string, data: AdminPlanStatusRequest) {
-    return http.patch<T>(`/admin/v1/plans/${pathId(planCode)}/status`, data, adminConfig())
-  },
-  /** 后台获取模型配置列表。 */
-  getAdminModelConfigs<T = unknown>() {
-    return http.get<T>('/admin/v1/model-configs', adminConfig())
-  },
-  /** 后台修改指定模型的积分和参数配置。 */
-  updateAdminModelConfig<T = unknown>(modelCode: string, data: AdminModelConfigRequest) {
-    return http.put<T>(`/admin/v1/model-configs/${pathId(modelCode)}`, data, adminConfig())
-  },
-  /** 后台修改指定模型的启用状态。 */
-  updateAdminModelStatus<T = unknown>(modelCode: string, data: AdminModelStatusRequest) {
-    return http.patch<T>(`/admin/v1/model-configs/${pathId(modelCode)}/status`, data, adminConfig())
-  },
-  /** 后台获取提示词模板列表。 */
-  getAdminPromptTemplates<T = unknown>() {
-    return http.get<T>('/admin/v1/prompt-templates', adminConfig())
-  },
-  /** 后台创建提示词模板。 */
-  createAdminPromptTemplate<T = unknown>(data: AdminPromptTemplateSaveRequest) {
-    return http.post<T>('/admin/v1/prompt-templates', data, adminConfig())
-  },
-  /** 后台修改指定提示词模板。 */
-  updateAdminPromptTemplate<T = unknown>(code: string, data: AdminPromptTemplateSaveRequest) {
-    return http.put<T>(`/admin/v1/prompt-templates/${pathId(code)}`, data, adminConfig())
-  },
-  /** 后台获取灵感内容列表。 */
-  getAdminInspirations<T = unknown>() {
-    return http.get<T>('/admin/v1/inspirations', adminConfig())
-  },
-  /** 后台创建灵感内容。 */
-  createAdminInspiration<T = unknown>(data: AdminInspirationSaveRequest) {
-    return http.post<T>('/admin/v1/inspirations', data, adminConfig())
-  },
-  /** 后台修改指定灵感内容。 */
-  updateAdminInspiration<T = unknown>(id: Id, data: AdminInspirationSaveRequest) {
-    return http.put<T>(`/admin/v1/inspirations/${pathId(id)}`, data, adminConfig())
+  /** 调用工具。 */
+  callTool<T = unknown>(toolCode: string, data: CallToolRequest) {
+    return http.post<T>(`/provider/tools/${toolCode}`, data)
   },
 }
 
