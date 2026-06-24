@@ -3753,22 +3753,6 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     })
   }
 
-  const onLoadProjects = async () => {
-    // 注意：此方法在 _legacy.ts 中，已不再作为 Canvas 入口。
-    // 实际逻辑请改 composables/useCanvas/registerCore.ts 中的 onLoadProjects。
-    let params = {
-      page: 1,
-      pageSize: 10,
-    }
-    const res = await api.getProjects(params);
-    console.log('res123', res);
-    canvasProjects.value = res.records;
-  }
-
-  onMounted(() => {
-    onLoadProjects();
-  });
-
   return {
     emit,
     TEXT_EDITOR_PLACEHOLDER,

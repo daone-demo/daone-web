@@ -135,6 +135,11 @@ const onRefreshProjects = () => {
   onLoadProjects();
 }
 
+const onLoadTools = async () => {
+  const res = await api.getTools();
+  console.log('tools', res);
+}
+
 watch(
   () => route.params.id,
   (newId) => {
@@ -146,8 +151,10 @@ watch(
 )
 
 onMounted(() => {
-  void onLoadProjects()
+  void onLoadProjects();
+  void onLoadTools();
 });
+
 </script>
 
 <style scoped lang="scss">
