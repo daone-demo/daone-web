@@ -85,7 +85,9 @@
       <router-view />
     </main>
     <Login v-model:open="modalStore.loginVisible" />
-    <Combo v-model:open="modalStore.comboVisible" />
+    <Combo
+      v-model:open="modalStore.comboVisible"
+    />
   </div>
 </template>
 

@@ -67,14 +67,14 @@
 
         <div class="home__filters">
           <button
-            v-for="category in HOME_INSPIRATION_CATEGORIES"
-            :key="category.key"
+            v-for="category in inspirationCategories"
+            :key="category.code"
             type="button"
             class="home__filter-btn"
-            :class="{ 'home__filter-btn--active': activeCategory === category.key }"
-            @click="activeCategory = category.key"
+            :class="{ 'home__filter-btn--active': activeCategory === category.code }"
+            @click="activeCategory = category.code"
           >
-            {{ category.label }}
+            {{ category.name }}
           </button>
         </div>
 
@@ -130,7 +130,6 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import api from '@/services/api';
 import {
-  HOME_INSPIRATION_CATEGORIES,
   HOME_INSPIRATION_ITEMS,
   type HomeInspirationCategory,
 } from './homeData'
@@ -208,8 +207,19 @@ const openDeleteProject = (id: string) => {
   })
 }
 
+const inspirationCategories = ref<any[]>([]);
+
+const onLoadHomeData = () => {
+  api.getHome()
+    .then((res:any)=>{
+      console.log('onLoadHomeData', res)
+      inspirationCategories.value = res.inspirationCategories;
+    })
+}
+
 onMounted(()=>{
   onLoadProjects();
+  onLoadHomeData();
 });
 
 </script>

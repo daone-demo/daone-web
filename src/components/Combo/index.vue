@@ -102,11 +102,11 @@
 
                   <div class="combo-modal__price-row">
                     <span class="combo-modal__price">
-                      ¥ {{ displayPrice(plan) }}
-                      <small>{{ priceUnit(plan) }}</small>
+                      ¥ {{ tools.div(plan.priceFen, 100) }}
+                      <small>元</small>
                     </span>
                     <span class="combo-modal__original">
-                      原价 ¥{{ displayOriginal(plan) }}{{ priceUnit(plan) }}
+                      原价 ¥{{ tools.div(plan.originalPriceFen, 100) }}元
                     </span>
                   </div>
 
@@ -252,9 +252,10 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import {
   TRIAL_FEATURE_CARDS,
   type BillingCycle,
-  type ComboPlan,
 } from './comboData'
 import api from '@/services/api';
+import tools from '@/utils/tools';
+import { message } from 'ant-design-vue';
 
 const open = defineModel<boolean>('open', { default: false });
 const plansList = ref<any[]>([]);
@@ -306,21 +307,6 @@ const onloadPlans = async () => {
   console.log('onloadPlans', res)
 }
 
-function displayPrice(plan: ComboPlan) {
-  return billing.value === 'YEAR' ? plan.yearlyPrice : plan.monthlyPrice
-}
-
-function displayOriginal(plan: ComboPlan) {
-  return billing.value === 'YEAR' ? plan.yearlyOriginal : plan.monthlyOriginal
-}
-
-function priceUnit(plan: ComboPlan) {
-  if (billing.value === 'YEAR') {
-    return plan.priceSuffixYearly ?? '/年'
-  }
-  return '/月'
-}
-
 function onActivate(planId: string) {
   emit('activate', planId, billing.value)
 }
@@ -340,9 +326,8 @@ function startTrialCountdown(seconds = 60) {
 async function sendTrialCode() {
   if (!trialPhoneValid.value || trialCodeCountdown.value > 0) return
   trialCodeSending.value = true
-  emit('send-trial-code', trialPhone.value.trim())
   try {
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    await api.queryTrialSmsCode({ phone: trialPhone.value.trim() })
     startTrialCountdown()
   } finally {
     trialCodeSending.value = false
@@ -351,11 +336,18 @@ async function sendTrialCode() {
 
 function submitTrial() {
   if (!canSubmitTrial.value) return
-  emit('trial-submit', {
+  api.createTrialApplication({
     phone: trialPhone.value.trim(),
     code: trialCode.value.trim(),
-    name: trialName.value.trim(),
+    contactName: trialName.value.trim(),
     position: trialPosition.value.trim(),
+  }).then((res:any)=>{
+    console.log('submitTrial', res)
+    message.success('操作成功');
+    close()
+  })
+  .catch((err:any)=>{
+    console.error('submitTrial', err)
   })
 }
 
