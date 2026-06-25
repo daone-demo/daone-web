@@ -1,4 +1,4 @@
-import { http } from '@/utils/request'
+import { http, type RequestConfig } from '@/utils/request'
 import type { PostSmsLoginRequest, QuerySmsCodeRequest } from '@/types/types'
 
 type JsonObject = Record<string, unknown>
@@ -99,15 +99,26 @@ export interface UploadTicketRequest {
   fileName: string
   contentType: string
   fileSize: number
+  fileBase64: string
 }
 
-export interface UploadTicketResponse {
-  uploadTicket: string
-  uploadMethod: 'PUT' | 'POST'
-  uploadUrl: string
+/** `POST /assets/upload-tickets` 上传本地文件到 OSS 并返回访问地址。 */
+export interface AssetUploadResponse {
+  id: Id
+  type: 'IMAGE' | 'VIDEO' | string
+  source: string
+  fileName: string
+  previewUrl: string
+  url: string
   objectKey: string
-  formFields: Record<string, string>
-  expiresAt: string
+  fileSize: number
+  width?: number | null
+  height?: number | null
+  durationSeconds?: number | null
+  status: string
+  favorited?: boolean
+  tags?: string[]
+  createdAt: string
 }
 
 export interface AssetCompleteUploadRequest {
@@ -122,6 +133,8 @@ export interface AssetView {
   source: string
   fileName: string
   previewUrl: string
+  url?: string
+  objectKey?: string
   fileSize: number
   width?: number | null
   height?: number | null
@@ -410,9 +423,9 @@ const api = {
   completeAssetUpload<T = unknown>(data: AssetCompleteUploadRequest) {
     return http.post<T>('/assets', data)
   },
-  /** 获取文件直传所需的上传凭证。 */
-  createAssetUploadTicket<T = unknown>(data: UploadTicketRequest) {
-    return http.post<T>('/assets/upload-tickets', data)
+  /** 上传本地文件到 OSS 并返回预览地址。 */
+  createAssetUploadTicket(data: UploadTicketRequest, config?: RequestConfig) {
+    return http.post<AssetUploadResponse>('/assets/upload-tickets', data, config)
   },
   /** 获取指定素材的详情。 */
   getAsset<T = unknown>(assetId: Id) {

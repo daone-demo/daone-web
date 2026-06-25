@@ -1,8 +1,6 @@
-import axios from 'axios'
 import { message } from 'ant-design-vue'
 import type { Graph, Node } from '@antv/x6'
-import api, { type AssetView, type UploadTicketResponse } from '@/services/api'
-import { getToken } from '@/utils/request'
+import api from '@/services/api'
 import type { CanvasNodeData } from './constants'
 import { syncGenNodesFromSource } from './imageGen'
 import { syncTextNodesFromImageSource } from './textPrompt'
@@ -48,75 +46,51 @@ function resolveUploadProjectId(projectId?: string) {
   return projectId || resolveProjectId?.() || undefined
 }
 
-function isMockStorageUpload(ticket: UploadTicketResponse) {
-  return ticket.uploadUrl.includes('/mock-files/upload')
-}
-
-async function uploadToStorage(
-  file: File,
-  ticket: UploadTicketResponse,
-  onProgress?: (percent: number) => void,
-) {
-  if (isMockStorageUpload(ticket)) {
-    onProgress?.(100)
-    return
-  }
-
-  const headers: Record<string, string> = { ...(ticket.formFields ?? {}) }
-  const token = getToken()
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
-
-  const reportProgress = (loaded: number, total: number) => {
-    if (!total) return
-    onProgress?.(Math.min(100, Math.round((loaded / total) * 100)))
-  }
-
-  if (ticket.uploadMethod === 'POST') {
-    const form = new FormData()
-    Object.entries(ticket.formFields ?? {}).forEach(([key, value]) => {
-      form.append(key, value)
-    })
-    form.append('file', file)
-
-    await axios.post(ticket.uploadUrl, form, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      onUploadProgress: (event) => reportProgress(event.loaded, event.total ?? file.size),
-      validateStatus: (status) => status >= 200 && status < 300,
-    })
-    return
-  }
-
-  await axios.put(ticket.uploadUrl, file, {
-    headers,
-    onUploadProgress: (event) => reportProgress(event.loaded, event.total ?? file.size),
-    validateStatus: (status) => status >= 200 && status < 300,
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result !== 'string') {
+        reject(new Error('Failed to read file'))
+        return
+      }
+      const base64 = result.split(',')[1]
+      if (!base64) {
+        reject(new Error('Failed to encode file'))
+        return
+      }
+      resolve(base64)
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'))
+    reader.readAsDataURL(file)
   })
 }
 
-/** 申请上传凭证 → 直传存储 → 确认上传，返回素材访问地址。 */
+/** 上传本地文件到 OSS，返回素材访问地址。 */
 export async function uploadAssetFile(
   file: File,
   options: UploadAssetOptions = {},
 ): Promise<UploadAssetResult> {
   const contentType = file.type || 'application/octet-stream'
   const projectId = resolveUploadProjectId(options.projectId)
+  const fileBase64 = await fileToBase64(file)
 
-  const ticket = await api.createAssetUploadTicket<UploadTicketResponse>({
-    projectId,
-    fileName: file.name,
-    contentType,
-    fileSize: file.size,
-  })
-
-  await uploadToStorage(file, ticket, options.onProgress)
-
-  const asset = await api.completeAssetUpload<AssetView>({
-    uploadTicket: ticket.uploadTicket,
-    projectId,
-    fileSize: file.size,
-  })
+  const asset = await api.createAssetUploadTicket(
+    {
+      projectId,
+      fileName: file.name,
+      contentType,
+      fileSize: file.size,
+      fileBase64,
+    },
+    {
+      onUploadProgress: (event) => {
+        if (!event.total) return
+        options.onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)))
+      },
+    },
+  )
 
   return {
     url: asset.previewUrl,
