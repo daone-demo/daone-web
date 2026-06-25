@@ -94,15 +94,16 @@ export type BillItem = {
   id: string
   orderNo: string
   type: string
-  status: 'paid' | 'pending' | 'refunded'
+  status: 'PAID' | 'PENDING' | 'REFUNDED' | 'PAYING'
   amount: number
   date: string
 }
 
 export const BILL_STATUS_LABEL: Record<BillItem['status'], string> = {
-  paid: '已支付',
-  pending: '待支付',
-  refunded: '已退款',
+  PAID: '已支付',
+  PENDING: '待支付',
+  PAYING: '支付中',
+  REFUNDED: '已退款',
 }
 
 export const USER_BILLS: BillItem[] = [
@@ -110,7 +111,7 @@ export const USER_BILLS: BillItem[] = [
     id: 'bill-1',
     orderNo: 'BJHY20260504133352RRodZI',
     type: '团队协作版',
-    status: 'paid',
+    status: 'PAID',
     amount: 5999,
     date: '2026-05-04 13:33:52',
   },

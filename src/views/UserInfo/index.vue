@@ -180,7 +180,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="bill in USER_BILLS" :key="bill.id">
+                <tr v-for="bill in orderList" :key="bill.id">
                   <td>
                     <div class="user-info__bill-order">
                       <span class="user-info__bill-order-no">{{ bill.orderNo }}</span>
@@ -194,16 +194,16 @@
                       </button>
                     </div>
                   </td>
-                  <td>{{ bill.type }}</td>
+                  <td>{{ bill.productName }}</td>
                   <td>
                     <span class="user-info__bill-status" :class="`user-info__bill-status--${bill.status}`">
-                      {{ BILL_STATUS_LABEL[bill.status] }}
+                      {{ BILL_STATUS_LABEL[bill.status as keyof typeof BILL_STATUS_LABEL] }}
                     </span>
                   </td>
                   <td>
-                    <strong class="user-info__bill-amount">¥{{ bill.amount.toLocaleString('en-US') }}</strong>
+                    <strong class="user-info__bill-amount">¥{{ tools.div(bill.amountFen, 100) }}</strong>
                   </td>
-                  <td>{{ bill.date }}</td>
+                  <td>{{ dayjs(bill.createdAt).format('YYYY-MM-DD HH:mm:ss') }}</td>
                   <td>
                     <button
                       type="button"
@@ -413,7 +413,6 @@ import {
   POINTS_LOG_ACTION_LABEL,
   POINTS_LOG_FILTERS,
   POINTS_LOG_REASON_LABEL,
-  USER_BILLS,
   USER_INFO_TABS,
   USER_MEMBERSHIP_NOTES,
   USER_POINTS_LOG,
@@ -424,6 +423,10 @@ import {
 import { useRouter } from 'vue-router';
 import api from '@/services/api';
 import { useUserInfo } from '@/stores/useUserInfo';
+import tools from '@/utils/tools';
+import dayjs from 'dayjs';
+import { message } from 'ant-design-vue';
+
 const modalStore = useModalStore();
 const userInfoStore = useUserInfo();
 type InvoiceHeaderType = 'personal' | 'enterprise'
@@ -459,6 +462,9 @@ const editProfileForm = ref({
 const pointsList = ref<any[]>([]);
 const pointsTotal = ref(0);
 const page = ref(1);
+const orderList = ref<any[]>([]);
+const orderTotal = ref(0);
+const orderPage = ref(1);
 
 const filteredPointsLog = computed(() => {
   if (pointsFilter.value === 'all') {
@@ -475,7 +481,8 @@ const placeholderText = computed(() => {
 
 async function copyOrderNo(orderNo: string) {
   try {
-    await navigator.clipboard.writeText(orderNo)
+    await navigator.clipboard.writeText(orderNo);
+    message.success('复制成功');
   } catch {
     // ignore clipboard errors in unsupported environments
   }
@@ -566,9 +573,23 @@ const onLogout = async () => {
   router.replace('/');
 }
 
+const onLoadOrderList = async () => {
+  let params = {
+    page: orderPage.value,
+    pageSize: 10,
+  }
+  api.getOrders(params)
+    .then(res=>{
+      console.log('res', res);
+      orderList.value = res.records || [];
+      orderTotal.value = res.total || 0;
+    })
+}
+
 onMounted(()=>{
   onLoadUserInfo();
   onLoadPoints();
+  onLoadOrderList();
 });
 </script>
 
