@@ -121,7 +121,7 @@
                   <button
                     type="button"
                     class="combo-modal__activate"
-                    @click="onActivate(plan.id)"
+                    @click="onActivate(plan)"
                   >
                     立即开通
                   </button>
@@ -244,11 +244,125 @@
         </div>
       </div>
     </Transition>
+
+    <Transition name="combo-confirm-fade">
+      <div
+        v-if="confirmVisible"
+        class="combo-confirm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="combo-confirm-title"
+        @mousedown.self="closeConfirm"
+      >
+        <div class="combo-confirm__dialog" @mousedown.stop>
+          <button
+            type="button"
+            class="combo-confirm__close"
+            aria-label="关闭"
+            @click="closeConfirm"
+          >
+            ×
+          </button>
+
+          <header class="combo-confirm__header">
+            <h3 id="combo-confirm-title" class="combo-confirm__title">
+              {{ confirmPreview.title }}
+            </h3>
+            <p v-if="confirmPreview.originalPlanLabel" class="combo-confirm__subtitle">
+              原订阅会员：{{ confirmPreview.originalPlanLabel }}
+            </p>
+          </header>
+          <section class="combo-confirm__pay" v-if="orderNo">
+            <p class="combo-confirm__pay-title">支付方式</p>
+            <div class="combo-confirm__pay-options" role="radiogroup" aria-label="支付方式">
+              <button
+                v-for="method in PAYMENT_METHODS"
+                :key="method.key"
+                type="button"
+                role="radio"
+                class="combo-confirm__pay-option"
+                :class="{ 'combo-confirm__pay-option--active': selectedPayMethod === method.key }"
+                :aria-checked="selectedPayMethod === method.key"
+                @click="selectedPayMethod = method.key"
+              >
+                <span
+                  class="combo-confirm__pay-icon"
+                  :class="`combo-confirm__pay-icon--${method.key.toLowerCase()}`"
+                  aria-hidden="true"
+                />
+                <span class="combo-confirm__pay-label">{{ method.label }}</span>
+              </button>
+            </div>
+            <img
+              v-if="payUrl"
+              :src="payUrl"
+              alt="支付二维码"
+              class="combo-confirm__pay-qrcode"
+            />
+            <p v-if="selectedPayMethod === 'BANK_TRANSFER'" class="combo-confirm__pay-tip">
+              提交后客服将与您联系并提供对公转账账户信息
+            </p>
+          </section>
+          <section v-else>
+            <section class="combo-confirm__card">
+              <div class="combo-confirm__row">
+                <span>原会员实付</span>
+                <span>¥{{ confirmPreview.originalPaidYuan }}</span>
+              </div>
+              <div class="combo-confirm__row">
+                <span>目标会员标价</span>
+                <span>¥{{ confirmPreview.targetPriceYuan }}</span>
+              </div>
+              <div class="combo-confirm__row combo-confirm__row--highlight">
+                <span>应付差价</span>
+                <strong>¥{{ confirmPreview.payDiffYuan }}</strong>
+              </div>
+            </section>
+            <section class="combo-confirm__card">
+              <div class="combo-confirm__row">
+                <span>生效时间</span>
+                <span>立即生效</span>
+              </div>
+              <div class="combo-confirm__row">
+                <span>有效期</span>
+                <span>{{ confirmPreview.validityRange }}</span>
+              </div>
+              <div class="combo-confirm__row">
+                <span>目标会员月度积分</span>
+                <span>{{ confirmPreview.targetGrantPoints }}</span>
+              </div>
+              <div class="combo-confirm__row">
+                <span>原会员已消耗积分</span>
+                <span>{{ confirmPreview.consumedPoints }}</span>
+              </div>
+              <div class="combo-confirm__row">
+                <span>实际到账积分</span>
+                <span>{{ confirmPreview.actualGrantPoints }}</span>
+              </div>
+            </section>
+            <ul class="combo-confirm__notes">
+              <li>应付差价按目标会员标价与原会员实付金额计算</li>
+              <li>实际到账积分按目标会员月度积分与原会员已消耗积分计算</li>
+              <li>升级后立即生效，有效期按新会员周期重新计算</li>
+              <li>升级后原会员模型折扣与赠送权益将终止，新会员权益即时生效</li>
+            </ul>
+          </section>
+          <button
+            type="button"
+            class="combo-confirm__submit"
+            :disabled="confirmLoading"
+            @click="confirmPay"
+          >
+            {{ confirmPayLabel }}
+          </button>
+        </div>
+      </div>
+    </Transition>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
   TRIAL_FEATURE_CARDS,
   type BillingCycle,
@@ -256,9 +370,56 @@ import {
 import api from '@/services/api';
 import tools from '@/utils/tools';
 import { message } from 'ant-design-vue';
+import { useUserInfo } from '@/stores/useUserInfo';
+import { useModalStore } from '@stores/useModal';
+import { v4 as uuidv4 } from 'uuid';
+import QRCode from 'qrcode';
 
-const open = defineModel<boolean>('open', { default: false });
-const plansList = ref<any[]>([]);
+interface PlanItem {
+  code: string
+  id?: string
+  name: string
+  cycleUnit: string
+  cycleCount?: number
+  priceFen: number
+  originalPriceFen: number
+  grantPoints: number
+  benefits?: string[]
+  discountLabel?: string
+  creditsYearly?: string
+  creditsMonthly?: string
+  quotaLines?: string[]
+  featured?: boolean
+}
+
+interface UserSubscription {
+  priceCode?: string
+  status?: string
+  currentPeriodStart?: string
+  currentPeriodEnd?: string
+}
+
+interface UserProfile {
+  subscription?: UserSubscription | null
+  points?: {
+    available?: number
+    grantedTotal?: number
+  }
+}
+
+type PayMethod = 'ALIPAY' | 'WECHAT' | 'BANK_TRANSFER'
+
+const PAYMENT_METHODS: Array<{ key: PayMethod; label: string }> = [
+  { key: 'ALIPAY', label: '支付宝' },
+  { key: 'WECHAT', label: '微信' },
+  { key: 'BANK_TRANSFER', label: '对公转账' },
+]
+
+const open = defineModel<boolean>('open', { default: false })
+const plansList = ref<PlanItem[]>([])
+const userInfoStore = useUserInfo()
+const modalStore = useModalStore()
+const currentIdempotencyKey = ref<string | null>(null);
 
 const emit = defineEmits<{
   close: []
@@ -272,12 +433,21 @@ const emit = defineEmits<{
 const memberTab = ref<'enterprise' | 'trial'>('enterprise')
 const billing = ref<BillingCycle>('YEAR')
 
+const confirmVisible = ref(false)
+const confirmLoading = ref(false)
+const selectedPlan = ref<PlanItem | null>(null)
+const userProfile = ref<UserProfile | null>(null)
+const selectedPayMethod = ref<PayMethod>('WECHAT')
+
 const trialPhone = ref('')
 const trialCode = ref('')
 const trialName = ref('')
 const trialPosition = ref('')
 const trialCodeCountdown = ref(0)
 const trialCodeSending = ref(false)
+const orderNo = ref('');
+const payUrl = ref('');
+const payExpireAt = ref('');
 
 let trialCountdownTimer: ReturnType<typeof setInterval> | null = null
 
@@ -301,14 +471,190 @@ function close() {
   emit('close')
 }
 
-const onloadPlans = async () => {
-  const res:any = await api.getPlans();
-  plansList.value = res.items || [];
-  console.log('onloadPlans', res)
+function formatYuan(fen: number): string {
+  return Number(tools.div(fen, 100)).toFixed(2)
 }
 
-function onActivate(planId: string) {
-  emit('activate', planId, billing.value)
+function getCycleLabel(plan: PlanItem): string {
+  if (plan.cycleUnit === 'YEAR') {
+    return plan.cycleCount && plan.cycleCount > 1 ? `连续包${plan.cycleCount}年` : '连续包年'
+  }
+  if (plan.cycleUnit === 'MONTH') return '连续包月'
+  if (plan.cycleUnit === 'DAY') return `${plan.cycleCount || 5}天`
+  return '会员'
+}
+
+function formatDateText(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}/${month}/${day}`
+}
+
+function getValidityRange(plan: PlanItem): string {
+  const start = new Date()
+  const end = new Date(start)
+
+  if (plan.cycleUnit === 'YEAR') {
+    end.setFullYear(end.getFullYear() + (plan.cycleCount || 1))
+  } else if (plan.cycleUnit === 'MONTH') {
+    end.setMonth(end.getMonth() + (plan.cycleCount || 1))
+  } else if (plan.cycleUnit === 'DAY') {
+    end.setDate(end.getDate() + (plan.cycleCount || 5))
+  }
+
+  return `${formatDateText(start)} 至 ${formatDateText(end)}`
+}
+
+function findPlanByPriceCode(priceCode?: string): PlanItem | undefined {
+  if (!priceCode) return undefined
+  return plansList.value.find((item) => item.code === priceCode)
+}
+
+const confirmPreview = computed(() => {
+  const plan = selectedPlan.value
+  const subscription = userProfile.value?.subscription
+  const currentPlan = findPlanByPriceCode(subscription?.priceCode)
+  const hasActiveSubscription = subscription?.status === 'ACTIVE' && Boolean(currentPlan)
+
+  const targetPriceFen = plan?.priceFen ?? 0
+  const originalPaidFen = hasActiveSubscription ? (currentPlan?.priceFen ?? 0) : 0
+  const payDiffFen = Math.max(0, targetPriceFen - originalPaidFen)
+
+  const grantedTotal = userProfile.value?.points?.grantedTotal ?? 0
+  const available = userProfile.value?.points?.available ?? 0
+  const consumedPoints = hasActiveSubscription ? Math.max(0, grantedTotal - available) : 0
+  const targetGrantPoints = plan?.grantPoints ?? 0
+  const actualGrantPoints = Math.max(0, targetGrantPoints - consumedPoints)
+
+  const cycleLabel = plan ? getCycleLabel(plan) : ''
+  const currentCycleLabel = currentPlan ? getCycleLabel(currentPlan) : ''
+
+  return {
+    title: plan
+      ? hasActiveSubscription
+        ? `升级至 ${plan.name} ${cycleLabel}`
+        : `开通 ${plan.name} ${cycleLabel}`
+      : '',
+    originalPlanLabel: hasActiveSubscription && currentPlan
+      ? `${currentPlan.name} ${currentCycleLabel}`
+      : '',
+    originalPaidYuan: formatYuan(originalPaidFen),
+    targetPriceYuan: formatYuan(targetPriceFen),
+    payDiffYuan: formatYuan(payDiffFen),
+    validityRange: plan ? getValidityRange(plan) : '',
+    targetGrantPoints,
+    consumedPoints,
+    actualGrantPoints,
+    payDiffFen,
+    productCode: plan?.code ?? plan?.id ?? '',
+  }
+})
+
+const confirmPayLabel = computed(() => {
+  if (confirmLoading.value) return '处理中...'
+  if (selectedPayMethod.value === 'BANK_TRANSFER') {
+    return '提交对公转账申请'
+  }
+  return `确认支付 ¥${confirmPreview.value.payDiffYuan}`
+})
+
+function closeConfirm() {
+  if (confirmLoading.value) return
+  confirmVisible.value = false
+  selectedPlan.value = null
+  selectedPayMethod.value = 'WECHAT'
+}
+
+async function loadUserProfile() {
+  if (!userInfoStore.isLoggedIn) {
+    userProfile.value = null
+    return
+  }
+
+  try {
+    const res = await api.getCurrentUser<UserProfile>()
+    userProfile.value = res
+    if (res.points) {
+      userInfoStore.setPointAccount({
+        available: res.points.available ?? 0,
+        frozen: 0,
+        grantedTotal: res.points.grantedTotal ?? 0,
+      })
+    }
+  } catch {
+    userProfile.value = null
+  }
+}
+
+const onloadPlans = async () => {
+  const res = await api.getPlans<{ items?: PlanItem[] }>()
+  plansList.value = res.items || []
+}
+
+async function onActivate(plan: PlanItem) {
+  if (!userInfoStore.isLoggedIn) {
+    modalStore.openModal('login')
+    return
+  };
+  await loadUserProfile()
+  selectedPlan.value = plan
+  confirmVisible.value = true;
+}
+
+async function confirmPay() {
+  if (!selectedPlan.value || confirmLoading.value) return
+
+  const productCode = confirmPreview.value.productCode
+  
+  if (!productCode) return
+  if (!currentIdempotencyKey.value) {
+    currentIdempotencyKey.value = uuidv4();
+  }
+
+  confirmLoading.value = true
+  try {
+    // api.createOrder({
+    //   orderType: 'PLAN',
+    //   productCode,
+    // }).then((res:any)=>{
+    //   console.log('confirmPay', res)
+    //   orderNo.value = res.orderNo;
+    // })
+    const order = await api.createOrder<{
+      orderNo: string
+      amountFen: number
+    }>(
+      {
+        orderType: 'PLAN',
+        productCode,
+      },
+      currentIdempotencyKey.value
+    )
+    console.log('order', order);
+    orderNo.value = order.orderNo;
+
+    // if (selectedPayMethod.value === 'BANK_TRANSFER') {
+    //   message.success('订单已提交，客服将联系您办理对公转账')
+    //   emit('activate', productCode, billing.value)
+    //   closeConfirm()
+    //   close()
+    //   return
+    // }
+
+    // await api.createPayment(order.orderNo, { payType: selectedPayMethod.value })
+    // await api.mockOrderPaid(order.orderNo)
+
+    // message.success('支付成功')
+    // emit('activate', productCode, billing.value)
+    // closeConfirm()
+    // close()
+  } catch (error) {
+    console.error('confirmPay', error)
+    message.error('支付失败，请稍后重试')
+  } finally {
+    confirmLoading.value = false
+  }
 }
 
 function startTrialCountdown(seconds = 60) {
@@ -372,11 +718,51 @@ watch(open, (visible) => {
   if (visible) {
     onloadPlans()
   } else {
+    orderNo.value = '';
+    selectedPayMethod.value = 'WECHAT';
+    closeConfirm()
     memberTab.value = 'enterprise'
     billing.value = 'YEAR'
     resetTrialForm()
   }
-})
+});
+
+interface PaymentResponse {
+  payType?: string
+  qrCodeContent?: string
+  redirectUrl?: string
+  expireAt?: string
+}
+
+const onLoadPayUrl = async () => {
+  try {
+    const res = await api.createPayment<PaymentResponse>(orderNo.value, {
+      payType: selectedPayMethod.value,
+    })
+    if (!res) return
+
+    if (res.payType === 'ALIPAY') {
+      payUrl.value = res.redirectUrl ?? ''
+    } else if (res.qrCodeContent) {
+      payUrl.value = await QRCode.toDataURL(res.qrCodeContent, {
+        width: 260,
+        margin: 2,
+      })
+    }
+    payExpireAt.value = res.expireAt ?? ''
+  } catch (error) {
+    console.error('onLoadPayUrl', error)
+    payUrl.value = ''
+  }
+}
+
+watch([orderNo, selectedPayMethod], ([no, method]) => {
+  if (no && method !== 'BANK_TRANSFER') {
+    onLoadPayUrl();
+  } else {
+    payUrl.value = '';
+  }
+});
 
 onBeforeUnmount(() => {
   lockBodyScroll(false)

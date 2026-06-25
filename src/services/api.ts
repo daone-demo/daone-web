@@ -506,8 +506,10 @@ const api = {
     return http.get<PageResult<T>>('/orders', { params })
   },
   /** 创建套餐订单。 */
-  createOrder<T = unknown>(data: OrderCreateRequest) {
-    return http.post<T>('/orders', data)
+  createOrder<T = unknown>(data: OrderCreateRequest, idempotencyKey?: string) {
+    return http.post<T>('/orders', data, {
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+    })
   },
   /** 获取指定订单的详情。 */
   getOrder<T = unknown>(orderNo: string) {
