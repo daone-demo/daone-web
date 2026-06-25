@@ -81,7 +81,7 @@ export {
   syncTextNodeImageSource,
 } from '../../textPrompt'
 export { createMinimap, destroyMinimap } from '../../minimap'
-export { runUploadSimulation } from '../../upload'
+export { runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId } from '../../upload'
 export { getCanvasSnapshot, saveCanvasSnapshotToStorage, normalizeCanvasSnapshot, type CanvasSnapshot } from '../../canvasSnapshot'
 export { applyCanvasSnapshot } from '../../canvasHistory'
 export { createCanvasHistory } from '../../canvasHistory'

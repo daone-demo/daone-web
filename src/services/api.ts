@@ -101,10 +101,35 @@ export interface UploadTicketRequest {
   fileSize: number
 }
 
+export interface UploadTicketResponse {
+  uploadTicket: string
+  uploadMethod: 'PUT' | 'POST'
+  uploadUrl: string
+  objectKey: string
+  formFields: Record<string, string>
+  expiresAt: string
+}
+
 export interface AssetCompleteUploadRequest {
   uploadTicket: string
   projectId?: Id
   fileSize: number
+}
+
+export interface AssetView {
+  id: Id
+  type: 'IMAGE' | 'VIDEO' | string
+  source: string
+  fileName: string
+  previewUrl: string
+  fileSize: number
+  width?: number | null
+  height?: number | null
+  durationSeconds?: number | null
+  status: string
+  favorited?: boolean
+  tags?: string[]
+  createdAt: string
 }
 
 export interface PointEstimateRequest {

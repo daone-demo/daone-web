@@ -18,7 +18,7 @@ import {
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, findIncomingImageNode, mockImg2Prompt, mockTextGenerate, syncTextNodeImageSource,
-  createMinimap, destroyMinimap, runUploadSimulation, getCanvasSnapshot, saveCanvasSnapshotToStorage,
+  createMinimap, destroyMinimap, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
   useCanvasKeyboard, api, exampleImage,
 } from './sharedImports'
@@ -889,12 +889,21 @@ function addPromptImageSourceRef(payload: {
 
 function onPromptUploadFiles(files: File[]) {
   const imageFiles = files.filter((file) => file.type.startsWith('image/'))
-  imageFiles.forEach((file) => {
-    addPromptImageSourceRef({
-      previewUrl: URL.createObjectURL(file),
-      fileName: file.name,
-    })
-  })
+  if (!imageFiles.length) return
+
+  void Promise.all(
+    imageFiles.map(async (file) => {
+      try {
+        const result = await uploadAssetFile(file, { projectId: activeProjectId.value })
+        addPromptImageSourceRef({
+          previewUrl: result.url,
+          fileName: file.name,
+        })
+      } catch (error) {
+        console.error('[Canvas] prompt image upload failed', error)
+      }
+    }),
+  )
 }
 
 function onPromptAddCanvasNode(sourceNodeId: string) {
@@ -3591,6 +3600,7 @@ function unbindScrollerScrollListener() {
 }
 
 onMounted(() => {
+  setCanvasUploadProjectId(() => activeProjectId.value || undefined)
   void onLoadProjects()
 
   const routeProjectId = router.currentRoute.value.params.id

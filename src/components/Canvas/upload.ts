@@ -1,12 +1,31 @@
+import axios from 'axios'
+import { message } from 'ant-design-vue'
 import type { Graph, Node } from '@antv/x6'
+import api, { type AssetView, type UploadTicketResponse } from '@/services/api'
+import { getToken } from '@/utils/request'
 import type { CanvasNodeData } from './constants'
 import { syncGenNodesFromSource } from './imageGen'
 import { syncTextNodesFromImageSource } from './textPrompt'
 import { getNodeSize, syncNodeShapeFromData } from './graph'
 
-export interface CanvasUploadResult {
-  /** 资源可访问地址（真实接口返回的 URL，或本地预览 URL） */
+export interface UploadAssetOptions {
+  projectId?: string
+  onProgress?: (percent: number) => void
+}
+
+export interface UploadAssetResult {
   url: string
+  assetId: string
+  width?: number | null
+  height?: number | null
+  durationSeconds?: number | null
+}
+
+export interface CanvasUploadResult {
+  url: string
+  assetId?: string
+  width?: number | null
+  height?: number | null
 }
 
 export type CanvasUploader = (
@@ -14,28 +33,100 @@ export type CanvasUploader = (
   onProgress?: (percent: number) => void,
 ) => Promise<CanvasUploadResult>
 
-/**
- * 上传接口接入点（预留口子）。
- * 默认实现为本地模拟：不依赖后端，使用 Object URL 生成预览地址。
- * 后续接入真实接口时，调用 `setCanvasUploader` 注入即可，无需改动节点组件与画布逻辑。
- *
- * @example
- * setCanvasUploader(async (file, onProgress) => {
- *   const form = new FormData()
- *   form.append('file', file)
- *   const { data } = await http.post('/api/upload', form, {
- *     onUploadProgress: (e) => onProgress?.(Math.round((e.loaded / e.total) * 100)),
- *   })
- *   return { url: data.url }
- * })
- */
+let resolveProjectId: (() => string | undefined) | null = null
 let canvasUploader: CanvasUploader | null = null
+
+export function setCanvasUploadProjectId(getter: () => string | undefined) {
+  resolveProjectId = getter
+}
 
 export function setCanvasUploader(uploader: CanvasUploader | null) {
   canvasUploader = uploader
 }
 
-/** 执行上传：有真实接口则走接口，否则回退到本地预览（mock）。 */
+function resolveUploadProjectId(projectId?: string) {
+  return projectId || resolveProjectId?.() || undefined
+}
+
+function isMockStorageUpload(ticket: UploadTicketResponse) {
+  return ticket.uploadUrl.includes('/mock-files/upload')
+}
+
+async function uploadToStorage(
+  file: File,
+  ticket: UploadTicketResponse,
+  onProgress?: (percent: number) => void,
+) {
+  if (isMockStorageUpload(ticket)) {
+    onProgress?.(100)
+    return
+  }
+
+  const headers: Record<string, string> = { ...(ticket.formFields ?? {}) }
+  const token = getToken()
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const reportProgress = (loaded: number, total: number) => {
+    if (!total) return
+    onProgress?.(Math.min(100, Math.round((loaded / total) * 100)))
+  }
+
+  if (ticket.uploadMethod === 'POST') {
+    const form = new FormData()
+    Object.entries(ticket.formFields ?? {}).forEach(([key, value]) => {
+      form.append(key, value)
+    })
+    form.append('file', file)
+
+    await axios.post(ticket.uploadUrl, form, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      onUploadProgress: (event) => reportProgress(event.loaded, event.total ?? file.size),
+      validateStatus: (status) => status >= 200 && status < 300,
+    })
+    return
+  }
+
+  await axios.put(ticket.uploadUrl, file, {
+    headers,
+    onUploadProgress: (event) => reportProgress(event.loaded, event.total ?? file.size),
+    validateStatus: (status) => status >= 200 && status < 300,
+  })
+}
+
+/** 申请上传凭证 → 直传存储 → 确认上传，返回素材访问地址。 */
+export async function uploadAssetFile(
+  file: File,
+  options: UploadAssetOptions = {},
+): Promise<UploadAssetResult> {
+  const contentType = file.type || 'application/octet-stream'
+  const projectId = resolveUploadProjectId(options.projectId)
+
+  const ticket = await api.createAssetUploadTicket<UploadTicketResponse>({
+    projectId,
+    fileName: file.name,
+    contentType,
+    fileSize: file.size,
+  })
+
+  await uploadToStorage(file, ticket, options.onProgress)
+
+  const asset = await api.completeAssetUpload<AssetView>({
+    uploadTicket: ticket.uploadTicket,
+    projectId,
+    fileSize: file.size,
+  })
+
+  return {
+    url: asset.previewUrl,
+    assetId: asset.id,
+    width: asset.width,
+    height: asset.height,
+    durationSeconds: asset.durationSeconds,
+  }
+}
+
 async function uploadCanvasFile(
   file: File,
   onProgress?: (percent: number) => void,
@@ -43,8 +134,14 @@ async function uploadCanvasFile(
   if (canvasUploader) {
     return canvasUploader(file, onProgress)
   }
-  // TODO: 真实上传接口未接入，先返回本地预览地址。
-  return { url: URL.createObjectURL(file) }
+
+  const result = await uploadAssetFile(file, { onProgress })
+  return {
+    url: result.url,
+    assetId: result.assetId,
+    width: result.width,
+    height: result.height,
+  }
 }
 
 export function runUploadSimulation(graphNode: Node, file: File) {
@@ -55,30 +152,40 @@ export function runUploadSimulation(graphNode: Node, file: File) {
   data.mode = 'editor'
   graphNode.setData(data)
 
-  const duration = file.size > 8_000_000 ? 3200 : file.type.startsWith('video/') ? 2400 : 1600
-  const start = Date.now()
-
-  const timer = window.setInterval(() => {
-    const elapsed = Date.now() - start
-    const progress = Math.min(100, Math.round((elapsed / duration) * 100))
+  void uploadCanvasFile(file, (progress) => {
     const current = { ...(graphNode.getData() as CanvasNodeData) }
+    if (current.uploadState !== 'uploading') return
     current.uploadProgress = progress
     graphNode.setData(current)
-
-    if (progress >= 100) {
-      window.clearInterval(timer)
-      void finishUpload(graphNode, file)
-    }
-  }, 60)
+  })
+    .then((result) => finishUpload(graphNode, file, result))
+    .catch((error) => {
+      console.error('[Canvas] upload failed', error)
+      message.error('上传失败，请稍后重试')
+      const current = { ...(graphNode.getData() as CanvasNodeData) }
+      current.uploadState = 'idle'
+      current.uploadProgress = 0
+      graphNode.setData(current)
+    })
 }
 
-async function finishUpload(graphNode: Node, file: File) {
-  const { url } = await uploadCanvasFile(file)
+async function finishUpload(
+  graphNode: Node,
+  file: File,
+  result: CanvasUploadResult,
+) {
   const data = { ...(graphNode.getData() as CanvasNodeData) }
   data.uploadState = 'done'
   data.uploadProgress = 100
-  data.previewUrl = url
+  data.previewUrl = result.url
   data.mode = 'editor'
+
+  if (result.width && result.height) {
+    data.mediaWidth = result.width
+    data.mediaHeight = result.height
+    applyNodeMedia(graphNode, data)
+    return
+  }
 
   if (file.type.startsWith('image/')) {
     const img = new Image()
@@ -87,7 +194,8 @@ async function finishUpload(graphNode: Node, file: File) {
       data.mediaHeight = img.naturalHeight
       applyNodeMedia(graphNode, data)
     }
-    img.src = url
+    img.onerror = () => applyNodeMedia(graphNode, data)
+    img.src = result.url
     return
   }
 
@@ -104,7 +212,7 @@ async function finishUpload(graphNode: Node, file: File) {
       data.mediaHeight = 1440
       applyNodeMedia(graphNode, data)
     }
-    video.src = url
+    video.src = result.url
     return
   }
 
