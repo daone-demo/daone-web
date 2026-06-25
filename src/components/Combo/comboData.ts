@@ -1,4 +1,4 @@
-export type BillingCycle = 'yearly' | 'monthly'
+export type BillingCycle = 'YEAR' | 'MONTH'
 export type MemberTab = 'enterprise' | 'trial'
 
 export interface TrialFeatureCard {

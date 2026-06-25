@@ -1514,6 +1514,18 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     closeProjectMenu()
   }
 
+  async function onLoadProjects() {
+    try {
+      const res = await api.getProjects({
+        page: 1,
+        pageSize: 10,
+      })
+      canvasProjects.value = res.records
+    } catch (error) {
+      console.error('[Canvas] load projects failed', error)
+    }
+  }
+
   function handleSaveCanvas() {
     const g = graph.value
     if (!g) return
@@ -3551,6 +3563,8 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   }
 
   onMounted(() => {
+    void onLoadProjects()
+
     if (!graphRef.value) return
 
     const instance = createGraph(graphRef.value) as CanvasGraph

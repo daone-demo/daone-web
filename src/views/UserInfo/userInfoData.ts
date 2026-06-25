@@ -33,8 +33,8 @@ export const USER_MEMBERSHIP_NOTES = [
 
 export const POINTS_LOG_FILTERS = [
   { key: 'all', label: '全部' },
-  { key: 'increase', label: '增加' },
-  { key: 'decrease', label: '减少' },
+  { key: 'INCOME', label: '增加' },
+  { key: 'EXPENSE', label: '减少' },
 ] as const
 
 export type PointsLogFilterKey = (typeof POINTS_LOG_FILTERS)[number]['key']

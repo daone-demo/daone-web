@@ -105,7 +105,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import api from '@/services/api'
-import { useUserInfo, type UserInfo, type PointAccount } from '@/stores/useUserInfo'
+import { useUserInfo, type UserInfo } from '@/stores/useUserInfo'
 
 interface SmsLoginResult {
   token: string

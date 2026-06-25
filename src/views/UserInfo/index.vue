@@ -30,10 +30,15 @@
           </div>
         </div> -->
 
-        <button type="button" class="user-info__edit-btn" @click="openEditProfileModal">
-          <span class="user-info__edit-icon" aria-hidden="true" />
-          编辑资料
-        </button>
+        <a-flex gap="10px" align="center">
+          <button type="button" class="user-info__edit-btn" @click="openEditProfileModal">
+            <span class="user-info__edit-icon" aria-hidden="true" />
+            编辑资料
+          </button>
+          <button type="button" class="user-info__edit-btn" @click="onLogout">
+            退出登录
+          </button>
+        </a-flex>
       </section>
 
       <section class="user-info__detail-card">
@@ -416,11 +421,13 @@ import {
   type PointsLogFilterKey,
   type UserInfoTabKey,
 } from './userInfoData'
-
+import { useRouter } from 'vue-router';
 import api from '@/services/api';
-const modalStore = useModalStore()
-
+import { useUserInfo } from '@/stores/useUserInfo';
+const modalStore = useModalStore();
+const userInfoStore = useUserInfo();
 type InvoiceHeaderType = 'personal' | 'enterprise'
+const router = useRouter();
 
 const activeTab = ref<UserInfoTabKey>('account')
 const pointsFilter = ref<PointsLogFilterKey>('all')
@@ -449,13 +456,16 @@ const editProfileForm = ref({
   email: '',
   avatarUrl: '',
 });
+const pointsList = ref<any[]>([]);
+const pointsTotal = ref(0);
 const page = ref(1);
 
 const filteredPointsLog = computed(() => {
   if (pointsFilter.value === 'all') {
     return USER_POINTS_LOG
   }
-  return USER_POINTS_LOG.filter((item) => item.action === pointsFilter.value)
+  const action = pointsFilter.value === 'INCOME' ? 'increase' : 'decrease'
+  return USER_POINTS_LOG.filter((item) => item.action === action)
 })
 
 const placeholderText = computed(() => {
@@ -534,12 +544,26 @@ const onLoadUserInfo = async () => {
   profileState.value = res;
 }
 
+/**
+ * 加载积分流水
+ */
 const onLoadPoints = async () => {
   let params = {
     page: page.value,
     pageSize: 10,
   }
-  await api.getPointsLedger(params);
+  if (pointsFilter.value !== 'all') {
+    (params as any)['direction'] = pointsFilter.value;
+  }
+  let res:any = await api.getPointsLedger(params);
+  pointsList.value = res.records || [];
+  pointsTotal.value = res.total || 0;
+}
+
+const onLogout = async () => {
+  await api.logout();
+  userInfoStore.logout();
+  router.replace('/');
 }
 
 onMounted(()=>{

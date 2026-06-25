@@ -66,17 +66,17 @@
                 <button
                   type="button"
                   class="combo-modal__billing-btn"
-                  :class="{ 'combo-modal__billing-btn--active': billing === 'yearly' }"
-                  @click="billing = 'yearly'"
+                  :class="{ 'combo-modal__billing-btn--active': billing === 'YEAR' }"
+                  @click="billing = 'YEAR'"
                 >
                   年付
-                  <span v-if="billing === 'yearly'" class="combo-modal__billing-badge">最高 3.75 折</span>
+                  <span v-if="billing === 'YEAR'" class="combo-modal__billing-badge">最高 3.75 折</span>
                 </button>
                 <button
                   type="button"
                   class="combo-modal__billing-btn"
-                  :class="{ 'combo-modal__billing-btn--active': billing === 'monthly' }"
-                  @click="billing = 'monthly'"
+                  :class="{ 'combo-modal__billing-btn--active': billing === 'MONTH' }"
+                  @click="billing = 'MONTH'"
                 >
                   月付
                 </button>
@@ -90,7 +90,7 @@
               <h2 id="combo-modal-title" class="visually-hidden">会员套餐</h2>
               <div class="combo-modal__plans">
                 <article
-                  v-for="plan in COMBO_PLANS"
+                  v-for="plan in plansList.filter(plan => plan.cycleUnit === billing)"
                   :key="plan.id"
                   class="combo-modal__card"
                   :class="{ 'combo-modal__card--featured': plan.featured }"
@@ -111,7 +111,7 @@
                   </div>
 
                   <p class="combo-modal__credits">
-                    {{ billing === 'yearly' ? plan.creditsYearly : plan.creditsMonthly }}
+                    {{ billing === 'YEAR' ? plan.creditsYearly : plan.creditsMonthly }}
                   </p>
 
                   <ul class="combo-modal__quota">
@@ -250,13 +250,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import {
-  COMBO_PLANS,
   TRIAL_FEATURE_CARDS,
   type BillingCycle,
   type ComboPlan,
 } from './comboData'
+import api from '@/services/api';
 
-const open = defineModel<boolean>('open', { default: false })
+const open = defineModel<boolean>('open', { default: false });
+const plansList = ref<any[]>([]);
 
 const emit = defineEmits<{
   close: []
@@ -268,7 +269,7 @@ const emit = defineEmits<{
 }>()
 
 const memberTab = ref<'enterprise' | 'trial'>('enterprise')
-const billing = ref<BillingCycle>('yearly')
+const billing = ref<BillingCycle>('YEAR')
 
 const trialPhone = ref('')
 const trialCode = ref('')
@@ -299,16 +300,22 @@ function close() {
   emit('close')
 }
 
+const onloadPlans = async () => {
+  const res:any = await api.getPlans();
+  plansList.value = res.items || [];
+  console.log('onloadPlans', res)
+}
+
 function displayPrice(plan: ComboPlan) {
-  return billing.value === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
+  return billing.value === 'YEAR' ? plan.yearlyPrice : plan.monthlyPrice
 }
 
 function displayOriginal(plan: ComboPlan) {
-  return billing.value === 'yearly' ? plan.yearlyOriginal : plan.monthlyOriginal
+  return billing.value === 'YEAR' ? plan.yearlyOriginal : plan.monthlyOriginal
 }
 
 function priceUnit(plan: ComboPlan) {
-  if (billing.value === 'yearly') {
+  if (billing.value === 'YEAR') {
     return plan.priceSuffixYearly ?? '/年'
   }
   return '/月'
@@ -370,9 +377,11 @@ function lockBodyScroll(locked: boolean) {
 
 watch(open, (visible) => {
   lockBodyScroll(visible)
-  if (!visible) {
+  if (visible) {
+    onloadPlans()
+  } else {
     memberTab.value = 'enterprise'
-    billing.value = 'yearly'
+    billing.value = 'YEAR'
     resetTrialForm()
   }
 })

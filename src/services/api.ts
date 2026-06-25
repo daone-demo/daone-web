@@ -1,4 +1,4 @@
-import { http, type RequestConfig } from '@/utils/request'
+import { http } from '@/utils/request'
 import type { PostSmsLoginRequest, QuerySmsCodeRequest } from '@/types/types'
 
 type JsonObject = Record<string, unknown>
@@ -276,16 +276,6 @@ export interface CallToolRequest {
 }
 
 const pathId = (value: string) => encodeURIComponent(value)
-
-// request.ts 的业务基地址是 /api/v1；后台接口则位于 /api/admin/v1。
-const apiRoot = import.meta.env.DEV
-  ? '/api'
-  : String(import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/v1\/?$/, '')
-
-const adminConfig = (config?: RequestConfig): RequestConfig => ({
-  ...config,
-  baseURL: apiRoot,
-})
 
 const api = {
   // Auth

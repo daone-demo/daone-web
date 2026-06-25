@@ -130,8 +130,14 @@ export const useUserInfo = defineStore('userInfo', () => {
   function clearSession() {
     token.value = ''
     userInfo.value = null
+    pointAccount.value = null
     removeToken()
     localStorage.removeItem(USER_INFO_KEY)
+    localStorage.removeItem(POINT_ACCOUNT_KEY)
+  }
+
+  function logout() {
+    clearSession()
   }
 
   return {
@@ -146,7 +152,8 @@ export const useUserInfo = defineStore('userInfo', () => {
     setSession,
     clearUserInfo,
     clearSession,
-    setPointAccount
+    setPointAccount,
+    logout
   }
 })
 
