@@ -28,23 +28,56 @@
         </button>
       </div>
     </div>
-    <button type="button" class="canvas__group-btn" title="整组执行" @click="emit('execute')">
+    <button 
+      type="button"
+      class="canvas__group-btn"
+      title="整组执行" @click="emit('execute')"
+    >
       <span class="canvas__group-icon" data-icon="execute" aria-hidden="true" />
       整组执行
     </button>
-    <button type="button" class="canvas__group-btn" title="添加到工具箱" @click="emit('add-to-toolbox')">
+    <button 
+      type="button"
+      class="canvas__group-btn"
+      title="添加到工具箱"
+      @click="emit('add-to-toolbox')"
+    >
       <span class="canvas__group-icon" data-icon="toolbox" aria-hidden="true" />
       添加到工具箱
     </button>
-    <button type="button" class="canvas__group-btn" title="转分镜组" @click="emit('to-storyboard')">
+    <button 
+      type="button"
+      class="canvas__group-btn"
+      title="转分镜组"
+      @click="emit('to-storyboard')"
+    >
       <span class="canvas__group-icon" data-icon="storyboard" aria-hidden="true" />
       转分镜组
     </button>
-    <button type="button" class="canvas__group-btn" title="解组" @click="emit('ungroup')">
+    <button 
+      type="button"
+      class="canvas__group-btn"
+      title="解组"
+      @click="emit('ungroup')"
+    >
       <span class="canvas__group-icon" data-icon="ungroup" aria-hidden="true" />
       解组
     </button>
-    <button type="button" class="canvas__group-btn" title="批量下载" @click="emit('batch-download')">
+    <button 
+      type="button"
+      class="canvas__group-btn"
+      title="保存为Skill"
+      @click="emit('save-to-skill')"
+    >
+      <span class="canvas__group-icon" data-icon="skill" aria-hidden="true" />
+      保存为Skill
+    </button>
+    <button 
+      type="button"
+      class="canvas__group-btn"
+      title="批量下载"
+      @click="emit('batch-download')"
+    >
       <span class="canvas__group-icon" data-icon="download" aria-hidden="true" />
       批量下载
     </button>
@@ -66,6 +99,7 @@ const emit = defineEmits<{
   'add-to-toolbox': []
   'to-storyboard': []
   ungroup: []
+  'save-to-skill': []
   'batch-download': []
 }>()
 

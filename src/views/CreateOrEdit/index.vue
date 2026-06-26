@@ -4,6 +4,7 @@
       ref="canvasRef"
       @focus-chat="focusChatPanel"
       @add-to-chat="onAddToChat"
+      @save-skill-to-chat="onSaveSkillToChat"
       :projects-list="projectsList"
       @new-project="onNewProject"
       @rename-project="onRenameProject"
@@ -70,6 +71,11 @@ function focusChatPanel() {
 function onAddToChat(payload: { previewUrl: string; fileName: string }) {
   chatPanelCollapsed.value = false
   chatPanelRef.value?.addAttachmentFromCanvas(payload)
+}
+
+function onSaveSkillToChat(payload: { file: File; skillName: string }) {
+  chatPanelCollapsed.value = false
+  chatPanelRef.value?.addSkillFile(payload.file, payload.skillName)
 }
 
 async function onChatSend(payload: ChatSendPayload) {

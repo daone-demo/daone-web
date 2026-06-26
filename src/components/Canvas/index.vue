@@ -90,6 +90,7 @@
       @add-to-toolbox="handleGroupAddToToolbox"
       @to-storyboard="handleGroupToStoryboard"
       @ungroup="handleUngroup"
+      @save-to-skill="handleGroupSaveToSkill"
       @batch-download="handleGroupBatchDownload"
     />
 
@@ -313,6 +314,7 @@ import type { ProjectCanvasResponse } from '@/services/api'
 const emit = defineEmits<{
   'focus-chat': []
   'add-to-chat': [payload: { previewUrl: string; fileName: string }],
+  'save-skill-to-chat': [payload: { file: File; skillName: string }],
   'new-project': []
   'rename-project': [projectId: string, name: string],
   'delete-project': [projectId: string],
@@ -376,6 +378,7 @@ const {
   handleGroupBatchDownload,
   handleGroupExecute,
   handleGroupLayout,
+  handleGroupSaveToSkill,
   handleGroupToStoryboard,
   handleLogout,
   handleMergeStoryboardGroup,

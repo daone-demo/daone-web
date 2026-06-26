@@ -3333,6 +3333,10 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     })
   }
 
+  function handleGroupSaveToSkill() {
+    // implemented in registerCore.ts
+  }
+
   function syncGroupedNodeMove(node: Node) {
     const g = graph.value
     if (!g) return
@@ -3873,6 +3877,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     handleGroupBatchDownload,
     handleGroupExecute,
     handleGroupLayout,
+    handleGroupSaveToSkill,
     handleGroupToStoryboard,
     handleImageNodeDblClick,
     handleLogout,

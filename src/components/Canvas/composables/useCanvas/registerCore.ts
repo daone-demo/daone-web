@@ -1,4 +1,5 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, provide } from 'vue'
+import { message } from 'ant-design-vue'
 import type { Edge, Graph, Node } from '@antv/x6'
 import type { CanvasBindings } from './types'
 import type { UploadFilter } from './state'
@@ -20,7 +21,7 @@ import {
   ensureImageTextEdge, findIncomingImageNode, mockImg2Prompt, mockTextGenerate, syncTextNodeImageSource,
   createMinimap, destroyMinimap, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
-  useCanvasKeyboard, api, exampleImage,
+  useCanvasKeyboard, api, exampleImage, buildGroupSkillMarkdown, createSkillFile, downloadTextFile, extractGroupSubgraph,
 } from './sharedImports'
 import type { GroupLayoutDirection } from './sharedImports'
 import type { ProjectCanvasResponse } from '@/services/api'
@@ -3369,6 +3370,29 @@ function handleGroupBatchDownload() {
   })
 }
 
+function handleGroupSaveToSkill() {
+  const g = graph.value
+  const group = activeGroupSelection.value
+  if (!g || !group) return
+
+  const subgraph = extractGroupSubgraph(g, group.nodeIds)
+  if (!subgraph) {
+    message.warning('当前分组没有可导出的节点')
+    return
+  }
+
+  const { content, skillName, fileName } = buildGroupSkillMarkdown(subgraph, {
+    projectName: currentProjectName.value,
+  })
+
+  downloadTextFile(content, fileName)
+  emit('save-skill-to-chat', {
+    file: createSkillFile(content, fileName),
+    skillName,
+  })
+  message.success(`已保存技能「${skillName}」`)
+}
+
 function syncGroupedNodeMove(node: Node) {
   const g = graph.value
   if (!g) return
@@ -3889,6 +3913,7 @@ const openNewProject = () => {
     handleGroupBatchDownload,
     handleGroupExecute,
     handleGroupLayout,
+    handleGroupSaveToSkill,
     handleGroupToStoryboard,
     handleImageNodeDblClick,
     handleLogout,

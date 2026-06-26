@@ -83,6 +83,12 @@ export {
 export { createMinimap, destroyMinimap } from '../../minimap'
 export { runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId } from '../../upload'
 export { getCanvasSnapshot, saveCanvasSnapshotToStorage, normalizeCanvasSnapshot, type CanvasSnapshot } from '../../canvasSnapshot'
+export {
+  buildGroupSkillMarkdown,
+  createSkillFile,
+  downloadTextFile,
+  extractGroupSubgraph,
+} from '../../groupSkill'
 export { applyCanvasSnapshot } from '../../canvasHistory'
 export { createCanvasHistory } from '../../canvasHistory'
 export {

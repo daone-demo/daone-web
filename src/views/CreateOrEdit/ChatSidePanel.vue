@@ -275,6 +275,15 @@ async function addAttachmentFromCanvas(payload: { previewUrl: string; fileName: 
   focusInput()
 }
 
+function addSkillFile(file: File, skillName?: string) {
+  if (!file.name.endsWith('.md')) return
+  addAttachments([file])
+  if (skillName) {
+    message.value = `请使用技能「${skillName}」处理以下工作流`
+  }
+  focusInput()
+}
+
 function removeAttachment(id: string) {
   const target = attachments.value.find((item) => item.id === id)
   if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl)
@@ -473,6 +482,7 @@ defineExpose({
   focusInput,
   startNewChat,
   addAttachmentFromCanvas,
+  addSkillFile,
 })
 </script>
 
