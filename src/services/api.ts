@@ -597,6 +597,14 @@ const api = {
   getChatModels<T = unknown>() {
     return http.get<T>('/provider/chat/models')
   },
+  /** 保存画布元素组 */
+  saveElementGroups<T = unknown>(projectId: string, data: any) {
+    return http.post<T>(`/projects/${projectId}/element-groups`, data)
+  },
+  /** 画布元素组列表 */
+  queryElementGroups<T = unknown>(projectId: string, params: any) {
+    return http.get<T>(`/projects/${projectId}/element-groups`, { params })
+  },
 }
 
 export default api

@@ -33,9 +33,7 @@ import type { ChatSendPayload } from './chatTypes';
 import { useRoute } from 'vue-router';
 import api, { type ProjectCanvasResponse } from '@/services/api';
 import { useModalStore } from '@stores/useModal';
-const toolsObject = ref<Record<string, any>>({});
 const modalStore = useModalStore();
-const workflowsList = ref<any[]>([]);
 
 const projectName = ref('');
 const project_Id = ref('');

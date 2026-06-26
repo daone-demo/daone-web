@@ -146,7 +146,6 @@ const skillName = ref('')
 const skillRole = ref(SKILL_ROLE_OPTIONS[0])
 const skillDescription = ref('')
 const skillTags = ref('')
-const showTags = ref(false)
 const selectedSkillId = ref('')
 
 const canSubmit = computed(() => {

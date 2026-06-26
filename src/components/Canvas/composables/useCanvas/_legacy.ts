@@ -111,8 +111,6 @@ import {
   clearCanvasAssetDrag,
   consumeCanvasAssetDragPayload,
   isCanvasAssetDragActive,
-  setCanvasAssetDropHandler,
-  wasCanvasAssetDropHandled,
 } from '../../canvasAssetDrag'
 import {
   getCanvasSnapshot,
