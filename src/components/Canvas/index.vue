@@ -142,6 +142,20 @@
       @close="showAssetsPanel = false"
     />
 
+    <CanvasAssetCenterPanel
+      v-if="showAssetCenterPanel"
+      :tab="assetCenterTab"
+      :search="assetCenterSearch"
+      :loading="assetCenterLoading"
+      :list="skillList"
+      :is-light="canvasBgTheme === 'light'"
+      @update:tab="onChangeAssetCenterTab($event)"
+      @update:search="assetCenterSearch = $event"
+      @close="closeAssetCenterPanel"
+      @select="onSelectAssetCenterItem"
+      @add-to-chat="onAddAssetCenterToChat"
+    />
+
     <CanvasNodeOverlays
       ref="nodeOverlaysRef"
       :canvas-bg-theme="canvasBgTheme"
@@ -223,9 +237,11 @@
       :canvas-bg-theme="canvasBgTheme"
       :show-add-menu="showAddMenu"
       :show-assets-panel="showAssetsPanel"
+      :show-asset-center-panel="showAssetCenterPanel"
       :show-history-panel="showHistoryPanel"
       @toggle-add-menu="toggleAddMenu"
       @toggle-assets-panel="toggleAssetsPanel"
+      @toggle-asset-center-panel="toggleAssetCenterPanel"
       @toggle-history-panel="toggleHistoryPanel"
     />
 
@@ -305,6 +321,7 @@ import CanvasLeftToolbar from './panels/CanvasLeftToolbar.vue'
 import CanvasConnectMenu from './panels/CanvasConnectMenu.vue'
 import CanvasAddMenu from './panels/CanvasAddMenu.vue'
 import CanvasAssetsPanel from './panels/CanvasAssetsPanel.vue'
+import CanvasAssetCenterPanel from './panels/CanvasAssetCenterPanel.vue'
 import CanvasNodeToolbar from './panels/CanvasNodeToolbar.vue'
 import CanvasMultiSelectToolbar from './panels/CanvasMultiSelectToolbar.vue'
 import CanvasEdgeDeleteButton from './panels/CanvasEdgeDeleteButton.vue'
@@ -323,20 +340,23 @@ import CanvasTextFormatAnchor from './panels/CanvasTextFormatAnchor.vue'
 import CanvasShortcutsBackdrop from './panels/CanvasShortcutsBackdrop.vue'
 import CanvasHiddenFileInput from './panels/CanvasHiddenFileInput.vue'
 import { useCanvas } from './composables/useCanvas'
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import api from '@/services/api'
 import type { AssetView, ProjectCanvasResponse } from '@/services/api'
 import { type ProjectTabKey } from '@/views/Project/projectData'
+import type { ElementGroupRecord, AssetCenterTabKey } from './assetCenterData'
 
 const emit = defineEmits<{
   'focus-chat': []
   'add-to-chat': [payload: { previewUrl: string; fileName: string }],
+  'add-asset-to-chat': [payload: { id: string; role: string; name: string }],
   'new-project': []
   'rename-project': [projectId: string, name: string],
   'delete-project': [projectId: string],
 }>()
 
-const assetsList = ref<AssetView[]>([])
+const assetsList = ref<AssetView[]>([]);
+const skillList = ref<ElementGroupRecord[]>([]);
 
 const canvasRef = ref<HTMLElement | null>(null)
 const graphRef = ref<HTMLElement | null>(null)
@@ -362,6 +382,9 @@ const {
   addMenuPos,
   assetsLoading,
   assetsTab,
+  assetCenterLoading,
+  assetCenterSearch,
+  assetCenterTab,
   canRedo,
   canSubmitTextPrompt,
   canUndo,
@@ -370,6 +393,7 @@ const {
   canvasCredits,
   clearImageDialoguePreview,
   closeHistoryPanel,
+  closeAssetCenterPanel,
   closeImageCrop,
   closeImagePreview,
   closeImageToolbarMore,
@@ -472,6 +496,7 @@ const {
   selectedKind,
   showAddMenu,
   showAssetsPanel,
+  showAssetCenterPanel,
   showBackToNodesBanner,
   showConnectMenu,
   showEdgeDeleteButton,
@@ -509,6 +534,7 @@ const {
   textFormatToolbarPos,
   toggleAddMenu,
   toggleAssetsPanel,
+  toggleAssetCenterPanel,
   toggleCanvasBgTheme,
   toggleGrid,
   toggleHistoryPanel,
@@ -540,6 +566,7 @@ const {
   zoomIn,
   zoomOut,
   zoomPercent,
+  addElementGroupFromRecord,
   addImageFromAsset,
   addImageFromFile,
   addImagesFromFiles,
@@ -596,9 +623,34 @@ const onLoadAssets = () => {
   })
 }
 
+const onChangeAssetCenterTab = (tab: AssetCenterTabKey) => {
+  assetCenterTab.value = tab
+}
+
+const onSelectAssetCenterItem = (item: ElementGroupRecord) => {
+  addElementGroupFromRecord(item)
+}
+
+const onAddAssetCenterToChat = (payload: { id: string; role: string; name: string }) => {
+  emit('add-asset-to-chat', payload)
+}
+
+const onLoadSkill = () => {
+  api.queryElementGroups(activeProjectId.value, { pageSize: 50, page: 1 }).then((res: any) => {
+    skillList.value = res.records ?? [];
+  })
+}
+
 onMounted(()=>{
   onLoadAssets();
+  onLoadSkill();
 });
+
+watch(showAssetCenterPanel, (open) => {
+  if (open && activeProjectId.value) {
+    onLoadSkill()
+  }
+})
 </script>
 
 <style lang="scss">

@@ -183,6 +183,14 @@ export interface WorkflowProjectCreateRequest {
   title: string
 }
 
+export interface CanvasElementGroupSaveRequest {
+  projectName: string
+  projectDescription: string
+  projectStructure: {
+    cells: JsonObject[]
+  }
+}
+
 export interface TrialSmsCodeRequest {
   phone: string
 }
@@ -598,12 +606,12 @@ const api = {
     return http.get<T>('/provider/chat/models')
   },
   /** 保存画布元素组 */
-  saveElementGroups<T = unknown>(projectId: string, data: any) {
-    return http.post<T>(`/projects/${projectId}/element-groups`, data)
+  saveElementGroups<T = unknown>(projectId: Id, data: CanvasElementGroupSaveRequest) {
+    return http.post<T>(`/projects/${pathId(projectId)}/element-groups`, data)
   },
   /** 画布元素组列表 */
-  queryElementGroups<T = unknown>(projectId: string, params: any) {
-    return http.get<T>(`/projects/${projectId}/element-groups`, { params })
+  queryElementGroups<T = unknown>(projectId: Id, params?: PageQuery) {
+    return http.get<T>(`/projects/${pathId(projectId)}/element-groups`, { params })
   },
 }
 

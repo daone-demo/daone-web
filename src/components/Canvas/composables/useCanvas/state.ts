@@ -73,9 +73,20 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const addMenuDropPoint = ref<{ x: number; y: number } | null>(null)
   const connectSourceNodeId = ref('')
   const showAssetsPanel = ref(false)
+  const showAssetCenterPanel = ref(false)
   const showHistoryPanel = ref(false)
   const assetsTab = ref<'RECOMMENDED' | 'CENTER' | 'MINE' | 'FAVORITE' | 'FILES'>('RECOMMENDED')
   const assetsLoading = ref(false)
+  const assetCenterTab = ref<'ALL' | '角色' | '场景' | '风格包' | '自定义'>('ALL')
+  const assetCenterSearch = ref('')
+  const assetCenterLoading = ref(false)
+  const assetCenterItems = ref<Array<{
+    id: string
+    name: string
+    role: string
+    previewUrl?: string
+    description?: string
+  }>>([])
   const promptText = ref('')
   const activePickerNodeId = ref('')
   const activeImageGenPromptNodeId = ref('')
@@ -188,9 +199,14 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     addMenuDropPoint,
     connectSourceNodeId,
     showAssetsPanel,
+    showAssetCenterPanel,
     showHistoryPanel,
     assetsTab,
     assetsLoading,
+    assetCenterTab,
+    assetCenterSearch,
+    assetCenterLoading,
+    assetCenterItems,
     promptText,
     activePickerNodeId,
     activeImageGenPromptNodeId,

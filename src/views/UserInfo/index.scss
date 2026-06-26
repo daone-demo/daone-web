@@ -886,11 +886,77 @@
   margin-bottom: 20px;
 }
 
+.user-info__edit-avatar-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 50%;
+  background: #f3f4f6;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    .user-info__edit-avatar-mask {
+      opacity: 1;
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 3px;
+  }
+
+  &:disabled {
+    cursor: wait;
+
+    .user-info__edit-avatar-mask {
+      opacity: 1;
+    }
+  }
+}
+
 .user-info__edit-avatar {
   width: 88px;
   height: 88px;
   border-radius: 50%;
   object-fit: cover;
+}
+
+.user-info__edit-avatar-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #6b7280;
+  font-size: 30px;
+  font-weight: 600;
+}
+
+.user-info__edit-avatar-mask {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  background: rgb(17 24 39 / 68%);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.user-info__edit-avatar-input {
+  display: none;
 }
 
 .user-info__edit-field {
@@ -1008,6 +1074,11 @@
 
   &:hover {
     background: #1f2937;
+  }
+
+  &:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
   }
 }
 

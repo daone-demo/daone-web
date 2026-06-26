@@ -1,6 +1,7 @@
-import type { CanvasAssetDragPayload } from './constants'
+import type { CanvasAssetDragPayload, CanvasElementGroupDragPayload } from './constants'
 
 let pending: CanvasAssetDragPayload | null = null
+let pendingElementGroup: CanvasElementGroupDragPayload | null = null
 let active = false
 let handledDrop = false
 let dropHandler: ((event: DragEvent) => void) | null = null
@@ -36,6 +37,15 @@ export function setCanvasAssetDropHandler(handler: ((event: DragEvent) => void) 
 
 export function startCanvasAssetDrag(payload: CanvasAssetDragPayload) {
   pending = payload
+  pendingElementGroup = null
+  active = true
+  handledDrop = false
+  bindDocumentDragListeners()
+}
+
+export function startCanvasElementGroupDrag(payload: CanvasElementGroupDragPayload) {
+  pendingElementGroup = payload
+  pending = null
   active = true
   handledDrop = false
   bindDocumentDragListeners()
@@ -55,10 +65,17 @@ export function consumeCanvasAssetDragPayload() {
   return data
 }
 
+export function consumeCanvasElementGroupDragPayload() {
+  const data = pendingElementGroup
+  pendingElementGroup = null
+  return data
+}
+
 export function endCanvasAssetDragSession() {
   active = false
   handledDrop = false
   pending = null
+  pendingElementGroup = null
   unbindDocumentDragListeners()
 }
 

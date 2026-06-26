@@ -19,6 +19,15 @@ export interface CanvasAssetDragPayload {
   height?: number | null
 }
 
+/** Skill / 元素组拖入画布时 dataTransfer 的 MIME 类型 */
+export const CANVAS_ELEMENT_GROUP_DRAG_TYPE = 'application/x-canvas-element-group'
+
+export interface CanvasElementGroupDragPayload {
+  recordId: string
+  name: string
+  structureJson: unknown
+}
+
 /** 由上游节点连线带过来的图片输入源 */
 export interface ImageSourceRef {
   nodeId: string

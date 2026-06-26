@@ -21,7 +21,9 @@
     <button
       type="button"
       class="canvas__tool-btn"
-      title="工作流"
+      :class="{ 'canvas__tool-btn--active': showAssetCenterPanel }"
+      title="资产中心"
+      @click="emit('toggle-asset-center-panel')"
     >
       <i class="iconfont icon-gongzuoliucheng" style="font-size: 18px;" />
     </button>
@@ -57,12 +59,14 @@ defineProps<{
   canvasBgTheme: CanvasBgTheme
   showAddMenu: boolean
   showAssetsPanel: boolean
+  showAssetCenterPanel: boolean
   showHistoryPanel: boolean
 }>()
 
 const emit = defineEmits<{
   'toggle-add-menu': []
   'toggle-assets-panel': []
+  'toggle-asset-center-panel': []
   'toggle-history-panel': []
 }>()
 </script>

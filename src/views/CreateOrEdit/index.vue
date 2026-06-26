@@ -4,6 +4,7 @@
       ref="canvasRef"
       @focus-chat="focusChatPanel"
       @add-to-chat="onAddToChat"
+      @add-asset-to-chat="onAddAssetToChat"
       :projects-list="projectsList"
       @new-project="onNewProject"
       @rename-project="onRenameProject"
@@ -68,6 +69,11 @@ function focusChatPanel() {
 function onAddToChat(payload: { previewUrl: string; fileName: string }) {
   chatPanelCollapsed.value = false
   chatPanelRef.value?.addAttachmentFromCanvas(payload)
+}
+
+function onAddAssetToChat(payload: { id: string; role: string; name: string }) {
+  chatPanelCollapsed.value = false
+  chatPanelRef.value?.insertAssetMention(payload)
 }
 
 async function onChatSend(payload: ChatSendPayload) {

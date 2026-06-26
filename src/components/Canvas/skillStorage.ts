@@ -1,5 +1,6 @@
-import type { GroupSkillSubgraph } from './groupSkill';
-import api from '@/services/api';
+import type { GroupSkillSubgraph } from './groupSkill'
+import { buildElementGroupStructure } from './groupSkill'
+import api from '@/services/api'
 
 export interface SavedCanvasSkill {
   id: string
@@ -37,20 +38,23 @@ export function listSavedCanvasSkills(): SavedCanvasSkill[] {
   return readSkills().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }
 
-export function saveCanvasSkill(skill: SavedCanvasSkill) {
-  console.log('saveCanvasSkill', skill)
-  let {
-    workflow,
-    name,
-    description
-  } = skill;
+export async function saveCanvasSkill(skill: SavedCanvasSkill) {
+  if (!skill.projectId) {
+    throw new Error('保存元素组缺少 projectId')
+  }
+
+  await api.saveElementGroups(skill.projectId, {
+    projectName: skill.name,
+    projectDescription: skill.description,
+    projectStructure: buildElementGroupStructure(skill.workflow),
+  })
 
   const skills = readSkills()
   skills.unshift(skill)
   writeSkills(skills)
 }
 
-export function mergeCanvasSkill(
+export async function mergeCanvasSkill(
   skillId: string,
   patch: {
     markdown: string
@@ -58,7 +62,7 @@ export function mergeCanvasSkill(
     addedNodeCount: number
     addedFileCount: number
   },
-): SavedCanvasSkill | null {
+): Promise<SavedCanvasSkill | null> {
   const skills = readSkills()
   const index = skills.findIndex((item) => item.id === skillId)
   if (index < 0) return null
@@ -68,10 +72,17 @@ export function mergeCanvasSkill(
     ...current,
     markdown: patch.markdown,
     workflow: patch.workflow,
-    nodeCount: current.nodeCount + patch.addedNodeCount,
-    fileCount: current.fileCount + patch.addedFileCount,
+    nodeCount: (current.nodeCount ?? 0) + patch.addedNodeCount,
+    fileCount: (current.fileCount ?? 0) + patch.addedFileCount,
     updatedAt: new Date().toISOString(),
   }
+
+  await api.saveElementGroups(next.projectId, {
+    projectName: next.name,
+    projectDescription: next.description,
+    projectStructure: buildElementGroupStructure(next.workflow),
+  })
+
   skills[index] = next
   writeSkills(skills)
   return next

@@ -22,6 +22,7 @@ declare module 'vue' {
     ATooltip: typeof import('ant-design-vue/es')['Tooltip']
     Canvas: typeof import('./components/Canvas/index.vue')['default']
     CanvasAddMenu: typeof import('./components/Canvas/panels/CanvasAddMenu.vue')['default']
+    CanvasAssetCenterPanel: typeof import('./components/Canvas/panels/CanvasAssetCenterPanel.vue')['default']
     CanvasAssetsPanel: typeof import('./components/Canvas/panels/CanvasAssetsPanel.vue')['default']
     CanvasBackToNodesBanner: typeof import('./components/Canvas/panels/CanvasBackToNodesBanner.vue')['default']
     CanvasBottomControls: typeof import('./components/Canvas/panels/CanvasBottomControls.vue')['default']

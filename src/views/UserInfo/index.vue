@@ -57,15 +57,15 @@
 
         <div v-if="activeTab === 'account'" class="user-info__account">
           <div class="user-info__form-grid">
-            <div class="user-info__field">
+            <!-- <div class="user-info__field">
               <label class="user-info__label">会员信息</label>
               <div class="user-info__input">{{ profileState.id }}</div>
-            </div>
+            </div> -->
 
             <div class="user-info__field">
               <label class="user-info__label">当前订阅</label>
               <div class="user-info__input user-info__input--with-action">
-                <span>{{ USER_PROFILE.plan }}</span>
+                <span>{{ profileState.vipName || '未订阅' }}</span>
                 <button
                   type="button"
                   class="user-info__upgrade-btn"
@@ -92,15 +92,15 @@
             </div>
 
             <div class="user-info__field">
-              <label class="user-info__label">赠送积分</label>
-              <div class="user-info__input">{{ USER_PROFILE.giftedPoints.toLocaleString('en-US') }}</div>
+              <label class="user-info__label">总积分</label>
+              <div class="user-info__input">{{ profileState?.points?.grantedTotal || 0 }}</div>
             </div>
 
             <div class="user-info__field">
               <label class="user-info__label">手机号</label>
               <div class="user-info__input user-info__input--with-link">
                 <span>{{ profileState.phoneMasked }}</span>
-                <button type="button" class="user-info__link-btn">修改</button>
+                <!-- <button type="button" class="user-info__link-btn">修改</button> -->
               </div>
             </div>
 
@@ -348,7 +348,33 @@
 
         <form class="user-info__edit-form" @submit.prevent="saveEditProfile">
           <div class="user-info__edit-avatar-wrap">
-            <img class="user-info__edit-avatar" :src="editProfileForm.avatarUrl" />
+            <button
+              type="button"
+              class="user-info__edit-avatar-btn"
+              :disabled="avatarUploading"
+              @click="avatarInputRef?.click()"
+            >
+              <img
+                v-if="editProfileForm.avatarUrl"
+                class="user-info__edit-avatar"
+                :src="editProfileForm.avatarUrl"
+                alt="头像"
+                @error="editProfileForm.avatarUrl = ''"
+              />
+              <span v-else class="user-info__edit-avatar-placeholder" aria-hidden="true">
+                {{ editProfileForm.nickname?.charAt(0) || '用' }}
+              </span>
+              <span class="user-info__edit-avatar-mask">
+                {{ avatarUploading ? `上传中 ${avatarUploadProgress}%` : '更换头像' }}
+              </span>
+            </button>
+            <input
+              ref="avatarInputRef"
+              class="user-info__edit-avatar-input"
+              type="file"
+              accept="image/*"
+              @change="onAvatarFileChange"
+            />
           </div>
 
           <div class="user-info__edit-field">
@@ -397,7 +423,9 @@
 
           <footer class="user-info__edit-footer">
             <button type="button" class="user-info__edit-cancel" @click="closeEditProfileModal">取消</button>
-            <button type="submit" class="user-info__edit-submit">保存</button>
+            <button type="submit" class="user-info__edit-submit" :disabled="avatarUploading || profileSaving">
+              {{ profileSaving ? '保存中...' : '保存' }}
+            </button>
           </footer>
         </form>
       </div>
@@ -453,6 +481,11 @@ const profileState = ref<any>({
 })
 const showEditProfileModal = ref(false)
 const showEditPassword = ref(false)
+const avatarInputRef = ref<HTMLInputElement | null>(null)
+const avatarUploading = ref(false)
+const avatarUploadProgress = ref(0)
+const profileSaving = ref(false)
+const avatarPreviewUrl = ref('')
 const editProfileForm = ref({
   nickname: '',
   phone: '',
@@ -519,6 +552,7 @@ function submitInvoice() {
 }
 
 function openEditProfileModal() {
+  revokeAvatarPreview()
   editProfileForm.value = {
     nickname: profileState.value.nickname,
     phone: profileState.value.phoneMasked,
@@ -531,24 +565,114 @@ function openEditProfileModal() {
 
 function closeEditProfileModal() {
   showEditProfileModal.value = false
+  if (!avatarUploading.value) {
+    revokeAvatarPreview()
+  }
+}
+
+function revokeAvatarPreview() {
+  if (!avatarPreviewUrl.value) return
+  URL.revokeObjectURL(avatarPreviewUrl.value)
+  avatarPreviewUrl.value = ''
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result !== 'string') {
+        reject(new Error('Failed to read file'))
+        return
+      }
+      const base64 = result.split(',')[1]
+      if (!base64) {
+        reject(new Error('Failed to encode file'))
+        return
+      }
+      resolve(base64)
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function uploadAvatarFile(file: File) {
+  const fileBase64 = await fileToBase64(file)
+  const asset = await api.createAssetUploadTicket(
+    {
+      fileName: file.name,
+      contentType: file.type || 'application/octet-stream',
+      fileSize: file.size,
+      fileBase64,
+    },
+    {
+      onUploadProgress: (event) => {
+        const total = event.total ?? 0
+        if (!total) return
+        avatarUploadProgress.value = Math.min(99, Math.round((event.loaded / total) * 95))
+      },
+    },
+  )
+  return asset.previewUrl || asset.url
+}
+
+async function onAvatarFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  if (!file.type.startsWith('image/')) {
+    message.warning('请选择图片文件')
+    return
+  }
+
+  revokeAvatarPreview()
+  const previousAvatarUrl = editProfileForm.value.avatarUrl
+  avatarPreviewUrl.value = URL.createObjectURL(file)
+  editProfileForm.value.avatarUrl = avatarPreviewUrl.value
+  avatarUploading.value = true
+  avatarUploadProgress.value = 0
+
+  try {
+    editProfileForm.value.avatarUrl = await uploadAvatarFile(file)
+    avatarUploadProgress.value = 100
+    revokeAvatarPreview()
+    message.success('头像上传成功')
+  } catch (error) {
+    console.error('[UserInfo] avatar upload failed', error)
+    editProfileForm.value.avatarUrl = previousAvatarUrl
+    message.error('头像上传失败，请重试')
+    revokeAvatarPreview()
+  } finally {
+    avatarUploading.value = false
+  }
 }
 
 /** 保存编辑资料 */
-function saveEditProfile() {
-  api.updateCurrentUser({
-    avatarUrl: editProfileForm.value.avatarUrl,
-    nickname: editProfileForm.value.nickname,
-    // email: profileState.value.email,
-  }).then(() => {
-    onLoadUserInfo();
-  })
-  closeEditProfileModal()
+async function saveEditProfile() {
+  if (avatarUploading.value || profileSaving.value) return
+  profileSaving.value = true
+  try {
+    await api.updateCurrentUser({
+      avatarUrl: editProfileForm.value.avatarUrl,
+      nickname: editProfileForm.value.nickname,
+      // email: profileState.value.email,
+    })
+    await onLoadUserInfo()
+    message.success('资料保存成功')
+    closeEditProfileModal()
+  } finally {
+    profileSaving.value = false
+  }
 }
 
 /** 加载用户资料 */
 const onLoadUserInfo = async () => {
   const res = await api.getCurrentUser();
   profileState.value = res;
+  userInfoStore.setUserInfo(res as any);
 }
 
 /**

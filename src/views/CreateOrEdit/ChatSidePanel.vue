@@ -72,6 +72,27 @@
         @drop.prevent="onComposerDrop"
       >
         <div class="panel__composer_box">
+          <div v-if="assetMentions.length" class="chat-panel__asset-mentions">
+            <span
+              v-for="mention in assetMentions"
+              :key="mention.id"
+              class="chat-panel__asset-mention"
+            >
+              <span class="chat-panel__asset-mention-at">@</span>
+              <span class="chat-panel__asset-mention-role">{{ mention.role }}</span>
+              <span class="chat-panel__asset-mention-name">{{ mention.name }}</span>
+              <button
+                type="button"
+                class="chat-panel__asset-mention-remove"
+                title="移除引用"
+                aria-label="移除引用"
+                @click="removeAssetMention(mention.id)"
+              >
+                ×
+              </button>
+            </span>
+          </div>
+
           <div v-if="attachments.length" class="chat-panel__attachments">
             <div
               v-for="attachment in attachments"
@@ -226,6 +247,7 @@ const isProcessing = ref(false)
 const sessionTitle = ref('New Chat')
 const messages = ref<ChatMessage[]>([])
 const attachments = ref<ChatAttachment[]>([])
+const assetMentions = ref<Array<{ id: string; role: string; name: string }>>([])
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const messagesRef = ref<HTMLElement | null>(null)
@@ -234,7 +256,9 @@ const inputPlaceholder = computed(() =>
   isActive.value ? '输入提示词，你的消息将排队...' : '输入消息...',
 )
 
-const canSend = computed(() => Boolean(message.value.trim() || attachments.value.length))
+const canSend = computed(() =>
+  Boolean(message.value.trim() || attachments.value.length || assetMentions.value.length),
+)
 
 const { isLightTheme } = useCanvasBgTheme()
 const isDarkTheme = computed(() => !isLightTheme.value)
@@ -246,6 +270,32 @@ function createAttachment(file: File): ChatAttachment {
     previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : '',
     fileName: file.name,
   }
+}
+
+function clearAssetMentions() {
+  assetMentions.value = []
+}
+
+function removeAssetMention(id: string) {
+  assetMentions.value = assetMentions.value.filter((item) => item.id !== id)
+}
+
+function insertAssetMention(payload: { id: string; role: string; name: string }) {
+  if (assetMentions.value.some((item) => item.id === payload.id)) {
+    focusInput()
+    return
+  }
+  assetMentions.value = [...assetMentions.value, payload]
+  isActive.value = true
+  focusInput()
+}
+
+function buildMessageText() {
+  const mentionText = assetMentions.value
+    .map((item) => `@${item.role} ${item.name}`)
+    .join(' ')
+  const body = message.value.trim()
+  return [mentionText, body].filter(Boolean).join(' ')
 }
 
 function addAttachments(files: File[]) {
@@ -404,7 +454,7 @@ function startChatStream() {
 function sendMessage() {
   if (isStreaming.value || isProcessing.value || !canSend.value) return
 
-  const text = message.value.trim()
+  const text = buildMessageText()
   const payloadAttachments = attachments.value.map((item) => ({ ...item }))
   if (!text && !payloadAttachments.length) return
 
@@ -423,6 +473,7 @@ function sendMessage() {
 
   message.value = ''
   clearAttachments()
+  clearAssetMentions()
   scrollMessagesToBottom()
   emit('send', { text, attachments: payloadAttachments })
 
@@ -452,6 +503,7 @@ function startNewChat() {
   messages.value = []
   message.value = ''
   clearAttachments()
+  clearAssetMentions()
   emit('new-chat')
 }
 
@@ -483,6 +535,7 @@ defineExpose({
   startNewChat,
   addAttachmentFromCanvas,
   addSkillFile,
+  insertAssetMention,
 })
 </script>
 
@@ -693,6 +746,66 @@ defineExpose({
 .chat-panel__composer {
   flex-shrink: 0;
   padding: 0 16px 16px;
+}
+
+.chat-panel__asset-mentions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 16px 0;
+}
+
+.chat-panel__asset-mention {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.chat-panel__asset-mention-at {
+  color: #6b7280;
+}
+
+.chat-panel__asset-mention-role {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.chat-panel__asset-mention-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-panel__asset-mention-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: #e5e7eb;
+    color: #374151;
+  }
 }
 
 .chat-panel__attachments {

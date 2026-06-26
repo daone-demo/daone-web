@@ -66,6 +66,78 @@ export function extractGroupSubgraph(graph: Graph, nodeIds: string[]): GroupSkil
   return { nodes, edges }
 }
 
+/** 将打组子图转为元素组接口所需的 projectStructure */
+export function buildElementGroupStructure(workflow: GroupSkillSubgraph) {
+  return {
+    cells: [
+      ...workflow.nodes.map((node) => ({ type: 'node', ...node })),
+      ...workflow.edges.map((edge) => ({ type: 'edge', ...edge })),
+    ],
+  }
+}
+
+function parseNodeKind(value: unknown): NodeKind {
+  if (value === 'text' || value === 'image' || value === 'video' || value === 'audio') {
+    return value
+  }
+  return 'text'
+}
+
+/** 从元素组 cells 解析为可落画布子图 */
+export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | null {
+  if (!Array.isArray(cells) || !cells.length) return null
+
+  const nodes: GroupSkillNode[] = []
+  const edges: GroupSkillSubgraph['edges'] = []
+
+  for (const cell of cells) {
+    if (!cell || typeof cell !== 'object') continue
+    const item = cell as Record<string, unknown>
+
+    if (item.type === 'edge') {
+      const source = String(item.source ?? '')
+      const target = String(item.target ?? '')
+      const id = String(item.id ?? `${source}-${target}`)
+      if (source && target) edges.push({ id, source, target })
+      continue
+    }
+
+    if (item.type === 'node' || item.kind) {
+      const position = item.position as { x?: number; y?: number } | undefined
+      nodes.push({
+        id: String(item.id ?? `node-${nodes.length}`),
+        kind: parseNodeKind(item.kind),
+        title: String(item.title ?? ''),
+        content: String(item.content ?? ''),
+        genPrompt: typeof item.genPrompt === 'string' ? item.genPrompt : undefined,
+        previewUrl: typeof item.previewUrl === 'string' ? item.previewUrl : undefined,
+        fileName: typeof item.fileName === 'string' ? item.fileName : undefined,
+        position: {
+          x: Number(position?.x ?? 0),
+          y: Number(position?.y ?? 0),
+        },
+      })
+    }
+  }
+
+  return nodes.length ? { nodes, edges } : null
+}
+
+/** 从接口记录或本地技能解析元素组结构 */
+export function parseElementGroupRecord(record: Record<string, unknown>): GroupSkillSubgraph | null {
+  let structure = record.structureJson ?? record.projectStructure ?? record.structure
+  if (typeof structure === 'string') {
+    try {
+      structure = JSON.parse(structure)
+    } catch {
+      return null
+    }
+  }
+  if (!structure || typeof structure !== 'object') return null
+  const cells = (structure as { cells?: unknown[] }).cells ?? []
+  return parseElementGroupCells(cells)
+}
+
 function slugifySkillName(name: string): string {
   const slug = name
     .trim()

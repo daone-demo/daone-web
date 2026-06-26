@@ -34,6 +34,21 @@ export type CanvasUploader = (
 let resolveProjectId: (() => string | undefined) | null = null
 let canvasUploader: CanvasUploader | null = null
 
+/** 文件读取阶段占用的进度上限 */
+const UPLOAD_READ_MAX_PERCENT = 20
+/** 请求发送阶段进度上限（保留余量等待服务端响应） */
+const UPLOAD_XHR_MAX_PERCENT = 95
+
+function mapUploadProgress(readRatio: number, xhrLoaded: number, xhrTotal: number) {
+  const readPart = Math.min(1, Math.max(0, readRatio)) * UPLOAD_READ_MAX_PERCENT
+  if (!xhrTotal) {
+    return Math.min(UPLOAD_XHR_MAX_PERCENT, Math.round(readPart))
+  }
+  const xhrRatio = Math.min(1, Math.max(0, xhrLoaded / xhrTotal))
+  const xhrPart = xhrRatio * (UPLOAD_XHR_MAX_PERCENT - UPLOAD_READ_MAX_PERCENT)
+  return Math.min(UPLOAD_XHR_MAX_PERCENT, Math.round(readPart + xhrPart))
+}
+
 export function setCanvasUploadProjectId(getter: () => string | undefined) {
   resolveProjectId = getter
 }
@@ -46,10 +61,21 @@ function resolveUploadProjectId(projectId?: string) {
   return projectId || resolveProjectId?.() || undefined
 }
 
-function fileToBase64(file: File): Promise<string> {
+function fileToBase64(file: File, onReadProgress?: (ratio: number) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
+    let lastRatio = 0
+
+    reader.onprogress = (event) => {
+      if (!event.lengthComputable) return
+      const ratio = event.loaded / event.total
+      if (ratio <= lastRatio) return
+      lastRatio = ratio
+      onReadProgress?.(ratio)
+    }
+
     reader.onload = () => {
+      onReadProgress?.(1)
       const result = reader.result
       if (typeof result !== 'string') {
         reject(new Error('Failed to read file'))
@@ -63,6 +89,7 @@ function fileToBase64(file: File): Promise<string> {
       resolve(base64)
     }
     reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'))
+    onReadProgress?.(0)
     reader.readAsDataURL(file)
   })
 }
@@ -74,7 +101,10 @@ export async function uploadAssetFile(
 ): Promise<UploadAssetResult> {
   const contentType = file.type || 'application/octet-stream'
   const projectId = resolveUploadProjectId(options.projectId)
-  const fileBase64 = await fileToBase64(file)
+
+  const fileBase64 = await fileToBase64(file, (readRatio) => {
+    options.onProgress?.(mapUploadProgress(readRatio, 0, 0))
+  })
 
   const asset = await api.createAssetUploadTicket(
     {
@@ -86,8 +116,9 @@ export async function uploadAssetFile(
     },
     {
       onUploadProgress: (event) => {
-        if (!event.total) return
-        options.onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)))
+        const total = event.total ?? 0
+        if (!total) return
+        options.onProgress?.(mapUploadProgress(1, event.loaded, total))
       },
     },
   )
@@ -129,7 +160,7 @@ export function runUploadSimulation(graphNode: Node, file: File) {
   void uploadCanvasFile(file, (progress) => {
     const current = { ...(graphNode.getData() as CanvasNodeData) }
     if (current.uploadState !== 'uploading') return
-    current.uploadProgress = progress
+    current.uploadProgress = Math.min(99, progress)
     graphNode.setData(current)
   })
     .then((result) => finishUpload(graphNode, file, result))

@@ -109,7 +109,6 @@ import {
 import { createMinimap, destroyMinimap } from '../../minimap'
 import {
   buildGroupSkillMarkdown,
-  downloadTextFile,
   extractGroupSubgraph,
 } from '../../groupSkill'
 import {
@@ -219,9 +218,20 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const addMenuDropPoint = ref<{ x: number; y: number } | null>(null)
   const connectSourceNodeId = ref('')
   const showAssetsPanel = ref(false)
+  const showAssetCenterPanel = ref(false)
   const showHistoryPanel = ref(false)
   const assetsTab = ref<'RECOMMENDED' | 'CENTER' | 'MINE' | 'FAVORITE' | 'FILES'>('RECOMMENDED');
   const assetsLoading = ref(false)
+  const assetCenterTab = ref<'ALL' | '角色' | '场景' | '风格包' | '自定义'>('ALL')
+  const assetCenterSearch = ref('')
+  const assetCenterLoading = ref(false)
+  const assetCenterItems = ref<Array<{
+    id: string
+    name: string
+    role: string
+    previewUrl?: string
+    description?: string
+  }>>([])
   const promptText = ref('')
   const activePickerNodeId = ref('')
   const activeImageGenPromptNodeId = ref('')
@@ -2770,6 +2780,18 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     }
   }
 
+  function closeAssetCenterPanel() {
+    showAssetCenterPanel.value = false
+  }
+
+  function loadAssetCenterItems() {
+    return Promise.resolve()
+  }
+
+  function toggleAssetCenterPanel() {
+    showAssetCenterPanel.value = !showAssetCenterPanel.value
+  }
+
   function closeHistoryPanel() {
     showHistoryPanel.value = false
   }
@@ -3445,7 +3467,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     saveSkillSubmitting.value = true
     try {
       const fileCount = Math.max(1, countSkillFiles(subgraph))
-      const { content, fileName } = buildGroupSkillMarkdown(subgraph, {
+      const { content } = buildGroupSkillMarkdown(subgraph, {
         name: payload.name,
         projectName: currentProjectName.value,
         description: payload.description,
@@ -3472,7 +3494,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
           tags: existing.tags,
         }).content
 
-        const updated = mergeCanvasSkill(payload.existingSkillId, {
+        const updated = await mergeCanvasSkill(payload.existingSkillId, {
           markdown: mergedMarkdown,
           workflow: mergedWorkflow,
           addedNodeCount: subgraph.nodes.length,
@@ -3484,7 +3506,6 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
           return
         }
 
-        downloadTextFile(mergedMarkdown, fileName)
         message.success(`已更新技能「${updated.name}」(含 ${updated.fileCount} 个文件)`)
         closeSaveSkillPopover()
         return
@@ -3505,10 +3526,12 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
         projectId: activeProjectId.value,
       }
 
-      saveCanvasSkill(skill)
-      downloadTextFile(content, fileName)
+      await saveCanvasSkill(skill)
       message.success(`已创建技能「${skill.name}」(含 ${skill.fileCount} 个文件)`)
       closeSaveSkillPopover()
+    } catch (error) {
+      console.error('[Canvas] save skill failed', error)
+      message.error('保存技能失败，请稍后重试')
     } finally {
       saveSkillSubmitting.value = false
     }
@@ -3914,6 +3937,8 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     return waitForNodeUploadDone(node)
   }
 
+  function addElementGroupFromRecord(_record: Record<string, unknown>, _point?: { x: number; y: number }) {}
+
   function addImageFromAsset(
     asset: {
       previewUrl: string
@@ -3983,6 +4008,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     activeVideoGenPromptNodeId,
     addFromMenu,
     addImageDialogueSourceRef,
+    addElementGroupFromRecord,
     addImageFromAsset,
     addImageFromFile,
     addImagesFromFiles,
@@ -3995,6 +4021,10 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     applyZoomAfterChange,
     assetsLoading,
     assetsTab,
+    assetCenterItems,
+    assetCenterLoading,
+    assetCenterSearch,
+    assetCenterTab,
     bindKeyboard,
     bindScrollerScrollListener,
     bottomLeftDockRef,
@@ -4014,6 +4044,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     clearEdgeSelection,
     clearImageDialoguePreview,
     closeAddMenu,
+    closeAssetCenterPanel,
     closeConnectMenu,
     closeHistoryPanel,
     closeImageCrop,
@@ -4085,6 +4116,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     handleSubmitSaveSkill,
     closeSaveSkillPopover,
     listSavedCanvasSkills,
+    loadAssetCenterItems,
     handleImageNodeDblClick,
     handleLogout,
     handleMergeStoryboardGroup,
@@ -4220,6 +4252,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     setupMinimap,
     showAddMenu,
     showAssetsPanel,
+    showAssetCenterPanel,
     showBackToNodesBanner,
     showConnectMenu,
     showEdgeDeleteButton,
@@ -4271,6 +4304,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     textFormatToolbarPos,
     toggleAddMenu,
     toggleAssetsPanel,
+    toggleAssetCenterPanel,
     toggleCanvasBgTheme,
     toggleGrid,
     toggleHistoryPanel,

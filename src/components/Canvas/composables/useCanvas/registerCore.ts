@@ -7,12 +7,13 @@ import { unpackBind } from './bindContext'
 import {
   clearCanvasAssetDrag,
   consumeCanvasAssetDragPayload,
+  consumeCanvasElementGroupDragPayload,
   isCanvasAssetDragActive,
   setCanvasAssetDropHandler,
   wasCanvasAssetDropHandled,
 } from '../../canvasAssetDrag'
 import {
-  ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
+  ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME, NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
   spawnCroppedImageNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
@@ -28,8 +29,10 @@ import {
   ensureImageTextEdge, findIncomingImageNode, mockImg2Prompt, mockTextGenerate, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
-  useCanvasKeyboard, api, exampleImage, buildGroupSkillMarkdown, downloadTextFile, extractGroupSubgraph,
+  useCanvasKeyboard, api, exampleImage, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports'
+import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
+import type { CanvasElementGroupDragPayload } from '../../constants'
 import {
   createSkillId,
   listSavedCanvasSkills,
@@ -37,6 +40,7 @@ import {
   saveCanvasSkill,
   type SavedCanvasSkill,
 } from '../../skillStorage'
+import type { AssetCenterItem } from '../../assetCenterData'
 import type { GroupLayoutDirection } from './sharedImports'
 import type { ProjectCanvasResponse } from '@/services/api'
 import type { Project } from '@/stores/useProject'
@@ -87,8 +91,11 @@ export function registerCore(bind: CanvasBindings) {
     addMenuDropPoint,
     connectSourceNodeId,
     showAssetsPanel,
+    showAssetCenterPanel,
     showHistoryPanel,
     assetsLoading,
+    assetCenterLoading,
+    assetCenterItems,
     promptText,
     activePickerNodeId,
     activeImageGenPromptNodeId,
@@ -2569,6 +2576,7 @@ function hasCanvasFileDrag(event: DragEvent) {
   return (
     types.includes('Files')
     || types.includes(CANVAS_ASSET_DRAG_TYPE)
+    || types.includes(CANVAS_ELEMENT_GROUP_DRAG_TYPE)
     || isCanvasAssetDragActive()
   )
 }
@@ -2578,6 +2586,16 @@ function parseCanvasAssetDragPayload(raw: string): CanvasAssetDragPayload | null
   try {
     const payload = JSON.parse(raw) as CanvasAssetDragPayload
     return payload.previewUrl ? payload : null
+  } catch {
+    return null
+  }
+}
+
+function parseCanvasElementGroupDragPayload(raw: string): CanvasElementGroupDragPayload | null {
+  if (!raw) return null
+  try {
+    const payload = JSON.parse(raw) as CanvasElementGroupDragPayload
+    return payload.structureJson != null ? payload : null
   } catch {
     return null
   }
@@ -2670,15 +2688,28 @@ function handleCanvasAssetDrop(event: DragEvent) {
   const g = graph.value
   if (!g) return
 
+  canvasFileDragDepth.value = 0
+  isCanvasFileDragOver.value = false
+
+  const point = clientPointToGraphLocal(g, event.clientX, event.clientY)
+
+  const groupPayload =
+    parseCanvasElementGroupDragPayload(event.dataTransfer?.getData(CANVAS_ELEMENT_GROUP_DRAG_TYPE) ?? '')
+    ?? consumeCanvasElementGroupDragPayload()
+  if (groupPayload) {
+    addElementGroupFromRecord({
+      id: groupPayload.recordId,
+      name: groupPayload.name,
+      structureJson: groupPayload.structureJson,
+    }, point)
+    return
+  }
+
   const asset =
     parseCanvasAssetDragPayload(event.dataTransfer?.getData(CANVAS_ASSET_DRAG_TYPE) ?? '')
     ?? consumeCanvasAssetDragPayload()
   if (!asset) return
 
-  canvasFileDragDepth.value = 0
-  isCanvasFileDragOver.value = false
-
-  const point = clientPointToGraphLocal(g, event.clientX, event.clientY)
   addImageFromAsset(asset, point)
 }
 
@@ -2695,6 +2726,14 @@ function onCanvasFileDrop(event: DragEvent) {
   if (isCanvasAssetDragActive()) {
     handleCanvasAssetDrop(event)
     clearCanvasAssetDrag()
+    return
+  }
+
+  const groupPayload = parseCanvasElementGroupDragPayload(
+    event.dataTransfer?.getData(CANVAS_ELEMENT_GROUP_DRAG_TYPE) ?? '',
+  )
+  if (groupPayload) {
+    handleCanvasAssetDrop(event)
     return
   }
 
@@ -2821,8 +2860,88 @@ function toggleAddMenu() {
   closeConnectMenu()
 }
 
+function mapSkillToAssetCenterItem(skill: SavedCanvasSkill): AssetCenterItem {
+  const previewUrl = skill.workflow.nodes.find((node) => node.previewUrl)?.previewUrl
+  return {
+    id: skill.id,
+    name: skill.name,
+    role: skill.role || '自定义',
+    previewUrl,
+    description: skill.description,
+  }
+}
+
+function mapElementGroupRecord(record: Record<string, unknown>): AssetCenterItem | null {
+  const structure = record.projectStructure as { cells?: Array<Record<string, unknown>> } | undefined
+    ?? record.structure as { cells?: Array<Record<string, unknown>> } | undefined
+  const cells = structure?.cells ?? []
+  const imageNode = cells.find((cell) => cell.type === 'node' && cell.previewUrl)
+  const name = String(record.projectName ?? record.name ?? '').trim()
+  if (!name) return null
+  return {
+    id: String(record.id ?? record.elementGroupId ?? `${name}-${record.updatedAt ?? ''}`),
+    name,
+    role: String(record.role ?? '自定义'),
+    previewUrl: typeof imageNode?.previewUrl === 'string' ? imageNode.previewUrl : undefined,
+    description: String(record.projectDescription ?? record.description ?? ''),
+  }
+}
+
+async function loadAssetCenterItems() {
+  assetCenterLoading.value = true
+  try {
+    const projectId = activeProjectId.value
+    const byId = new Map<string, AssetCenterItem>()
+
+    listSavedCanvasSkills()
+      .filter((skill) => !projectId || skill.projectId === projectId)
+      .forEach((skill) => {
+        byId.set(skill.id, mapSkillToAssetCenterItem(skill))
+      })
+
+    if (projectId) {
+      try {
+        const res = await api.queryElementGroups(projectId, { pageSize: 50, page: 1 }) as {
+          records?: Array<Record<string, unknown>>
+        }
+        for (const record of res?.records ?? []) {
+          const item = mapElementGroupRecord(record)
+          if (item) byId.set(item.id, item)
+        }
+      } catch (error) {
+        console.warn('[Canvas] load asset center failed', error)
+      }
+    }
+
+    assetCenterItems.value = Array.from(byId.values())
+  } finally {
+    assetCenterLoading.value = false
+  }
+}
+
+function closeAssetCenterPanel() {
+  showAssetCenterPanel.value = false
+}
+
+function openAssetCenterPanel() {
+  showAssetCenterPanel.value = true
+  closeAddMenu()
+  closeHistoryPanel()
+  showAssetsPanel.value = false
+  void loadAssetCenterItems()
+}
+
+function toggleAssetCenterPanel() {
+  if (showAssetCenterPanel.value) {
+    closeAssetCenterPanel()
+  } else {
+    openAssetCenterPanel()
+  }
+}
+
 function openAssetsPanel() {
   showAssetsPanel.value = true
+  closeAssetCenterPanel()
   closeAddMenu()
   assetsLoading.value = true
   window.setTimeout(() => {
@@ -2850,6 +2969,7 @@ function toggleHistoryPanel() {
   }
   showHistoryPanel.value = true
   showAssetsPanel.value = false
+  closeAssetCenterPanel()
   closeAddMenu()
   closeConnectMenu()
   closeShortcutsPanel()
@@ -2867,6 +2987,7 @@ function toggleShortcutsPanel() {
   closeAddMenu()
   closeConnectMenu()
   showAssetsPanel.value = false
+  closeAssetCenterPanel()
   closeHistoryPanel()
 }
 
@@ -3149,6 +3270,10 @@ function dismissOneCanvasLayer() {
   }
   if (showAssetsPanel.value) {
     showAssetsPanel.value = false
+    return true
+  }
+  if (showAssetCenterPanel.value) {
+    closeAssetCenterPanel()
     return true
   }
   if (showHistoryPanel.value) {
@@ -3516,7 +3641,7 @@ async function handleSubmitSaveSkill(payload: {
   saveSkillSubmitting.value = true
   try {
     const fileCount = Math.max(1, countSkillFiles(subgraph))
-    const { content, fileName } = buildGroupSkillMarkdown(subgraph, {
+    const { content } = buildGroupSkillMarkdown(subgraph, {
       name: payload.name,
       projectName: currentProjectName.value,
       description: payload.description,
@@ -3543,7 +3668,7 @@ async function handleSubmitSaveSkill(payload: {
         tags: existing.tags,
       }).content
 
-      const updated = mergeCanvasSkill(payload.existingSkillId, {
+      const updated = await mergeCanvasSkill(payload.existingSkillId, {
         markdown: mergedMarkdown,
         workflow: mergedWorkflow,
         addedNodeCount: subgraph.nodes.length,
@@ -3555,7 +3680,6 @@ async function handleSubmitSaveSkill(payload: {
         return
       }
 
-      downloadTextFile(mergedMarkdown, fileName)
       message.success(`已更新技能「${updated.name}」(含 ${updated.fileCount} 个文件)`)
       closeSaveSkillPopover()
       return
@@ -3576,10 +3700,12 @@ async function handleSubmitSaveSkill(payload: {
       projectId: activeProjectId.value,
     }
 
-    saveCanvasSkill(skill)
-    downloadTextFile(content, fileName)
+    await saveCanvasSkill(skill)
     message.success(`已创建技能「${skill.name}」(含 ${skill.fileCount} 个文件)`)
     closeSaveSkillPopover()
+  } catch (error) {
+    console.error('[Canvas] save skill failed', error)
+    message.error('保存技能失败，请稍后重试')
   } finally {
     saveSkillSubmitting.value = false
   }
@@ -4005,6 +4131,31 @@ function addImageFromFile(file: File, point?: { x: number; y: number }) {
   return waitForNodeUploadDone(node)
 }
 
+function addElementGroupFromRecord(
+  record: Record<string, unknown>,
+  point?: { x: number; y: number },
+) {
+  const g = graph.value
+  if (!g) return
+
+  if (!parseElementGroupRecord(record)) {
+    message.warning('无法解析该技能数据')
+    return
+  }
+
+  const anchor = point ?? getRandomViewportLocalPoint(g)
+  const nodes = addElementGroupRecordToCanvas(g, record, anchor)
+  if (!nodes.length) {
+    message.warning('无法解析该技能数据')
+    return
+  }
+
+  selectGraphNodes(nodes.map((node) => node.id))
+  syncNodeCount()
+  scheduleHistoryPush()
+  ensureInfiniteCanvasArea(g)
+}
+
 function addImageFromAsset(
   asset: {
     previewUrl: string
@@ -4070,6 +4221,7 @@ const openNewProject = () => {
 
   return {
     activeGroupSelection,
+    addElementGroupFromRecord,
     addFromMenu,
     addImageDialogueSourceRef,
     addImageFromAsset,
@@ -4271,6 +4423,9 @@ const openNewProject = () => {
     teardownMinimap,
     toggleAddMenu,
     toggleAssetsPanel,
+    toggleAssetCenterPanel,
+    loadAssetCenterItems,
+    closeAssetCenterPanel,
     toggleCanvasBgTheme,
     toggleGrid,
     toggleHistoryPanel,

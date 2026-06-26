@@ -188,9 +188,9 @@ function submit() {
   emit('submit', {
     tab: 'existing',
     name: target.name,
-    role: target.role,
+    role: target.role ?? '自定义',
     description: target.description,
-    tags: target.tags,
+    tags: target.tags ?? [],
     existingSkillId: target.id,
   })
 }

@@ -609,12 +609,14 @@ export function addCanvasNode(
   kind: NodeKind,
   point: { x: number; y: number },
   overrides: Partial<CanvasNodeData> = {},
+  options?: { id?: string },
 ) {
   const data = { ...createDefaultNodeData(kind), ...overrides }
   const size = getNodeSize(kind, data.mode, data)
   const shape = getNodeShape(kind, data)
 
   return graph.addNode({
+    ...(options?.id ? { id: options.id } : {}),
     shape,
     x: point.x - size.width / 2,
     y: point.y - size.height / 2,

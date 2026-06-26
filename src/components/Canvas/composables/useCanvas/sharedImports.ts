@@ -1,6 +1,7 @@
 export {
   ADD_NODE_GROUPS,
   CANVAS_ASSET_DRAG_TYPE,
+  CANVAS_ELEMENT_GROUP_DRAG_TYPE,
   CANVAS_PROJECTS,
   CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME,
@@ -11,6 +12,7 @@ export {
   ZOOM_MENU_PRESETS,
   TEXT_EDITOR_PLACEHOLDER,
   type CanvasAssetDragPayload,
+  type CanvasElementGroupDragPayload,
   type CanvasNodeData,
   type ImageGenTask,
   type ImageSourceRef,
@@ -91,6 +93,7 @@ export {
   createSkillFile,
   downloadTextFile,
   extractGroupSubgraph,
+  parseElementGroupRecord,
 } from '../../groupSkill'
 export { applyCanvasSnapshot } from '../../canvasHistory'
 export { createCanvasHistory } from '../../canvasHistory'
