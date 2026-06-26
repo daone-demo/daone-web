@@ -96,7 +96,7 @@
           >
             <div class="canvas__asset-center-preview-head">
               <span class="canvas__asset-center-preview-name">{{ displayName(item) }}</span>
-              <span class="canvas__asset-center-preview-role">{{ getRole(item) }}</span>
+              <!-- <span class="canvas__asset-center-preview-role">{{ getRole(item) }}</span> -->
             </div>
             <p class="canvas__asset-center-preview-summary">
               包含 {{ getFiles(item).length }} 个文件
@@ -209,7 +209,7 @@ function setHovered(event: MouseEvent, item: ElementGroupRecord) {
   const rect = target.getBoundingClientRect()
   previewStyle.value = {
     top: `${rect.top}px`,
-    left: `${rect.right + 10}px`,
+    left: `${rect.right + 10}px`
   }
 }
 
