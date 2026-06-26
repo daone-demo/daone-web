@@ -74,7 +74,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const connectSourceNodeId = ref('')
   const showAssetsPanel = ref(false)
   const showHistoryPanel = ref(false)
-  const assetsTab = ref<'all' | 'mine'>('mine')
+  const assetsTab = ref<'RECOMMENDED' | 'CENTER' | 'MINE' | 'FAVORITE' | 'FILES'>('RECOMMENDED')
   const assetsLoading = ref(false)
   const promptText = ref('')
   const activePickerNodeId = ref('')
@@ -101,6 +101,10 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const toolbarPos = ref({ left: 0, top: 0 })
   const multiSelectToolbarPos = ref({ left: 0, top: 0 })
   const groupToolbarPos = ref({ left: 0, top: 0 })
+  const showSaveSkillPopover = ref(false)
+  const saveSkillPopoverPos = ref({ left: 0, top: 0 })
+  const saveSkillItems = ref<Array<{ nodeId: string; label: string }>>([])
+  const saveSkillSubmitting = ref(false)
   const groupOverlayBox = ref<{
     left: number
     top: number
@@ -212,6 +216,10 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     toolbarPos,
     multiSelectToolbarPos,
     groupToolbarPos,
+    showSaveSkillPopover,
+    saveSkillPopoverPos,
+    saveSkillItems,
+    saveSkillSubmitting,
     groupOverlayBox,
     dialoguePos,
     promptPos,

@@ -42,6 +42,7 @@ declare module 'vue' {
     CanvasMultiSelectToolbar: typeof import('./components/Canvas/panels/CanvasMultiSelectToolbar.vue')['default']
     CanvasNodeOverlays: typeof import('./components/Canvas/panels/CanvasNodeOverlays.vue')['default']
     CanvasNodeToolbar: typeof import('./components/Canvas/panels/CanvasNodeToolbar.vue')['default']
+    CanvasSaveSkillPopover: typeof import('./components/Canvas/panels/CanvasSaveSkillPopover.vue')['default']
     CanvasShortcutsBackdrop: typeof import('./components/Canvas/panels/CanvasShortcutsBackdrop.vue')['default']
     CanvasShortcutsPanel: typeof import('./components/Canvas/CanvasShortcutsPanel.vue')['default']
     CanvasTextExpandEditor: typeof import('./components/Canvas/panels/CanvasTextExpandEditor.vue')['default']

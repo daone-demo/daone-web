@@ -195,6 +195,40 @@ async function finishUpload(
   applyNodeMedia(graphNode, data)
 }
 
+export function applyRemoteImageToNode(
+  graphNode: Node,
+  payload: {
+    previewUrl: string
+    fileName?: string
+    width?: number | null
+    height?: number | null
+  },
+) {
+  const data = { ...(graphNode.getData() as CanvasNodeData) }
+  data.uploadState = 'done'
+  data.uploadProgress = 100
+  data.previewUrl = payload.previewUrl
+  data.mode = 'editor'
+  data.fileName = payload.fileName || '图片'
+  data.title = data.fileName
+
+  if (payload.width && payload.height) {
+    data.mediaWidth = payload.width
+    data.mediaHeight = payload.height
+    applyNodeMedia(graphNode, data)
+    return
+  }
+
+  const img = new Image()
+  img.onload = () => {
+    data.mediaWidth = img.naturalWidth
+    data.mediaHeight = img.naturalHeight
+    applyNodeMedia(graphNode, data)
+  }
+  img.onerror = () => applyNodeMedia(graphNode, data)
+  img.src = payload.previewUrl
+}
+
 function applyNodeMedia(graphNode: Node, data: CanvasNodeData) {
   if (data.imageGenTask === 'picker') {
     data.imageGenTask = undefined

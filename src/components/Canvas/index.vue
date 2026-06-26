@@ -94,6 +94,17 @@
       @batch-download="handleGroupBatchDownload"
     />
 
+    <CanvasSaveSkillPopover
+      v-if="showSaveSkillPopover"
+      :position="saveSkillPopoverPos"
+      :items="saveSkillItems"
+      :existing-skills="listSavedCanvasSkills()"
+      :is-light="canvasBgTheme === 'light'"
+      :submitting="saveSkillSubmitting"
+      @close="closeSaveSkillPopover"
+      @submit="handleSubmitSaveSkill"
+    />
+
     <CanvasNodeToolbar
       v-if="showNodeToolbar && !showMultiSelectToolbar && !showGroupToolbar && showToolbarFeatureButtons && !showImageCrop"
       :position="toolbarPos"
@@ -124,7 +135,10 @@
       v-if="showAssetsPanel"
       :tab="assetsTab"
       :loading="assetsLoading"
-      @update:tab="assetsTab = $event"
+      :is-light="canvasBgTheme === 'light'"
+      :list="assetsList"
+      @update:tab="onChangeAssetsTab($event)"
+      @select="onAddAssetToCanvas"
       @close="showAssetsPanel = false"
     />
 
@@ -296,6 +310,7 @@ import CanvasMultiSelectToolbar from './panels/CanvasMultiSelectToolbar.vue'
 import CanvasEdgeDeleteButton from './panels/CanvasEdgeDeleteButton.vue'
 import CanvasGroupOverlay from './panels/CanvasGroupOverlay.vue'
 import CanvasGroupToolbar from './panels/CanvasGroupToolbar.vue'
+import CanvasSaveSkillPopover from './panels/CanvasSaveSkillPopover.vue'
 import CanvasElementSelectBar from './panels/CanvasElementSelectBar.vue'
 import CanvasNodeOverlays from './panels/CanvasNodeOverlays.vue'
 import CanvasImagePreview from './panels/CanvasImagePreview.vue'
@@ -308,17 +323,20 @@ import CanvasTextFormatAnchor from './panels/CanvasTextFormatAnchor.vue'
 import CanvasShortcutsBackdrop from './panels/CanvasShortcutsBackdrop.vue'
 import CanvasHiddenFileInput from './panels/CanvasHiddenFileInput.vue'
 import { useCanvas } from './composables/useCanvas'
-import { ref } from 'vue'
-import type { ProjectCanvasResponse } from '@/services/api'
+import { ref, onMounted } from 'vue'
+import api from '@/services/api'
+import type { AssetView, ProjectCanvasResponse } from '@/services/api'
+import { type ProjectTabKey } from '@/views/Project/projectData'
 
 const emit = defineEmits<{
   'focus-chat': []
   'add-to-chat': [payload: { previewUrl: string; fileName: string }],
-  'save-skill-to-chat': [payload: { file: File; skillName: string }],
   'new-project': []
   'rename-project': [projectId: string, name: string],
   'delete-project': [projectId: string],
 }>()
+
+const assetsList = ref<AssetView[]>([])
 
 const canvasRef = ref<HTMLElement | null>(null)
 const graphRef = ref<HTMLElement | null>(null)
@@ -380,6 +398,9 @@ const {
   handleGroupLayout,
   handleGroupSaveToSkill,
   handleGroupToStoryboard,
+  handleSubmitSaveSkill,
+  closeSaveSkillPopover,
+  listSavedCanvasSkills,
   handleLogout,
   handleMergeStoryboardGroup,
   handleMultiSelectGroup,
@@ -456,6 +477,10 @@ const {
   showEdgeDeleteButton,
   showElementSelectMode,
   showGroupToolbar,
+  showSaveSkillPopover,
+  saveSkillPopoverPos,
+  saveSkillItems,
+  saveSkillSubmitting,
   showHistoryPanel,
   showImageCreativeToolbar,
   showImageCrop,
@@ -515,6 +540,7 @@ const {
   zoomIn,
   zoomOut,
   zoomPercent,
+  addImageFromAsset,
   addImageFromFile,
   addImagesFromFiles,
   getNodeCount,
@@ -545,6 +571,34 @@ export type CanvasProjectItem = {
 defineProps<{
   projectsList: CanvasProjectItem[]
 }>()
+
+const onChangeAssetsTab = (tab: ProjectTabKey) => {
+  assetsTab.value = tab
+  onLoadAssets()
+}
+
+const onAddAssetToCanvas = (asset: AssetView) => {
+  addImageFromAsset({
+    previewUrl: asset.previewUrl,
+    fileName: asset.fileName,
+    width: asset.width,
+    height: asset.height,
+  })
+}
+
+const onLoadAssets = () => {
+  api.getAssets({
+    scope: assetsTab.value,
+    pageSize: 50,
+    page: 1,
+  }).then((res: any) => {
+    assetsList.value = res.records ?? [];
+  })
+}
+
+onMounted(()=>{
+  onLoadAssets();
+});
 </script>
 
 <style lang="scss">

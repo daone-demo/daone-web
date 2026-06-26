@@ -741,8 +741,11 @@ const onLoadPayUrl = async () => {
     })
     if (!res) return
 
-    if (res.payType === 'ALIPAY') {
-      payUrl.value = res.redirectUrl ?? ''
+    if (res.redirectUrl) {
+      payUrl.value = await QRCode.toDataURL(res.redirectUrl, {
+        width: 260,
+        margin: 2,
+      })
     } else if (res.qrCodeContent) {
       payUrl.value = await QRCode.toDataURL(res.qrCodeContent, {
         width: 260,

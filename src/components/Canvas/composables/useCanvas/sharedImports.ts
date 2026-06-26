@@ -1,5 +1,6 @@
 export {
   ADD_NODE_GROUPS,
+  CANVAS_ASSET_DRAG_TYPE,
   CANVAS_PROJECTS,
   CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME,
@@ -9,6 +10,7 @@ export {
   NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS,
   TEXT_EDITOR_PLACEHOLDER,
+  type CanvasAssetDragPayload,
   type CanvasNodeData,
   type ImageGenTask,
   type ImageSourceRef,
@@ -40,6 +42,7 @@ export {
   ensureInfiniteCanvasArea,
   clientPointToGraphLocal,
   getViewportCenterLocal,
+  getRandomViewportLocalPoint,
   hasVisibleNodesInViewport,
   centerGraphContent,
   getNodeCropOverlayPosition,
@@ -81,7 +84,7 @@ export {
   syncTextNodeImageSource,
 } from '../../textPrompt'
 export { createMinimap, destroyMinimap } from '../../minimap'
-export { runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId } from '../../upload'
+export { applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId } from '../../upload'
 export { getCanvasSnapshot, saveCanvasSnapshotToStorage, normalizeCanvasSnapshot, type CanvasSnapshot } from '../../canvasSnapshot'
 export {
   buildGroupSkillMarkdown,

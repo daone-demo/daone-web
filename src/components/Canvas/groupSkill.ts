@@ -99,11 +99,12 @@ function buildNodeStepSummary(node: GroupSkillNode, index: number): string {
 
 export function buildGroupSkillMarkdown(
   subgraph: GroupSkillSubgraph,
-  options: { name?: string; projectName?: string } = {},
+  options: { name?: string; projectName?: string; description?: string; role?: string; tags?: string[] } = {},
 ): { content: string; skillName: string; fileName: string } {
   const skillName = options.name?.trim() || inferSkillName(subgraph)
   const slug = slugifySkillName(skillName)
-  const description = `从${options.projectName ? `「${options.projectName}」` : '画布'}导出的工作流技能，共 ${subgraph.nodes.length} 个节点、${subgraph.edges.length} 条连线。`
+  const description = options.description?.trim()
+    || `从${options.projectName ? `「${options.projectName}」` : '画布'}导出的工作流技能，共 ${subgraph.nodes.length} 个节点、${subgraph.edges.length} 条连线。`
   const nodeIdToLabel = new Map(
     subgraph.nodes.map((node, index) => [node.id, `${KIND_LABELS[node.kind]}#${index + 1}`]),
   )
@@ -131,6 +132,8 @@ source: daone-canvas
 version: 1
 nodeCount: ${subgraph.nodes.length}
 edgeCount: ${subgraph.edges.length}
+role: ${options.role || '自定义'}
+tags: ${JSON.stringify(options.tags || [])}
 ---
 
 # ${skillName}

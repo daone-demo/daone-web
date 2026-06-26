@@ -5,13 +5,20 @@ import type { CanvasBindings } from './types'
 import type { UploadFilter } from './state'
 import { unpackBind } from './bindContext'
 import {
-  ADD_NODE_GROUPS, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
+  clearCanvasAssetDrag,
+  consumeCanvasAssetDragPayload,
+  isCanvasAssetDragActive,
+  setCanvasAssetDropHandler,
+  wasCanvasAssetDropHandled,
+} from '../../canvasAssetDrag'
+import {
+  ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME, NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
   spawnCroppedImageNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
   getConnectMenuPosition, getLinkedSpawnPoint, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
-  ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, hasVisibleNodesInViewport,
+  ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
   getNodeVideoGenPromptPosition, getNodePromptPosition, getNodeSidePanelPosition, getNodeTextDownloadPosition,
   getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition, getNodeToolbarPosition,
@@ -19,16 +26,23 @@ import {
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, findIncomingImageNode, mockImg2Prompt, mockTextGenerate, syncTextNodeImageSource,
-  createMinimap, destroyMinimap, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
+  createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
-  useCanvasKeyboard, api, exampleImage, buildGroupSkillMarkdown, createSkillFile, downloadTextFile, extractGroupSubgraph,
+  useCanvasKeyboard, api, exampleImage, buildGroupSkillMarkdown, downloadTextFile, extractGroupSubgraph,
 } from './sharedImports'
+import {
+  createSkillId,
+  listSavedCanvasSkills,
+  mergeCanvasSkill,
+  saveCanvasSkill,
+  type SavedCanvasSkill,
+} from '../../skillStorage'
 import type { GroupLayoutDirection } from './sharedImports'
 import type { ProjectCanvasResponse } from '@/services/api'
 import type { Project } from '@/stores/useProject'
 import type {
   CanvasNodeData, ImageSourceRef, NodeKind, TextFormatCommand,
-  ImageGenTask, ConnectMenuKey, CanvasGraph, CanvasSnapshot, TextEditorApi, UserMenuKey,
+  ImageGenTask, ConnectMenuKey, CanvasGraph, CanvasSnapshot, TextEditorApi, UserMenuKey, CanvasAssetDragPayload,
 } from './sharedImports'
 
 export function registerCore(bind: CanvasBindings) {
@@ -100,6 +114,10 @@ export function registerCore(bind: CanvasBindings) {
     multiSelectToolbarPos,
     groupToolbarPos,
     groupOverlayBox,
+    showSaveSkillPopover,
+    saveSkillPopoverPos,
+    saveSkillItems,
+    saveSkillSubmitting,
     dialoguePos,
     promptPos,
     imageGenPromptPos,
@@ -2547,7 +2565,22 @@ function filterUploadFiles(files: File[], filter: UploadFilter) {
 }
 
 function hasCanvasFileDrag(event: DragEvent) {
-  return Array.from(event.dataTransfer?.types ?? []).includes('Files')
+  const types = Array.from(event.dataTransfer?.types ?? [])
+  return (
+    types.includes('Files')
+    || types.includes(CANVAS_ASSET_DRAG_TYPE)
+    || isCanvasAssetDragActive()
+  )
+}
+
+function parseCanvasAssetDragPayload(raw: string): CanvasAssetDragPayload | null {
+  if (!raw) return null
+  try {
+    const payload = JSON.parse(raw) as CanvasAssetDragPayload
+    return payload.previewUrl ? payload : null
+  } catch {
+    return null
+  }
 }
 
 function getHorizontalUploadSpawnPoint(
@@ -2621,6 +2654,7 @@ function onCanvasDragEnter(event: DragEvent) {
 
 function onCanvasDragOver(event: DragEvent) {
   if (!hasCanvasFileDrag(event)) return
+  event.preventDefault()
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
 }
 
@@ -2632,18 +2666,74 @@ function onCanvasDragLeave(event: DragEvent) {
   }
 }
 
-function onCanvasFileDrop(event: DragEvent) {
+function handleCanvasAssetDrop(event: DragEvent) {
+  const g = graph.value
+  if (!g) return
+
+  const asset =
+    parseCanvasAssetDragPayload(event.dataTransfer?.getData(CANVAS_ASSET_DRAG_TYPE) ?? '')
+    ?? consumeCanvasAssetDragPayload()
+  if (!asset) return
+
   canvasFileDragDepth.value = 0
   isCanvasFileDragOver.value = false
 
+  const point = clientPointToGraphLocal(g, event.clientX, event.clientY)
+  addImageFromAsset(asset, point)
+}
+
+function onCanvasFileDrop(event: DragEvent) {
+  event.preventDefault()
+  canvasFileDragDepth.value = 0
+  isCanvasFileDragOver.value = false
+
+  if (wasCanvasAssetDropHandled()) return
+
   const g = graph.value
   if (!g) return
+
+  if (isCanvasAssetDragActive()) {
+    handleCanvasAssetDrop(event)
+    clearCanvasAssetDrag()
+    return
+  }
+
+  const asset = parseCanvasAssetDragPayload(event.dataTransfer?.getData(CANVAS_ASSET_DRAG_TYPE) ?? '')
+  if (asset) {
+    handleCanvasAssetDrop(event)
+    return
+  }
 
   const files = filterUploadFiles(Array.from(event.dataTransfer?.files ?? []), 'any')
   if (!files.length) return
 
   const point = clientPointToGraphLocal(g, event.clientX, event.clientY)
   spawnMediaFilesAtPoint(files, point)
+}
+
+let graphDropEl: HTMLElement | null = null
+
+function onGraphDragOver(event: DragEvent) {
+  if (!hasCanvasFileDrag(event)) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+
+function onGraphDrop(event: DragEvent) {
+  onCanvasFileDrop(event)
+}
+
+function bindGraphDropListeners(el: HTMLElement) {
+  graphDropEl = el
+  el.addEventListener('dragover', onGraphDragOver, true)
+  el.addEventListener('drop', onGraphDrop, true)
+}
+
+function unbindGraphDropListeners() {
+  if (!graphDropEl) return
+  graphDropEl.removeEventListener('dragover', onGraphDragOver, true)
+  graphDropEl.removeEventListener('drop', onGraphDrop, true)
+  graphDropEl = null
 }
 
 function openFileUploadPicker(
@@ -3001,6 +3091,10 @@ function resetCanvasInteractionState() {
 }
 
 function dismissOneCanvasLayer() {
+  if (showSaveSkillPopover.value) {
+    closeSaveSkillPopover()
+    return true
+  }
   if (imagePreviewUrl.value) {
     closeImagePreview()
     return true
@@ -3373,7 +3467,8 @@ function handleGroupBatchDownload() {
 function handleGroupSaveToSkill() {
   const g = graph.value
   const group = activeGroupSelection.value
-  if (!g || !group) return
+  const overlayRoot = canvasRef.value
+  if (!g || !group || !overlayRoot) return
 
   const subgraph = extractGroupSubgraph(g, group.nodeIds)
   if (!subgraph) {
@@ -3381,16 +3476,112 @@ function handleGroupSaveToSkill() {
     return
   }
 
-  const { content, skillName, fileName } = buildGroupSkillMarkdown(subgraph, {
-    projectName: currentProjectName.value,
-  })
+  const box = getGroupScreenBox(g, group.nodeIds, overlayRoot)
+  saveSkillItems.value = subgraph.nodes.map((node) => ({
+    nodeId: node.id,
+    label: node.fileName || node.title || `节点-${node.id.slice(-4)}`,
+  }))
+  saveSkillPopoverPos.value = {
+    left: box.centerX,
+    top: box.anchorTop + box.height / 2,
+  }
+  showSaveSkillPopover.value = true
+}
 
-  downloadTextFile(content, fileName)
-  emit('save-skill-to-chat', {
-    file: createSkillFile(content, fileName),
-    skillName,
-  })
-  message.success(`已保存技能「${skillName}」`)
+function closeSaveSkillPopover() {
+  showSaveSkillPopover.value = false
+  saveSkillItems.value = []
+  saveSkillSubmitting.value = false
+}
+
+function countSkillFiles(subgraph: NonNullable<ReturnType<typeof extractGroupSubgraph>>) {
+  return subgraph.nodes.filter((node) => node.previewUrl || node.fileName).length
+}
+
+async function handleSubmitSaveSkill(payload: {
+  tab: 'new' | 'existing'
+  name: string
+  role: string
+  description: string
+  tags: string[]
+  existingSkillId?: string
+}) {
+  const g = graph.value
+  const group = activeGroupSelection.value
+  if (!g || !group || saveSkillSubmitting.value) return
+
+  const subgraph = extractGroupSubgraph(g, group.nodeIds)
+  if (!subgraph) return
+
+  saveSkillSubmitting.value = true
+  try {
+    const fileCount = Math.max(1, countSkillFiles(subgraph))
+    const { content, fileName } = buildGroupSkillMarkdown(subgraph, {
+      name: payload.name,
+      projectName: currentProjectName.value,
+      description: payload.description,
+      role: payload.role,
+      tags: payload.tags,
+    })
+
+    if (payload.tab === 'existing' && payload.existingSkillId) {
+      const existing = listSavedCanvasSkills().find((item) => item.id === payload.existingSkillId)
+      if (!existing) {
+        message.warning('目标技能不存在')
+        return
+      }
+
+      const mergedWorkflow = {
+        nodes: [...existing.workflow.nodes, ...subgraph.nodes],
+        edges: [...existing.workflow.edges, ...subgraph.edges],
+      }
+      const mergedMarkdown = buildGroupSkillMarkdown(mergedWorkflow, {
+        name: existing.name,
+        projectName: currentProjectName.value,
+        description: existing.description,
+        role: existing.role,
+        tags: existing.tags,
+      }).content
+
+      const updated = mergeCanvasSkill(payload.existingSkillId, {
+        markdown: mergedMarkdown,
+        workflow: mergedWorkflow,
+        addedNodeCount: subgraph.nodes.length,
+        addedFileCount: fileCount,
+      })
+
+      if (!updated) {
+        message.warning('加入技能失败')
+        return
+      }
+
+      downloadTextFile(mergedMarkdown, fileName)
+      message.success(`已更新技能「${updated.name}」(含 ${updated.fileCount} 个文件)`)
+      closeSaveSkillPopover()
+      return
+    }
+
+    const skill: SavedCanvasSkill = {
+      id: createSkillId(),
+      name: payload.name,
+      role: payload.role,
+      description: payload.description,
+      tags: payload.tags,
+      markdown: content,
+      workflow: subgraph,
+      nodeCount: subgraph.nodes.length,
+      fileCount,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    saveCanvasSkill(skill)
+    downloadTextFile(content, fileName)
+    message.success(`已创建技能「${skill.name}」(含 ${skill.fileCount} 个文件)`)
+    closeSaveSkillPopover()
+  } finally {
+    saveSkillSubmitting.value = false
+  }
 }
 
 function syncGroupedNodeMove(node: Node) {
@@ -3771,6 +3962,9 @@ onMounted(() => {
   if (showMinimap.value) {
     nextTick(() => setupMinimap())
   }
+
+  bindGraphDropListeners(graphRef.value)
+  setCanvasAssetDropHandler(handleCanvasAssetDrop)
 })
 
 function waitForNodeUploadDone(node: Node) {
@@ -3810,6 +4004,31 @@ function addImageFromFile(file: File, point?: { x: number; y: number }) {
   return waitForNodeUploadDone(node)
 }
 
+function addImageFromAsset(
+  asset: {
+    previewUrl: string
+    fileName?: string
+    width?: number | null
+    height?: number | null
+  },
+  point?: { x: number; y: number },
+) {
+  const g = graph.value
+  if (!g || !asset.previewUrl) return
+
+  const position = point ?? getRandomViewportLocalPoint(g, { kind: 'image', mode: 'editor' })
+  const node = addCanvasNode(g, 'image', position, {
+    mode: 'editor',
+    title: asset.fileName || '图片',
+    fileName: asset.fileName || '图片',
+  })
+
+  applyRemoteImageToNode(node, asset)
+  selectGraphNodes(node)
+  syncNodeCount()
+  scheduleHistoryPush()
+}
+
 async function addImagesFromFiles(files: File[]) {
   const imageFiles = files.filter((file) => file.type.startsWith('image/'))
   if (!imageFiles.length) return []
@@ -3828,6 +4047,9 @@ async function addImagesFromFiles(files: File[]) {
 
 onBeforeUnmount(() => {
   unbindKeyboard()
+  unbindGraphDropListeners()
+  setCanvasAssetDropHandler(null)
+  clearCanvasAssetDrag()
   if (historyPushTimer) clearTimeout(historyPushTimer)
   if (edgeHoverLeaveTimer) window.clearTimeout(edgeHoverLeaveTimer)
   if (altVoiceTimer.value) clearTimeout(altVoiceTimer.value)
@@ -3849,6 +4071,7 @@ const openNewProject = () => {
     activeGroupSelection,
     addFromMenu,
     addImageDialogueSourceRef,
+    addImageFromAsset,
     addImageFromFile,
     addImagesFromFiles,
     addNode,
@@ -3915,6 +4138,9 @@ const openNewProject = () => {
     handleGroupLayout,
     handleGroupSaveToSkill,
     handleGroupToStoryboard,
+    handleSubmitSaveSkill,
+    closeSaveSkillPopover,
+    listSavedCanvasSkills,
     handleImageNodeDblClick,
     handleLogout,
     handleMergeStoryboardGroup,
@@ -4019,6 +4245,10 @@ const openNewProject = () => {
     setRubberbandEnabled,
     setupMinimap,
     showGroupToolbar,
+    showSaveSkillPopover,
+    saveSkillPopoverPos,
+    saveSkillItems,
+    saveSkillSubmitting,
     showImageCreativeToolbar,
     showImageGenPromptBar,
     showMultiSelectToolbar,

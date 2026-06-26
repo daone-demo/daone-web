@@ -337,6 +337,43 @@ export function getNodeSize(
   }
 }
 
+/** 当前可视区域内的随机图坐标（用于点击添加节点，避免每次都落在正中心） */
+export function getRandomViewportLocalPoint(
+  graph: Graph,
+  options: { kind?: NodeKind; mode?: NodeMode } = {},
+) {
+  const kind = options.kind ?? 'image'
+  const mode = options.mode ?? 'editor'
+  const { width, height } = getNodeSize(kind, mode)
+  const padX = width / 2 + 24
+  const padY = height / 2 + 24
+
+  const scroller = getScroller(graph)
+  const el = scroller?.container ?? graph.container
+  const rect = el.getBoundingClientRect()
+
+  const topLeft = clientPointToGraphLocal(graph, rect.left, rect.top)
+  const bottomRight = clientPointToGraphLocal(graph, rect.right, rect.bottom)
+
+  const minX = Math.min(topLeft.x, bottomRight.x) + padX
+  const maxX = Math.max(topLeft.x, bottomRight.x) - padX
+  const minY = Math.min(topLeft.y, bottomRight.y) + padY
+  const maxY = Math.max(topLeft.y, bottomRight.y) - padY
+
+  if (minX >= maxX || minY >= maxY) {
+    const center = getViewportCenterLocal(graph)
+    return {
+      x: center.x + (Math.random() - 0.5) * 120,
+      y: center.y + (Math.random() - 0.5) * 90,
+    }
+  }
+
+  return {
+    x: minX + Math.random() * (maxX - minX),
+    y: minY + Math.random() * (maxY - minY),
+  }
+}
+
 export function createPorts(stroke = '#8b8b95') {
   return {
     groups: {

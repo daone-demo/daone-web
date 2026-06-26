@@ -19,6 +19,7 @@ import type CanvasTextExpandEditor from '../../panels/CanvasTextExpandEditor.vue
 import type { UserMenuKey } from '../../panels/CanvasHeader.vue'
 import {
   ADD_NODE_GROUPS,
+  CANVAS_ASSET_DRAG_TYPE,
   CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME,
   CANVAS_MAX_ZOOM,
@@ -27,6 +28,7 @@ import {
   NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS,
   TEXT_EDITOR_PLACEHOLDER,
+  type CanvasAssetDragPayload,
   type CanvasNodeData,
   type ImageGenTask,
   type ImageSourceRef,
@@ -59,6 +61,7 @@ import {
   ensureInfiniteCanvasArea,
   clientPointToGraphLocal,
   getViewportCenterLocal,
+  getRandomViewportLocalPoint,
   hasVisibleNodesInViewport,
   centerGraphContent,
   getNodeCropOverlayPosition,
@@ -103,7 +106,14 @@ import {
   syncTextNodeImageSource,
 } from '../../textPrompt'
 import { createMinimap, destroyMinimap } from '../../minimap'
-import { runUploadSimulation } from '../../upload'
+import { applyRemoteImageToNode, runUploadSimulation } from '../../upload'
+import {
+  clearCanvasAssetDrag,
+  consumeCanvasAssetDragPayload,
+  isCanvasAssetDragActive,
+  setCanvasAssetDropHandler,
+  wasCanvasAssetDropHandled,
+} from '../../canvasAssetDrag'
 import {
   getCanvasSnapshot,
   saveCanvasSnapshotToStorage,
@@ -199,7 +209,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const connectSourceNodeId = ref('')
   const showAssetsPanel = ref(false)
   const showHistoryPanel = ref(false)
-  const assetsTab = ref<'all' | 'mine'>('mine')
+  const assetsTab = ref<'RECOMMENDED' | 'CENTER' | 'MINE' | 'FAVORITE' | 'FILES'>('RECOMMENDED');
   const assetsLoading = ref(false)
   const promptText = ref('')
   const activePickerNodeId = ref('')
@@ -230,6 +240,10 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const toolbarPos = ref({ left: 0, top: 0 })
   const multiSelectToolbarPos = ref({ left: 0, top: 0 })
   const groupToolbarPos = ref({ left: 0, top: 0 })
+  const showSaveSkillPopover = ref(false)
+  const saveSkillPopoverPos = ref({ left: 0, top: 0 })
+  const saveSkillItems = ref<Array<{ nodeId: string; label: string }>>([])
+  const saveSkillSubmitting = ref(false)
   const groupOverlayBox = ref<{
     left: number
     top: number
@@ -2515,7 +2529,22 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   }
 
   function hasCanvasFileDrag(event: DragEvent) {
-    return Array.from(event.dataTransfer?.types ?? []).includes('Files')
+    const types = Array.from(event.dataTransfer?.types ?? [])
+    return (
+      types.includes('Files')
+      || types.includes(CANVAS_ASSET_DRAG_TYPE)
+      || isCanvasAssetDragActive()
+    )
+  }
+
+  function parseCanvasAssetDragPayload(raw: string): CanvasAssetDragPayload | null {
+    if (!raw) return null
+    try {
+      const payload = JSON.parse(raw) as CanvasAssetDragPayload
+      return payload.previewUrl ? payload : null
+    } catch {
+      return null
+    }
   }
 
   function getHorizontalUploadSpawnPoint(
@@ -2589,6 +2618,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
 
   function onCanvasDragOver(event: DragEvent) {
     if (!hasCanvasFileDrag(event)) return
+    event.preventDefault()
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   }
 
@@ -2601,11 +2631,23 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   }
 
   function onCanvasFileDrop(event: DragEvent) {
+    event.preventDefault()
     canvasFileDragDepth.value = 0
     isCanvasFileDragOver.value = false
 
     const g = graph.value
     if (!g) return
+
+    const asset =
+      parseCanvasAssetDragPayload(event.dataTransfer?.getData(CANVAS_ASSET_DRAG_TYPE) ?? '')
+      ?? consumeCanvasAssetDragPayload()
+    clearCanvasAssetDrag()
+
+    if (asset) {
+      const point = clientPointToGraphLocal(g, event.clientX, event.clientY)
+      addImageFromAsset(asset, point)
+      return
+    }
 
     const files = filterUploadFiles(Array.from(event.dataTransfer?.files ?? []), 'any')
     if (!files.length) return
@@ -3337,6 +3379,18 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     // implemented in registerCore.ts
   }
 
+  function closeSaveSkillPopover() {
+    // implemented in registerCore.ts
+  }
+
+  function handleSubmitSaveSkill() {
+    // implemented in registerCore.ts
+  }
+
+  function listSavedCanvasSkills() {
+    return []
+  }
+
   function syncGroupedNodeMove(node: Node) {
     const g = graph.value
     if (!g) return
@@ -3737,6 +3791,31 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     return waitForNodeUploadDone(node)
   }
 
+  function addImageFromAsset(
+    asset: {
+      previewUrl: string
+      fileName?: string
+      width?: number | null
+      height?: number | null
+    },
+    point?: { x: number; y: number },
+  ) {
+    const g = graph.value
+    if (!g || !asset.previewUrl) return
+
+    const position = point ?? getRandomViewportLocalPoint(g, { kind: 'image', mode: 'editor' })
+    const node = addCanvasNode(g, 'image', position, {
+      mode: 'editor',
+      title: asset.fileName || '图片',
+      fileName: asset.fileName || '图片',
+    })
+
+    applyRemoteImageToNode(node, asset)
+    selectGraphNodes(node)
+    syncNodeCount()
+    scheduleHistoryPush()
+  }
+
   async function addImagesFromFiles(files: File[]) {
     const imageFiles = files.filter((file) => file.type.startsWith('image/'))
     if (!imageFiles.length) return []
@@ -3781,6 +3860,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     activeVideoGenPromptNodeId,
     addFromMenu,
     addImageDialogueSourceRef,
+    addImageFromAsset,
     addImageFromFile,
     addImagesFromFiles,
     addMenuDropPoint,
@@ -3879,6 +3959,9 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     handleGroupLayout,
     handleGroupSaveToSkill,
     handleGroupToStoryboard,
+    handleSubmitSaveSkill,
+    closeSaveSkillPopover,
+    listSavedCanvasSkills,
     handleImageNodeDblClick,
     handleLogout,
     handleMergeStoryboardGroup,
@@ -4019,6 +4102,10 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showEdgeDeleteButton,
     showElementSelectMode,
     showGroupToolbar,
+    showSaveSkillPopover,
+    saveSkillPopoverPos,
+    saveSkillItems,
+    saveSkillSubmitting,
     showHistoryPanel,
     showImageCreativeToolbar,
     showImageCrop,

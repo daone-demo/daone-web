@@ -594,6 +594,9 @@ const api = {
   callTool<T = unknown>(toolCode: string, data: CallToolRequest) {
     return http.post<T>(`/provider/tools/${toolCode}`, data)
   },
+  getChatModels<T = unknown>() {
+    return http.get<T>('/provider/chat/models')
+  },
 }
 
 export default api
