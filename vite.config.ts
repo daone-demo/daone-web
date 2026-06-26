@@ -6,10 +6,33 @@ import Components from 'unplugin-vue-components/vite'
 import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers'
 import { loadEnv } from 'vite'
 
+const VERCEL_API_TARGETS = {
+  production: {
+    baseUrl: 'https://api.daoneai.com/api/v1',
+    host: 'https://api.daoneai.com',
+  },
+  preview: {
+    baseUrl: 'https://api-test.daoneai.com/api/v1',
+    host: 'https://api-test.daoneai.com',
+  },
+} as const
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
-  console.log('env', env);
+  const env = loadEnv(mode, process.cwd(), '')
+  const vercelTarget =
+    process.env.VERCEL_ENV === 'production'
+      ? VERCEL_API_TARGETS.production
+      : process.env.VERCEL_ENV === 'preview'
+        ? VERCEL_API_TARGETS.preview
+        : undefined
+
+  if (vercelTarget) {
+    process.env.VITE_API_BASE_URL = vercelTarget.baseUrl
+    env.VITE_API_BASE_URL = vercelTarget.baseUrl
+    env.VITE_API_BASE_HOST = vercelTarget.host
+  }
+
   return {
     server: {
       host: true,
