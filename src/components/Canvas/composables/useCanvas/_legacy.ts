@@ -1,5 +1,6 @@
 import { useModalStore } from '@stores/useModal'
 import { useRouter } from 'vue-router'
+import { message } from 'ant-design-vue'
 import {
   computed,
   nextTick,
@@ -106,6 +107,18 @@ import {
   syncTextNodeImageSource,
 } from '../../textPrompt'
 import { createMinimap, destroyMinimap } from '../../minimap'
+import {
+  buildGroupSkillMarkdown,
+  downloadTextFile,
+  extractGroupSubgraph,
+} from '../../groupSkill'
+import {
+  createSkillId,
+  listSavedCanvasSkills,
+  mergeCanvasSkill,
+  saveCanvasSkill,
+  type SavedCanvasSkill,
+} from '../../skillStorage'
 import { applyRemoteImageToNode, runUploadSimulation } from '../../upload'
 import {
   clearCanvasAssetDrag,
@@ -3373,20 +3386,132 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     })
   }
 
+  function getActiveGroupSubgraph() {
+    const g = graph.value
+    const group = activeGroupSelection.value
+    if (!g || !group) return null
+    return extractGroupSubgraph(g, group.nodeIds)
+  }
+
+  function countSkillFiles(subgraph: NonNullable<ReturnType<typeof extractGroupSubgraph>>) {
+    return subgraph.nodes.filter((node) => node.previewUrl || node.fileName).length
+  }
+
   function handleGroupSaveToSkill() {
-    // implemented in registerCore.ts
+    const g = graph.value
+    const group = activeGroupSelection.value
+    const overlayRoot = canvasRef.value
+    if (!g || !group || !overlayRoot) return
+
+    const subgraph = getActiveGroupSubgraph()
+    if (!subgraph) {
+      message.warning('当前分组没有可导出的节点')
+      return
+    }
+
+    const box = getGroupScreenBox(g, group.nodeIds, overlayRoot)
+    saveSkillItems.value = subgraph.nodes.map((node) => ({
+      nodeId: node.id,
+      label: node.fileName || node.title || `节点-${node.id.slice(-4)}`,
+    }))
+    saveSkillPopoverPos.value = {
+      left: box.centerX,
+      top: box.anchorTop + box.height / 2,
+    }
+    showSaveSkillPopover.value = true
   }
 
   function closeSaveSkillPopover() {
-    // implemented in registerCore.ts
+    showSaveSkillPopover.value = false
+    saveSkillItems.value = []
+    saveSkillSubmitting.value = false
   }
 
-  function handleSubmitSaveSkill() {
-    // implemented in registerCore.ts
-  }
+  async function handleSubmitSaveSkill(payload: {
+    tab: 'new' | 'existing'
+    name: string
+    role: string
+    description: string
+    tags: string[]
+    existingSkillId?: string
+  }) {
+    const g = graph.value
+    const group = activeGroupSelection.value
+    if (!g || !group || saveSkillSubmitting.value) return
 
-  function listSavedCanvasSkills() {
-    return []
+    const subgraph = getActiveGroupSubgraph()
+    if (!subgraph) return
+
+    saveSkillSubmitting.value = true
+    try {
+      const fileCount = Math.max(1, countSkillFiles(subgraph))
+      const { content, fileName } = buildGroupSkillMarkdown(subgraph, {
+        name: payload.name,
+        projectName: currentProjectName.value,
+        description: payload.description,
+        role: payload.role,
+        tags: payload.tags,
+      })
+
+      if (payload.tab === 'existing' && payload.existingSkillId) {
+        const existing = listSavedCanvasSkills().find((item) => item.id === payload.existingSkillId)
+        if (!existing) {
+          message.warning('目标技能不存在')
+          return
+        }
+
+        const mergedWorkflow = {
+          nodes: [...existing.workflow.nodes, ...subgraph.nodes],
+          edges: [...existing.workflow.edges, ...subgraph.edges],
+        }
+        const mergedMarkdown = buildGroupSkillMarkdown(mergedWorkflow, {
+          name: existing.name,
+          projectName: currentProjectName.value,
+          description: existing.description,
+          role: existing.role,
+          tags: existing.tags,
+        }).content
+
+        const updated = mergeCanvasSkill(payload.existingSkillId, {
+          markdown: mergedMarkdown,
+          workflow: mergedWorkflow,
+          addedNodeCount: subgraph.nodes.length,
+          addedFileCount: fileCount,
+        })
+
+        if (!updated) {
+          message.warning('加入技能失败')
+          return
+        }
+
+        downloadTextFile(mergedMarkdown, fileName)
+        message.success(`已更新技能「${updated.name}」(含 ${updated.fileCount} 个文件)`)
+        closeSaveSkillPopover()
+        return
+      }
+
+      const skill: SavedCanvasSkill = {
+        id: createSkillId(),
+        name: payload.name,
+        role: payload.role,
+        description: payload.description,
+        tags: payload.tags,
+        markdown: content,
+        workflow: subgraph,
+        nodeCount: subgraph.nodes.length,
+        fileCount,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        projectId: activeProjectId.value,
+      }
+
+      saveCanvasSkill(skill)
+      downloadTextFile(content, fileName)
+      message.success(`已创建技能「${skill.name}」(含 ${skill.fileCount} 个文件)`)
+      closeSaveSkillPopover()
+    } finally {
+      saveSkillSubmitting.value = false
+    }
   }
 
   function syncGroupedNodeMove(node: Node) {

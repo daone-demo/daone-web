@@ -3573,6 +3573,7 @@ async function handleSubmitSaveSkill(payload: {
       fileCount,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      projectId: activeProjectId.value,
     }
 
     saveCanvasSkill(skill)

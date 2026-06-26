@@ -112,7 +112,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { SavedCanvasSkill } from '../skillStorage'
+import type { SavedCanvasSkill } from '../skillStorage';
 
 export interface SaveSkillItem {
   nodeId: string

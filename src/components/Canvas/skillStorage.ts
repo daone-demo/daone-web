@@ -1,17 +1,19 @@
-import type { GroupSkillSubgraph } from './groupSkill'
+import type { GroupSkillSubgraph } from './groupSkill';
+import api from '@/services/api';
 
 export interface SavedCanvasSkill {
   id: string
   name: string
-  role: string
+  role?: string
   description: string
-  tags: string[]
-  markdown: string
+  tags?: string[]
+  markdown?: string
   workflow: GroupSkillSubgraph
   nodeCount: number
   fileCount: number
   createdAt: string
   updatedAt: string
+  projectId: string
 }
 
 const STORAGE_KEY = 'daone-canvas-skills'
@@ -36,6 +38,13 @@ export function listSavedCanvasSkills(): SavedCanvasSkill[] {
 }
 
 export function saveCanvasSkill(skill: SavedCanvasSkill) {
+  console.log('saveCanvasSkill', skill)
+  let {
+    workflow,
+    name,
+    description
+  } = skill;
+
   const skills = readSkills()
   skills.unshift(skill)
   writeSkills(skills)
