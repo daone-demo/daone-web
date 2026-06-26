@@ -33,10 +33,13 @@ import type { ChatSendPayload } from './chatTypes';
 import { useRoute } from 'vue-router';
 import api, { type ProjectCanvasResponse } from '@/services/api';
 import { useModalStore } from '@stores/useModal';
+const toolsObject = ref<Record<string, any>>({});
 const modalStore = useModalStore();
+const workflowsList = ref<any[]>([]);
 
 const projectName = ref('');
 const project_Id = ref('');
+
 type CanvasExpose = {
   addImagesFromFiles: (files: File[]) => Promise<Node[]>
   getNodeCount: () => number
@@ -140,6 +143,11 @@ const onLoadTools = async () => {
   console.log('tools', res);
 }
 
+const onLoadWorkflows = async () => {
+  const res = await api.getWorkflows({ page: 1, pageSize: 50 });
+  console.log('workflows', res);
+}
+
 watch(
   () => route.params.id,
   (newId) => {
@@ -151,6 +159,7 @@ watch(
 )
 
 onMounted(() => {
+  void onLoadWorkflows();
   void onLoadProjects();
   void onLoadTools();
 });
