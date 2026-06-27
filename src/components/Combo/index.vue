@@ -293,12 +293,14 @@
                 <span class="combo-confirm__pay-label">{{ method.label }}</span>
               </button>
             </div>
-            <img
-              v-if="payUrl"
-              :src="payUrl"
-              alt="支付二维码"
-              class="combo-confirm__pay-qrcode"
-            />
+            <a-flex align="center" justify="center">
+              <img
+                v-if="payUrl"
+                :src="payUrl"
+                alt="支付二维码"
+                class="combo-confirm__pay-qrcode"
+              />
+            </a-flex>
             <p v-if="selectedPayMethod === 'BANK_TRANSFER'" class="combo-confirm__pay-tip">
               提交后客服将与您联系并提供对公转账账户信息
             </p>
@@ -412,7 +414,7 @@ type PayMethod = 'ALIPAY' | 'WECHAT' | 'BANK_TRANSFER'
 const PAYMENT_METHODS: Array<{ key: PayMethod; label: string }> = [
   { key: 'ALIPAY', label: '支付宝' },
   { key: 'WECHAT', label: '微信' },
-  { key: 'BANK_TRANSFER', label: '对公转账' },
+  // { key: 'BANK_TRANSFER', label: '对公转账' },
 ]
 
 const open = defineModel<boolean>('open', { default: false })
@@ -736,21 +738,22 @@ interface PaymentResponse {
 
 const onLoadPayUrl = async () => {
   try {
-    const res = await api.createPayment<PaymentResponse>(orderNo.value, {
+    const res:any = await api.createPayment<PaymentResponse>(orderNo.value, {
       payType: selectedPayMethod.value,
     })
     if (!res) return
 
-    if (res.redirectUrl) {
+    if (selectedPayMethod.value === 'WECHAT') {
       payUrl.value = await QRCode.toDataURL(res.redirectUrl, {
         width: 260,
         margin: 2,
       })
-    } else if (res.qrCodeContent) {
-      payUrl.value = await QRCode.toDataURL(res.qrCodeContent, {
-        width: 260,
-        margin: 2,
-      })
+    } else {
+      // payUrl.value = await QRCode.toDataURL(res.qrCodeContent, {
+      //   width: 260,
+      //   margin: 2,
+      // }
+      payUrl.value = res.qrCodeContent
     }
     payExpireAt.value = res.expireAt ?? ''
   } catch (error) {

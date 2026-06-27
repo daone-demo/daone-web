@@ -7,9 +7,9 @@
           <div class="user-info__profile-text">
             <div class="user-info__name-row">
               <h1 class="user-info__name">{{ profileState.nickname }}</h1>
-              <span class="user-info__vip-badge">
+              <span class="user-info__vip-badge" v-if="profileState.vipName">
                 <span class="user-info__vip-icon" aria-hidden="true" />
-                VIP
+                {{profileState.vipName}}
               </span>
               <!-- <span class="user-info__plan">{{ USER_PROFILE.plan }}</span> -->
             </div>
@@ -30,12 +30,12 @@
           </div>
         </div> -->
 
-        <a-flex gap="10px" align="center">
+        <a-flex gap="10" align="center">
           <button type="button" class="user-info__edit-btn" @click="openEditProfileModal">
             <span class="user-info__edit-icon" aria-hidden="true" />
             编辑资料
           </button>
-          <button type="button" class="user-info__edit-btn" @click="onLogout">
+          <button type="button" class="user-info__edit-btn" @click="onLogout" style="background: #ff4d4f;">
             退出登录
           </button>
         </a-flex>
@@ -106,8 +106,8 @@
 
             <div class="user-info__field">
               <label class="user-info__label">邮箱</label>
-              <div class="user-info__input user-info__input--empty">
-                {{ profileState.email || '\u00A0' }}
+              <div class="user-info__input user-info__input--with-link">
+                {{ profileState.email || '未绑定' }}
               </div>
             </div>
           </div>
@@ -163,6 +163,19 @@
                 </tr>
               </tbody>
             </table>
+            <a-flex
+              v-if="pointsTotal > 0"
+              align="center"
+              justify="center"
+              style="margin-top: 20px;"
+            >
+              <a-pagination
+                size="small"
+                :total="pointsTotal"
+                :show-total="pointsTotal => `Total ${pointsTotal} items`"
+                @change="onChangePointsPage"
+              />
+            </a-flex>
           </div>
         </div>
 
@@ -217,7 +230,19 @@
               </tbody>
             </table>
           </div>
-          <p class="user-info__bills-end">没有更多了</p>
+          <a-flex
+            align="center"
+            justify="center"
+            style="margin-top: 20px;"
+            v-if="orderTotal > 0"
+          >
+            <a-pagination
+              size="small"
+              :total="orderTotal"
+              :show-total="orderTotal => `Total ${orderTotal} items`"
+              @change="onChangeOrderPage"
+            />
+          </a-flex>
         </div>
 
         <div v-else class="user-info__placeholder">
@@ -474,10 +499,10 @@ const invoiceForm = ref({
   address: '',
 })
 const profileState = ref<any>({
-  name: USER_PROFILE.name,
-  phone: USER_PROFILE.phone,
-  email: USER_PROFILE.email,
-  avatar: USER_PROFILE.avatar,
+  name: '',
+  phone: '',
+  email: '',
+  avatarUrl: '',
 })
 const showEditProfileModal = ref(false)
 const showEditPassword = ref(false)
@@ -658,7 +683,7 @@ async function saveEditProfile() {
     await api.updateCurrentUser({
       avatarUrl: editProfileForm.value.avatarUrl,
       nickname: editProfileForm.value.nickname,
-      // email: profileState.value.email,
+      email: editProfileForm.value.email,
     })
     await onLoadUserInfo()
     message.success('资料保存成功')
@@ -708,6 +733,16 @@ const onLoadOrderList = async () => {
       orderList.value = res.records || [];
       orderTotal.value = res.total || 0;
     })
+}
+
+const onChangeOrderPage = (page: number) => {
+  orderPage.value = page;
+  onLoadOrderList();
+}
+
+const onChangePointsPage = (key: number) => {  
+  page.value = key;
+  onLoadPoints();
 }
 
 onMounted(()=>{

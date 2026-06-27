@@ -23,7 +23,7 @@
       type="button"
       class="canvas-node__delete-float"
       title="删除节点"
-      @mousedown.stop.prevent="removeSelf"
+      @pointerdown.stop.prevent="removeSelf"
     >
       ×
     </button>
@@ -35,7 +35,7 @@
         type="button"
         class="canvas-node__delete"
         title="删除节点"
-        @mousedown.stop.prevent="removeSelf"
+        @pointerdown.stop.prevent="removeSelf"
       >
         ×
       </button>
@@ -111,15 +111,79 @@ import {
 } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import type { CanvasGraph } from '../graph'
-import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import type { TextEditorApi } from './useTextEditorRegistry'
+import { VueShapeView } from '@antv/x6-vue-shape'
+
+/**
+ * 模块级一次性补丁：X6 的 vue-shape 默认会在 foreignObject 上按下时启动节点拖拽，
+ * 从而把内部 <button> 的点击吞掉，导致删除/操作按钮“点了没反应”。
+ * 这里让按钮、可编辑区上的按下不再触发 X6 拖拽。放在 TextNode 内，随该文件一起生效。
+ */
+const vsvProto = VueShapeView.prototype as unknown as {
+  onMouseDown: (e: MouseEvent, x: number, y: number) => void
+  __btnPatched?: boolean
+}
+if (!vsvProto.__btnPatched) {
+  vsvProto.__btnPatched = true
+  const originalOnMouseDown = vsvProto.onMouseDown
+  vsvProto.onMouseDown = function patchedOnMouseDown(e: MouseEvent, x: number, y: number) {
+    const target = e?.target as Element | null
+    if (target) {
+      const tag = target.tagName?.toLowerCase()
+      if (
+        tag === 'button' ||
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        target.closest(
+          'button, [contenteditable="true"], .canvas-node__delete, .canvas-node__delete-float, .node-port-plus',
+        )
+      ) {
+        return
+      }
+    }
+    return originalOnMouseDown.call(this, e, x, y)
+  }
+}
 
 const getNode = inject<() => Node>('getNode')!
 const { isLightTheme } = useCanvasBgTheme()
-const { removeSelf } = useNodeDelete()
 const { onPlusPointerDown } = useNodeConnect()
+
+/**
+ * 删除当前文本节点：不依赖外部链路（可能被清理函数中断），
+ * 优先走应用统一删除，最后强制 removeCell 兜底，保证一定删得掉。
+ */
+function removeSelf(event?: Event) {
+  event?.preventDefault()
+  event?.stopPropagation()
+
+  const node = getNode()
+  const nodeId = node.id
+  const g = node.model?.graph as CanvasGraph | undefined
+  // eslint-disable-next-line no-console
+  console.log('[delete] TextNode removeSelf', { nodeId, hasGraph: !!g })
+  if (!g) return
+
+  ;(document.activeElement as HTMLElement | null)?.blur?.()
+
+  requestAnimationFrame(() => {
+    const appDelete = g.__deleteCanvasNode
+    if (typeof appDelete === 'function') {
+      try {
+        appDelete(nodeId)
+      } catch (error) {
+        console.error('[Canvas] __deleteCanvasNode failed, fallback to removeCell', error)
+      }
+    }
+    const cell = g.getCellById(nodeId)
+    // eslint-disable-next-line no-console
+    console.log('[delete] TextNode force removeCell', { nodeId, stillExists: !!cell })
+    if (cell) g.removeCell(cell)
+  })
+}
 
 const editorRef = ref<HTMLElement | null>(null)
 const data = reactive<CanvasNodeData>({

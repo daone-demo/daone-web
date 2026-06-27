@@ -19,6 +19,7 @@ export interface PageResult<T = unknown> {
 export interface UserProfileUpdateRequest {
   nickname?: string
   avatarUrl?: string
+  email?: string
 }
 
 export interface ProjectCreateRequest {
