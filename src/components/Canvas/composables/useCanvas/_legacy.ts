@@ -332,12 +332,26 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   }
 
   function handleUserMenuAction(key: UserMenuKey) {
-    if (key === 'projects') {
+    console.log('handleUserMenuAction', key);
+    if (key === 'assets') {
       closeUserMenu()
       router.push({ name: 'project' })
       return
     }
+    if (key === 'UserAgreement') {
+      onGoUrl('UserAgreement')
+      return
+    }
+    if (key === 'PrivacyPolicy') {
+      onGoUrl('PrivacyPolicy')
+      return
+    }
     closeUserMenu()
+  }
+
+  const onGoUrl = (type: string) => {
+    const { href } = router.resolve({ name: 'pdf', query: { type } })
+    window.open(href, '_blank')
   }
 
   function handleLogout() {

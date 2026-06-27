@@ -19,6 +19,7 @@
     "ant-design-vue": "4.x",
     "axios": "^1.18.0",
     "dayjs": "^1.11.21",
+    "pdfjs-dist": "^6.0.227",
     "pinia": "^3.0.4",
     "qrcode": "^1.5.4",
     "sass": "^1.100.0",

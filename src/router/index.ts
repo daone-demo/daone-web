@@ -27,7 +27,12 @@ const router = createRouter({
       path: '/userInfo',
       name: 'userInfo',
       component: () => import('@views/UserInfo/index.vue'),
-    }
+    },
+    {
+      path: '/pdf',
+      name: 'pdf',
+      component: () => import('@views/PDF/index.vue'),
+    },
   ],
 })
 

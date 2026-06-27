@@ -200,7 +200,9 @@ import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
 import type { CanvasBgTheme } from '../canvasTheme';
 import { useUserInfo } from '@/stores/useUserInfo';
+import { useRouter } from 'vue-router';
 
+const router = useRouter();
 const userInfoStore = useUserInfo();
 
 export type CanvasProjectItem = {
@@ -215,8 +217,8 @@ export type CanvasProjectItem = {
 
 const USER_MENU_ITEMS = [
   { key: 'assets', label: '账户管理' },
-  { key: 'projects', label: '用户协议' },
-  { key: 'materials', label: '隐私政策' },
+  { key: 'UserAgreement', label: '用户协议' },
+  { key: 'PrivacyPolicy', label: '隐私政策' },
 ] as const
 
 export type UserMenuKey = (typeof USER_MENU_ITEMS)[number]['key']
@@ -259,7 +261,5 @@ const emit = defineEmits<{
   'rename-project': [projectId: string, name: string],
   'delete-project': [projectId: string],
 }>();
-
-console.log('userInfoStore', userInfoStore.userInfo?.nickname);
 
 </script>

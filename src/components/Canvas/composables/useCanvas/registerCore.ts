@@ -185,12 +185,16 @@ function openComboModal() {
 }
 
 function handleUserMenuAction(key: UserMenuKey) {
-  if (key === 'projects') {
-    closeUserMenu()
-    router.push({ name: 'project' })
+  closeUserMenu()
+  if (key === 'assets') {
+    router.push({ name: 'userInfo' })
     return
   }
-  closeUserMenu()
+  if (key === 'UserAgreement' || key === 'PrivacyPolicy') {
+    const { href } = router.resolve({ name: 'pdf', query: { type: key } })
+    window.open(href, '_blank')
+    return
+  }
 }
 
 function handleLogout() {

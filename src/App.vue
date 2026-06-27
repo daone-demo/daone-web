@@ -62,10 +62,10 @@
         <a-popover placement="right">
           <template #content>
             <a-flex justify="space-between">
-              <div class="protocol-link">用户协议</div>
+              <div class="protocol-link" @click="onGoUrl('UserAgreement')">用户协议</div>
             </a-flex>
             <a-flex justify="space-between">
-              <div class="protocol-link">隐私政策</div>
+              <div class="protocol-link" @click="onGoUrl('PrivacyPolicy')">隐私政策</div>
             </a-flex>
             <img
               src="@assets/images/kefu.jpg"
@@ -124,6 +124,11 @@ watch(
     }
   },
 )
+
+const onGoUrl = (type: string) => {
+  const { href } = router.resolve({ name: 'pdf', query: { type } })
+  window.open(href, '_blank')
+}
 
 const onDoAction = (key: string) => {
   api.getCurrentUser()
