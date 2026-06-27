@@ -231,7 +231,7 @@
       @change="onFileSelected"
     />
 
-    <CanvasHistoryAnchor v-if="showHistoryPanel" @close="closeHistoryPanel" />
+    <CanvasHistoryAnchor v-if="showHistoryPanel" :list="historyList" @close="closeHistoryPanel" />
 
     <CanvasLeftToolbar
       :canvas-bg-theme="canvasBgTheme"
@@ -357,6 +357,8 @@ const emit = defineEmits<{
 
 const assetsList = ref<AssetView[]>([]);
 const skillList = ref<ElementGroupRecord[]>([]);
+const historyList = ref<any[]>([]);
+const historyPage = ref(1);
 
 const canvasRef = ref<HTMLElement | null>(null)
 const graphRef = ref<HTMLElement | null>(null)
@@ -641,14 +643,26 @@ const onLoadSkill = () => {
   })
 }
 
+const onLoadHistory = () => {
+  api.getProjectVersions(activeProjectId.value, { pageSize: 50, page: historyPage.value })
+    .then((res: any) => {
+      historyList.value = res.records ?? [];
+    })
+}
+
 onMounted(()=>{
   onLoadAssets();
-  onLoadSkill();
 });
 
 watch(showAssetCenterPanel, (open) => {
   if (open && activeProjectId.value) {
     onLoadSkill()
+  }
+})
+
+watch(showHistoryPanel, (open) => {
+  if (open && activeProjectId.value) {
+    onLoadHistory();
   }
 })
 </script>

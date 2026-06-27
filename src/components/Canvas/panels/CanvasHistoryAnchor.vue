@@ -1,6 +1,6 @@
 <template>
   <div class="canvas__history-anchor" @mousedown.stop>
-    <CanvasHistoryPanel @close="emit('close')" />
+    <CanvasHistoryPanel :list="list" @close="emit('close')" />
   </div>
 </template>
 
@@ -9,5 +9,9 @@ import CanvasHistoryPanel from '../CanvasHistoryPanel.vue'
 
 const emit = defineEmits<{
   close: []
+}>()
+
+defineProps<{
+  list: any[]
 }>()
 </script>

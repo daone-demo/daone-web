@@ -78,6 +78,10 @@ const emit = defineEmits<{
   close: []
 }>()
 
+defineProps<{
+  list: any[]
+}>()
+
 const searchQuery = ref('')
 const activeTab = ref<HistoryRecordTab>('all')
 
