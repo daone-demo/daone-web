@@ -159,6 +159,8 @@ export function registerCore(bind: CanvasBindings) {
 
 let canvasHistory: ReturnType<typeof createCanvasHistory> | null = null
 let historyPushTimer: ReturnType<typeof setTimeout> | null = null
+let autoSaveTimer: number | null = null
+let saveInFlight = false
 let scrollerScrollTarget: HTMLElement | null = null
 let pendingProjectCanvas: ProjectCanvasResponse | null = null
 
@@ -1508,7 +1510,7 @@ function loadProjectCanvas(payload: ProjectCanvasResponse) {
   return loaded
 }
 
-function handleSaveCanvas() {
+function handleSaveCanvas(saveType: 'MANUAL' | 'AUTO' = 'MANUAL') {
   const g = graph.value
   if (!g) return
 
@@ -1530,22 +1532,31 @@ function handleSaveCanvas() {
   }
 
   if (!projectId) {
-    console.warn('[Canvas] skip remote save: missing projectId')
+    if (saveType === 'MANUAL') {
+      console.warn('[Canvas] skip remote save: missing projectId')
+    }
     return
   }
 
+  if (saveInFlight) return
+  saveInFlight = true
+
   void api.saveProjectCanvas(projectId, {
     revision: canvasRevision.value,
-    saveType: 'MANUAL',
+    saveType,
     canvasData: snapshot,
   }).then((res) => {
     canvasRevision.value = res.revision
     if (project) {
       project.saved = true
     }
-    console.info('[Canvas] saved to server', res)
+    if (saveType === 'MANUAL') {
+      console.info('[Canvas] saved to server', res)
+    }
   }).catch((error) => {
     console.error('[Canvas] save to server failed', error)
+  }).finally(() => {
+    saveInFlight = false
   })
 }
 
@@ -2928,7 +2939,6 @@ function openAssetCenterPanel() {
   closeAddMenu()
   closeHistoryPanel()
   showAssetsPanel.value = false
-  void loadAssetCenterItems()
 }
 
 function toggleAssetCenterPanel() {
@@ -4092,6 +4102,10 @@ onMounted(() => {
 
   bindGraphDropListeners(graphRef.value)
   setCanvasAssetDropHandler(handleCanvasAssetDrop)
+
+  autoSaveTimer = window.setInterval(() => {
+    handleSaveCanvas('AUTO')
+  }, 8000)
 })
 
 function waitForNodeUploadDone(node: Node) {
@@ -4202,6 +4216,7 @@ onBeforeUnmount(() => {
   unbindGraphDropListeners()
   setCanvasAssetDropHandler(null)
   clearCanvasAssetDrag()
+  if (autoSaveTimer) clearInterval(autoSaveTimer)
   if (historyPushTimer) clearTimeout(historyPushTimer)
   if (edgeHoverLeaveTimer) window.clearTimeout(edgeHoverLeaveTimer)
   if (altVoiceTimer.value) clearTimeout(altVoiceTimer.value)

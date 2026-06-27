@@ -101,7 +101,7 @@
       </div>
       <span class="canvas__brand-divider" aria-hidden="true" />
       <div class="canvas__brand-group">
-        <button type="button" class="canvas__brand-icon-btn" title="保存" @click="emit('save')">
+        <button type="button" class="canvas__brand-icon-btn" title="保存（每 8 秒自动保存）" @click="emit('save')">
           <i class="iconfont icon-baocun" style="font-size: 18px;"></i>
         </button>
         <button type="button" class="canvas__brand-icon-btn" title="打开文件夹">

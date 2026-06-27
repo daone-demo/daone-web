@@ -124,7 +124,7 @@ export async function uploadAssetFile(
   )
 
   return {
-    url: asset.previewUrl,
+    url: asset.previewUrl || asset.url || '',
     assetId: asset.id,
     width: asset.width,
     height: asset.height,
@@ -179,28 +179,45 @@ async function finishUpload(
   file: File,
   result: CanvasUploadResult,
 ) {
+  const previewUrl = result.url?.trim()
+  if (!previewUrl) {
+    console.error('[Canvas] upload succeeded but missing preview url', result)
+    message.error('上传成功但未返回资源地址')
+    const current = { ...(graphNode.getData() as CanvasNodeData) }
+    current.uploadState = 'idle'
+    current.uploadProgress = 0
+    graphNode.setData(current)
+    return
+  }
+
   const data = { ...(graphNode.getData() as CanvasNodeData) }
   data.uploadState = 'done'
   data.uploadProgress = 100
-  data.previewUrl = result.url
+  data.previewUrl = previewUrl
   data.mode = 'editor'
 
   if (result.width && result.height) {
     data.mediaWidth = result.width
     data.mediaHeight = result.height
-    applyNodeMedia(graphNode, data)
-    return
   }
+
+  applyNodeMedia(graphNode, data)
+
+  if (result.width && result.height) return
 
   if (file.type.startsWith('image/')) {
     const img = new Image()
     img.onload = () => {
-      data.mediaWidth = img.naturalWidth
-      data.mediaHeight = img.naturalHeight
-      applyNodeMedia(graphNode, data)
+      const current = { ...(graphNode.getData() as CanvasNodeData) }
+      if (current.previewUrl !== previewUrl) return
+      current.mediaWidth = img.naturalWidth
+      current.mediaHeight = img.naturalHeight
+      applyNodeMedia(graphNode, current)
     }
-    img.onerror = () => applyNodeMedia(graphNode, data)
-    img.src = result.url
+    img.onerror = () => {
+      // 资源地址已展示，尺寸加载失败时保留当前节点尺寸
+    }
+    img.src = previewUrl
     return
   }
 
@@ -208,22 +225,28 @@ async function finishUpload(
     const video = document.createElement('video')
     video.preload = 'metadata'
     video.onloadedmetadata = () => {
-      data.mediaWidth = video.videoWidth || 2560
-      data.mediaHeight = video.videoHeight || 1440
-      applyNodeMedia(graphNode, data)
+      const current = { ...(graphNode.getData() as CanvasNodeData) }
+      if (current.previewUrl !== previewUrl) return
+      current.mediaWidth = video.videoWidth || 2560
+      current.mediaHeight = video.videoHeight || 1440
+      applyNodeMedia(graphNode, current)
     }
     video.onerror = () => {
-      data.mediaWidth = 2560
-      data.mediaHeight = 1440
-      applyNodeMedia(graphNode, data)
+      const current = { ...(graphNode.getData() as CanvasNodeData) }
+      if (current.previewUrl !== previewUrl) return
+      current.mediaWidth = 2560
+      current.mediaHeight = 1440
+      applyNodeMedia(graphNode, current)
     }
-    video.src = result.url
+    video.src = previewUrl
     return
   }
 
-  data.mediaWidth = 2560
-  data.mediaHeight = 1440
-  applyNodeMedia(graphNode, data)
+  const current = { ...(graphNode.getData() as CanvasNodeData) }
+  if (current.previewUrl !== previewUrl) return
+  current.mediaWidth = current.mediaWidth || 2560
+  current.mediaHeight = current.mediaHeight || 1440
+  applyNodeMedia(graphNode, current)
 }
 
 export function applyRemoteImageToNode(
@@ -235,10 +258,13 @@ export function applyRemoteImageToNode(
     height?: number | null
   },
 ) {
+  const previewUrl = payload.previewUrl?.trim()
+  if (!previewUrl) return
+
   const data = { ...(graphNode.getData() as CanvasNodeData) }
   data.uploadState = 'done'
   data.uploadProgress = 100
-  data.previewUrl = payload.previewUrl
+  data.previewUrl = previewUrl
   data.mode = 'editor'
   data.fileName = payload.fileName || '图片'
   data.title = data.fileName
@@ -250,14 +276,17 @@ export function applyRemoteImageToNode(
     return
   }
 
+  applyNodeMedia(graphNode, data)
+
   const img = new Image()
   img.onload = () => {
-    data.mediaWidth = img.naturalWidth
-    data.mediaHeight = img.naturalHeight
-    applyNodeMedia(graphNode, data)
+    const current = { ...(graphNode.getData() as CanvasNodeData) }
+    if (current.previewUrl !== previewUrl) return
+    current.mediaWidth = img.naturalWidth
+    current.mediaHeight = img.naturalHeight
+    applyNodeMedia(graphNode, current)
   }
-  img.onerror = () => applyNodeMedia(graphNode, data)
-  img.src = payload.previewUrl
+  img.src = previewUrl
 }
 
 function applyNodeMedia(graphNode: Node, data: CanvasNodeData) {
