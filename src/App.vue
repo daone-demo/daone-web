@@ -67,9 +67,6 @@
             <a-flex justify="space-between">
               <div class="protocol-link">隐私政策</div>
             </a-flex>
-            <a-flex justify="space-between">
-              <a-button type="primary" @click="openLoginModal">登录</a-button>
-            </a-flex>
             <img
               src="@assets/images/kefu.jpg"
               class="app-sidebar__kefu"
