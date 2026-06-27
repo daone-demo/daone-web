@@ -43,6 +43,7 @@ import {
 import type { AssetCenterItem } from '../../assetCenterData'
 import type { GroupLayoutDirection } from './sharedImports'
 import type { ProjectCanvasResponse } from '@/services/api'
+import { isRequestError } from '@/utils/request'
 import type { Project } from '@/stores/useProject'
 import type {
   CanvasNodeData, ImageSourceRef, NodeKind, TextFormatCommand,
@@ -161,6 +162,7 @@ let canvasHistory: ReturnType<typeof createCanvasHistory> | null = null
 let historyPushTimer: ReturnType<typeof setTimeout> | null = null
 let autoSaveTimer: number | null = null
 let saveInFlight = false
+let pendingRemoteSaveType: 'MANUAL' | 'AUTO' | null = null
 let scrollerScrollTarget: HTMLElement | null = null
 let pendingProjectCanvas: ProjectCanvasResponse | null = null
 
@@ -1510,22 +1512,116 @@ function loadProjectCanvas(payload: ProjectCanvasResponse) {
   return loaded
 }
 
-function handleSaveCanvas(saveType: 'MANUAL' | 'AUTO' = 'MANUAL') {
+function buildCanvasSnapshot(): CanvasSnapshot | null {
   const g = graph.value
-  if (!g) return
+  if (!g) return null
 
-  const projectId = activeProjectId.value
-  const snapshot: CanvasSnapshot = getCanvasSnapshot(g, {
-    projectId,
+  return getCanvasSnapshot(g, {
+    projectId: activeProjectId.value,
     projectName: currentProjectName.value,
     canvasBgTheme: canvasBgTheme.value,
     gridVisible: gridVisible.value,
     panMode: panMode.value,
     showMinimap: showMinimap.value,
   })
+}
+
+function mergePendingSaveType(saveType: 'MANUAL' | 'AUTO'): 'MANUAL' | 'AUTO' {
+  if (pendingRemoteSaveType === 'MANUAL' || saveType === 'MANUAL') return 'MANUAL'
+  return 'AUTO'
+}
+
+function extractLatestRevision(error: unknown): number | null {
+  if (!isRequestError(error)) return null
+  if (error.code !== 'CANVAS_REVISION_CONFLICT') return null
+  const data = error.data
+  if (data == null || typeof data !== 'object') return null
+  const latestRevision = (data as { latestRevision?: unknown }).latestRevision
+  return typeof latestRevision === 'number' ? latestRevision : null
+}
+
+async function persistCanvasToServer(
+  projectId: string,
+  snapshot: CanvasSnapshot,
+  saveType: 'MANUAL' | 'AUTO',
+  project?: (typeof canvasProjects.value)[number],
+) {
+  const sendSave = (revision: number) =>
+    api.saveProjectCanvas(projectId, {
+      revision,
+      saveType,
+      canvasData: snapshot,
+    })
+
+  try {
+    const res = await sendSave(canvasRevision.value)
+    if (typeof res.revision === 'number') {
+      canvasRevision.value = res.revision
+    }
+    if (project) project.saved = true
+    if (saveType === 'MANUAL') {
+      console.info('[Canvas] saved to server', res)
+    }
+    return
+  } catch (error) {
+    const latestRevision = extractLatestRevision(error)
+    if (latestRevision == null) throw error
+
+    canvasRevision.value = latestRevision
+    const freshSnapshot = buildCanvasSnapshot() ?? snapshot
+    const res = await api.saveProjectCanvas(projectId, {
+      revision: canvasRevision.value,
+      saveType,
+      canvasData: freshSnapshot,
+    })
+    if (typeof res.revision === 'number') {
+      canvasRevision.value = res.revision
+    }
+    if (project) project.saved = true
+    if (saveType === 'MANUAL') {
+      console.info('[Canvas] saved to server after revision sync', res)
+    }
+  }
+}
+
+async function flushRemoteCanvasSave(saveType: 'MANUAL' | 'AUTO') {
+  if (saveInFlight) {
+    pendingRemoteSaveType = mergePendingSaveType(saveType)
+    return
+  }
+
+  const projectId = activeProjectId.value
+  if (!projectId) return
+
+  const snapshot = buildCanvasSnapshot()
+  if (!snapshot) return
+
+  const project = canvasProjects.value.find((item) => item.id === projectId)
+  saveInFlight = true
+  pendingRemoteSaveType = null
+
+  try {
+    await persistCanvasToServer(projectId, snapshot, saveType, project)
+  } catch (error) {
+    console.error('[Canvas] save to server failed', error)
+    if (project) project.saved = false
+  } finally {
+    saveInFlight = false
+    if (pendingRemoteSaveType) {
+      const nextSaveType = pendingRemoteSaveType
+      pendingRemoteSaveType = null
+      void flushRemoteCanvasSave(nextSaveType)
+    }
+  }
+}
+
+function handleSaveCanvas(saveType: 'MANUAL' | 'AUTO' = 'MANUAL') {
+  const snapshot = buildCanvasSnapshot()
+  if (!snapshot) return
 
   saveCanvasSnapshotToStorage(snapshot)
 
+  const projectId = activeProjectId.value
   const project = canvasProjects.value.find((item) => item.id === projectId)
   if (project) {
     project.saved = false
@@ -1538,26 +1634,7 @@ function handleSaveCanvas(saveType: 'MANUAL' | 'AUTO' = 'MANUAL') {
     return
   }
 
-  if (saveInFlight) return
-  saveInFlight = true
-
-  void api.saveProjectCanvas(projectId, {
-    revision: canvasRevision.value,
-    saveType,
-    canvasData: snapshot,
-  }).then((res) => {
-    canvasRevision.value = res.revision
-    if (project) {
-      project.saved = true
-    }
-    if (saveType === 'MANUAL') {
-      console.info('[Canvas] saved to server', res)
-    }
-  }).catch((error) => {
-    console.error('[Canvas] save to server failed', error)
-  }).finally(() => {
-    saveInFlight = false
-  })
+  void flushRemoteCanvasSave(saveType)
 }
 
 function handleExportCanvas() {
@@ -4103,6 +4180,10 @@ onMounted(() => {
   bindGraphDropListeners(graphRef.value)
   setCanvasAssetDropHandler(handleCanvasAssetDrop)
 
+  if (autoSaveTimer) {
+    clearInterval(autoSaveTimer)
+    autoSaveTimer = null
+  }
   autoSaveTimer = window.setInterval(() => {
     handleSaveCanvas('AUTO')
   }, 8000)
@@ -4216,7 +4297,12 @@ onBeforeUnmount(() => {
   unbindGraphDropListeners()
   setCanvasAssetDropHandler(null)
   clearCanvasAssetDrag()
-  if (autoSaveTimer) clearInterval(autoSaveTimer)
+  if (autoSaveTimer) {
+    clearInterval(autoSaveTimer)
+    autoSaveTimer = null
+  }
+  pendingRemoteSaveType = null
+  saveInFlight = false
   if (historyPushTimer) clearTimeout(historyPushTimer)
   if (edgeHoverLeaveTimer) window.clearTimeout(edgeHoverLeaveTimer)
   if (altVoiceTimer.value) clearTimeout(altVoiceTimer.value)
