@@ -502,29 +502,41 @@ function nextTickFocus() {
 }
 
 let editorApi: TextEditorApi | undefined
+// 卸载时节点可能已从 graph 移除（cell.model 被置空），此时再访问
+// canvasGraph() 会得到 undefined。挂载时缓存注册表与节点 id，保证卸载逻辑
+// 始终安全、不会抛错——否则异常会中断 vue-shape 的卸载流程，导致节点 DOM
+// 残留在画布上（“删除后仍然显示”）。
+let editorRegistry: ReturnType<typeof canvasGraph>['__textEditorRegistry']
+let nodeIdForCleanup = ''
+let detachDataListener: (() => void) | undefined
 
 onMounted(() => {
   const node = getNode()
+  nodeIdForCleanup = node.id
   Object.assign(data, node.getData() as CanvasNodeData)
   syncEditorHtml()
 
   editorApi = {
     execFormat,
     copyContent,
-    requestExpand: () => canvasGraph().__requestTextExpand?.(node.id),
+    requestExpand: () => canvasGraph()?.__requestTextExpand?.(node.id),
     focus: focusEditor,
     getPlainText,
   }
-  canvasGraph().__textEditorRegistry?.register(node.id, editorApi)
+  editorRegistry = canvasGraph()?.__textEditorRegistry
+  editorRegistry?.register(node.id, editorApi)
 
-  node.on('change:data', ({ current }) => {
+  const onDataChange = ({ current }: { current: unknown }) => {
     Object.assign(data, current as CanvasNodeData)
     syncEditorHtml()
-  })
+  }
+  node.on('change:data', onDataChange)
+  detachDataListener = () => node.off('change:data', onDataChange)
 })
 
 onBeforeUnmount(() => {
-  canvasGraph().__textEditorRegistry?.unregister(getNode().id)
+  detachDataListener?.()
+  editorRegistry?.unregister(nodeIdForCleanup)
 })
 </script>
 
