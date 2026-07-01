@@ -12,7 +12,7 @@
 
 .login-modal__dialog {
   position: relative;
-  width: min(820px, 100%);
+  width: min(410px, 100%);
   border-radius: 20px;
   background: #fff;
   box-shadow:
@@ -199,9 +199,9 @@
 }
 
 .login-modal__body {
-  display: grid;
-  grid-template-columns: 1fr 1px 1fr;
-  gap: 0;
+  // display: grid;
+  // grid-template-columns: 1fr 1px 1fr;
+  // gap: 0;
   padding: 28px 32px 20px;
 }
 
