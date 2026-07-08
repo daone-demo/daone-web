@@ -1,3 +1,4 @@
+<!-- 冗余文件:未被项目任何地方引用(仅出现在自动生成的 components.d.ts)。确认无用后可整体删除。
 <template>
   <div class="canvas__bottom-dock" @mousedown.stop>
     <button
@@ -56,3 +57,5 @@ const emit = defineEmits<{
   'toggle-shortcuts': []
 }>()
 </script>
+
+-->

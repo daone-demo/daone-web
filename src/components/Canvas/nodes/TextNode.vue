@@ -164,7 +164,7 @@ function removeSelf(event?: Event) {
   const nodeId = node.id
   const g = node.model?.graph as CanvasGraph | undefined
   // eslint-disable-next-line no-console
-  console.log('[delete] TextNode removeSelf', { nodeId, hasGraph: !!g })
+  // console.log('[delete] TextNode removeSelf', { nodeId, hasGraph: !!g })
   if (!g) return
 
   ;(document.activeElement as HTMLElement | null)?.blur?.()
@@ -180,7 +180,7 @@ function removeSelf(event?: Event) {
     }
     const cell = g.getCellById(nodeId)
     // eslint-disable-next-line no-console
-    console.log('[delete] TextNode force removeCell', { nodeId, stillExists: !!cell })
+    // console.log('[delete] TextNode force removeCell', { nodeId, stillExists: !!cell })
     if (cell) g.removeCell(cell)
   })
 }

@@ -423,7 +423,7 @@ function startChatStream() {
       stream: true,
     },
     onMessage(data) {
-      console.log('data', data);
+      // console.log('data', data);
       const chunk = parseChatChunk(data)
       if (!chunk) return
 

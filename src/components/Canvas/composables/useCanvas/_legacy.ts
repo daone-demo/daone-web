@@ -332,7 +332,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   }
 
   function handleUserMenuAction(key: UserMenuKey) {
-    console.log('handleUserMenuAction', key);
+    // console.log('handleUserMenuAction', key);
     if (key === 'assets') {
       closeUserMenu()
       router.push({ name: 'project' })

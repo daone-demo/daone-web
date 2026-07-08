@@ -200,9 +200,9 @@ import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
 import type { CanvasBgTheme } from '../canvasTheme';
 import { useUserInfo } from '@/stores/useUserInfo';
-import { useRouter } from 'vue-router';
+// import { useRouter } from 'vue-router';
 
-const router = useRouter();
+// const router = useRouter();
 const userInfoStore = useUserInfo();
 
 export type CanvasProjectItem = {

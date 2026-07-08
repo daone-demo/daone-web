@@ -143,18 +143,18 @@ const onRefreshProjects = () => {
 }
 
 const onLoadTools = async () => {
-  const res = await api.getTools();
-  console.log('tools', res);
+  /* const res = */ await api.getTools();
+  // console.log('tools', res);
 }
 
 const onLoadWorkflows = async () => {
-  const res = await api.getWorkflows({ page: 1, pageSize: 50 });
-  console.log('workflows', res);
+  /* const res = */ await api.getWorkflows({ page: 1, pageSize: 50 });
+  // console.log('workflows', res);
 }
 
 const onLoadChatModels = async () => {
-  const res = await api.getChatModels();
-  console.log('chatModels', res);
+  /* const res = */ await api.getChatModels();
+  // console.log('chatModels', res);
 }
 
 watch(

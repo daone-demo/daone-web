@@ -212,7 +212,7 @@ const inspirationCategories = ref<any[]>([]);
 const onLoadHomeData = () => {
   api.getHome()
     .then((res:any)=>{
-      console.log('onLoadHomeData', res)
+      // console.log('onLoadHomeData', res)
       inspirationCategories.value = res.inspirationCategories;
     })
 }

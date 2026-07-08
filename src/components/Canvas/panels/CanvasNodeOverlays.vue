@@ -460,13 +460,13 @@ function togglePromptWorkFlow() {
 }
 
 function selectPromptModel(model: TextPromptModelItem) {
-  console.log(model)
+  // console.log(model)
   selectedPromptModelKey.value = model.key
   showPromptModelMenu.value = false
 }
 
 function selectPromptWorkFlow(model: TextPromptModelItem) {
-  console.log(model)
+  // console.log(model)
   selectedPromptWorkFlowKey.value = model.key
   showPromptWorkFlow.value = false
 }

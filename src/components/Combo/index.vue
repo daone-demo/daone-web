@@ -633,7 +633,7 @@ async function confirmPay() {
       },
       currentIdempotencyKey.value
     )
-    console.log('order', order);
+    // console.log('order', order);
     orderNo.value = order.orderNo;
 
     // if (selectedPayMethod.value === 'BANK_TRANSFER') {
@@ -689,8 +689,8 @@ function submitTrial() {
     code: trialCode.value.trim(),
     contactName: trialName.value.trim(),
     position: trialPosition.value.trim(),
-  }).then((res:any)=>{
-    console.log('submitTrial', res)
+  }).then((/* res:any */)=>{
+    // console.log('submitTrial', res)
     message.success('操作成功');
     close()
   })

@@ -1,3 +1,4 @@
+<!-- 冗余文件:未被项目任何地方引用(仅出现在自动生成的 components.d.ts)。确认无用后可整体删除。
 <script setup lang="ts">
 import { ref } from 'vue'
 import viteLogo from '../assets/vite.svg'
@@ -93,3 +94,5 @@ const count = ref(0)
   <div class="ticks"></div>
   <section id="spacer"></section>
 </template>
+
+-->

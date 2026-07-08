@@ -469,7 +469,7 @@ import {
   USER_INFO_TABS,
   USER_MEMBERSHIP_NOTES,
   USER_POINTS_LOG,
-  USER_PROFILE,
+  // USER_PROFILE,
   type PointsLogFilterKey,
   type UserInfoTabKey,
 } from './userInfoData'
@@ -729,7 +729,7 @@ const onLoadOrderList = async () => {
   }
   api.getOrders(params)
     .then(res=>{
-      console.log('res', res);
+      // console.log('res', res);
       orderList.value = res.records || [];
       orderTotal.value = res.total || 0;
     })

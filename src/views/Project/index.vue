@@ -105,7 +105,7 @@ const onLoadAssets = () => {
     pageSize: 50,
     page: 1,
   }).then((res: any) => {
-    console.log('res', res);
+    // console.log('res', res);
     list.value = res.records;
   })
 }
