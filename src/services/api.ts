@@ -328,7 +328,7 @@ const api = {
   // Auth
   /** 发送登录短信验证码。 */
   querySmsCode(data: QuerySmsCodeRequest) {
-    return http.post('/auth/sms-codes', data)
+    return http.post('/auth/sms-code', data)
   },
   /** 使用手机号和短信验证码登录。 */
   postSmsLogin<T = unknown>(data: PostSmsLoginRequest) {
@@ -354,7 +354,7 @@ const api = {
   },
   /** 修改当前用户的昵称或头像。 */
   updateCurrentUser<T = unknown>(data: UserProfileUpdateRequest) {
-    return http.patch<T>('/users/me', data)
+    return http.put<T>('/users/me', data)
   },
   /** 获取当前用户的积分账户。 */
   getPointsAccount<T = unknown>() {
@@ -362,7 +362,7 @@ const api = {
   },
   /** 分页查询积分流水，可按收支方向筛选。 */
   getPointsLedger<T = unknown>(params?: PageQuery & { direction?: string }) {
-    return http.get<PageResult<T>>('/points/ledger', { params })
+    return http.get<PageResult<T>>('/points/ledgers', { params })
   },
   /** 获取指定积分流水的详情。 */
   getPointsLedgerDetail<T = unknown>(ledgerId: Id) {
