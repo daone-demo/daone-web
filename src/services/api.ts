@@ -384,7 +384,7 @@ const api = {
   },
   /** 修改指定项目的信息。 */
   updateProject<T = unknown>(projectId: Id, data: ProjectUpdateRequest) {
-    return http.patch<T>(`/projects/${pathId(projectId)}`, data)
+    return http.put<T>(`/projects/${pathId(projectId)}`, data)
   },
   /** 删除指定项目。 */
   deleteProject(projectId: Id) {
@@ -542,7 +542,7 @@ const api = {
   },
   /** 发送试用申请短信验证码。 */
   queryTrialSmsCode(data: TrialSmsCodeRequest) {
-    return http.post('/trial-applications/sms-codes', data)
+    return http.post('/trial-applications/sms-code', data)
   },
   /** 提交试用申请并创建对应试用订单。 */
   createTrialApplication<T = unknown>(data: TrialApplicationRequest) {
