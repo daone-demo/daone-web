@@ -125,7 +125,7 @@
 
 <script setup lang="ts">
 import { ExclamationCircleFilled, MoreOutlined } from '@ant-design/icons-vue'
-import { computed, createVNode, onMounted, ref } from 'vue'
+import { computed, createVNode, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import api from '@/services/api';
@@ -135,10 +135,12 @@ import {
 } from './homeData'
 import dayjs from 'dayjs';
 import UpdateProjectName from '@components/UpdateProjectName/index.vue';
+import { useNeedReloadStore } from '@stores/useNeedReload';
 import { Modal } from 'ant-design-vue';
 
 import { useModalStore } from '@stores/useModal';
 import { useProject } from '@stores/useProject';
+const needReloadStore = useNeedReloadStore();
 const modalStore = useModalStore();
 const projectStore = useProject();
 const { projects: recentProjects } = storeToRefs(projectStore);
@@ -174,6 +176,7 @@ const openInspiration = (id: string) => {
 }
 
 const onLoadProjects = () => {
+  needReloadStore.setNeedReload(false);
   return projectStore.loadProjects({ page: 1, pageSize: 10 })
 }
 
@@ -216,6 +219,12 @@ const onLoadHomeData = () => {
       inspirationCategories.value = res.inspirationCategories;
     })
 }
+
+watch(needReloadStore.getNeedReload, (newVal) => {
+  if (newVal) {
+    onLoadProjects();
+  }
+})
 
 onMounted(()=>{
   onLoadProjects();

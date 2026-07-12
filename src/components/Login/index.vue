@@ -104,6 +104,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useNeedReloadStore } from '@stores/useNeedReload';
 import api from '@/services/api'
 import { useUserInfo, type UserInfo } from '@/stores/useUserInfo'
 
@@ -113,8 +114,9 @@ interface SmsLoginResult {
   user: UserInfo
 }
 
-const open = defineModel<boolean>('open', { default: false })
-const userInfoStore = useUserInfo()
+const open = defineModel<boolean>('open', { default: false });
+const userInfoStore = useUserInfo();
+const needReloadStore = useNeedReloadStore();
 
 const emit = defineEmits<{
   close: []
@@ -194,7 +196,8 @@ async function submitLogin() {
   }
   const result = await api.postSmsLogin<SmsLoginResult>(loginData)
 
-  userInfoStore.setSession(result.token, result.user)
+  userInfoStore.setSession(result.token, result.user);
+  needReloadStore.setNeedReload(true);
   onLoadUserPoint();
   emit('submit', loginData)
   close()
