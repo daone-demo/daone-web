@@ -393,7 +393,7 @@ export type ImageToolbarMenuItem = {
 export const IMAGE_NODE_TOOLBAR = {
   chat: { key: 'chat', label: '对话', icon: 'chat' as const },
   actions: [
-    { key: 'cutout', label: '抠图', icon: 'cutout' },
+    { key: 'IMAGE_REMOVE_BG', label: '抠图', icon: 'cutout' },
     { key: 'hd', label: 'HD 高清' },
     { key: 'crop', label: '裁剪', icon: 'crop' },
     { key: 'inpaint', label: '局部修改', icon: 'edit' },

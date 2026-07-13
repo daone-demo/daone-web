@@ -127,8 +127,8 @@ const emit = defineEmits<{
   'privacy-policy': []
 }>()
 
-const phone = ref('13396578061')
-const smsCode = ref('123456');
+const phone = ref('');
+const smsCode = ref('');
 const codeCountdown = ref(0)
 const codeSending = ref(false)
 
