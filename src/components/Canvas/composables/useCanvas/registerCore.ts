@@ -30,7 +30,7 @@ import {
   createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
   useCanvasKeyboard, api, exampleImage, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
-} from './sharedImports'
+} from './sharedImports';
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import {
   applyGenerationResultToNode,
