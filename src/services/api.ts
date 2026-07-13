@@ -433,7 +433,7 @@ const api = {
     return http.post<T>('/assets', data)
   },
   /** 上传本地文件到 OSS 并返回预览地址。 */
-  createAssetUploadTicket(data: UploadTicketRequest, config?: RequestConfig) {
+  createAssetUploadTicket(data: any, config?: RequestConfig) {
     return http.post<AssetUploadResponse>('/assets/upload-tickets', data, config)
   },
   /** 获取指定素材的详情。 */
@@ -475,7 +475,7 @@ const api = {
     return http.get<PageResult<T>>('/generation-tasks', { params })
   },
   /** 创建 AI 生成任务。 */
-  createGenerationTask<T = unknown>(data: GenerationTaskCreateRequest) {
+  createGenerationTask<T = unknown>(data: any) {
     return http.post<T>('/generation-tasks', data)
   },
   /** 获取指定生成任务的详情和执行状态。 */

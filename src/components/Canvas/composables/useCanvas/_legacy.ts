@@ -551,16 +551,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     }
   }
 
-  function onImageToolbarAction(key: string) {
-    showImageHdMenu.value = false
-    if (key === 'more') {
-      openImageToolbarMore()
-      return
-    }
-    if (key === 'crop') {
-      openImageCrop()
-    }
-  }
+  function onImageToolbarAction(_payload: import('../../constants').ImageToolbarClickPayload) {}
 
   function openImageCrop() {
     const data = getSelectedNodeData()
@@ -3955,6 +3946,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
 
   function addImageFromAsset(
     asset: {
+      assetId?: string
       previewUrl: string
       fileName?: string
       width?: number | null

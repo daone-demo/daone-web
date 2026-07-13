@@ -126,7 +126,7 @@
               type="button"
               class="canvas__node-toolbar-btn"
               :class="{ 'canvas__node-toolbar-btn--active': showImageDialogue }"
-              @click="emit('toggle-image-dialogue')"
+              @click="emitImageAction(IMAGE_NODE_TOOLBAR.chat.key)"
             >
               <span class="canvas__node-toolbar-icon" data-icon="chat" aria-hidden="true" />
               {{ IMAGE_NODE_TOOLBAR.chat.label }}
@@ -136,7 +136,11 @@
           <div class="canvas__node-toolbar-group">
             <template v-for="item in IMAGE_NODE_TOOLBAR.actions" :key="item.key">
               <div v-if="item.key === 'cutout'" class="canvas__node-toolbar-dropdown">
-                <button type="button" class="canvas__node-toolbar-btn">
+                <button
+                  type="button"
+                  class="canvas__node-toolbar-btn"
+                  @click="emitImageAction(item.key)"
+                >
                   <span
                     class="canvas__node-toolbar-icon"
                     data-icon="cutout"
@@ -150,6 +154,7 @@
                     :key="mode"
                     type="button"
                     class="canvas__node-toolbar-dropdown-item"
+                    @click="emitImageAction(item.key, mode)"
                   >
                     {{ mode }}
                   </button>
@@ -160,7 +165,7 @@
                   type="button"
                   class="canvas__node-toolbar-btn"
                   :class="{ 'canvas__node-toolbar-btn--active': showImageHdMenu }"
-                  @click="emit('toggle-image-hd-menu')"
+                  @click="emitImageAction(item.key)"
                 >
                   {{ item.label }}
                 </button>
@@ -174,13 +179,18 @@
                     :key="resolution"
                     type="button"
                     class="canvas__node-toolbar-hd-item"
+                    @click="emitImageAction(item.key, resolution)"
                   >
                     {{ resolution }}
                   </button>
                 </div>
               </div>
               <div v-else-if="item.key === 'inpaint'" class="canvas__node-toolbar-tooltip">
-                <button type="button" class="canvas__node-toolbar-btn">
+                <button
+                  type="button"
+                  class="canvas__node-toolbar-btn"
+                  @click="emitImageAction(item.key)"
+                >
                   <span
                     class="canvas__node-toolbar-icon"
                     data-icon="edit"
@@ -194,7 +204,7 @@
                 <img
                   src="@assets/images/addToDialog.png"
                   class="canvas__node-toolbar-addToDialog-img"
-                  @click="emit('toggle-image-addToDialog-menu')"
+                  @click="emitImageAction(item.key)"
                 />
               </div>
               <button
@@ -202,7 +212,7 @@
                 type="button"
                 class="canvas__node-toolbar-btn"
                 :class="{ 'canvas__node-toolbar-btn--active': item.key === 'crop' && showImageCrop }"
-                @click="emit('image-toolbar-action', item.key)"
+                @click="emitImageAction(item.key)"
               >
                 <span
                   v-if="item.icon"
@@ -215,7 +225,12 @@
             </template>
           </div>
           <span class="canvas__node-toolbar-divider" aria-hidden="true" />
-          <button type="button" class="canvas__node-toolbar-btn canvas__node-toolbar-btn--icon" title="下载">
+          <button
+            type="button"
+            class="canvas__node-toolbar-btn canvas__node-toolbar-btn--icon"
+            title="下载"
+            @click="emitImageAction('download')"
+          >
             <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" />
           </button>
         </template>
@@ -294,7 +309,13 @@ import {
   getImageToolbarMoreHover,
   VIDEO_NODE_TOOLBAR,
   type NodeKind,
+  type ImageToolbarClickPayload,
 } from '../constants'
+
+function emitImageAction(key: string, option?: string) {
+  const payload: ImageToolbarClickPayload = option ? { key, option } : { key }
+  emit('image-toolbar-action', payload)
+}
 
 defineProps<{
   position: { left: number; top: number }
@@ -315,12 +336,10 @@ defineProps<{
 const emit = defineEmits<{
   'close-image-toolbar-more': []
   'toggle-image-toolbar-more-menu': []
-  'toggle-image-hd-menu': []
   'toggle-image-dialogue': []
-  'image-toolbar-action': [key: string]
+  'image-toolbar-action': [payload: ImageToolbarClickPayload]
   'toggle-video-dialogue': []
   'toggle-video-hd-panel': []
-  'toggle-video-frames-panel': [],
-  'toggle-image-addToDialog-menu': []
+  'toggle-video-frames-panel': []
 }>()
 </script>

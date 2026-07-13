@@ -34,6 +34,7 @@ export function detachEdgeRelation(graph: Graph, edge: Edge) {
     data.sourceNodeId = latest?.nodeId ?? ''
     data.sourcePreviewUrl = latest?.previewUrl ?? ''
     data.sourceFileName = latest?.fileName ?? ''
+    data.sourceAssetId = latest?.assetId ?? ''
     data.inputUpdated = refs.some((item) => Boolean(item.previewUrl))
 
     if (data.kind === 'text') {
@@ -51,6 +52,7 @@ export function detachEdgeRelation(graph: Graph, edge: Edge) {
     data.sourceNodeId = ''
     data.sourcePreviewUrl = ''
     data.sourceFileName = ''
+    data.sourceAssetId = ''
     data.inputUpdated = false
     target.setData(data)
   }

@@ -33,6 +33,7 @@ import {
 } from './sharedImports'
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import type { CanvasElementGroupDragPayload } from '../../constants'
+import { resolveImageAssetId, type ImageToolbarClickPayload, type ImageToolbarClickEvent } from '../../constants'
 import {
   createSkillId,
   listSavedCanvasSkills,
@@ -49,6 +50,7 @@ import type {
   CanvasNodeData, ImageSourceRef, NodeKind, TextFormatCommand,
   ImageGenTask, ConnectMenuKey, CanvasGraph, CanvasSnapshot, TextEditorApi, UserMenuKey, CanvasAssetDragPayload,
 } from './sharedImports'
+// import { v4 as uuidv4 } from 'uuid';
 
 export function registerCore(bind: CanvasBindings) {
   const {
@@ -301,13 +303,19 @@ const imageDialoguePreviews = computed<ImageSourceRef[]>(() => {
   if (refs.length) {
     return refs.map((item) => ({
       nodeId: item.nodeId,
+      assetId: item.assetId,
       previewUrl: item.previewUrl,
       fileName: item.fileName ?? '',
     }))
   }
   const single = data.sourcePreviewUrl || ''
   if (single) {
-    return [{ nodeId: data.sourceNodeId ?? '', previewUrl: single, fileName: data.sourceFileName ?? '' }]
+    return [{
+      nodeId: data.sourceNodeId ?? '',
+      assetId: data.sourceAssetId,
+      previewUrl: single,
+      fileName: data.sourceFileName ?? '',
+    }]
   }
   return []
 })
@@ -393,15 +401,109 @@ function toggleImageHdMenu() {
   }
 }
 
-function onImageToolbarAction(key: string) {
-  showImageHdMenu.value = false
-  if (key === 'more') {
-    openImageToolbarMore()
+function onImageToolbarAction(payload: ImageToolbarClickPayload) {
+  const data = getSelectedNodeData()
+  const event: ImageToolbarClickEvent = {
+    key: payload.key,
+    option: payload.option,
+    assetId: resolveImageAssetId(data),
+  }
+
+  if (event.key !== 'hd') {
+    showImageHdMenu.value = false
+  }
+
+  switch (event.key) {
+    case 'chat':
+      toggleImageDialogue()
+      return
+    case 'more':
+      openImageToolbarMore()
+      return
+    case 'crop':
+      openImageCrop()
+      return
+    case 'hd':
+      if (event.option) {
+        handleImageHdAction(event)
+      } else {
+        toggleImageHdMenu()
+      }
+      return
+    case 'IMAGE_REMOVE_BG':
+      handleImageCutoutAction(event)
+      return
+    case 'preview':
+      openImagePreview()
+      return
+    case 'addToDialog':
+      toggleImageAddToDialogMenu()
+      return
+    case 'download':
+      handleImageDownloadAction(event)
+      return
+    case 'inpaint':
+      handleImageInpaintAction(event)
+      return
+    default:
+      break
+  }
+}
+
+function handleImageCutoutAction(event: ImageToolbarClickEvent) {
+  console.log('handleImageCutoutAction', event)
+  if (!event.assetId) {
+    message.warning('图片素材 ID 不存在，请等待上传完成')
     return
   }
-  if (key === 'crop') {
-    openImageCrop()
+  const nodeId = selectedNodeId.value;
+  console.log('nodeId', nodeId);
+  if (!nodeId) return
+
+  const mode = event.option ?? '快速'
+  const params = {
+    taskType: 'IMAGE',
+    capabilityCode: 'IMAGE_REMOVE_BG',
+    prompt: '',
+    parameters: { assetId: event.assetId },
+    projectId: activeProjectId.value,
+    nodeId,
+    // 'Idempotency-Key': uuidv4()
   }
+  api.createGenerationTask(params)
+    .then((res) => {
+      console.log('res', res)
+    })
+  void mode
+}
+
+function handleImageHdAction(event: ImageToolbarClickEvent) {
+  if (!event.assetId) {
+    message.warning('图片素材 ID 不存在，请等待上传完成')
+    return
+  }
+  void event
+}
+
+function handleImageInpaintAction(event: ImageToolbarClickEvent) {
+  if (!event.assetId) {
+    message.warning('图片素材 ID 不存在，请等待上传完成')
+    return
+  }
+  void event
+}
+
+function handleImageDownloadAction(event: ImageToolbarClickEvent) {
+  const data = getSelectedNodeData()
+  const url = data?.previewUrl
+  if (!url) return
+  const link = document.createElement('a')
+  link.href = url
+  link.download = data?.fileName || 'image'
+  link.target = '_blank'
+  link.rel = 'noopener'
+  link.click()
+  void event.assetId
 }
 
 function openImageCrop() {
@@ -568,6 +670,7 @@ function seedImageDialogueRefs(data: CanvasNodeData, targetNodeId: string): Imag
   if (data.sourceNodeId && data.sourcePreviewUrl) {
     refs.push({
       nodeId: data.sourceNodeId,
+      assetId: data.sourceAssetId,
       previewUrl: data.sourcePreviewUrl,
       fileName: data.sourceFileName ?? '',
     })
@@ -577,6 +680,7 @@ function seedImageDialogueRefs(data: CanvasNodeData, targetNodeId: string): Imag
   if (data.previewUrl) {
     refs.push({
       nodeId: targetNodeId,
+      assetId: data.assetId,
       previewUrl: data.previewUrl,
       fileName: data.fileName || data.title || '',
     })
@@ -587,6 +691,7 @@ function seedImageDialogueRefs(data: CanvasNodeData, targetNodeId: string): Imag
 
 function addImageDialogueSourceRef(payload: {
   nodeId?: string
+  assetId?: string
   previewUrl: string
   fileName?: string
 }) {
@@ -602,7 +707,8 @@ function addImageDialogueSourceRef(payload: {
   if (payload.nodeId && payload.nodeId === id) return
 
   const ref: ImageSourceRef = {
-    nodeId: payload.nodeId || `upload-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    nodeId: payload.nodeId || payload.assetId || `upload-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    assetId: payload.assetId,
     previewUrl: payload.previewUrl,
     fileName: payload.fileName ?? '',
   }
@@ -625,6 +731,7 @@ function addImageDialogueSourceRef(payload: {
   data.sourceNodeId = latest?.nodeId ?? ''
   data.sourcePreviewUrl = latest?.previewUrl ?? ''
   data.sourceFileName = latest?.fileName ?? ''
+  data.sourceAssetId = latest?.assetId ?? ''
   data.inputUpdated = refs.some((item) => Boolean(item.previewUrl))
   cell.setData(data, { overwrite: true })
   bumpToolbarRevision()
@@ -664,6 +771,7 @@ async function linkImageNodeToImageDialogue(
 
   addImageDialogueSourceRef({
     nodeId: imageNodeId,
+    assetId: sourceData.assetId,
     previewUrl: sourceData.previewUrl,
     fileName: sourceData.fileName || sourceData.title || '',
   })
@@ -741,6 +849,7 @@ function clearImageDialoguePreview(sourceNodeId?: string) {
   data.sourceNodeId = latest?.nodeId ?? ''
   data.sourcePreviewUrl = latest?.previewUrl ?? ''
   data.sourceFileName = latest?.fileName ?? ''
+  data.sourceAssetId = latest?.assetId ?? ''
   data.inputUpdated = refs.some((item) => Boolean(item.previewUrl))
   // overwrite: true —— X6 默认深合并数组不会缩短，删除元素必须整体替换
   cell.setData(data, { overwrite: true })
@@ -860,6 +969,7 @@ function seedPromptImageRefs(data: CanvasNodeData): ImageSourceRef[] {
   if (data.sourcePreviewUrl) {
     refs.push({
       nodeId: data.linkedImageNodeId || data.sourceNodeId || '',
+      assetId: data.sourceAssetId,
       previewUrl: data.sourcePreviewUrl,
       fileName: data.sourceFileName ?? '',
     })
@@ -878,6 +988,7 @@ function refreshPromptSourcePreviews(data: CanvasNodeData) {
 
 function addPromptImageSourceRef(payload: {
   nodeId?: string
+  assetId?: string
   previewUrl: string
   fileName?: string
 }) {
@@ -892,7 +1003,8 @@ function addPromptImageSourceRef(payload: {
   if (data.kind !== 'text') return
 
   const ref: ImageSourceRef = {
-    nodeId: payload.nodeId || `upload-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    nodeId: payload.nodeId || payload.assetId || `upload-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    assetId: payload.assetId,
     previewUrl: payload.previewUrl,
     fileName: payload.fileName ?? '',
   }
@@ -915,6 +1027,7 @@ function addPromptImageSourceRef(payload: {
   data.sourceNodeId = latest?.nodeId ?? ''
   data.sourcePreviewUrl = latest?.previewUrl ?? ''
   data.sourceFileName = latest?.fileName ?? ''
+  data.sourceAssetId = latest?.assetId ?? ''
   data.linkedImageNodeId = latest?.nodeId ?? ''
   cell.setData(data, { overwrite: true })
   refreshPromptSourcePreviews(data)
@@ -930,6 +1043,7 @@ function onPromptUploadFiles(files: File[]) {
       try {
         const result = await uploadAssetFile(file, { projectId: activeProjectId.value })
         addPromptImageSourceRef({
+          assetId: result.assetId,
           previewUrl: result.url,
           fileName: file.name,
         })
@@ -1000,6 +1114,7 @@ function removePromptImageSource(sourceNodeId?: string) {
   data.sourceNodeId = latest?.nodeId ?? ''
   data.sourcePreviewUrl = latest?.previewUrl ?? ''
   data.sourceFileName = latest?.fileName ?? ''
+  data.sourceAssetId = latest?.assetId ?? ''
   data.linkedImageNodeId = latest?.nodeId ?? ''
   cell.setData(data, { overwrite: true })
   refreshPromptSourcePreviews(data)
@@ -1863,6 +1978,7 @@ function applyIncomingImageSource(target: Node, source: Node) {
 
   const ref: ImageSourceRef = {
     nodeId: source.id,
+    assetId: sourceData.assetId,
     previewUrl: sourceData.previewUrl ?? '',
     fileName: sourceData.fileName ?? '',
   }
@@ -1871,6 +1987,7 @@ function applyIncomingImageSource(target: Node, source: Node) {
   if (!refs.length && data.sourceNodeId && data.sourcePreviewUrl) {
     refs.push({
       nodeId: data.sourceNodeId,
+      assetId: data.sourceAssetId,
       previewUrl: data.sourcePreviewUrl,
       fileName: data.sourceFileName ?? '',
     })
@@ -1884,6 +2001,7 @@ function applyIncomingImageSource(target: Node, source: Node) {
   data.sourceNodeId = source.id
   data.sourcePreviewUrl = ref.previewUrl
   data.sourceFileName = ref.fileName
+  data.sourceAssetId = ref.assetId
   data.inputUpdated = refs.some((item) => Boolean(item.previewUrl))
   // overwrite: true —— 避免 X6 默认深合并对 imageSourceRefs 数组按索引合并导致脏数据
   target.setData(data, { overwrite: true })
@@ -2004,6 +2122,7 @@ function detachImageSourceFromDownstream(g: Graph, deletedNodeId: string) {
     next.sourceNodeId = latest?.nodeId ?? ''
     next.sourcePreviewUrl = latest?.previewUrl ?? ''
     next.sourceFileName = latest?.fileName ?? ''
+    next.sourceAssetId = latest?.assetId ?? ''
     next.inputUpdated = filtered.some((item) => Boolean(item.previewUrl))
     if (data.kind === 'text') next.linkedImageNodeId = latest?.nodeId ?? ''
     node.setData(next, { overwrite: true })
@@ -4257,6 +4376,7 @@ function addElementGroupFromRecord(
 
 function addImageFromAsset(
   asset: {
+    assetId?: string
     previewUrl: string
     fileName?: string
     width?: number | null

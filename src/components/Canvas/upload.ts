@@ -195,6 +195,9 @@ async function finishUpload(
   data.uploadProgress = 100
   data.previewUrl = previewUrl
   data.mode = 'editor'
+  if (result.assetId) {
+    data.assetId = result.assetId
+  }
 
   if (result.width && result.height) {
     data.mediaWidth = result.width
@@ -252,6 +255,7 @@ async function finishUpload(
 export function applyRemoteImageToNode(
   graphNode: Node,
   payload: {
+    assetId?: string
     previewUrl: string
     fileName?: string
     width?: number | null
@@ -268,6 +272,9 @@ export function applyRemoteImageToNode(
   data.mode = 'editor'
   data.fileName = payload.fileName || '图片'
   data.title = data.fileName
+  if (payload.assetId) {
+    data.assetId = payload.assetId
+  }
 
   if (payload.width && payload.height) {
     data.mediaWidth = payload.width

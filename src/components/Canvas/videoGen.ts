@@ -3,6 +3,7 @@ import type { CanvasNodeData } from './constants'
 
 export type VideoSourceRef = {
   nodeId: string
+  assetId?: string
   previewUrl: string
   fileName: string
   title: string
@@ -65,6 +66,7 @@ export function getVideoSourceRefs(graph: Graph, videoNodeId: string): VideoSour
     const data = node.getData() as CanvasNodeData
     return {
       nodeId: node.id,
+      assetId: data.assetId,
       previewUrl: data.previewUrl,
       fileName: data.fileName,
       title: data.title,

@@ -122,13 +122,10 @@
       :show-video-frames-panel="showVideoFramesPanel"
       @close-image-toolbar-more="closeImageToolbarMore"
       @toggle-image-toolbar-more-menu="toggleImageToolbarMoreMenu"
-      @toggle-image-hd-menu="toggleImageHdMenu"
-      @toggle-image-dialogue="toggleImageDialogue"
       @image-toolbar-action="onImageToolbarAction"
       @toggle-video-dialogue="toggleVideoDialogue"
       @toggle-video-hd-panel="toggleVideoHdPanel"
       @toggle-video-frames-panel="toggleVideoFramesPanel"
-      @toggle-image-addToDialog-menu="toggleImageAddToDialogMenu"
     />
 
     <CanvasAssetsPanel
@@ -540,9 +537,6 @@ const {
   toggleCanvasBgTheme,
   toggleGrid,
   toggleHistoryPanel,
-  toggleImageAddToDialogMenu,
-  toggleImageDialogue,
-  toggleImageHdMenu,
   toggleImageToolbarMoreMenu,
   toggleMinimap,
   togglePanMode,
@@ -608,6 +602,7 @@ const onChangeAssetsTab = (tab: ProjectTabKey) => {
 
 const onAddAssetToCanvas = (asset: AssetView) => {
   addImageFromAsset({
+    assetId: asset.id,
     previewUrl: asset.previewUrl,
     fileName: asset.fileName,
     width: asset.width,

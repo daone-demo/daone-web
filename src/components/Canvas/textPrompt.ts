@@ -80,6 +80,7 @@ export function syncTextNodeImageSource(
       const imageData = node.getData() as CanvasNodeData
       return {
         nodeId: node.id,
+        assetId: imageData.assetId,
         previewUrl: imageData.previewUrl ?? '',
         fileName: imageData.fileName ?? '',
       }
@@ -89,6 +90,7 @@ export function syncTextNodeImageSource(
     data.linkedImageNodeId = latest.nodeId
     data.sourcePreviewUrl = latest.previewUrl
     data.sourceFileName = latest.fileName
+    data.sourceAssetId = latest.assetId
     // overwrite: true —— 避免 X6 默认深合并对数组按索引合并
     textNode.setData(data, { overwrite: true })
   }

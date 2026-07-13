@@ -85,6 +85,7 @@ function isImageAsset(asset: AssetView) {
 
 function toDragPayload(asset: AssetView): CanvasAssetDragPayload {
   return {
+    assetId: asset.id,
     previewUrl: asset.previewUrl,
     fileName: asset.fileName,
     width: asset.width,

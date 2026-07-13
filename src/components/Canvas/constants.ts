@@ -13,6 +13,7 @@ export const CANVAS_IMAGE_NODE_DRAG_TYPE = 'application/x-canvas-image-node-id'
 export const CANVAS_ASSET_DRAG_TYPE = 'application/x-canvas-asset'
 
 export interface CanvasAssetDragPayload {
+  assetId?: string
   previewUrl: string
   fileName?: string
   width?: number | null
@@ -31,6 +32,8 @@ export interface CanvasElementGroupDragPayload {
 /** 由上游节点连线带过来的图片输入源 */
 export interface ImageSourceRef {
   nodeId: string
+  /** 素材库资源 ID（上传接口返回的 id） */
+  assetId?: string
   previewUrl: string
   fileName?: string
 }
@@ -46,6 +49,8 @@ export interface CanvasNodeData {
   mediaHeight: number
   previewUrl: string
   fileName: string
+  /** 本节点对应素材库资源 ID（上传接口返回的 id） */
+  assetId?: string
   isSelected?: boolean
   /** 节点所属分组 ID，同组节点可整组移动与解组 */
   groupId?: string
@@ -53,6 +58,8 @@ export interface CanvasNodeData {
   sourceNodeId?: string
   sourcePreviewUrl?: string
   sourceFileName?: string
+  /** 当前主图片来源对应的素材库资源 ID */
+  sourceAssetId?: string
   /** 多个上游节点连线带过来的图片输入源（图生图多图参考），按连入顺序排列 */
   imageSourceRefs?: ImageSourceRef[]
   inputUpdated?: boolean
@@ -203,6 +210,19 @@ export function createEmptyNodeData(): CanvasNodeData {
     previewUrl: '',
     fileName: '',
   }
+}
+
+/** 从节点数据或图片来源引用中解析素材库资源 ID */
+export function resolveImageAssetId(
+  source?:
+    | Pick<CanvasNodeData, 'assetId' | 'sourceAssetId'>
+    | Pick<ImageSourceRef, 'assetId'>
+    | null,
+): string {
+  if (!source) return ''
+  if ('assetId' in source && source.assetId) return source.assetId
+  if ('sourceAssetId' in source && source.sourceAssetId) return source.sourceAssetId
+  return ''
 }
 
 export const EMPTY_HINT = '双击画布 自由生成节点'
@@ -381,6 +401,17 @@ export type ImageToolbarAction = {
   key: string
   label: string
   icon?: ImageToolbarIcon
+}
+
+/** 图片节点工具栏点击事件（子组件上报 key/option，assetId 由画布层解析） */
+export type ImageToolbarClickPayload = {
+  key: string
+  option?: string
+}
+
+/** 图片节点工具栏点击上下文（含当前图片素材 ID） */
+export type ImageToolbarClickEvent = ImageToolbarClickPayload & {
+  assetId: string
 }
 
 export type ImageToolbarMenuItem = {
