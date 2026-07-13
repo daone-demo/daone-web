@@ -135,7 +135,7 @@
           <span class="canvas__node-toolbar-divider" aria-hidden="true" />
           <div class="canvas__node-toolbar-group">
             <template v-for="item in IMAGE_NODE_TOOLBAR.actions" :key="item.key">
-              <div v-if="item.key === 'cutout'" class="canvas__node-toolbar-dropdown">
+              <div v-if="item.key === 'IMAGE_REMOVE_BG'" class="canvas__node-toolbar-dropdown">
                 <button
                   type="button"
                   class="canvas__node-toolbar-btn"

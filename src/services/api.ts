@@ -157,10 +157,13 @@ export interface PromptTranslateRequest {
 }
 
 export interface GenerationTaskCreateRequest {
-  projectId: Id
+  projectId?: Id
+  nodeId?: Id
+  taskType?: string
   capabilityCode: string
-  prompt: string
-  parameters?: { count?: number } & JsonObject
+  prompt?: string
+  parameters?: JsonObject
+  referenceAssetIds?: Id[]
   assetIds?: Id[]
 }
 
@@ -475,8 +478,10 @@ const api = {
     return http.get<PageResult<T>>('/generation-tasks', { params })
   },
   /** 创建 AI 生成任务。 */
-  createGenerationTask<T = unknown>(data: any) {
-    return http.post<T>('/generation-tasks', data)
+  createGenerationTask<T = unknown>(data: GenerationTaskCreateRequest, idempotencyKey?: string) {
+    return http.post<T>('/generation-tasks', data, {
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+    })
   },
   /** 获取指定生成任务的详情和执行状态。 */
   getGenerationTask<T = unknown>(taskId: Id) {

@@ -16,7 +16,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME, NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
+  spawnCroppedImageNode, spawnGenerationResultNode, findOutgoingLoadingGenerationNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
   getConnectMenuPosition, getLinkedSpawnPoint, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -32,6 +32,14 @@ import {
   useCanvasKeyboard, api, exampleImage, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports'
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
+import {
+  applyGenerationResultToNode,
+  markGenerationNodeFailed,
+  pickPrimaryGenerationResult,
+  pollGenerationTask,
+  updateGenerationNodeProgress,
+  type GenerationTaskDetail,
+} from '../../generationTask'
 import type { CanvasElementGroupDragPayload } from '../../constants'
 import { resolveImageAssetId, type ImageToolbarClickPayload, type ImageToolbarClickEvent } from '../../constants'
 import {
@@ -451,30 +459,130 @@ function onImageToolbarAction(payload: ImageToolbarClickPayload) {
 }
 
 function handleImageCutoutAction(event: ImageToolbarClickEvent) {
-  console.log('handleImageCutoutAction', event)
+  void runImageGenerationTask(event, {
+    capabilityCode: 'IMAGE_REMOVE_BG',
+    title: '抠图结果',
+    buildFileName: (sourceFileName) =>
+      sourceFileName ? `抠图-${sourceFileName}` : '抠图结果.png',
+    buildParameters: (ctx) => ({
+      assetId: ctx.assetId,
+      mode: ctx.option ?? '快速',
+    }),
+  })
+}
+
+async function runImageGenerationTask(
+  event: ImageToolbarClickEvent,
+  config: {
+    capabilityCode: string
+    title: string
+    buildFileName: (sourceFileName: string) => string
+    buildParameters: (event: ImageToolbarClickEvent) => Record<string, unknown>
+  },
+) {
   if (!event.assetId) {
     message.warning('图片素材 ID 不存在，请等待上传完成')
     return
   }
-  const nodeId = selectedNodeId.value;
-  console.log('nodeId', nodeId);
-  if (!nodeId) return
 
-  const mode = event.option ?? '快速'
-  const params = {
-    taskType: 'IMAGE',
-    capabilityCode: 'IMAGE_REMOVE_BG',
-    prompt: '',
-    parameters: { assetId: event.assetId },
-    projectId: activeProjectId.value,
-    nodeId,
-    // 'Idempotency-Key': uuidv4()
+  const g = graph.value
+  const sourceNodeId = selectedNodeId.value
+  if (!g || !sourceNodeId) return
+
+  const sourceCell = g.getCellById(sourceNodeId)
+  if (!sourceCell?.isNode()) return
+
+  const sourceNode = sourceCell as Node
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  if (!sourceData.previewUrl || sourceData.uploadState === 'uploading') return
+
+  if (findOutgoingLoadingGenerationNode(g, sourceNodeId)) {
+    message.info('当前图片已有进行中的生成任务')
+    return
   }
-  api.createGenerationTask(params)
-    .then((res) => {
-      console.log('res', res)
+
+  const resultNode = spawnGenerationResultNode(g, sourceNode, {
+    title: config.title,
+    fileName: config.buildFileName(sourceData.fileName || sourceData.title || ''),
+  })
+
+  selectedNodeId.value = resultNode.id
+  selectedKind.value = 'image'
+  syncNodeSelectionHighlight(resultNode.id)
+  syncNodeCount()
+  bumpToolbarRevision()
+  updateNodeToolbar()
+  scheduleHistoryPush()
+
+  const idempotencyKey =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `gen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+  try {
+    const created = await api.createGenerationTask<GenerationTaskDetail>(
+      {
+        taskType: 'IMAGE',
+        capabilityCode: config.capabilityCode,
+        prompt: '',
+        parameters: config.buildParameters(event),
+        projectId: activeProjectId.value,
+        nodeId: sourceNodeId,
+        referenceAssetIds: [event.assetId],
+      },
+      idempotencyKey,
+    )
+
+    const taskId = created.id
+    if (!taskId) {
+      throw new Error('创建生成任务失败')
+    }
+
+    updateGenerationNodeProgress(resultNode, created.progress ?? 5)
+
+    const finalTask =
+      created.status === 'SUCCEEDED'
+        ? created
+        : await pollGenerationTask(taskId, {
+            onProgress: (task) => updateGenerationNodeProgress(resultNode, task.progress ?? 0),
+          })
+
+    if (finalTask.status !== 'SUCCEEDED') {
+      const reason = finalTask.error?.message || '生成任务失败'
+      markGenerationNodeFailed(resultNode, reason)
+      message.error(reason)
+      return
+    }
+
+    const result = pickPrimaryGenerationResult(finalTask)
+    if (!result?.previewUrl) {
+      markGenerationNodeFailed(resultNode, '未返回结果图片')
+      message.error('生成完成，但未返回结果图片')
+      return
+    }
+
+    applyGenerationResultToNode(resultNode, result, {
+      title: config.title,
+      fileName: config.buildFileName(sourceData.fileName || sourceData.title || ''),
     })
-  void mode
+
+    selectedNodeId.value = resultNode.id
+    syncNodeSelectionHighlight(resultNode.id)
+    bumpToolbarRevision()
+    updateNodeToolbar()
+    scheduleHistoryPush()
+
+    nextTick(() => {
+      const scroller = getScroller(g)
+      const bbox = resultNode.getBBox()
+      scroller?.transitionToPoint(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, {
+        duration: '280ms',
+      })
+    })
+  } catch (error) {
+    markGenerationNodeFailed(resultNode)
+    message.error(isRequestError(error) ? error.message : '生成失败，请稍后重试')
+  }
 }
 
 function handleImageHdAction(event: ImageToolbarClickEvent) {

@@ -26,6 +26,8 @@ export {
   applyImageGenTask as applyImageGenTaskToNode,
   connectGenEdge,
   spawnCroppedImageNode,
+  spawnGenerationResultNode,
+  findOutgoingLoadingGenerationNode,
 } from '../../imageGen'
 export {
   canImageNodeAcceptIncoming,

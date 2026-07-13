@@ -186,3 +186,53 @@ export function spawnCroppedImageNode(
   connectGenEdge(graph, sourceNode.id, node.id)
   return node
 }
+
+/** 在源节点右侧生成「生成中」结果节点，并连线 */
+export function spawnGenerationResultNode(
+  graph: Graph,
+  sourceNode: Node,
+  options: {
+    title: string
+    fileName?: string
+  },
+) {
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  const bbox = sourceNode.getBBox()
+  const outgoingCount = graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceNode.id).length
+  const overrides: Partial<CanvasNodeData> = {
+    kind: 'image',
+    mode: 'editor',
+    imageGenTask: 'picker',
+    imageGenState: 'loading',
+    imageGenProgress: 0,
+    title: options.title,
+    fileName: options.fileName || options.title,
+    sourceNodeId: sourceNode.id,
+    sourcePreviewUrl: sourceData.previewUrl ?? '',
+    sourceFileName: sourceData.fileName ?? '',
+    sourceAssetId: sourceData.assetId,
+    inputUpdated: Boolean(sourceData.previewUrl),
+  }
+  const size = getNodeSize('image', 'editor', overrides)
+  const point = {
+    x: bbox.x + bbox.width + GEN_GAP + outgoingCount * (size.width + GEN_GAP) + size.width / 2,
+    y: bbox.y + bbox.height / 2,
+  }
+
+  const node = addCanvasNode(graph, 'image', point, overrides)
+  connectGenEdge(graph, sourceNode.id, node.id)
+  return node
+}
+
+export function findOutgoingLoadingGenerationNode(graph: Graph, sourceId: string) {
+  for (const edge of graph.getEdges()) {
+    if (edge.getSourceCellId() !== sourceId) continue
+    const target = graph.getCellById(edge.getTargetCellId()!)
+    if (!target?.isNode()) continue
+    const data = target.getData() as CanvasNodeData
+    if (data.imageGenState === 'loading') {
+      return target as Node
+    }
+  }
+  return null
+}
