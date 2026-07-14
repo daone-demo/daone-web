@@ -13,8 +13,15 @@
     <ChatSidePanel
       ref="chatPanelRef"
       v-model:collapsed="chatPanelCollapsed"
+      :project-id="currentProjectId"
+      :history-sessions="historySessions"
+      :current-session-id="currentSessionId"
+      :session-name="sessionName"
+      @load-history-sessions="onLoadHistorySessions"
+      @set-current-session-id="onSetCurrentSessionId"
       @send="onChatSend"
       @new-chat="onNewChat"
+      @set-session-name="onSetSessionName"
     />
     <UpdateProjectName
       v-model:open="modalStore.updateProjectNameVisible"
@@ -26,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import type { Node } from '@antv/x6';
 import Canvas from '@/components/Canvas/index.vue';
 import ChatSidePanel from './ChatSidePanel.vue';
@@ -38,6 +45,9 @@ const modalStore = useModalStore();
 
 const projectName = ref('');
 const project_Id = ref('');
+const historySessions = ref<any[]>([]);
+const currentSessionId = ref('');
+const sessionName = ref('');
 
 type CanvasExpose = {
   addImagesFromFiles: (files: File[]) => Promise<Node[]>
@@ -58,6 +68,10 @@ type CanvasProjectItem = {
 const route = useRoute();
 const projectsList = ref<CanvasProjectItem[]>([]);
 const chatPanelCollapsed = ref(true)
+const currentProjectId = computed(() => {
+  const id = route.params.id
+  return typeof id === 'string' && id.trim() ? id : undefined
+})
 const canvasRef = ref<InstanceType<typeof Canvas> & CanvasExpose | null>(null)
 const chatPanelRef = ref<InstanceType<typeof ChatSidePanel> | null>(null)
 
@@ -77,6 +91,7 @@ function onAddAssetToChat(payload: { id: string; role: string; name: string }) {
 }
 
 async function onChatSend(payload: ChatSendPayload) {
+  console.log('onChatSend', payload);
   const canvas = canvasRef.value
   if (!canvas) return
 
@@ -157,6 +172,30 @@ const onLoadChatModels = async () => {
   // console.log('chatModels', res);
 }
 
+const onLoadHistorySessions = async () => {
+  const res = await api.getChatSessions({ projectId: currentProjectId.value, page: 1, pageSize: 100 });
+  historySessions.value = res.records as unknown as any[];
+
+  if (historySessions.value.length) {
+    const first = historySessions.value[0]
+    sessionName.value = first?.title || '新建对话'
+    // 仅在尚未选中会话时，默认切到第一条历史
+    if (!currentSessionId.value) {
+      currentSessionId.value = first.id
+    }
+  } else {
+    sessionName.value = '新建对话'
+  }
+}
+
+const onSetCurrentSessionId = (sessionId: string) => {
+  currentSessionId.value = sessionId;
+}
+
+const onSetSessionName = (name: string) => {
+  sessionName.value = name;
+}
+
 watch(
   () => route.params.id,
   (newId) => {
@@ -168,6 +207,7 @@ watch(
 )
 
 onMounted(() => {
+  void onLoadHistorySessions();
   void onLoadWorkflows();
   void onLoadProjects();
   void onLoadTools();

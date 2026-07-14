@@ -7,10 +7,28 @@ export interface ChatAttachment {
 
 export interface ChatMessage {
   id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   text: string
+  kind?: 'text' | 'balance_error'
   attachments?: ChatAttachment[]
   tip?: string
+}
+
+export interface ChatDraft {
+  message: string
+  attachments: ChatAttachment[]
+  assetMentions: Array<{ id: string; role: string; name: string }>
+}
+
+export interface ChatSession {
+  id: string
+  chatId: string | null
+  title: string
+  messages: ChatMessage[]
+  draft: ChatDraft
+  isOpen: boolean
+  createdAt: number
+  updatedAt: number
 }
 
 export interface ChatSendPayload {

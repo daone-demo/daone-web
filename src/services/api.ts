@@ -172,6 +172,14 @@ export interface ChatSessionCreateRequest {
   title?: string
 }
 
+export interface ChatSessionData {
+  id: string
+  projectId: string | null
+  title: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ChatMessageCreateRequest {
   content: string
   assetIds?: Id[]
@@ -498,7 +506,7 @@ const api = {
     return http.get<PageResult<T>>('/chat-sessions', { params })
   },
   /** 创建一个新的对话会话。 */
-  createChatSession<T = unknown>(data: ChatSessionCreateRequest = {}) {
+  createChatSession<T = ChatSessionData>(data: ChatSessionCreateRequest = {}) {
     return http.post<T>('/chat-sessions', data)
   },
   /** 删除指定对话会话。 */
