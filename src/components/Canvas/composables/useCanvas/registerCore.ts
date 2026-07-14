@@ -752,6 +752,7 @@ function toggleImageAddToDialogMenu() {
   emit('add-to-chat', {
     previewUrl: data.previewUrl,
     fileName: data.fileName || data.title || 'image.jpg',
+    assetId: resolveImageAssetId(data),
   })
 }
 
@@ -769,6 +770,7 @@ function addVideoToDialog() {
   emit('add-to-chat', {
     previewUrl: data.previewUrl,
     fileName: data.fileName || data.title || 'video.jpg',
+    assetId: data.assetId || data.sourceAssetId || '',
   })
 }
 

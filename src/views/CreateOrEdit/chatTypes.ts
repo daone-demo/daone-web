@@ -3,6 +3,8 @@ export interface ChatAttachment {
   file: File
   previewUrl: string
   fileName: string
+  /** 媒体资源对应的素材库资源 ID（画布加入对话框时透传） */
+  assetId?: string
 }
 
 export interface ChatMessage {

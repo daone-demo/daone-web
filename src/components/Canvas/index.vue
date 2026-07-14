@@ -346,7 +346,7 @@ import type { ElementGroupRecord, AssetCenterTabKey } from './assetCenterData'
 
 const emit = defineEmits<{
   'focus-chat': []
-  'add-to-chat': [payload: { previewUrl: string; fileName: string }],
+  'add-to-chat': [payload: { previewUrl: string; fileName: string; assetId?: string }],
   'add-asset-to-chat': [payload: { id: string; role: string; name: string }],
   'new-project': []
   'rename-project': [projectId: string, name: string],

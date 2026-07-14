@@ -9,7 +9,7 @@ import type { CanvasState } from './state'
 
 export type CanvasEmit = {
   (event: 'focus-chat'): void
-  (event: 'add-to-chat', payload: { previewUrl: string; fileName: string }): void
+  (event: 'add-to-chat', payload: { previewUrl: string; fileName: string; assetId?: string }): void
 }
 
 export type CanvasDomRefs = {

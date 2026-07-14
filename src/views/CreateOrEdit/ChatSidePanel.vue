@@ -295,9 +295,7 @@ const props = defineProps<{
   sessionName?: string
 }>()
 
-const API_BASE = import.meta.env.DEV
-  ? '/api/v1'
-  : import.meta.env.VITE_API_BASE_URL || '/api/v1'
+const API_BASE = import.meta.env.VITE_API_BASE_HOST + '/api/v1';
 
 const { loading, connected, connect, close } = useSSE()
 const isStreaming = computed(() => loading.value || connected.value)
@@ -606,12 +604,13 @@ function formatRelativeTime(timestamp: number) {
   return new Date(timestamp).toLocaleDateString('zh-CN')
 }
 
-function createAttachment(file: File): ChatAttachment {
+function createAttachment(file: File, assetId?: string): ChatAttachment {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     file,
     previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : '',
     fileName: file.name,
+    assetId,
   }
 }
 
@@ -641,15 +640,15 @@ function buildMessageText() {
   return [mentionText, body].filter(Boolean).join(' ')
 }
 
-function addAttachments(files: File[]) {
+function addAttachments(files: File[], assetId?: string) {
   ensureActiveSession()
   files.forEach((file) => {
     if (!file.type.startsWith('image/') && !file.name.endsWith('.md')) return
-    attachments.value.push(createAttachment(file))
+    attachments.value.push(createAttachment(file, assetId))
   })
 }
 
-async function addAttachmentFromCanvas(payload: { previewUrl: string; fileName: string }) {
+async function addAttachmentFromCanvas(payload: { previewUrl: string; fileName: string; assetId?: string }) {
   ensureActiveSession()
   if (!payload.previewUrl) return
 
@@ -660,13 +659,14 @@ async function addAttachmentFromCanvas(payload: { previewUrl: string; fileName: 
   }
 
   const fileName = payload.fileName || 'canvas-image.jpg'
+  const assetId = payload.assetId || undefined
 
   try {
     const response = await fetch(payload.previewUrl, { mode: 'cors' })
     if (!response.ok) throw new Error(`fetch failed: ${response.status}`)
     const blob = await response.blob()
     const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' })
-    addAttachments([file])
+    addAttachments([file], assetId)
   } catch (error) {
     // 跨域/网络失败时不静默丢弃，降级为远程链接附件，保证资源仍出现在对话框中
     console.warn('[ChatSidePanel] 拉取画布图片失败，降级为远程附件', error)
@@ -675,6 +675,7 @@ async function addAttachmentFromCanvas(payload: { previewUrl: string; fileName: 
       file: new File([], fileName, { type: 'image/jpeg' }),
       previewUrl: payload.previewUrl,
       fileName,
+      assetId,
     })
   }
 
@@ -880,7 +881,8 @@ function streamAssistantText(
   return done
 }
 
-function startChatStream(session: ChatSession, text: string) {
+function startChatStream(session: ChatSession, text: string, assetIds: string[] = []) {
+  console.log('startChatStream', session, text, assetIds);
   const chatId = session.chatId || props.currentSessionId
   if (!chatId) return
 
@@ -915,6 +917,7 @@ function startChatStream(session: ChatSession, text: string) {
       model: resolveModel(autoMode.value),
       content: text,
       stream: true,
+      ...(assetIds.length ? { attachmentAssetIds: assetIds } : {}),
     },
     onMessage(data) {
       const payload = parseStreamEvent(data)
@@ -1043,13 +1046,24 @@ function sendMessage() {
   const payloadAttachments = attachments.value.map((item) => ({ ...item }))
   if (!text && !payloadAttachments.length) return
 
-  void onSendMessage(session, payloadAttachments, text)
+  // 对话框中存在媒体资源时，收集其 assetId（画布附件 + @素材引用），随消息一起发送
+  const assetIds = Array.from(
+    new Set(
+      [
+        ...payloadAttachments.map((item) => item.assetId),
+        ...assetMentions.value.map((item) => item.id),
+      ].filter((id): id is string => Boolean(id)),
+    ),
+  )
+
+  void onSendMessage(session, payloadAttachments, text, assetIds)
 }
 
 async function onSendMessage(
   session: ChatSession,
   payloadAttachments: ChatAttachment[],
   text: string,
+  assetIds: string[] = [],
 ) {
   const title = session.title === '新建对话'
     ? (text || payloadAttachments[0]?.fileName || '新建对话')
@@ -1084,10 +1098,9 @@ async function onSendMessage(
     clearAssetMentions()
     saveActiveDraft()
     scrollMessagesToBottom()
-    emit('send', { text, attachments: payloadAttachments })
-
     if (text) {
-      startChatStream(session, text)
+      emit('send', { text, attachments: payloadAttachments })
+      startChatStream(session, text, assetIds)
     }
   } catch {
     // ensureChatSession 失败时由请求层提示

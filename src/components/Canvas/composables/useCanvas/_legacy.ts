@@ -142,7 +142,7 @@ import api from '@/services/api'
 
 export type CanvasEmit = {
   (event: 'focus-chat'): void
-  (event: 'add-to-chat', payload: { previewUrl: string; fileName: string }): void
+  (event: 'add-to-chat', payload: { previewUrl: string; fileName: string; assetId?: string }): void
 }
 
 export type CanvasDomRefs = {
@@ -691,6 +691,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     emit('add-to-chat', {
       previewUrl: data.previewUrl,
       fileName: data.fileName || data.title || 'image.jpg',
+      assetId: data.assetId || data.sourceAssetId || '',
     })
   }
 
@@ -708,6 +709,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     emit('add-to-chat', {
       previewUrl: data.previewUrl,
       fileName: data.fileName || data.title || 'video.jpg',
+      assetId: data.assetId || data.sourceAssetId || '',
     })
   }
 
