@@ -126,6 +126,7 @@
       @toggle-video-dialogue="toggleVideoDialogue"
       @toggle-video-hd-panel="toggleVideoHdPanel"
       @toggle-video-frames-panel="toggleVideoFramesPanel"
+      @add-video-to-dialog="addVideoToDialog"
     />
 
     <CanvasAssetsPanel
@@ -546,6 +547,7 @@ const {
   toggleVideoDialogue,
   toggleVideoFramesPanel,
   toggleVideoHdPanel,
+  addVideoToDialog,
   toggleZoomMenu,
   toolbarPos,
   userMenuName,

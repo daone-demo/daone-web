@@ -360,6 +360,7 @@ export const VIDEO_NODE_TOOLBAR = {
     { key: 'replicate', label: '复刻', icon: 'replicate' },
     { key: 'watermark', label: '去水印', icon: 'watermark' },
     { key: 'subtitle', label: '去字幕', icon: 'subtitle' },
+    { key: 'addToDialog', label: '', icon: 'addToDialog' },
   ] satisfies ImageToolbarAction[],
 } as const
 

@@ -513,6 +513,9 @@ const api = {
   deleteChatSession(sessionId: Id) {
     return http.delete(`/chat-sessions/${pathId(sessionId)}`)
   },
+  queryChatSession<T = unknown>(sessionId: Id) {
+    return http.get<T>(`/chat-sessions/${pathId(sessionId)}`)
+  },
   /** 分页查询指定会话的历史消息。 */
   getChatMessages<T = unknown>(sessionId: Id, params?: PageQuery) {
     return http.get<PageResult<T>>(`/chat-sessions/${pathId(sessionId)}/messages`, { params })

@@ -96,7 +96,7 @@ async function onChatSend(payload: ChatSendPayload) {
   if (!canvas) return
 
   const files = payload.attachments
-    .filter((item) => item.file.type.startsWith('image/'))
+    .filter((item) => item.file.type.startsWith('image/') && item.file.size > 0)
     .map((item) => item.file)
 
   if (!files.length) return
@@ -181,11 +181,17 @@ const onLoadHistorySessions = async () => {
     sessionName.value = first?.title || '新建对话'
     // 仅在尚未选中会话时，默认切到第一条历史
     if (!currentSessionId.value) {
-      currentSessionId.value = first.id
+      currentSessionId.value = first.id;
+      onLoadChatSession(first.id);
     }
   } else {
     sessionName.value = '新建对话'
   }
+}
+
+const onLoadChatSession = async (sessionId: string) => {
+  const res = await api.queryChatSession(sessionId);
+  console.log('chatSession', res);
 }
 
 const onSetCurrentSessionId = (sessionId: string) => {

@@ -694,6 +694,23 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     })
   }
 
+  function addVideoToDialog() {
+    const g = graph.value
+    const id = selectedNodeId.value
+    if (!g || !id) return
+
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return
+
+    const data = cell.getData() as CanvasNodeData
+    if (data.kind !== 'video' || !data.previewUrl || data.uploadState === 'uploading') return
+
+    emit('add-to-chat', {
+      previewUrl: data.previewUrl,
+      fileName: data.fileName || data.title || 'video.jpg',
+    })
+  }
+
   function resetVideoHdPanel() {
     showVideoHdPanel.value = false
   }
@@ -4315,6 +4332,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     toggleGrid,
     toggleHistoryPanel,
     toggleImageAddToDialogMenu,
+    addVideoToDialog,
     toggleImageDialogue,
     toggleImageHdMenu,
     toggleImageToolbarMoreMenu,

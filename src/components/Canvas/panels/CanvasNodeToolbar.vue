@@ -278,6 +278,13 @@
               />
               {{ item.label }}
             </button>
+            <div v-else-if="item.key === 'addToDialog'" class="canvas__node-toolbar-hd">
+              <img
+                src="@assets/images/addToDialog.png"
+                class="canvas__node-toolbar-addToDialog-img"
+                @click="emit('add-video-to-dialog')"
+              />
+            </div>
             <button v-else type="button" class="canvas__node-toolbar-btn">
               <span
                 v-if="item.icon"
@@ -341,5 +348,6 @@ const emit = defineEmits<{
   'toggle-video-dialogue': []
   'toggle-video-hd-panel': []
   'toggle-video-frames-panel': []
+  'add-video-to-dialog': []
 }>()
 </script>

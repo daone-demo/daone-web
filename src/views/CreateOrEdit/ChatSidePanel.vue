@@ -652,19 +652,30 @@ function addAttachments(files: File[]) {
 async function addAttachmentFromCanvas(payload: { previewUrl: string; fileName: string }) {
   ensureActiveSession()
   if (!payload.previewUrl) return
-  if (attachments.value.some((item) => item.previewUrl === payload.previewUrl)) return
+
+  // 已存在相同资源时，仅聚焦输入框，避免重复添加
+  if (attachments.value.some((item) => item.previewUrl === payload.previewUrl)) {
+    focusInput()
+    return
+  }
+
+  const fileName = payload.fileName || 'canvas-image.jpg'
 
   try {
-    const response = await fetch(payload.previewUrl)
+    const response = await fetch(payload.previewUrl, { mode: 'cors' })
+    if (!response.ok) throw new Error(`fetch failed: ${response.status}`)
     const blob = await response.blob()
-    const file = new File(
-      [blob],
-      payload.fileName || 'canvas-image.jpg',
-      { type: blob.type || 'image/jpeg' },
-    )
+    const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' })
     addAttachments([file])
-  } catch {
-    return
+  } catch (error) {
+    // 跨域/网络失败时不静默丢弃，降级为远程链接附件，保证资源仍出现在对话框中
+    console.warn('[ChatSidePanel] 拉取画布图片失败，降级为远程附件', error)
+    attachments.value.push({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file: new File([], fileName, { type: 'image/jpeg' }),
+      previewUrl: payload.previewUrl,
+      fileName,
+    })
   }
 
   focusInput()
