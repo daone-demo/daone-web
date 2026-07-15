@@ -424,7 +424,9 @@ function onImageToolbarAction(payload: ImageToolbarClickPayload) {
   if (event.key === 'chat') {
     toggleImageDialogue()
   }
-  else if (event.key === 'more') {
+  else if (event.key === 'IMAGE_CROP') {
+    openImageCrop()
+  } else if (event.key === 'more') {
     openImageToolbarMore()
   } else if (event.key === 'addToDialog') {
     toggleImageAddToDialogMenu()
