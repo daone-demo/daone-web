@@ -404,15 +404,25 @@ export type ImageToolbarAction = {
   icon?: ImageToolbarIcon
 }
 
-/** 图片节点工具栏点击事件（子组件上报 key/option，assetId 由画布层解析） */
+/** 图片节点工具栏点击事件（子组件上报 key/option/label，assetId 由画布层解析） */
 export type ImageToolbarClickPayload = {
   key: string
   option?: string
+  /** 能力展示名，用于结果节点 title */
+  label?: string
 }
 
 /** 图片节点工具栏点击上下文（含当前图片素材 ID） */
 export type ImageToolbarClickEvent = ImageToolbarClickPayload & {
   assetId: string
+}
+
+/** 由工具栏 action 名生成结果节点标题 */
+export function buildImageActionResultTitle(label?: string, fallback = '生成结果') {
+  const name = label?.trim()
+  if (!name) return fallback
+  if (/结果$/.test(name)) return name
+  return `${name}结果`
 }
 
 export type ImageToolbarMenuItem = {

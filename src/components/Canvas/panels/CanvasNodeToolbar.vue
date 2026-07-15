@@ -248,9 +248,10 @@ const addToDialogAction = createAddToDialogToolbarAction()
 const primaryActions = computed(() => splitActions.value.primaryActions)
 const overflowActions = computed(() => splitActions.value.overflowActions)
 
-function emitImageAction(key: string, option?: string) {
-  console.log('key', key, option);
-  const payload: ImageToolbarClickPayload = option ? { key, option } : { key }
+function emitImageAction(key: string, option?: string, label?: string) {
+  const payload: ImageToolbarClickPayload = { key }
+  if (option) payload.option = option
+  if (label) payload.label = label
   emit('image-toolbar-action', payload)
 }
 </script>

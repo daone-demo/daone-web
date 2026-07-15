@@ -41,7 +41,12 @@ import {
   type GenerationTaskDetail,
 } from '../../generationTask'
 import type { CanvasElementGroupDragPayload } from '../../constants'
-import { resolveImageAssetId, type ImageToolbarClickPayload, type ImageToolbarClickEvent } from '../../constants'
+import {
+  resolveImageAssetId,
+  buildImageActionResultTitle,
+  type ImageToolbarClickPayload,
+  type ImageToolbarClickEvent,
+} from '../../constants'
 import {
   createSkillId,
   listSavedCanvasSkills,
@@ -414,17 +419,16 @@ function onImageToolbarAction(payload: ImageToolbarClickPayload) {
   const event: ImageToolbarClickEvent = {
     key: payload.key,
     option: payload.option,
+    label: payload.label,
     assetId: resolveImageAssetId(data),
   }
 
   if (event.key !== 'hd') {
     showImageHdMenu.value = false
   }
-  console.log('event', event);
   if (event.key === 'chat') {
     toggleImageDialogue()
-  }
-  else if (event.key === 'IMAGE_CROP') {
+  } else if (event.key === 'IMAGE_CROP') {
     openImageCrop()
   } else if (event.key === 'more') {
     openImageToolbarMore()
@@ -433,7 +437,7 @@ function onImageToolbarAction(payload: ImageToolbarClickPayload) {
   } else if (event.key === 'download') {
     handleImageDownloadAction(event)
   } else {
-    handleImageCutoutAction(event);
+    handleImageCapabilityAction(event)
   }
   // switch (event.key) {
   //   case 'chat':
@@ -474,16 +478,23 @@ function onImageToolbarAction(payload: ImageToolbarClickPayload) {
   // }
 }
 
-function handleImageCutoutAction(event: ImageToolbarClickEvent) {
+function handleImageCapabilityAction(event: ImageToolbarClickEvent) {
+  const title = buildImageActionResultTitle(event.label)
+  const namePrefix = event.label?.trim() || '生成'
   void runImageGenerationTask(event, {
     capabilityCode: event.key,
-    title: '抠图结果',
+    title,
     buildFileName: (sourceFileName) =>
-      sourceFileName ? `抠图-${sourceFileName}` : '抠图结果.png',
-    buildParameters: (ctx) => ({
-      assetId: ctx.assetId,
-      mode: normalizeCutoutMode(ctx.option),
-    }),
+      sourceFileName ? `${namePrefix}-${sourceFileName}` : `${title}.png`,
+    buildParameters: (ctx) => {
+      const params: Record<string, unknown> = {
+        assetId: ctx.assetId,
+      }
+      if (ctx.option) {
+        params.mode = normalizeCutoutMode(ctx.option)
+      }
+      return params
+    },
   })
 }
 

@@ -3,7 +3,7 @@
     <img
       src="@assets/images/addToDialog.png"
       class="canvas__node-toolbar-addToDialog-img"
-      @click="emit('action', item.key)"
+      @click="emit('action', item.key, undefined, item.label)"
     />
   </div>
   <div v-else-if="item.key === 'hd'" class="canvas__node-toolbar-hd">
@@ -11,7 +11,7 @@
       type="button"
       class="canvas__node-toolbar-btn"
       :class="{ 'canvas__node-toolbar-btn--active': showImageHdMenu }"
-      @click="emit('action', item.key)"
+      @click="emit('action', item.key, undefined, item.label)"
     >
       {{ item.label }}
     </button>
@@ -27,7 +27,7 @@
         type="button"
         class="canvas__node-toolbar-hd-item"
         @mousedown.stop
-        @click.stop="emit('action', item.key, resolution)"
+        @click.stop="emit('action', item.key, resolution, item.label)"
       >
         {{ resolution }}
       </button>
@@ -65,7 +65,7 @@
           type="button"
           class="canvas__node-toolbar-dropdown-item"
           @mousedown.stop
-          @click.stop="emit('action', item.key, mode.value)"
+          @click.stop="emit('action', item.key, mode.value, item.label)"
         >
           {{ mode.label }}
         </button>
@@ -77,7 +77,7 @@
     type="button"
     class="canvas__node-toolbar-btn"
     :class="{ 'canvas__node-toolbar-btn--active': item.key === 'crop' && showImageCrop }"
-    @click="emit('action', item.key)"
+    @click="emit('action', item.key, undefined, item.label)"
   >
     <span
       v-if="item.icon"
@@ -99,6 +99,6 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  action: [key: string, option?: string]
+  action: [key: string, option?: string, label?: string]
 }>()
 </script>
