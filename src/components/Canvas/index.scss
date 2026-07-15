@@ -2309,7 +2309,7 @@
 
 .canvas__node-toolbar {
   position: absolute;
-  z-index: 5;
+  z-index: 12;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -2360,6 +2360,12 @@
   }
 }
 
+/* 下拉打开时抬高父级，避免被画布节点盖住 */
+.canvas__node-toolbar-dropdown:hover,
+.canvas__node-toolbar-dropdown:focus-within {
+  z-index: 20;
+}
+
 .canvas__node-toolbar-tooltip-label {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -2383,9 +2389,18 @@
 .canvas__node-toolbar-dropdown-menu {
   display: none;
   position: absolute;
-  top: calc(100% + 8px);
+  /* 贴住按钮；视觉间距用内部 padding，避免 8px 空隙导致 :hover 断开 */
+  top: 100%;
   left: 0;
-  z-index: 6;
+  z-index: 30;
+  min-width: 88px;
+  padding: 8px 0 4px;
+  border: none;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.canvas__node-toolbar-dropdown-panel {
   min-width: 88px;
   padding: 4px 0;
   border: 1px solid #e5e7eb;
@@ -2406,6 +2421,7 @@
   line-height: 1;
   text-align: center;
   cursor: pointer;
+  pointer-events: auto;
 
   &:hover {
     background: #f3f4f6;

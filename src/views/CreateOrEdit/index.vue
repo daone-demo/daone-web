@@ -9,6 +9,9 @@
       @new-project="onNewProject"
       @rename-project="onRenameProject"
       @delete-project="onDeleteProject"
+      :image-capabilities="ImageCapabilities"
+      :video-capabilities="VideoCapabilities"
+      :text-capabilities="TextCapabilities"
     />
     <ChatSidePanel
       ref="chatPanelRef"
@@ -40,7 +43,12 @@ import ChatSidePanel from './ChatSidePanel.vue';
 import type { ChatSendPayload } from './chatTypes';
 import { useRoute } from 'vue-router';
 import api, { type ProjectCanvasResponse } from '@/services/api';
-import { useModalStore } from '@stores/useModal';
+import { useModalStore } from '@stores/useModal'
+import type { ImageCapability } from '@/components/Canvas/constants'
+
+const ImageCapabilities = ref<ImageCapability[]>([])
+const VideoCapabilities = ref<any[]>([])
+const TextCapabilities = ref<any[]>([])
 const modalStore = useModalStore();
 
 const projectName = ref('');
@@ -202,6 +210,28 @@ const onSetSessionName = (name: string) => {
   sessionName.value = name;
 }
 
+const onLoadAiCapabilities = async (key: string) => {
+  let params = {
+    nodeType: key,
+    scene: 'all'
+  }
+  const res:any = await api.queryAiCapabilities(params);
+  switch (key) {
+    case 'TEXT':
+      TextCapabilities.value = res;
+      break;
+    case 'IMAGE':
+      ImageCapabilities.value = res;
+      break;
+    case 'VIDEO':
+      VideoCapabilities.value = res;
+      break;
+    default:
+      TextCapabilities.value = res;
+      break;
+  }
+}
+
 watch(
   () => route.params.id,
   (newId) => {
@@ -218,6 +248,9 @@ onMounted(() => {
   void onLoadProjects();
   void onLoadTools();
   void onLoadChatModels();
+  void onLoadAiCapabilities('TEXT');
+  void onLoadAiCapabilities('IMAGE');
+  void onLoadAiCapabilities('VIDEO');
 });
 
 </script>

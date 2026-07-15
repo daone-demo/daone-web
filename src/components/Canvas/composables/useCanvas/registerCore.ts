@@ -420,55 +420,77 @@ function onImageToolbarAction(payload: ImageToolbarClickPayload) {
   if (event.key !== 'hd') {
     showImageHdMenu.value = false
   }
-
-  switch (event.key) {
-    case 'chat':
-      toggleImageDialogue()
-      return
-    case 'more':
-      openImageToolbarMore()
-      return
-    case 'crop':
-      openImageCrop()
-      return
-    case 'hd':
-      if (event.option) {
-        handleImageHdAction(event)
-      } else {
-        toggleImageHdMenu()
-      }
-      return
-    case 'IMAGE_REMOVE_BG':
-      handleImageCutoutAction(event)
-      return
-    case 'preview':
-      openImagePreview()
-      return
-    case 'addToDialog':
-      toggleImageAddToDialogMenu()
-      return
-    case 'download':
-      handleImageDownloadAction(event)
-      return
-    case 'inpaint':
-      handleImageInpaintAction(event)
-      return
-    default:
-      break
+  console.log('event', event);
+  if (event.key === 'chat') {
+    toggleImageDialogue()
   }
+  else if (event.key === 'more') {
+    openImageToolbarMore()
+  } else if (event.key === 'addToDialog') {
+    toggleImageAddToDialogMenu()
+  } else if (event.key === 'download') {
+    handleImageDownloadAction(event)
+  } else {
+    handleImageCutoutAction(event);
+  }
+  // switch (event.key) {
+  //   case 'chat':
+  //     toggleImageDialogue()
+  //     return
+  //   case 'more':
+  //     openImageToolbarMore()
+  //     return
+  //   case 'crop':
+  //     openImageCrop()
+  //     return
+  //   case 'hd':
+  //     if (event.option) {
+  //       handleImageHdAction(event)
+  //     } else {
+  //       toggleImageHdMenu()
+  //     }
+  //     return
+  //   case 'IMAGE_REMOVE_BG':
+  //     // dropdown：必须选择 mode 后才执行
+  //     if (!event.option) return
+  //     handleImageCutoutAction(event)
+  //     return
+  //   case 'preview':
+  //     openImagePreview()
+  //     return
+  //   case 'addToDialog':
+  //     toggleImageAddToDialogMenu()
+  //     return
+  //   case 'download':
+  //     handleImageDownloadAction(event)
+  //     return
+  //   case 'inpaint':
+  //     handleImageInpaintAction(event)
+  //     return
+  //   default:
+  //     break
+  // }
 }
 
 function handleImageCutoutAction(event: ImageToolbarClickEvent) {
   void runImageGenerationTask(event, {
-    capabilityCode: 'IMAGE_REMOVE_BG',
+    capabilityCode: event.key,
     title: '抠图结果',
     buildFileName: (sourceFileName) =>
       sourceFileName ? `抠图-${sourceFileName}` : '抠图结果.png',
     buildParameters: (ctx) => ({
       assetId: ctx.assetId,
-      mode: ctx.option ?? '快速',
+      mode: normalizeCutoutMode(ctx.option),
     }),
   })
+}
+
+function normalizeCutoutMode(option?: string) {
+  if (!option) return 'quick'
+  if (option === '快速') return 'quick'
+  if (option === '精准') return 'precise'
+  if (option === '擦除') return 'erase'
+  return option
 }
 
 async function runImageGenerationTask(

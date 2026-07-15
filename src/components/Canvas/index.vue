@@ -127,6 +127,7 @@
       @toggle-video-hd-panel="toggleVideoHdPanel"
       @toggle-video-frames-panel="toggleVideoFramesPanel"
       @add-video-to-dialog="addVideoToDialog"
+      :image-capabilities="imageCapabilities"
     />
 
     <CanvasAssetsPanel
@@ -343,6 +344,7 @@ import api from '@/services/api'
 import type { AssetView, ProjectCanvasResponse } from '@/services/api'
 import { type ProjectTabKey } from '@/views/Project/projectData'
 import type { ElementGroupRecord, AssetCenterTabKey } from './assetCenterData'
+import type { ImageCapability } from './constants'
 
 const emit = defineEmits<{
   'focus-chat': []
@@ -595,6 +597,9 @@ export type CanvasProjectItem = {
 
 defineProps<{
   projectsList: CanvasProjectItem[]
+  imageCapabilities: ImageCapability[]
+  videoCapabilities: any[]
+  textCapabilities: any[]
 }>()
 
 const onChangeAssetsTab = (tab: ProjectTabKey) => {

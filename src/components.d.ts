@@ -49,6 +49,7 @@ declare module 'vue' {
     CanvasShortcutsPanel: typeof import('./components/Canvas/CanvasShortcutsPanel.vue')['default']
     CanvasTextExpandEditor: typeof import('./components/Canvas/panels/CanvasTextExpandEditor.vue')['default']
     CanvasTextFormatAnchor: typeof import('./components/Canvas/panels/CanvasTextFormatAnchor.vue')['default']
+    CanvasToolbarActionItem: typeof import('./components/Canvas/panels/CanvasToolbarActionItem.vue')['default']
     Combo: typeof import('./components/Combo/index.vue')['default']
     HelloWorld: typeof import('./components/HelloWorld.vue')['default']
     ImageColorPickerPanel: typeof import('./components/Canvas/ImageColorPickerPanel.vue')['default']

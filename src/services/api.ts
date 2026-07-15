@@ -630,9 +630,8 @@ const api = {
   queryElementGroups<T = unknown>(projectId: Id, params?: PageQuery) {
     return http.get<T>(`/projects/${pathId(projectId)}/element-groups`, { params })
   },
-  queryAiCapabilities<T = unknown>() {
-    return http.get<T>('/ai/capabilities')
+  queryAiCapabilities<T = unknown>(params:any) {
+    return http.get<T>('/canvas/capabilities', { params })
   },
 }
-
 export default api
