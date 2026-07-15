@@ -16,7 +16,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME, NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnGenerationResultNode, findOutgoingLoadingGenerationNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
+  spawnCroppedImageNode, spawnGenerationResultNode, spawnModel3DResultNode, findOutgoingLoadingGenerationNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
   getConnectMenuPosition, getLinkedSpawnPoint, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -34,7 +34,9 @@ import {
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import {
   applyGenerationResultToNode,
+  applyModelGenerationResultToNode,
   markGenerationNodeFailed,
+  pickModelGenerationResult,
   pickPrimaryGenerationResult,
   pollGenerationTask,
   updateGenerationNodeProgress,
@@ -393,7 +395,7 @@ const isLightNodeToolbar = computed(
 )
 
 function openImageToolbarMore() {
-  showImageToolbarMore.value = true
+  showImageToolbarMore.value = !showImageToolbarMore.value
   showImageToolbarMoreMenu.value = false
   showImageHdMenu.value = false
 }
@@ -432,10 +434,14 @@ function onImageToolbarAction(payload: ImageToolbarClickPayload) {
     openImageCrop()
   } else if (event.key === 'more') {
     openImageToolbarMore()
+  } else if (event.key === 'IMAGE_GENERAL_V1') {
+    handleImageGeneralV1Action(event);
   } else if (event.key === 'addToDialog') {
     toggleImageAddToDialogMenu()
   } else if (event.key === 'download') {
     handleImageDownloadAction(event)
+  } else if (event.key === 'IMAGE_TO_3D') {
+    handleImageTo3DAction(event)
   } else {
     handleImageCapabilityAction(event)
   }
@@ -476,6 +482,124 @@ function onImageToolbarAction(payload: ImageToolbarClickPayload) {
   //   default:
   //     break
   // }
+}
+
+function handleImageGeneralV1Action(event: ImageToolbarClickEvent) {
+  
+}
+
+function handleImageTo3DAction(event: ImageToolbarClickEvent) {
+  void runImageTo3DTask(event)
+}
+
+async function runImageTo3DTask(event: ImageToolbarClickEvent) {
+  if (!event.assetId) {
+    message.warning('图片素材 ID 不存在，请等待上传完成')
+    return
+  }
+
+  const g = graph.value
+  const sourceNodeId = selectedNodeId.value
+  if (!g || !sourceNodeId) return
+
+  const sourceCell = g.getCellById(sourceNodeId)
+  if (!sourceCell?.isNode()) return
+
+  const sourceNode = sourceCell as Node
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  if (!sourceData.previewUrl || sourceData.uploadState === 'uploading') return
+
+  if (findOutgoingLoadingGenerationNode(g, sourceNodeId)) {
+    message.info('当前图片已有进行中的生成任务')
+    return
+  }
+
+  const title = buildImageActionResultTitle(event.label || '图片转3D')
+  const resultNode = spawnModel3DResultNode(g, sourceNode, {
+    title,
+    fileName: `${event.label?.trim() || '图片转3D'}.glb`,
+  })
+
+  selectedNodeId.value = resultNode.id
+  selectedKind.value = 'model3d'
+  syncNodeSelectionHighlight(resultNode.id)
+  syncNodeCount()
+  bumpToolbarRevision()
+  updateNodeToolbar()
+  scheduleHistoryPush()
+
+  const idempotencyKey =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `model3d-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+  try {
+    const created = await api.createGenerationTask<GenerationTaskDetail>(
+      {
+        taskType: 'MODEL',
+        capabilityCode: 'IMAGE_TO_3D',
+        prompt: '',
+        parameters: {
+          assetId: event.assetId,
+        },
+        projectId: activeProjectId.value,
+        nodeId: sourceNodeId,
+        referenceAssetIds: [event.assetId],
+      },
+      idempotencyKey,
+    )
+
+    const taskId = created.id
+    if (!taskId) {
+      throw new Error('创建 3D 生成任务失败')
+    }
+
+    updateGenerationNodeProgress(resultNode, created.progress ?? 5)
+
+    const finalTask =
+      created.status === 'SUCCEEDED'
+        ? created
+        : await pollGenerationTask(taskId, {
+            onProgress: (task) => updateGenerationNodeProgress(resultNode, task.progress ?? 0),
+          })
+
+    if (finalTask.status !== 'SUCCEEDED') {
+      const reason = finalTask.error?.message || '3D 生成任务失败'
+      markGenerationNodeFailed(resultNode, reason)
+      message.error(reason)
+      return
+    }
+
+    const result = pickModelGenerationResult(finalTask)
+    if (!result?.previewUrl) {
+      markGenerationNodeFailed(resultNode, '未返回 3D 模型')
+      message.error('生成完成，但未返回 GLB 模型')
+      return
+    }
+
+    applyModelGenerationResultToNode(resultNode, result, {
+      title,
+      fileName: result.previewUrl.split('/').pop()?.split('?')[0] || `${title}.glb`,
+    })
+
+    selectedNodeId.value = resultNode.id
+    selectedKind.value = 'model3d'
+    syncNodeSelectionHighlight(resultNode.id)
+    bumpToolbarRevision()
+    updateNodeToolbar()
+    scheduleHistoryPush()
+
+    nextTick(() => {
+      const scroller = getScroller(g)
+      const bbox = resultNode.getBBox()
+      scroller?.transitionToPoint(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, {
+        duration: '280ms',
+      })
+    })
+  } catch (error) {
+    markGenerationNodeFailed(resultNode)
+    message.error(isRequestError(error) ? error.message : '3D 生成失败，请稍后重试')
+  }
 }
 
 function handleImageCapabilityAction(event: ImageToolbarClickEvent) {

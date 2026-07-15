@@ -31,6 +31,53 @@ export function pickPrimaryGenerationResult(task: GenerationTaskDetail): Generat
   return results[0] ?? null
 }
 
+/** 优先取 type=MODEL 的 GLB；否则回退到 .glb URL 或首个结果 */
+export function pickModelGenerationResult(task: GenerationTaskDetail): GenerationTaskResult | null {
+  const results = task.results?.filter((item) => item.previewUrl || item.assetId) ?? []
+  if (!results.length) return null
+
+  const byType = results.find((item) => String(item.type || '').toUpperCase() === 'MODEL')
+  if (byType?.previewUrl) return byType
+
+  const byExt = results.find((item) => /\.glb(\?|$)/i.test(item.previewUrl || ''))
+  if (byExt) return byExt
+
+  return results[0] ?? null
+}
+
+export function applyModelGenerationResultToNode(
+  node: Node,
+  result: GenerationTaskResult,
+  options: { title?: string; fileName?: string } = {},
+) {
+  const previewUrl = result.previewUrl?.trim()
+  if (!previewUrl) return false
+
+  const data = { ...(node.getData() as CanvasNodeData) }
+  data.kind = 'model3d'
+  data.imageGenState = 'done'
+  data.imageGenProgress = 100
+  data.mode = 'editor'
+  data.uploadState = 'done'
+  data.uploadProgress = 100
+  data.previewUrl = previewUrl
+  data.assetId = result.assetId
+  data.title = options.title || data.title || '3D 模型'
+  data.fileName =
+    options.fileName ||
+    result.fileName ||
+    data.fileName ||
+    (previewUrl.split('/').pop()?.split('?')[0] || 'model.glb')
+  data.mediaWidth = data.mediaWidth || 320
+  data.mediaHeight = data.mediaHeight || 360
+
+  node.setData(data)
+  syncNodeShapeFromData(node)
+  const size = getNodeSize(data.kind, data.mode, data)
+  node.resize(size.width, size.height)
+  return true
+}
+
 export function updateGenerationNodeProgress(node: Node, progress: number) {
   const data = { ...(node.getData() as CanvasNodeData) }
   if (data.imageGenState !== 'loading') return

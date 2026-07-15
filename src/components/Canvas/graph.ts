@@ -12,6 +12,7 @@ import TextNode from './nodes/TextNode.vue'
 import ImageNode from './nodes/ImageNode.vue'
 import ImageGenNode from './nodes/ImageGenNode.vue'
 import VideoNode from './nodes/VideoNode.vue'
+import Model3DNode from './nodes/Model3DNode.vue'
 import {
   CANVAS_MAX_ZOOM,
   CANVAS_MIN_ZOOM,
@@ -260,6 +261,7 @@ const counters: Record<NodeKind, number> = {
   image: 0,
   video: 0,
   audio: 0,
+  model3d: 0,
 }
 
 export function registerShapes() {
@@ -270,6 +272,7 @@ export function registerShapes() {
   register({ shape: 'image-node', width: 180, height: 270, component: ImageNode })
   register({ shape: 'image-gen-node', width: 180, height: 270, component: ImageGenNode })
   register({ shape: 'video-node', width: 180, height: 270, component: VideoNode })
+  register({ shape: 'model3d-node', width: 320, height: 360, component: Model3DNode })
 }
 
 export function createDefaultNodeData(kind: NodeKind): CanvasNodeData {
@@ -286,6 +289,7 @@ export function createDefaultNodeData(kind: NodeKind): CanvasNodeData {
 export function getNodeShape(kind: NodeKind, data?: Partial<CanvasNodeData>) {
   if (kind === 'text' || kind === 'audio') return 'text-node'
   if (kind === 'video') return 'video-node'
+  if (kind === 'model3d') return 'model3d-node'
   if (kind === 'image' && data?.imageGenTask) return 'image-gen-node'
   return 'image-node'
 }
@@ -311,6 +315,9 @@ export function getBaseNodeSize(
   if (kind === 'video') {
     if (mode === 'picker' || !data?.previewUrl) return NODE_SIZE.video.picker
     return NODE_SIZE.video.media
+  }
+  if (kind === 'model3d') {
+    return NODE_SIZE.model3d.editor
   }
   if (kind === 'image') {
     if (data?.imageGenTask === 'picker') return NODE_SIZE.image.genPicker

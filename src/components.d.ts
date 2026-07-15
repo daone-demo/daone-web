@@ -61,6 +61,7 @@ declare module 'vue' {
     ImageNode: typeof import('./components/Canvas/nodes/ImageNode.vue')['default']
     ImageStylePanel: typeof import('./components/Canvas/ImageStylePanel.vue')['default']
     Login: typeof import('./components/Login/index.vue')['default']
+    Model3DNode: typeof import('./components/Canvas/nodes/Model3DNode.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     TextFormatToolbar: typeof import('./components/Canvas/TextFormatToolbar.vue')['default']

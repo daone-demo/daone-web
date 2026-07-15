@@ -224,6 +224,44 @@ export function spawnGenerationResultNode(
   return node
 }
 
+/** 在源节点右侧生成「图转 3D」加载中节点，并连线 */
+export function spawnModel3DResultNode(
+  graph: Graph,
+  sourceNode: Node,
+  options: {
+    title: string
+    fileName?: string
+  },
+) {
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  const bbox = sourceNode.getBBox()
+  const outgoingCount = graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceNode.id).length
+  const overrides: Partial<CanvasNodeData> = {
+    kind: 'model3d',
+    mode: 'editor',
+    imageGenState: 'loading',
+    imageGenProgress: 0,
+    title: options.title,
+    fileName: options.fileName || `${options.title}.glb`,
+    previewUrl: '',
+    mediaWidth: 320,
+    mediaHeight: 360,
+    sourceNodeId: sourceNode.id,
+    sourcePreviewUrl: sourceData.previewUrl ?? '',
+    sourceFileName: sourceData.fileName ?? '',
+    sourceAssetId: sourceData.assetId,
+  }
+  const size = getNodeSize('model3d', 'editor', overrides)
+  const point = {
+    x: bbox.x + bbox.width + GEN_GAP + outgoingCount * (size.width + GEN_GAP) + size.width / 2,
+    y: bbox.y + bbox.height / 2,
+  }
+
+  const node = addCanvasNode(graph, 'model3d', point, overrides)
+  connectGenEdge(graph, sourceNode.id, node.id)
+  return node
+}
+
 export function findOutgoingLoadingGenerationNode(graph: Graph, sourceId: string) {
   for (const edge of graph.getEdges()) {
     if (edge.getSourceCellId() !== sourceId) continue

@@ -26,6 +26,7 @@ const KIND_LABELS: Record<NodeKind, string> = {
   image: '图片',
   video: '视频',
   audio: '音频',
+  model3d: '3D',
 }
 
 export function extractGroupSubgraph(graph: Graph, nodeIds: string[]): GroupSkillSubgraph | null {
@@ -77,7 +78,13 @@ export function buildElementGroupStructure(workflow: GroupSkillSubgraph) {
 }
 
 function parseNodeKind(value: unknown): NodeKind {
-  if (value === 'text' || value === 'image' || value === 'video' || value === 'audio') {
+  if (
+    value === 'text' ||
+    value === 'image' ||
+    value === 'video' ||
+    value === 'audio' ||
+    value === 'model3d'
+  ) {
     return value
   }
   return 'text'

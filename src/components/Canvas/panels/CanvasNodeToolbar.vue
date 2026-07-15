@@ -31,39 +31,7 @@
           </button>
         </template>
 
-        <!-- 更多：展示第 7 个起的剩余 actions -->
-        <template v-else-if="showImageToolbarMore">
-          <button
-            type="button"
-            class="canvas__node-toolbar-btn canvas__node-toolbar-btn--icon"
-            title="返回"
-            @click="emit('close-image-toolbar-more')"
-          >
-            <span class="canvas__node-toolbar-icon" data-icon="back" aria-hidden="true" />
-          </button>
-          <span class="canvas__node-toolbar-divider" aria-hidden="true" />
-          <div class="canvas__node-toolbar-group">
-            <CanvasToolbarActionItem
-              v-for="item in overflowActions"
-              :key="item.key"
-              :item="item"
-              :show-image-hd-menu="showImageHdMenu"
-              :show-image-crop="showImageCrop"
-              @action="emitImageAction"
-            />
-          </div>
-          <span class="canvas__node-toolbar-divider" aria-hidden="true" />
-          <button
-            type="button"
-            class="canvas__node-toolbar-btn canvas__node-toolbar-btn--icon"
-            title="下载"
-            @click="emitImageAction('download')"
-          >
-            <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" />
-          </button>
-        </template>
-
-        <!-- 主工具栏：对话 + 前 6 个 actions +（超限时）更多 + 下载 -->
+        <!-- 主工具栏：对话 + addToDialog + 前 6 个 + 更多(下拉剩余全部) + 下载 -->
         <template v-else>
           <div class="canvas__node-toolbar-group">
             <button
@@ -78,32 +46,51 @@
           </div>
           <span class="canvas__node-toolbar-divider" aria-hidden="true" />
           <div class="canvas__node-toolbar-group">
-            <!-- 固定：加入对话，始终在 actions 最前 -->
             <CanvasToolbarActionItem
               :item="addToDialogAction"
               @action="emitImageAction"
             />
             <CanvasToolbarActionItem
-              v-for="item in primaryActions"
-              :key="item.key"
+              v-for="(item, index) in primaryActions"
+              :key="`primary-${item.key}-${index}`"
               :item="item"
               :show-image-hd-menu="showImageHdMenu"
               :show-image-crop="showImageCrop"
               @action="emitImageAction"
             />
-            <button
-              v-if="overflowActions.length"
-              type="button"
-              class="canvas__node-toolbar-btn"
-              @click="emitImageAction(IMAGE_NODE_TOOLBAR.more.key)"
-            >
-              <span
-                class="canvas__node-toolbar-icon"
-                :data-icon="IMAGE_NODE_TOOLBAR.more.icon"
-                aria-hidden="true"
-              />
-              {{ IMAGE_NODE_TOOLBAR.more.label }}
-            </button>
+            <div v-if="overflowActions.length" class="canvas__node-toolbar-more">
+              <button
+                type="button"
+                class="canvas__node-toolbar-btn"
+                :class="{ 'canvas__node-toolbar-btn--active': showImageToolbarMore }"
+                @mousedown.stop
+                @click.stop="emitImageAction(IMAGE_NODE_TOOLBAR.more.key)"
+              >
+                <span
+                  class="canvas__node-toolbar-icon"
+                  :data-icon="IMAGE_NODE_TOOLBAR.more.icon"
+                  aria-hidden="true"
+                />
+                {{ IMAGE_NODE_TOOLBAR.more.label }}
+                <span class="canvas__node-toolbar-more-count">{{ overflowActions.length }}</span>
+              </button>
+              <div
+                v-if="showImageToolbarMore"
+                class="canvas__node-toolbar-more-panel"
+                @mousedown.stop
+                @click.stop
+                @pointerdown.stop
+              >
+                <CanvasToolbarActionItem
+                  v-for="(item, index) in overflowActions"
+                  :key="`overflow-${item.key}-${index}`"
+                  :item="item"
+                  :show-image-hd-menu="showImageHdMenu"
+                  :show-image-crop="showImageCrop"
+                  @action="onOverflowAction"
+                />
+              </div>
+            </div>
           </div>
           <span class="canvas__node-toolbar-divider" aria-hidden="true" />
           <button
@@ -139,11 +126,7 @@
               :class="{ 'canvas__node-toolbar-btn--active': showVideoHdPanel }"
               @click="emit('toggle-video-hd-panel')"
             >
-              <span
-                class="canvas__node-toolbar-icon"
-                data-icon="video-hd"
-                aria-hidden="true"
-              />
+              <span class="canvas__node-toolbar-icon" data-icon="video-hd" aria-hidden="true" />
               {{ item.label }}
             </button>
             <button
@@ -153,11 +136,7 @@
               :class="{ 'canvas__node-toolbar-btn--active': showVideoFramesPanel }"
               @click="emit('toggle-video-frames-panel')"
             >
-              <span
-                class="canvas__node-toolbar-icon"
-                data-icon="frames"
-                aria-hidden="true"
-              />
+              <span class="canvas__node-toolbar-icon" data-icon="frames" aria-hidden="true" />
               {{ item.label }}
             </button>
             <div v-else-if="item.key === 'addToDialog'" class="canvas__node-toolbar-hd">
@@ -233,7 +212,6 @@ const emit = defineEmits<{
   'add-video-to-dialog': []
 }>()
 
-/** 接口能力优先；未返回时用静态兜底（已排除 addToDialog 等固定项） */
 const allActions = computed<ImageCapabilityToolbarAction[]>(() => {
   const fromApi = buildImageToolbarActionsFromCapabilities(props.imageCapabilities)
   if (fromApi.length) return fromApi
@@ -253,5 +231,10 @@ function emitImageAction(key: string, option?: string, label?: string) {
   if (option) payload.option = option
   if (label) payload.label = label
   emit('image-toolbar-action', payload)
+}
+
+function onOverflowAction(key: string, option?: string, label?: string) {
+  emit('close-image-toolbar-more')
+  emitImageAction(key, option, label)
 }
 </script>

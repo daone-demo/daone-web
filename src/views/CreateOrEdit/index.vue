@@ -44,7 +44,10 @@ import type { ChatSendPayload } from './chatTypes';
 import { useRoute } from 'vue-router';
 import api, { type ProjectCanvasResponse } from '@/services/api';
 import { useModalStore } from '@stores/useModal'
-import type { ImageCapability } from '@/components/Canvas/constants'
+import {
+  normalizeImageCapabilities,
+  type ImageCapability,
+} from '@/components/Canvas/constants'
 
 const ImageCapabilities = ref<ImageCapability[]>([])
 const VideoCapabilities = ref<any[]>([])
@@ -215,20 +218,21 @@ const onLoadAiCapabilities = async (key: string) => {
     nodeType: key,
     scene: 'all'
   }
-  const res:any = await api.queryAiCapabilities(params);
+  const res: any = await api.queryAiCapabilities(params)
+  const list = normalizeImageCapabilities(res)
   switch (key) {
     case 'TEXT':
-      TextCapabilities.value = res;
-      break;
+      TextCapabilities.value = list
+      break
     case 'IMAGE':
-      ImageCapabilities.value = res;
-      break;
+      ImageCapabilities.value = list
+      break
     case 'VIDEO':
-      VideoCapabilities.value = res;
-      break;
+      VideoCapabilities.value = list
+      break
     default:
-      TextCapabilities.value = res;
-      break;
+      TextCapabilities.value = list
+      break
   }
 }
 

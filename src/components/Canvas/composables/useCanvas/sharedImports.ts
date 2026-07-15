@@ -27,6 +27,7 @@ export {
   connectGenEdge,
   spawnCroppedImageNode,
   spawnGenerationResultNode,
+  spawnModel3DResultNode,
   findOutgoingLoadingGenerationNode,
 } from '../../imageGen'
 export {

@@ -1,4 +1,4 @@
-export type NodeKind = 'text' | 'image' | 'video' | 'audio'
+export type NodeKind = 'text' | 'image' | 'video' | 'audio' | 'model3d'
 
 export type NodeMode = 'picker' | 'editor'
 
@@ -484,40 +484,63 @@ export function resolveCapabilityToolbarIcon(icon?: string): string | undefined 
   return CAPABILITY_ICON_MAP[icon] ?? icon
 }
 
+/** 不进图片节点工具栏的能力（纯文生图入口，无选中源图） */
+const IMAGE_TOOLBAR_EXCLUDED_CODES = new Set(['IMAGE_GENERAL_V1'])
+
+/** 兼容接口直接返回数组，或包在 records/list/data 里 */
+export function normalizeImageCapabilities(
+  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+): ImageCapability[] {
+  if (Array.isArray(capabilities)) return capabilities
+  if (!capabilities || typeof capabilities !== 'object') return []
+  const obj = capabilities as Record<string, unknown>
+  if (Array.isArray(obj.records)) return obj.records as ImageCapability[]
+  if (Array.isArray(obj.list)) return obj.list as ImageCapability[]
+  if (Array.isArray(obj.data)) return obj.data as ImageCapability[]
+  if (Array.isArray(obj.items)) return obj.items as ImageCapability[]
+  return []
+}
+
 /**
  * 从 imageCapabilities 生成图片节点工具栏 actions。
- * 仅展示 toolbar.visible !== false、已实现、且 group 为 edit（或未标 group）的能力。
+ * 已实现且未显式隐藏的能力都会进入；无 toolbar 时按 button 兜底。
+ * 仅排除 IMAGE_GENERAL_V1（通用生图入口）。
  */
 export function buildImageToolbarActionsFromCapabilities(
-  capabilities: ImageCapability[] | null | undefined,
+  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
 ): ImageCapabilityToolbarAction[] {
-  if (!Array.isArray(capabilities) || !capabilities.length) return []
+  const list = normalizeImageCapabilities(capabilities)
+  if (!list.length) return []
 
-  return capabilities
+  const mapped = list
     .filter((item) => {
       if (!item?.code || !item?.name) return false
       if (item.implemented === false) return false
-      const toolbar = item.toolbar
-      if (!toolbar) return false
-      if (toolbar.visible === false) return false
-      // create 组用于生图入口，不进选中图片的编辑工具栏
-      if (toolbar.group === 'create') return false
+      if (IMAGE_TOOLBAR_EXCLUDED_CODES.has(item.code)) return false
+      if (item.toolbar?.visible === false) return false
       return true
     })
     .map((item) => {
-      const toolbar = item.toolbar!
-      const type = toolbar.type === 'dropdown' ? 'dropdown' : 'button'
+      const toolbar = item.toolbar
+      const type = toolbar?.type === 'dropdown' ? 'dropdown' : 'button'
       return {
         key: item.code,
         label: item.name,
         icon: resolveCapabilityToolbarIcon(item.icon),
         type,
-        modes: Array.isArray(toolbar.modes) ? toolbar.modes : [],
-        order: typeof toolbar.order === 'number' ? toolbar.order : 999,
+        modes: Array.isArray(toolbar?.modes) ? toolbar!.modes! : [],
+        order: typeof toolbar?.order === 'number' ? toolbar.order : 999,
         capability: item,
       } satisfies ImageCapabilityToolbarAction
     })
     .sort((a, b) => a.order - b.order || a.key.localeCompare(b.key))
+
+  const seen = new Set<string>()
+  return mapped.filter((item) => {
+    if (seen.has(item.key)) return false
+    seen.add(item.key)
+    return true
+  })
 }
 
 /** 图片工具栏主栏最多展示的 action 数，超出部分进「更多」 */
@@ -1143,6 +1166,7 @@ export const NODE_SIZE = {
     media: { ...NODE_CARD },
   },
   audio: { picker: { ...NODE_CARD }, editor: { width: 320, height: 220 } },
+  model3d: { editor: { width: 320, height: 360 } },
 }
 
 export const KIND_LABEL: Record<NodeKind, string> = {
@@ -1150,6 +1174,7 @@ export const KIND_LABEL: Record<NodeKind, string> = {
   image: '图片节点',
   video: '视频节点',
   audio: '音频节点',
+  model3d: '3D 模型',
 }
 
 export function formatDimensions(width: number, height: number) {
