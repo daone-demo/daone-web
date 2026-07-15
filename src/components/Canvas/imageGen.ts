@@ -262,13 +262,49 @@ export function spawnModel3DResultNode(
   return node
 }
 
+/** 在源节点右侧生成「反推提示词」加载中文本节点，并连线 */
+export function spawnTextPromptResultNode(
+  graph: Graph,
+  sourceNode: Node,
+  options: {
+    title: string
+  },
+) {
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  const bbox = sourceNode.getBBox()
+  const outgoingCount = graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceNode.id).length
+  const overrides: Partial<CanvasNodeData> = {
+    kind: 'text',
+    mode: 'editor',
+    textGenState: 'loading',
+    textGenProgress: 0,
+    textPickerTask: '',
+    content: '',
+    title: options.title,
+    linkedImageNodeId: sourceNode.id,
+    sourceNodeId: sourceNode.id,
+    sourcePreviewUrl: sourceData.previewUrl ?? '',
+    sourceFileName: sourceData.fileName ?? '',
+    sourceAssetId: sourceData.assetId,
+  }
+  const size = getNodeSize('text', 'editor', overrides)
+  const point = {
+    x: bbox.x + bbox.width + GEN_GAP + outgoingCount * (size.width + GEN_GAP) + size.width / 2,
+    y: bbox.y + bbox.height / 2,
+  }
+
+  const node = addCanvasNode(graph, 'text', point, overrides)
+  connectGenEdge(graph, sourceNode.id, node.id)
+  return node
+}
+
 export function findOutgoingLoadingGenerationNode(graph: Graph, sourceId: string) {
   for (const edge of graph.getEdges()) {
     if (edge.getSourceCellId() !== sourceId) continue
     const target = graph.getCellById(edge.getTargetCellId()!)
     if (!target?.isNode()) continue
     const data = target.getData() as CanvasNodeData
-    if (data.imageGenState === 'loading') {
+    if (data.imageGenState === 'loading' || data.textGenState === 'loading') {
       return target as Node
     }
   }

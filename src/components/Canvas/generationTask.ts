@@ -7,6 +7,7 @@ export type GenerationTaskResult = {
   assetId?: string
   type?: string
   previewUrl?: string
+  content?: string
   width?: number | null
   height?: number | null
   fileName?: string
@@ -43,6 +44,58 @@ export function pickModelGenerationResult(task: GenerationTaskDetail): Generatio
   if (byExt) return byExt
 
   return results[0] ?? null
+}
+
+/** 优先取 type=TEXT 且带 content 的结果（如图片反推提示词） */
+export function pickTextGenerationResult(task: GenerationTaskDetail): GenerationTaskResult | null {
+  const results = task.results ?? []
+  if (!results.length) return null
+
+  const byType = results.find(
+    (item) => String(item.type || '').toUpperCase() === 'TEXT' && String(item.content || '').trim(),
+  )
+  if (byType) return byType
+
+  const withContent = results.find((item) => String(item.content || '').trim())
+  return withContent ?? null
+}
+
+export function updateTextGenerationNodeProgress(node: Node, progress: number) {
+  const data = { ...(node.getData() as CanvasNodeData) }
+  if (data.textGenState !== 'loading') return
+  data.textGenProgress = Math.max(0, Math.min(100, Math.round(progress)))
+  node.setData(data)
+}
+
+export function applyTextGenerationResultToNode(
+  node: Node,
+  content: string,
+  options: { title?: string; toHtml?: (text: string) => string } = {},
+) {
+  const text = content.trim()
+  if (!text) return false
+
+  const data = { ...(node.getData() as CanvasNodeData) }
+  data.kind = 'text'
+  data.mode = 'editor'
+  data.textGenState = 'done'
+  data.textGenProgress = 100
+  data.textPickerTask = ''
+  data.title = options.title || data.title || '反推提示词'
+  data.content = options.toHtml ? options.toHtml(text) : text
+  node.setData(data)
+  syncNodeShapeFromData(node)
+  const size = getNodeSize(data.kind, data.mode, data)
+  node.resize(size.width, size.height)
+  return true
+}
+
+export function markTextGenerationNodeFailed(node: Node, errorMessage?: string) {
+  const data = { ...(node.getData() as CanvasNodeData) }
+  data.textGenState = 'idle'
+  data.textGenProgress = 0
+  if (errorMessage) data.title = '生成失败'
+  node.setData(data)
 }
 
 export function applyModelGenerationResultToNode(

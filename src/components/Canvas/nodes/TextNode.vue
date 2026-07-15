@@ -101,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import type { Node } from '@antv/x6'
 import {
   TEXT_EDITOR_PLACEHOLDER,
@@ -221,6 +221,18 @@ function syncEditorHtml() {
   if (el.innerHTML !== html) {
     el.innerHTML = html
   }
+}
+
+/** loading → editor 时 contenteditable 尚未挂载，需等 DOM 更新后再写入 */
+function syncEditorHtmlWhenReady() {
+  if (data.textGenState === 'loading') return
+  nextTick(() => {
+    syncEditorHtml()
+    // vue-shape / v-if 切换偶发再晚一帧才出 editor
+    if (!editorRef.value && data.content) {
+      requestAnimationFrame(() => syncEditorHtml())
+    }
+  })
 }
 
 function onEditorInput() {
@@ -514,7 +526,7 @@ onMounted(() => {
   const node = getNode()
   nodeIdForCleanup = node.id
   Object.assign(data, node.getData() as CanvasNodeData)
-  syncEditorHtml()
+  syncEditorHtmlWhenReady()
 
   editorApi = {
     execFormat,
@@ -528,11 +540,18 @@ onMounted(() => {
 
   const onDataChange = ({ current }: { current: unknown }) => {
     Object.assign(data, current as CanvasNodeData)
-    syncEditorHtml()
+    syncEditorHtmlWhenReady()
   }
   node.on('change:data', onDataChange)
   detachDataListener = () => node.off('change:data', onDataChange)
 })
+
+watch(
+  () => [data.textGenState, data.content] as const,
+  () => {
+    syncEditorHtmlWhenReady()
+  },
+)
 
 onBeforeUnmount(() => {
   detachDataListener?.()

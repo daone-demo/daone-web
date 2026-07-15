@@ -28,6 +28,7 @@ export {
   spawnCroppedImageNode,
   spawnGenerationResultNode,
   spawnModel3DResultNode,
+  spawnTextPromptResultNode,
   findOutgoingLoadingGenerationNode,
 } from '../../imageGen'
 export {
