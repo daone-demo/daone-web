@@ -856,22 +856,6 @@ async function runImageGenerationTask(
   }
 }
 
-function handleImageHdAction(event: ImageToolbarClickEvent) {
-  if (!event.assetId) {
-    message.warning('图片素材 ID 不存在，请等待上传完成')
-    return
-  }
-  void event
-}
-
-function handleImageInpaintAction(event: ImageToolbarClickEvent) {
-  if (!event.assetId) {
-    message.warning('图片素材 ID 不存在，请等待上传完成')
-    return
-  }
-  void event
-}
-
 function handleImageDownloadAction(event: ImageToolbarClickEvent) {
   const data = getSelectedNodeData()
   const url = data?.previewUrl

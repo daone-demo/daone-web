@@ -592,18 +592,6 @@ function toggleHistoryMenu() {
   }
 }
 
-function formatRelativeTime(timestamp: number) {
-  const diff = Date.now() - timestamp
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}小时`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}天`
-  return new Date(timestamp).toLocaleDateString('zh-CN')
-}
-
 function createAttachment(file: File, assetId?: string): ChatAttachment {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
