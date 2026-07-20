@@ -516,11 +516,13 @@ export function buildImageToolbarActionsFromCapabilities(
     .filter((item) => {
       if (!item?.code || !item?.name) return false
       if (item.implemented === false) return false
+      // 仅排除 IMAGE_GENERAL_V1（通用生图入口）；其余已实现能力全部进入工具栏。
+      // 注意：不再按 toolbar.visible 过滤——后端会给部分能力返回 visible:false，
+      // 但节点工具栏需要把所有已实现能力都暴露出来（主栏 6 个 + 更多）。
       if (IMAGE_TOOLBAR_EXCLUDED_CODES.has(item.code)) return false
-      if (item.toolbar?.visible === false) return false
       return true
     })
-    .map((item) => {
+    .map((item, index) => {
       const toolbar = item.toolbar
       const type = toolbar?.type === 'dropdown' ? 'dropdown' : 'button'
       return {
@@ -531,9 +533,13 @@ export function buildImageToolbarActionsFromCapabilities(
         modes: Array.isArray(toolbar?.modes) ? toolbar!.modes! : [],
         order: typeof toolbar?.order === 'number' ? toolbar.order : 999,
         capability: item,
-      } satisfies ImageCapabilityToolbarAction
+        _index: index,
+      } satisfies ImageCapabilityToolbarAction & { _index: number }
     })
-    .sort((a, b) => a.order - b.order || a.key.localeCompare(b.key))
+    // 有 toolbar.order 的优先按 order；其余保持接口返回的原始顺序（数组下标），
+    // 不再按 code 字母序，避免展示顺序与后端返回不一致。
+    .sort((a, b) => a.order - b.order || a._index - b._index)
+    .map(({ _index, ...action }) => action)
 
   const seen = new Set<string>()
   return mapped.filter((item) => {
