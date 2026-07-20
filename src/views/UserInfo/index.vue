@@ -118,7 +118,7 @@
         </div>
 
         <div v-else-if="activeTab === 'points'" class="user-info__points-log">
-          <div class="user-info__points-toolbar">
+          <!-- <div class="user-info__points-toolbar">
             <h3 class="user-info__points-title">明细</h3>
             <label class="user-info__points-filter">
               <select v-model="pointsFilter" class="user-info__points-select">
@@ -132,7 +132,7 @@
               </select>
               <span class="user-info__points-select-arrow" aria-hidden="true" />
             </label>
-          </div>
+          </div> -->
 
           <div class="user-info__points-table-wrap">
             <table class="user-info__points-table">
@@ -141,7 +141,7 @@
                   <th scope="col" />
                   <th scope="col" />
                   <th scope="col">使用人</th>
-                  <th scope="col">任务</th>
+                  <!-- <th scope="col">任务</th> -->
                   <th scope="col">积分变化</th>
                   <th scope="col">日期</th>
                 </tr>
@@ -151,9 +151,9 @@
                   <td>{{ POINTS_LOG_REASON_LABEL[item.reason] }}</td>
                   <td>{{ POINTS_LOG_ACTION_LABEL[item.action] }}</td>
                   <td>{{ item.username }}</td>
-                  <td>
-                    <button type="button" class="user-info__points-detail-link">详情</button>
-                  </td>
+                  <!-- <td>
+                    <button type="button" class="user-info__points-detail-link" @click="openPointsLogDetail(item.id)">详情</button>
+                  </td> -->
                   <td>
                     <strong class="user-info__points-change">
                       {{ item.action === 'increase' ? '+' : '-' }}{{ item.change }}
@@ -222,6 +222,7 @@
                       type="button"
                       class="user-info__bill-action-link"
                       @click="openInvoiceModal(bill.orderNo)"
+                      v-if="bill.status === 'PAID'"
                     >
                       开票
                     </button>
@@ -464,7 +465,6 @@ import { computed, ref, onMounted } from 'vue'
 import {
   BILL_STATUS_LABEL,
   POINTS_LOG_ACTION_LABEL,
-  POINTS_LOG_FILTERS,
   POINTS_LOG_REASON_LABEL,
   USER_INFO_TABS,
   USER_MEMBERSHIP_NOTES,
@@ -744,6 +744,13 @@ const onChangePointsPage = (key: number) => {
   page.value = key;
   onLoadPoints();
 }
+
+// const openPointsLogDetail = (id: string) => {
+//   api.getPointsLedgerDetail(id).then(res=>{
+//     console.log('res', res);
+//   });
+//   console.log('openPointsLogDetail', id);
+// }
 
 onMounted(()=>{
   onLoadUserInfo();

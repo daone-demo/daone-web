@@ -452,6 +452,8 @@ const payUrl = ref('');
 const payExpireAt = ref('');
 
 let trialCountdownTimer: ReturnType<typeof setInterval> | null = null
+let orderPollingTimer: ReturnType<typeof setInterval> | null = null
+const ORDER_POLLING_INTERVAL = 3000
 
 const trialPhoneValid = computed(() => /^1\d{10}$/.test(trialPhone.value.trim()))
 
@@ -553,6 +555,8 @@ const confirmPreview = computed(() => {
   }
 })
 
+
+
 const confirmPayLabel = computed(() => {
   if (confirmLoading.value) return '处理中...'
   if (selectedPayMethod.value === 'BANK_TRANSFER') {
@@ -563,6 +567,7 @@ const confirmPayLabel = computed(() => {
 
 function closeConfirm() {
   if (confirmLoading.value) return
+  stopOrderPolling()
   confirmVisible.value = false
   selectedPlan.value = null
   selectedPayMethod.value = 'WECHAT'
@@ -616,13 +621,6 @@ async function confirmPay() {
 
   confirmLoading.value = true
   try {
-    // api.createOrder({
-    //   orderType: 'PLAN',
-    //   productCode,
-    // }).then((res:any)=>{
-    //   console.log('confirmPay', res)
-    //   orderNo.value = res.orderNo;
-    // })
     const order = await api.createOrder<{
       orderNo: string
       amountFen: number
@@ -633,29 +631,44 @@ async function confirmPay() {
       },
       currentIdempotencyKey.value
     )
-    // console.log('order', order);
     orderNo.value = order.orderNo;
-
-    // if (selectedPayMethod.value === 'BANK_TRANSFER') {
-    //   message.success('订单已提交，客服将联系您办理对公转账')
-    //   emit('activate', productCode, billing.value)
-    //   closeConfirm()
-    //   close()
-    //   return
-    // }
-
-    // await api.createPayment(order.orderNo, { payType: selectedPayMethod.value })
-    // await api.mockOrderPaid(order.orderNo)
-
-    // message.success('支付成功')
-    // emit('activate', productCode, billing.value)
-    // closeConfirm()
-    // close()
+    startOrderPolling();
   } catch (error) {
     console.error('confirmPay', error)
     message.error('支付失败，请稍后重试')
   } finally {
     confirmLoading.value = false
+  }
+}
+
+const queryOrder = () => {
+  if (!orderNo.value) return
+  api.getOrder(orderNo.value).then((res:any)=>{
+    console.log('queryOrder', res)
+    const status = res?.status
+    if (status === 'PAID') {
+      stopOrderPolling()
+      message.success('支付成功')
+      loadUserProfile()
+      close()
+    } else if (status === 'REFUNDED') {
+      stopOrderPolling()
+    }
+  }).catch((error) => {
+    console.error('queryOrder', error)
+  });
+}
+
+function startOrderPolling() {
+  stopOrderPolling()
+  if (!orderNo.value) return
+  orderPollingTimer = setInterval(queryOrder, ORDER_POLLING_INTERVAL)
+}
+
+function stopOrderPolling() {
+  if (orderPollingTimer) {
+    clearInterval(orderPollingTimer)
+    orderPollingTimer = null
   }
 }
 
@@ -720,6 +733,7 @@ watch(open, (visible) => {
   if (visible) {
     onloadPlans()
   } else {
+    stopOrderPolling()
     orderNo.value = '';
     selectedPayMethod.value = 'WECHAT';
     closeConfirm()
@@ -773,6 +787,7 @@ watch([orderNo, selectedPayMethod], ([no, method]) => {
 onBeforeUnmount(() => {
   lockBodyScroll(false)
   if (trialCountdownTimer) clearInterval(trialCountdownTimer)
+  stopOrderPolling()
 })
 </script>
 

@@ -94,7 +94,7 @@ export type BillItem = {
   id: string
   orderNo: string
   type: string
-  status: 'PAID' | 'PENDING' | 'REFUNDED' | 'PAYING'
+  status: 'PAID' | 'PENDING' | 'REFUNDED' | 'PAYING' | 'CANCELLED'
   amount: number
   date: string
 }
@@ -104,6 +104,7 @@ export const BILL_STATUS_LABEL: Record<BillItem['status'], string> = {
   PENDING: '待支付',
   PAYING: '支付中',
   REFUNDED: '已退款',
+  CANCELLED: '已取消',
 }
 
 export const USER_BILLS: BillItem[] = [
