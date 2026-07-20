@@ -221,6 +221,14 @@
                     <button
                       type="button"
                       class="user-info__bill-action-link"
+                      @click="openPayModal(bill.orderNo, bill.payType)"
+                      v-if="bill.status === 'PAYING'"
+                    >
+                      支付
+                    </button>
+                    <button
+                      type="button"
+                      class="user-info__bill-action-link"
                       @click="openInvoiceModal(bill.orderNo)"
                       v-if="bill.status === 'PAID'"
                     >
@@ -456,12 +464,49 @@
         </form>
       </div>
     </div>
+    <Teleport to="body">
+      <Transition name="combo-modal-fade">
+        <div
+          class="combo-confirm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="combo-confirm-title"
+          v-if="showPayModal"
+        >
+          <div class="combo-confirm__dialog" @mousedown.stop>
+            <button
+              type="button"
+              class="combo-confirm__close"
+              aria-label="关闭"
+              @click="showPayModal = false"
+            >
+              ×
+            </button>
+            <section class="combo-confirm__pay">
+              <p class="combo-confirm__pay-title">支付方式</p>
+              <div class="combo-confirm__pay-options" role="radiogroup" aria-label="支付方式">
+                {{ payType === 'WECHAT' ? '微信支付' : '支付宝支付' }}
+              </div>
+              <a-flex align="center" justify="center">
+                <img
+                  v-if="payUrl"
+                  :src="payUrl"
+                  alt="支付二维码"
+                  class="combo-confirm__pay-qrcode"
+                />
+              </a-flex>
+            </section>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useModalStore } from '@stores/useModal';
 import { computed, ref, onMounted } from 'vue'
+import QRCode from 'qrcode';
 import {
   BILL_STATUS_LABEL,
   POINTS_LOG_ACTION_LABEL,
@@ -523,6 +568,14 @@ const page = ref(1);
 const orderList = ref<any[]>([]);
 const orderTotal = ref(0);
 const orderPage = ref(1);
+const orderNo = ref('');
+const payUrl = ref('');
+const showPayModal = ref(false);
+const payType = ref('');
+
+let trialCountdownTimer: ReturnType<typeof setInterval> | null = null
+let orderPollingTimer: ReturnType<typeof setInterval> | null = null
+const ORDER_POLLING_INTERVAL = 3000
 
 const filteredPointsLog = computed(() => {
   if (pointsFilter.value === 'all') {
@@ -566,6 +619,75 @@ function openInvoiceModal(orderNo: string) {
   invoiceOrderNo.value = orderNo
   resetInvoiceForm()
   showInvoiceModal.value = true
+}
+
+async function openPayModal(key: string, payTypes: string) {
+  orderNo.value = key;
+  showPayModal.value = true;
+  payType.value = payTypes;
+  try {
+    const res:any = await api.createPayment<PaymentResponse>(orderNo.value, {
+      payType: payTypes
+    })
+    if (!res) return
+    if (payTypes === 'WECHAT') {
+      payUrl.value = await QRCode.toDataURL(res.redirectUrl, {
+        width: 260,
+        margin: 2,
+      })
+    } else {
+      // payUrl.value = await QRCode.toDataURL(res.qrCodeContent, {
+      //   width: 260,
+      //   margin: 2,
+      // }
+      payUrl.value = res.qrCodeContent
+    }
+    startOrderPolling();
+  } catch (error) {
+    console.error('onLoadPayUrl', error)
+    payUrl.value = ''
+  }
+}
+
+
+
+const queryOrder = () => {
+  if (!orderNo.value) return
+  api.getOrder(orderNo.value).then((res:any)=>{
+    console.log('queryOrder', res)
+    const status = res?.status
+    if (status === 'PAID') {
+      stopOrderPolling()
+      message.success('支付成功')
+      onLoadOrderList();
+      close()
+    } else if (status === 'REFUNDED') {
+      stopOrderPolling()
+    }
+  }).catch((error) => {
+    console.error('queryOrder', error)
+  });
+}
+
+const close = () => {
+  showPayModal.value = false
+  orderNo.value = ''
+  payUrl.value = ''
+  payType.value = '';
+  stopOrderPolling()
+}
+
+function startOrderPolling() {
+  stopOrderPolling()
+  if (!orderNo.value) return
+  orderPollingTimer = setInterval(queryOrder, ORDER_POLLING_INTERVAL)
+}
+
+function stopOrderPolling() {
+  if (orderPollingTimer) {
+    clearInterval(orderPollingTimer)
+    orderPollingTimer = null
+  }
 }
 
 function closeInvoiceModal() {

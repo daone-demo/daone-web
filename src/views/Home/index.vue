@@ -162,7 +162,7 @@ function formatCount(value: number) {
 }
 
 function openNewProject() {
-  api.createProject({ title: `新项目-${Date.now()}` }).then((res: any) => {
+  api.createProject({ title: `未命名-${Date.now()}` }).then((res: any) => {
     router.push({ name: 'createProject', params: { id: res.id } })
   })
 }

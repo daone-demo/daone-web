@@ -145,7 +145,7 @@ const onLoadProjects = async () => {
 }
 
 const onNewProject = async () => {
-  const res = await api.createProject({ title: `新项目-${Date.now()}` });
+  const res = await api.createProject({ title: `未命名-${Date.now()}` });
   projectsList.value.push(res as CanvasProjectItem);
 }
 

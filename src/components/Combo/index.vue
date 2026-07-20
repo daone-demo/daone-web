@@ -28,9 +28,17 @@
               <p class="combo-modal__identity">
                 当前身份：<strong>普通用户</strong>
               </p>
-              <button type="button" class="combo-modal__service" @click="emit('contact-service')">
+              <a-popover placement="bottom">
+                <template #content>
+                  <img
+                    src="@assets/images/kefu.jpg"
+                    style="width: 160px; height: 160px;"
+                  />
+                </template>
+                <button type="button" class="combo-modal__service" @click="emit('contact-service')">
                 联系客服
               </button>
+              </a-popover>
             </div>
 
             <div class="combo-modal__header-center">
@@ -198,7 +206,7 @@
 
                 <label class="combo-modal__field">
                   <span class="combo-modal__label">
-                    <span class="combo-modal__required">*</span>称呼
+                    <span class="combo-modal__required">*</span>公司名称
                   </span>
                   <input
                     v-model="trialName"
@@ -211,7 +219,7 @@
 
                 <label class="combo-modal__field">
                   <span class="combo-modal__label">
-                    <span class="combo-modal__required">*</span>职位
+                    <span class="combo-modal__required">*</span>职位/称呼
                   </span>
                   <input
                     v-model="trialPosition"
@@ -237,7 +245,7 @@
             <p class="combo-modal__personal">
               个人版设计师使用请
               <button type="button" class="combo-modal__personal-link" @click="emit('view-personal')">
-                点击查看
+                敬请期待
               </button>
             </p>
           </footer>
