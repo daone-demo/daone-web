@@ -1,37 +1,45 @@
 <template>
   <div class="create-or-edit">
-    <Canvas
-      ref="canvasRef"
-      @focus-chat="focusChatPanel"
-      @add-to-chat="onAddToChat"
-      @add-asset-to-chat="onAddAssetToChat"
-      :projects-list="projectsList"
-      @new-project="onNewProject"
-      @rename-project="onRenameProject"
-      @delete-project="onDeleteProject"
-      :image-capabilities="ImageCapabilities"
-      :video-capabilities="VideoCapabilities"
-      :text-capabilities="TextCapabilities"
-    />
-    <ChatSidePanel
-      ref="chatPanelRef"
-      v-model:collapsed="chatPanelCollapsed"
-      :project-id="currentProjectId"
-      :history-sessions="historySessions"
-      :current-session-id="currentSessionId"
-      :session-name="sessionName"
-      @load-history-sessions="onLoadHistorySessions"
-      @set-current-session-id="onSetCurrentSessionId"
-      @send="onChatSend"
-      @new-chat="onNewChat"
-      @set-session-name="onSetSessionName"
-    />
-    <UpdateProjectName
-      v-model:open="modalStore.updateProjectNameVisible"
-      v-model:project-id="project_Id"
-      v-model:project-name="projectName"
-      @submit="onRefreshProjects"
-    />
+    <div v-if="pageLoading" class="create-or-edit__loading" role="status" aria-live="polite">
+      <span class="create-or-edit__loading-spinner" aria-hidden="true" />
+      <p class="create-or-edit__loading-text">项目加载中...</p>
+    </div>
+
+    <template v-else>
+      <Canvas
+        ref="canvasRef"
+        @focus-chat="focusChatPanel"
+        @add-to-chat="onAddToChat"
+        @add-asset-to-chat="onAddAssetToChat"
+        :projects-list="projectsList"
+        @new-project="onNewProject"
+        @rename-project="onRenameProject"
+        @delete-project="onDeleteProject"
+        :image-capabilities="ImageCapabilities"
+        :video-capabilities="VideoCapabilities"
+        :text-capabilities="TextCapabilities"
+      />
+      <ChatSidePanel
+        ref="chatPanelRef"
+        v-model:collapsed="chatPanelCollapsed"
+        :project-id="currentProjectId"
+        :history-sessions="historySessions"
+        :current-session-id="currentSessionId"
+        :session-name="sessionName"
+        @load-history-sessions="onLoadHistorySessions"
+        @set-current-session-id="onSetCurrentSessionId"
+        @send="onChatSend"
+        @new-chat="onNewChat"
+        @set-session-name="onSetSessionName"
+        @close-chat="onCloseChat"
+      />
+      <UpdateProjectName
+        v-model:open="modalStore.updateProjectNameVisible"
+        v-model:project-id="project_Id"
+        v-model:project-name="projectName"
+        @submit="onRefreshProjects"
+      />
+    </template>
   </div>
 </template>
 
@@ -85,6 +93,8 @@ const currentProjectId = computed(() => {
 })
 const canvasRef = ref<InstanceType<typeof Canvas> & CanvasExpose | null>(null)
 const chatPanelRef = ref<InstanceType<typeof ChatSidePanel> | null>(null)
+const pageLoading = ref(true)
+const pendingCanvasPayload = ref<ProjectCanvasResponse | null>(null)
 
 function focusChatPanel() {
   chatPanelCollapsed.value = false
@@ -130,13 +140,14 @@ const onLoadProjectCanvas = async (id?: string) => {
   const targetId = (id ?? route.params.id) as string
   if (!targetId?.trim()) return
 
-  try {
-    const res = await api.getProjectCanvas(targetId)
+  const res = await api.getProjectCanvas(targetId)
+  if (canvasRef.value) {
     await nextTick()
-    canvasRef.value?.loadProjectCanvas(res)
-  } catch (error) {
-    console.error('[CreateOrEdit] load project canvas failed', error)
+    canvasRef.value.loadProjectCanvas(res)
+    pendingCanvasPayload.value = null
+    return
   }
+  pendingCanvasPayload.value = res
 }
 
 const onLoadProjects = async () => {
@@ -159,6 +170,10 @@ const onRenameProject = async (projectId: string, name: string) => {
 const onDeleteProject = async (projectId: string) => {
   await api.deleteProject(projectId);
   onLoadProjects();
+}
+
+const onCloseChat = () => {
+  chatPanelCollapsed.value = true
 }
 
 /**
@@ -184,6 +199,11 @@ const onLoadChatModels = async () => {
 }
 
 const onLoadHistorySessions = async () => {
+  if (!currentProjectId.value) {
+    sessionName.value = '新建对话'
+    return
+  }
+
   const res = await api.getChatSessions({ projectId: currentProjectId.value, page: 1, pageSize: 100 });
   historySessions.value = res.records as unknown as any[];
 
@@ -193,7 +213,7 @@ const onLoadHistorySessions = async () => {
     // 仅在尚未选中会话时，默认切到第一条历史
     if (!currentSessionId.value) {
       currentSessionId.value = first.id;
-      onLoadChatSession(first.id);
+      await onLoadChatSession(first.id);
     }
   } else {
     sessionName.value = '新建对话'
@@ -236,26 +256,50 @@ const onLoadAiCapabilities = async (key: string) => {
   }
 }
 
+async function initializePage() {
+  pageLoading.value = true
+  pendingCanvasPayload.value = null
+
+  try {
+    const projectId = typeof route.params.id === 'string' ? route.params.id.trim() : ''
+    await Promise.all([
+      onLoadProjects(),
+      onLoadWorkflows(),
+      onLoadTools(),
+      onLoadChatModels(),
+      onLoadAiCapabilities('TEXT'),
+      onLoadAiCapabilities('IMAGE'),
+      onLoadAiCapabilities('VIDEO'),
+      onLoadHistorySessions(),
+      projectId ? onLoadProjectCanvas(projectId) : Promise.resolve(),
+    ])
+  } catch (error) {
+    console.error('[CreateOrEdit] page init failed', error)
+  } finally {
+    pageLoading.value = false
+    await nextTick()
+    if (pendingCanvasPayload.value && canvasRef.value) {
+      canvasRef.value.loadProjectCanvas(pendingCanvasPayload.value)
+      pendingCanvasPayload.value = null
+    }
+  }
+}
+
 watch(
   () => route.params.id,
-  (newId) => {
-    if (typeof newId === 'string' && newId.trim()) {
-      void onLoadProjectCanvas(newId)
+  (newId, oldId) => {
+    if (pageLoading.value) return
+    if (typeof newId === 'string' && newId.trim() && newId !== oldId) {
+      void onLoadProjectCanvas(newId).catch((error) => {
+        console.error('[CreateOrEdit] load project canvas failed', error)
+      })
     }
   },
-  { immediate: true },
 )
 
 onMounted(() => {
-  void onLoadHistorySessions();
-  void onLoadWorkflows();
-  void onLoadProjects();
-  void onLoadTools();
-  void onLoadChatModels();
-  void onLoadAiCapabilities('TEXT');
-  void onLoadAiCapabilities('IMAGE');
-  void onLoadAiCapabilities('VIDEO');
-});
+  void initializePage()
+})
 
 </script>
 
