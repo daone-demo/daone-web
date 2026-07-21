@@ -125,7 +125,7 @@
             @mousedown.stop
           >
             <button
-              v-for="model in IMAGE_DIALOGUE_MODEL_MENU"
+              v-for="model in modelMenu"
               :key="model.key"
               type="button"
               class="image-dialogue__model-item"
@@ -159,7 +159,7 @@
             @click="toggleGenSettings"
           >
             <span class="image-dialogue__pill-icon" data-icon="frame" aria-hidden="true" />
-            {{ IMAGE_DIALOGUE_QUALITY_LABEL }}
+            {{ qualityLabel }}
             <span class="image-dialogue__select-arrow" aria-hidden="true" />
           </button>
           <div
@@ -169,7 +169,9 @@
           >
             <ImageGenSettingsPopover
               v-model:aspect-ratio="genAspectRatio"
+              v-model:resolution="genResolution"
               v-model:image-count="genImageCount"
+              :image-capabilities="imageCapabilities"
               @close="showGenSettings = false"
             />
           </div>
@@ -198,7 +200,7 @@
             title="生成张数"
             @click="toggleCountMenu"
           >
-            {{ selectedCount }}张
+            {{ genImageCount }}张
             <span class="image-dialogue__select-arrow" aria-hidden="true" />
           </button>
           <div
@@ -207,11 +209,11 @@
             @mousedown.stop
           >
             <button
-              v-for="count in IMAGE_DIALOGUE_COUNT_OPTIONS"
+              v-for="count in countOptions"
               :key="count"
               type="button"
               class="image-dialogue__count-item"
-              :class="{ 'image-dialogue__count-item--active': count === selectedCount }"
+              :class="{ 'image-dialogue__count-item--active': count === genImageCount }"
               @click="selectCount(count)"
             >
               {{ count }}张
@@ -249,13 +251,15 @@ import { createPromptMentionApi, needsSpaceBeforeMention } from './promptMention
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
   IMAGE_DIALOGUE_PLACEHOLDER,
-  IMAGE_DIALOGUE_QUALITY_LABEL,
   IMAGE_DIALOGUE_CREDITS,
   IMAGE_DIALOGUE_MODEL_MENU,
-  IMAGE_DIALOGUE_COUNT_OPTIONS,
+  buildImageDialogueAspectRatiosFromCapabilities,
+  buildImageDialogueCountOptionsFromCapabilities,
+  buildImageDialogueModelsFromCapabilities,
+  buildImageDialogueResolutionsFromCapabilities,
+  findImageGeneralCapability,
+  type ImageCapability,
   type ImageDialogueModelItem,
-  type ImageGenAspectRatio,
-  type ImageGenCount,
   type ImageSourceRef,
   type ImageStyleCard,
 } from './constants'
@@ -264,6 +268,7 @@ const props = defineProps<{
   modelValue: string
   previewUrl?: string
   previews?: ImageSourceRef[]
+  imageCapabilities?: ImageCapability[]
 }>()
 
 const emit = defineEmits<{
@@ -303,16 +308,74 @@ const showStyleModal = ref(false)
 const showGenSettings = ref(false)
 const showModelMenu = ref(false)
 const showCountMenu = ref(false)
-const genAspectRatio = ref<ImageGenAspectRatio>('auto')
-const genImageCount = ref<ImageGenCount>(1)
-const selectedCount = ref<number>(IMAGE_DIALOGUE_COUNT_OPTIONS[0])
+const genAspectRatio = ref('auto')
+const genResolution = ref('2K')
+const genImageCount = ref(1)
 const selectedModelKey = ref(IMAGE_DIALOGUE_MODEL_MENU[0].key)
-const selectedWorkFlow = ref('');
+const selectedWorkFlow = ref('')
+
+const modelMenu = computed(() =>
+  buildImageDialogueModelsFromCapabilities(props.imageCapabilities),
+)
+const countOptions = computed(() =>
+  buildImageDialogueCountOptionsFromCapabilities(props.imageCapabilities),
+)
+const aspectRatioOptions = computed(() =>
+  buildImageDialogueAspectRatiosFromCapabilities(props.imageCapabilities),
+)
+const resolutionOptions = computed(() =>
+  buildImageDialogueResolutionsFromCapabilities(props.imageCapabilities),
+)
 
 const selectedModelName = computed(
   () =>
-    IMAGE_DIALOGUE_MODEL_MENU.find((model) => model.key === selectedModelKey.value)?.name ??
+    modelMenu.value.find((model) => model.key === selectedModelKey.value)?.name ??
+    modelMenu.value[0]?.name ??
     IMAGE_DIALOGUE_MODEL_MENU[0].name,
+)
+
+const qualityLabel = computed(() => {
+  const aspectLabel = genAspectRatio.value === 'auto' ? '自适应' : genAspectRatio.value
+  return `${aspectLabel} · 标准画质 · ${genResolution.value}`
+})
+
+function syncDialogueDefaultsFromCapabilities() {
+  const models = modelMenu.value
+  if (models.length && !models.some((model) => model.key === selectedModelKey.value)) {
+    selectedModelKey.value = models[0].key
+  }
+
+  const ratios = aspectRatioOptions.value
+  if (ratios.length && !ratios.some((ratio) => ratio.key === genAspectRatio.value)) {
+    genAspectRatio.value = ratios[0].key
+  }
+
+  const resolutions = resolutionOptions.value
+  if (resolutions.length && !resolutions.includes(genResolution.value)) {
+    genResolution.value = resolutions[0]
+  }
+
+  const counts = countOptions.value
+  if (counts.length && !counts.includes(genImageCount.value)) {
+    genImageCount.value = counts[0]
+  }
+
+  const capability = findImageGeneralCapability(props.imageCapabilities)
+  const countParam = capability?.parameters?.count
+  if (countParam && typeof countParam === 'object' && !Array.isArray(countParam)) {
+    const defaultCount = Number((countParam as { default?: number }).default)
+    if (Number.isFinite(defaultCount) && counts.includes(defaultCount)) {
+      genImageCount.value = defaultCount
+    }
+  }
+}
+
+watch(
+  () => props.imageCapabilities,
+  () => {
+    syncDialogueDefaultsFromCapabilities()
+  },
+  { immediate: true, deep: true },
 )
 
 function emitPrompt(text: string) {
@@ -474,7 +537,7 @@ function selectModel(model: ImageDialogueModelItem) {
 }
 
 function selectCount(count: number) {
-  selectedCount.value = count
+  genImageCount.value = count
   showCountMenu.value = false
 }
 

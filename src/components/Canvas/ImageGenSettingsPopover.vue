@@ -12,7 +12,7 @@
       <p class="image-gen-settings__title">{{ IMAGE_GEN_ASPECT_RATIO_LABEL }}</p>
       <div class="image-gen-settings__ratio-grid">
         <button
-          v-for="ratio in IMAGE_GEN_ASPECT_RATIOS"
+          v-for="ratio in aspectRatioOptions"
           :key="ratio.key"
           type="button"
           class="image-gen-settings__ratio"
@@ -35,25 +35,17 @@
     <div class="image-gen-settings__divider" aria-hidden="true" />
     <section class="image-gen-settings__section">
       <p class="image-gen-settings__title">{{ IMAGE_DESIGN_IPS_TITLE }}</p>
-      <div class="image-gen-settings__ratio-grid">
-        <!-- <button
-          v-for="ratio in IMAGE_DESIGN_IPS_MENU"
-          :key="ratio.key"
+      <div class="image-gen-settings__counts">
+        <button
+          v-for="item in resolutionOptions"
+          :key="item"
           type="button"
-          class="image-gen-settings__ratio"
-          :class="{ 'image-gen-settings__ratio--active': aspectRatio === ratio.key }"
-          @click="aspectRatio = ratio.key"
+          class="image-gen-settings__count"
+          :class="{ 'image-gen-settings__count--active': resolution === item }"
+          @click="resolution = item"
         >
-          <span
-            class="image-gen-settings__ratio-preview"
-            :style="{
-              width: `${ratio.preview.width}px`,
-              height: `${ratio.preview.height}px`,
-            }"
-            aria-hidden="true"
-          />
-          <span class="image-gen-settings__ratio-label">{{ ratio.label }}</span>
-        </button> -->
+          {{ item }}
+        </button>
       </div>
     </section>
 
@@ -63,7 +55,7 @@
       <p class="image-gen-settings__title">{{ IMAGE_GEN_COUNT_LABEL }}</p>
       <div class="image-gen-settings__counts">
         <button
-          v-for="count in IMAGE_GEN_COUNTS"
+          v-for="count in imageCountOptions"
           :key="count"
           type="button"
           class="image-gen-settings__count"
@@ -84,36 +76,72 @@ import {
   IMAGE_DESIGN_IPS_TITLE,
   IMAGE_GEN_ASPECT_RATIOS,
   IMAGE_GEN_COUNT_LABEL,
-  IMAGE_GEN_COUNTS,
-  type ImageGenAspectRatio,
-  type ImageGenCount,
+  buildImageDialogueAspectRatiosFromCapabilities,
+  buildImageDialogueResolutionsFromCapabilities,
+  buildImageDialogueCountOptionsFromCapabilities,
+  type ImageDialogueAspectRatioOption,
+  type ImageCapability,
 } from './constants'
 
 const props = withDefaults(
   defineProps<{
-    aspectRatio?: ImageGenAspectRatio
-    imageCount?: ImageGenCount
+    aspectRatio?: string
+    resolution?: string
+    imageCount?: number
+    imageCapabilities?: ImageCapability[]
+    aspectRatios?: ImageDialogueAspectRatioOption[]
+    resolutions?: string[]
+    imageCounts?: number[]
   }>(),
   {
     aspectRatio: 'auto',
+    resolution: '2K',
     imageCount: 1,
+    imageCapabilities: () => [],
   },
 )
 
 const emit = defineEmits<{
-  'update:aspectRatio': [value: ImageGenAspectRatio]
-  'update:imageCount': [value: ImageGenCount]
+  'update:aspectRatio': [value: string]
+  'update:resolution': [value: string]
+  'update:imageCount': [value: number]
   close: []
 }>()
 
+const aspectRatioOptions = computed(() => {
+  if (props.aspectRatios?.length) return props.aspectRatios
+  const fromApi = buildImageDialogueAspectRatiosFromCapabilities(props.imageCapabilities)
+  if (fromApi.length) return fromApi
+  return IMAGE_GEN_ASPECT_RATIOS.map((item) => ({
+    key: item.key,
+    label: item.label,
+    preview: item.preview,
+  }))
+})
+
+const resolutionOptions = computed(() => {
+  if (props.resolutions?.length) return props.resolutions
+  return buildImageDialogueResolutionsFromCapabilities(props.imageCapabilities)
+})
+
+const imageCountOptions = computed(() => {
+  if (props.imageCounts?.length) return props.imageCounts
+  return buildImageDialogueCountOptionsFromCapabilities(props.imageCapabilities)
+})
+
 const aspectRatio = computed({
   get: () => props.aspectRatio,
-  set: (value: ImageGenAspectRatio) => emit('update:aspectRatio', value),
+  set: (value: string) => emit('update:aspectRatio', value),
+})
+
+const resolution = computed({
+  get: () => props.resolution,
+  set: (value: string) => emit('update:resolution', value),
 })
 
 const imageCount = computed({
   get: () => props.imageCount,
-  set: (value: ImageGenCount) => emit('update:imageCount', value),
+  set: (value: number) => emit('update:imageCount', value),
 })
 </script>
 

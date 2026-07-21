@@ -199,6 +199,7 @@
       :video-dialogue-text="videoDialogueText"
       :video-hd-magnification="videoHdMagnification"
       :video-num="videoNum"
+      :image-capabilities="imageCapabilities"
       @update:prompt-text="promptText = $event"
       @update:video-num="videoNum = $event"
       @persist-prompt-bar-draft="persistPromptBarDraft"

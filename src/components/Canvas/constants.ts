@@ -503,6 +503,122 @@ export function normalizeImageCapabilities(
   return []
 }
 
+export const IMAGE_GENERAL_CAPABILITY_CODE = 'IMAGE_GENERAL_V1'
+
+/** 从 capabilities 中取指定 code 的能力项 */
+export function findImageCapability(
+  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+  code: string,
+): ImageCapability | null {
+  const list = normalizeImageCapabilities(capabilities)
+  return list.find((item) => item.code === code) ?? null
+}
+
+export function findImageGeneralCapability(
+  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+): ImageCapability | null {
+  return findImageCapability(capabilities, IMAGE_GENERAL_CAPABILITY_CODE)
+}
+
+function parseCapabilityStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+}
+
+function parseCapabilityCountRange(parameters?: Record<string, unknown>): number[] {
+  const count = parameters?.count
+  if (Array.isArray(count)) {
+    return count
+      .map((item) => Number(item))
+      .filter((item) => Number.isFinite(item) && item > 0)
+  }
+  if (count && typeof count === 'object') {
+    const range = count as { min?: number; max?: number; default?: number }
+    const min = Math.max(1, Math.floor(Number(range.min) || 1))
+    const max = Math.max(min, Math.floor(Number(range.max) || min))
+    const options: number[] = []
+    for (let value = min; value <= max; value += 1) options.push(value)
+    return options
+  }
+  return []
+}
+
+function resolveAspectRatioPreview(ratio: string): { width: number; height: number } {
+  const preset = IMAGE_GEN_ASPECT_RATIOS.find((item) => item.key === ratio)
+  if (preset) return preset.preview
+
+  if (ratio === 'auto') return { width: 14, height: 10 }
+
+  const parts = ratio.split(':').map((part) => Number(part.trim()))
+  if (parts.length === 2 && parts[0] > 0 && parts[1] > 0) {
+    const max = 16
+    if (parts[0] >= parts[1]) {
+      return { width: max, height: Math.max(6, Math.round((max * parts[1]) / parts[0])) }
+    }
+    return { width: Math.max(6, Math.round((max * parts[0]) / parts[1])), height: max }
+  }
+
+  return { width: 12, height: 12 }
+}
+
+export type ImageDialogueAspectRatioOption = {
+  key: string
+  label: string
+  preview: { width: number; height: number }
+}
+
+export function buildImageDialogueAspectRatiosFromCapabilities(
+  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+): ImageDialogueAspectRatioOption[] {
+  const capability = findImageGeneralCapability(capabilities)
+  const ratios = parseCapabilityStringArray(capability?.parameters?.aspectRatio)
+  if (!ratios.length) {
+    return IMAGE_GEN_ASPECT_RATIOS.map((item) => ({
+      key: item.key,
+      label: item.label,
+      preview: item.preview,
+    }))
+  }
+  return ratios.map((ratio) => ({
+    key: ratio,
+    label: ratio,
+    preview: resolveAspectRatioPreview(ratio),
+  }))
+}
+
+export function buildImageDialogueResolutionsFromCapabilities(
+  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+): string[] {
+  const capability = findImageGeneralCapability(capabilities)
+  const resolutions = parseCapabilityStringArray(capability?.parameters?.resolution)
+  if (resolutions.length) return resolutions
+  return IMAGE_DESIGN_IPS_MENU.map((item) => item.label)
+}
+
+export function buildImageDialogueModelsFromCapabilities(
+  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+): ImageDialogueModelItem[] {
+  const capability = findImageGeneralCapability(capabilities)
+  const models = parseCapabilityStringArray(capability?.parameters?.model)
+  if (!models.length) return IMAGE_DIALOGUE_MODEL_MENU
+
+  return models.map((key, index) => ({
+    key,
+    name: key,
+    duration: '',
+    icon: index === 0 ? 'lib' : 'seedream',
+  }))
+}
+
+export function buildImageDialogueCountOptionsFromCapabilities(
+  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+): number[] {
+  const capability = findImageGeneralCapability(capabilities)
+  const fromApi = parseCapabilityCountRange(capability?.parameters)
+  if (fromApi.length) return fromApi
+  return [...IMAGE_DIALOGUE_COUNT_OPTIONS]
+}
+
 /**
  * 从 imageCapabilities 生成图片节点工具栏 actions。
  * 已实现且未显式隐藏的能力都会进入；无 toolbar 时按 button 兜底。
