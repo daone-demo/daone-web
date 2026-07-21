@@ -212,6 +212,7 @@
       :source-refs="videoGenSourceRefs"
       :element-select-mode="elementSelectMode"
       :video-num="videoNum"
+      :chat-tools="chatTools"
       @update:prompt="emit('update:videoGenPromptText', $event)"
       @update:video-num="emit('update:videoNum', $event)"
       @update:active-tab="emit('update:videoGenActiveTab', $event)"

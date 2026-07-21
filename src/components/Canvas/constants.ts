@@ -82,6 +82,8 @@ export interface CanvasNodeData {
   imageGenState?: 'idle' | 'loading' | 'done'
   /** 文生图生成进度（0-100） */
   imageGenProgress?: number
+  /** 关联的后端生成任务 ID，用于多任务并发时独立追踪 */
+  generationTaskId?: string
 }
 
 /** 图片反推提示词默认示例图文件名 */
@@ -1285,6 +1287,15 @@ function resolveVideoDialogueModelIcon(key: string, index: number): VideoDialogu
   if (lower.includes('happy') || lower.includes('horse')) return 'happy-horse'
   if (lower.includes('wan')) return 'wan'
   return index === 0 ? 'lib' : 'seedream'
+}
+
+export function buildVideoDialogueCountOptionsFromCapabilities(
+  source: VideoDialogueSource,
+): number[] {
+  const capability = findVideoDialogueSource(source)
+  const fromApi = parseCapabilityCountRange(capability?.parameters)
+  if (fromApi.length) return fromApi
+  return [1, 2, 3]
 }
 
 export function buildVideoDialogueModelsFromCapabilities(

@@ -143,18 +143,28 @@
           :class="{ 'video-gen-prompt-panel__chip--active': showVideoModelPicker }"
           @click.stop="toggleVideoModelPicker"
         >
-          {{ selectedVideoModel?.name ?? 'Seedance 2.0 VIP' }} ▾
+          {{ selectedModelName }} ▾
         </button>
         <div
           v-if="showVideoModelPicker"
           class="video-gen-prompt-panel__model-menu"
           @mousedown.stop
         >
-          <VideoGenModelPicker
-            :model-id="videoModelId"
-            @update:model-id="onVideoModelChange"
-            @select="showVideoModelPicker = false"
-          />
+          <button
+            v-for="model in modelMenu"
+            :key="model.key"
+            type="button"
+            class="video-gen-prompt-panel__model-item"
+            :class="{ 'video-gen-prompt-panel__model-item--active': model.key === selectedModelKey }"
+            @click="selectModel(model)"
+          >
+            <span
+              class="video-gen-prompt-panel__model-item-icon"
+              :data-icon="model.icon"
+              aria-hidden="true"
+            />
+            <span class="video-gen-prompt-panel__model-item-name">{{ model.name }}</span>
+          </button>
         </div>
       </div>
       <div class="video-gen-prompt-panel__settings-wrap">
@@ -176,6 +186,7 @@
             v-model:aspect-ratio="videoAspectRatio"
             v-model:resolution="videoResolution"
             v-model:generate-audio="generateAudio"
+            :chat-tools="chatTools"
             @close="showVideoSettings = false"
           />
         </div>
@@ -212,9 +223,13 @@
         class="video-gen-prompt-panel__count-select"
         @update:value="onVideoNumChange"
       >
-        <a-select-option :value="1">1个</a-select-option>
-        <a-select-option :value="2">2个</a-select-option>
-        <a-select-option :value="3">3个</a-select-option>
+        <a-select-option
+          v-for="count in countOptions"
+          :key="count"
+          :value="count"
+        >
+          {{ count }}个
+        </a-select-option>
       </a-select>
       <span class="video-gen-prompt-panel__credits">⚡ 122/135</span>
       <button
@@ -233,7 +248,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useCanvasBgTheme } from './useCanvasBgTheme'
-import VideoGenModelPicker from './VideoGenModelPicker.vue'
 import { createPromptMentionApi, needsSpaceBeforeMention } from './promptMention'
 import {
   createMentionSpan,
@@ -248,13 +262,20 @@ import {
 import VideoGenSettingsPopover from './VideoGenSettingsPopover.vue'
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
-  VIDEO_GEN_MODELS,
   VIDEO_GEN_PROMPT_PLACEHOLDER,
   VIDEO_GEN_TABS,
+  VIDEO_DIALOGUE_MODEL_MENU,
+  buildVideoDialogueAspectRatiosFromCapabilities,
+  buildVideoDialogueClaritiesFromCapabilities,
+  buildVideoDialogueCountOptionsFromCapabilities,
+  buildVideoDialogueDurationRangeFromCapabilities,
+  buildVideoDialogueGenerateAudioOptions,
+  buildVideoDialogueModelsFromCapabilities,
   formatVideoGenSettings,
+  type ChatTools,
+  type VideoDialogueModelItem,
   type VideoGenAspectRatio,
   type VideoGenDuration,
-  type VideoGenModelId,
   type VideoGenResolution,
 } from './constants'
 import { getVideoGenTabValidation } from './videoGen'
@@ -276,6 +297,7 @@ const props = defineProps<{
   activeTab: string
   sourceRefs?: VideoSourceRef[]
   elementSelectMode?: boolean
+  chatTools?: ChatTools | null
 }>()
 
 const emit = defineEmits<{
@@ -308,27 +330,90 @@ const sourceCount = computed(() => props.sourceRefs?.length ?? 0)
 
 const showVideoModelPicker = ref(false)
 const showVideoSettings = ref(false)
-const videoModelId = ref<VideoGenModelId>('seedance-2-vip')
+const selectedModelKey = ref(VIDEO_DIALOGUE_MODEL_MENU[0].key)
 const videoDuration = ref<VideoGenDuration>(5)
 const videoAspectRatio = ref<VideoGenAspectRatio>('16:9')
 const videoResolution = ref<VideoGenResolution>('720P')
 const generateAudio = ref(true)
 
+const modelMenu = computed(() =>
+  buildVideoDialogueModelsFromCapabilities(props.chatTools),
+)
+const selectedModelName = computed(
+  () =>
+    modelMenu.value.find((model) => model.key === selectedModelKey.value)?.name ??
+    modelMenu.value[0]?.name ??
+    VIDEO_DIALOGUE_MODEL_MENU[0].name,
+)
+const countOptions = computed(() =>
+  buildVideoDialogueCountOptionsFromCapabilities(props.chatTools),
+)
+const aspectRatioOptions = computed(() =>
+  buildVideoDialogueAspectRatiosFromCapabilities(props.chatTools),
+)
+const clarityOptions = computed(() =>
+  buildVideoDialogueClaritiesFromCapabilities(props.chatTools),
+)
+const durationRange = computed(() =>
+  buildVideoDialogueDurationRangeFromCapabilities(props.chatTools),
+)
+const generateAudioOptions = computed(() =>
+  buildVideoDialogueGenerateAudioOptions(props.chatTools),
+)
+
+function syncToolbarDefaultsFromChatTools() {
+  const models = modelMenu.value
+  if (models.length && !models.some((model) => model.key === selectedModelKey.value)) {
+    selectedModelKey.value = models[0].key
+  }
+
+  const ratios = aspectRatioOptions.value
+  if (ratios.length && !ratios.some((ratio) => ratio.key === videoAspectRatio.value)) {
+    videoAspectRatio.value = ratios[0].key as VideoGenAspectRatio
+  }
+
+  const clarities = clarityOptions.value
+  if (clarities.length && !clarities.includes(videoResolution.value)) {
+    videoResolution.value = clarities[0] as VideoGenResolution
+  }
+
+  const range = durationRange.value
+  const currentDuration = videoDuration.value
+  if (currentDuration < range.min || currentDuration > range.max) {
+    videoDuration.value = (range.defaultValue ?? range.min) as VideoGenDuration
+  }
+
+  const audioOptions = generateAudioOptions.value
+  if (audioOptions.length && !audioOptions.includes(generateAudio.value)) {
+    generateAudio.value = audioOptions[0]
+  }
+
+  const counts = countOptions.value
+  if (counts.length && !counts.includes(props.videoNum)) {
+    emit('update:videoNum', counts[0])
+  }
+}
+
+watch(
+  () => props.chatTools,
+  () => {
+    syncToolbarDefaultsFromChatTools()
+  },
+  { immediate: true, deep: true },
+)
+
 const videoSettingsLabel = computed(() =>
   formatVideoGenSettings(videoDuration.value, videoAspectRatio.value, videoResolution.value),
 )
 
-const selectedVideoModel = computed(() =>
-  VIDEO_GEN_MODELS.find((item) => item.id === videoModelId.value),
-)
+function selectModel(model: VideoDialogueModelItem) {
+  selectedModelKey.value = model.key
+  showVideoModelPicker.value = false
+}
 
 function toggleVideoModelPicker() {
   showVideoModelPicker.value = !showVideoModelPicker.value
   if (showVideoModelPicker.value) showVideoSettings.value = false
-}
-
-function onVideoModelChange(id: VideoGenModelId) {
-  videoModelId.value = id
 }
 
 function toggleVideoSettings() {
@@ -976,6 +1061,86 @@ onMounted(() => {
   left: 0;
   bottom: calc(100% + 8px);
   z-index: 10;
+}
+
+.video-gen-prompt-panel__model-menu {
+  min-width: 220px;
+  max-width: 300px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #4b4b55;
+  border-radius: 12px;
+  background: #1e1e22;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+
+  .video-gen-prompt-panel--light & {
+    border-color: #ebedf0;
+    background: #fff;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+  }
+}
+
+.video-gen-prompt-panel__model-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover,
+  &--active {
+    background: #2a2a30;
+  }
+
+  .video-gen-prompt-panel--light & {
+    &:hover,
+    &--active {
+      background: #f3f4f6;
+    }
+  }
+}
+
+.video-gen-prompt-panel__model-item-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background-color: #2a2a30;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
+
+  &[data-icon='lib'],
+  &[data-icon='seedream'],
+  &[data-icon='seedance'],
+  &[data-icon='kling'],
+  &[data-icon='happy-horse'],
+  &[data-icon='wan'] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 18 18'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.3' d='M4 13V8M9 13V5M14 13v-3'/%3E%3C/svg%3E");
+  }
+
+  .video-gen-prompt-panel--light & {
+    background-color: #f3f4f6;
+  }
+}
+
+.video-gen-prompt-panel__model-item-name {
+  flex: 1;
+  min-width: 0;
+  color: #e5e7eb;
+  font-size: 12px;
+  line-height: 1.3;
+  word-break: break-all;
+
+  .video-gen-prompt-panel--light & {
+    color: #374151;
+  }
 }
 
 .video-gen-prompt-panel__chip {

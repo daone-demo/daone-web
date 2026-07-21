@@ -16,7 +16,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME, NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
+  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
   getConnectMenuPosition, getLinkedSpawnPoint, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -33,15 +33,15 @@ import {
 } from './sharedImports';
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import {
-  applyGenerationResultToNode,
   applyModelGenerationResultToNode,
   applyTextGenerationResultToNode,
   markGenerationNodeFailed,
   markTextGenerationNodeFailed,
   pickModelGenerationResult,
-  pickImageGenerationResults,
   pickTextGenerationResult,
   pollGenerationTask,
+  resolveGenerationResultPreview,
+  runImageGenerationOnNode,
   updateGenerationNodeProgress,
   updateTextGenerationNodeProgress,
   type GenerationTaskDetail,
@@ -714,7 +714,7 @@ export function registerCore(bind: CanvasBindings) {
             prompt: promptText.value.trim(),
           },
           projectId: activeProjectId.value,
-          nodeId: sourceNodeId,
+          nodeId: resultNode.id,
           referenceAssetIds: [event.assetId],
         },
         idempotencyKey,
@@ -829,7 +829,7 @@ export function registerCore(bind: CanvasBindings) {
             assetId: event.assetId,
           },
           projectId: activeProjectId.value,
-          nodeId: sourceNodeId,
+          nodeId: resultNode.id,
           referenceAssetIds: [event.assetId],
         },
         idempotencyKey,
@@ -857,15 +857,16 @@ export function registerCore(bind: CanvasBindings) {
       }
 
       const result = pickModelGenerationResult(finalTask)
-      if (!result?.previewUrl) {
+      const resolved = result ? await resolveGenerationResultPreview(result) : null
+      if (!resolved?.previewUrl) {
         markGenerationNodeFailed(resultNode, '未返回 3D 模型')
         message.error('生成完成，但未返回 GLB 模型')
         return
       }
 
-      applyModelGenerationResultToNode(resultNode, result, {
+      applyModelGenerationResultToNode(resultNode, resolved, {
         title,
-        fileName: result.previewUrl.split('/').pop()?.split('?')[0] || `${title}.glb`,
+        fileName: resolved.previewUrl.split('/').pop()?.split('?')[0] || `${title}.glb`,
       })
 
       selectedNodeId.value = resultNode.id
@@ -1077,106 +1078,87 @@ export function registerCore(bind: CanvasBindings) {
 
     resetImageDialogue()
 
-    const resultNode = spawnGenerationResultNode(g, sourceNode, {
-      title: config.title,
-      fileName: config.buildFileName(sourceData.fileName || sourceData.title || ''),
-    })
+    const sourceFileName = sourceData.fileName || sourceData.title || ''
+    const taskParameters = config.buildParameters(event)
+    const requestedCount = Math.max(1, Math.floor(Number(taskParameters.count)) || 1)
+    const singleTaskParameters = { ...taskParameters, count: 1 }
+    const resultNodes: Node[] = []
 
-    selectedNodeId.value = resultNode.id
+    for (let index = 0; index < requestedCount; index += 1) {
+      resultNodes.push(
+        spawnGenerationResultNode(g, sourceNode, {
+          title: config.title,
+          fileName: resolveGenerationResultFileName(
+            config.buildFileName,
+            sourceFileName,
+            index,
+            requestedCount,
+          ),
+        }),
+      )
+    }
+
+    const primaryNode = resultNodes[0]
+
+    selectedNodeId.value = primaryNode.id
     selectedKind.value = 'image'
-    syncNodeSelectionHighlight(resultNode.id)
+    syncNodeSelectionHighlight(primaryNode.id)
     syncNodeCount()
     bumpToolbarRevision()
     updateNodeToolbar()
     scheduleHistoryPush()
 
-    const idempotencyKey =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `gen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const referenceAssetIds =
+      config.resolveReferenceAssetIds?.(event) ??
+      (event.assetId ? [event.assetId] : [])
 
-    try {
-      const referenceAssetIds =
-        config.resolveReferenceAssetIds?.(event) ??
-        (event.assetId ? [event.assetId] : [])
-
-      const created = await api.createGenerationTask<GenerationTaskDetail>(
-        {
-          taskType: 'IMAGE',
-          capabilityCode: config.capabilityCode,
-          prompt: config.prompt?.trim() ?? '',
-          parameters: config.buildParameters(event),
-          projectId: activeProjectId.value,
-          nodeId: sourceNodeId,
-          referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
-        },
-        idempotencyKey,
+    const runners = resultNodes.map((resultNode, index) => {
+      const fileName = resolveGenerationResultFileName(
+        config.buildFileName,
+        sourceFileName,
+        index,
+        requestedCount,
       )
 
-      const taskId = created.id
-      if (!taskId) {
-        throw new Error('创建生成任务失败')
-      }
+      return runImageGenerationOnNode(resultNode, {
+        title: config.title,
+        fileName,
+        createTask: async () => {
+          const idempotencyKey =
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+              ? crypto.randomUUID()
+              : `gen-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`
 
-      updateGenerationNodeProgress(resultNode, created.progress ?? 5)
-
-      const finalTask =
-        created.status === 'SUCCEEDED'
-          ? created
-          : await pollGenerationTask(taskId, {
-            onProgress: (task) => updateGenerationNodeProgress(resultNode, task.progress ?? 0),
-          })
-
-      if (finalTask.status !== 'SUCCEEDED') {
-        const reason = finalTask.error?.message || '生成任务失败'
-        markGenerationNodeFailed(resultNode, reason)
-        message.error(reason)
-        return
-      }
-
-      const results = pickImageGenerationResults(finalTask).filter((item) => item.previewUrl?.trim())
-      if (!results.length) {
-        markGenerationNodeFailed(resultNode, '未返回结果图片')
-        message.error('生成完成，但未返回结果图片')
-        return
-      }
-
-      const sourceFileName = sourceData.fileName || sourceData.title || ''
-      const resultNodes: Node[] = [resultNode]
-
-      results.forEach((result, index) => {
-        const fileName = resolveGenerationResultFileName(
-          config.buildFileName,
-          sourceFileName,
-          index,
-          results.length,
-        )
-
-        const node =
-          index === 0
-            ? resultNode
-            : spawnCompletedImageResultNode(g, sourceNode, {
-              title: config.title,
-              fileName,
-              previewUrl: result.previewUrl,
-              assetId: result.assetId,
-              mediaWidth: result.width ?? undefined,
-              mediaHeight: result.height ?? undefined,
-            })
-
-        if (index > 0) {
-          resultNodes.push(node)
-        }
-
-        applyGenerationResultToNode(node, result, {
-          title: config.title,
-          fileName,
-        })
+          return api.createGenerationTask<GenerationTaskDetail>(
+            {
+              taskType: 'IMAGE',
+              capabilityCode: config.capabilityCode,
+              prompt: config.prompt?.trim() ?? '',
+              parameters: singleTaskParameters,
+              projectId: activeProjectId.value,
+              nodeId: resultNode.id,
+              referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
+            },
+            idempotencyKey,
+          )
+        },
+        onError: (reason) => message.error(reason),
       })
+    })
+
+    try {
+      const outcomes = await Promise.allSettled(runners)
+      const succeededNodes = resultNodes.filter(
+        (_node, index) => outcomes[index]?.status === 'fulfilled' && outcomes[index].value === true,
+      )
+
+      if (!succeededNodes.length) {
+        return
+      }
 
       resetImageDialogue()
 
-      const focusNode = resultNodes[resultNodes.length - 1] ?? resultNode
+      const focusNode = succeededNodes[succeededNodes.length - 1] ?? primaryNode
       selectedNodeId.value = focusNode.id
       selectedKind.value = 'image'
       syncNodeSelectionHighlight(focusNode.id)
@@ -1187,8 +1169,8 @@ export function registerCore(bind: CanvasBindings) {
 
       nextTick(() => {
         const scroller = getScroller(g)
-        if (!scroller || !resultNodes.length) return
-        const boxes = resultNodes.map((node) => node.getBBox())
+        if (!scroller || !succeededNodes.length) return
+        const boxes = succeededNodes.map((node) => node.getBBox())
         const minX = Math.min(...boxes.map((box) => box.x))
         const maxX = Math.max(...boxes.map((box) => box.x + box.width))
         const minY = Math.min(...boxes.map((box) => box.y))
@@ -1198,7 +1180,7 @@ export function registerCore(bind: CanvasBindings) {
         })
       })
     } catch (error) {
-      markGenerationNodeFailed(resultNode)
+      resultNodes.forEach((node) => markGenerationNodeFailed(node))
       message.error(isRequestError(error) ? error.message : '生成失败，请稍后重试')
     }
   }
@@ -2134,52 +2116,72 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   async function generateImageFromPrompt() {
-    if (imageGenSubmitting.value) return
     const g = graph.value
     const nodeId = activeImageGenPromptNodeId.value
     if (!g || !nodeId) return
     const cell = g.getCellById(nodeId)
     if (!cell?.isNode()) return
+    const node = cell as Node
+
+    const prompt = imageGenPromptText.value.trim()
+    if (!prompt) {
+      message.warning('请输入提示词')
+      return
+    }
+
+    const currentData = node.getData() as CanvasNodeData
+    if (currentData.imageGenState === 'loading') return
 
     imageGenSubmitting.value = true
     persistImageGenPrompt()
 
-    cell.setData({
-      ...(cell.getData() as CanvasNodeData),
+    node.setData({
+      ...currentData,
       imageGenState: 'loading',
       imageGenProgress: 0,
+      genPrompt: prompt,
     })
 
-    let progress = 0
-    const timer = window.setInterval(() => {
-      progress = Math.min(95, progress + Math.round(7 + Math.random() * 12))
-      cell.setData({
-        ...(cell.getData() as CanvasNodeData),
-        imageGenProgress: progress,
-      })
-    }, 280)
+    const referenceAssetIds = resolvePromptReferenceAssetIds(currentData)
+    const fileName = currentData.fileName || currentData.title || '文生图.png'
 
     try {
-      await new Promise((resolve) => window.setTimeout(resolve, 2600))
-    } finally {
-      window.clearInterval(timer)
-    }
+      const succeeded = await runImageGenerationOnNode(node, {
+        title: currentData.title || '文生图',
+        fileName,
+        createTask: async () => {
+          const idempotencyKey =
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+              ? crypto.randomUUID()
+              : `img-prompt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-    cell.setData({
-      ...(cell.getData() as CanvasNodeData),
-      imageGenState: 'done',
-      imageGenProgress: 100,
-      previewUrl: exampleImage,
-      fileName: IMG2PROMPT_EXAMPLE_FILENAME,
-      uploadState: 'done',
-    })
-    imageGenSubmitting.value = false
-    selectedNodeId.value = nodeId
-    selectedKind.value = 'image'
-    syncNodeSelectionHighlight(nodeId)
-    bumpToolbarRevision()
-    updateNodeToolbar()
-    scheduleHistoryPush()
+          return api.createGenerationTask<GenerationTaskDetail>(
+            {
+              taskType: 'IMAGE',
+              capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+              prompt,
+              parameters: { count: 1 },
+              projectId: activeProjectId.value,
+              nodeId: node.id,
+              referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
+            },
+            idempotencyKey,
+          )
+        },
+        onError: (reason) => message.error(reason),
+      })
+
+      if (!succeeded) return
+
+      selectedNodeId.value = nodeId
+      selectedKind.value = 'image'
+      syncNodeSelectionHighlight(nodeId)
+      scheduleHistoryPush()
+    } finally {
+      imageGenSubmitting.value = false
+      bumpToolbarRevision()
+      updateNodeToolbar()
+    }
   }
 
   function openVideoGenPromptBar(nodeId: string, tab = 'text2video') {
