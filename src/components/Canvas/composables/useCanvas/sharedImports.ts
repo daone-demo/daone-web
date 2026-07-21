@@ -26,6 +26,7 @@ export {
   applyImageGenTask as applyImageGenTaskToNode,
   connectGenEdge,
   spawnCroppedImageNode,
+  spawnErasedImageNode,
   spawnGenerationResultNode,
   spawnCompletedImageResultNode,
   spawnGridSplitResultNodes,

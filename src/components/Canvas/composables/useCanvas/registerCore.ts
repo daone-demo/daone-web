@@ -16,7 +16,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME, NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
+  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
   getConnectMenuPosition, getLinkedSpawnPoint, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -171,6 +171,9 @@ export function registerCore(bind: CanvasBindings) {
     gridSplitSourceNodeId,
     gridSplitRows,
     gridSplitCols,
+    showImageErase,
+    eraseSourceNodeId,
+    imageErasePos,
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,
@@ -250,7 +253,7 @@ export function registerCore(bind: CanvasBindings) {
   const showPromptBar = computed(() => {
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
     const id = activePickerNodeId.value
-    if (!id || nodeCount.value === 0 || showImageCrop.value || showImageGridSplit.value) return false
+    if (!id || nodeCount.value === 0 || showImageCrop.value || showImageGridSplit.value || showImageErase.value) return false
     return true
   })
   const showImageGenPromptBar = computed(
@@ -260,7 +263,8 @@ export function registerCore(bind: CanvasBindings) {
       Boolean(activeImageGenPromptNodeId.value) &&
       nodeCount.value > 0 &&
       !showImageCrop.value &&
-      !showImageGridSplit.value,
+      !showImageGridSplit.value &&
+      !showImageErase.value,
   )
   const showVideoGenPromptBar = computed(
     () =>
@@ -269,7 +273,8 @@ export function registerCore(bind: CanvasBindings) {
       Boolean(activeVideoGenPromptNodeId.value) &&
       nodeCount.value > 0 &&
       !showImageCrop.value &&
-      !showImageGridSplit.value,
+      !showImageGridSplit.value &&
+      !showImageErase.value,
   )
 
   const videoGenSourceRefs = computed(() => {
@@ -289,7 +294,7 @@ export function registerCore(bind: CanvasBindings) {
   const showTextFormatToolbar = computed(() => {
     void toolbarRevision.value
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
-    if (!selectedNodeId.value || showImageCrop.value || showImageGridSplit.value || textExpandOpen.value) return false
+    if (!selectedNodeId.value || showImageCrop.value || showImageGridSplit.value || showImageErase.value || textExpandOpen.value) return false
     const data = getSelectedNodeData()
     return (
       data?.kind === 'text' &&
@@ -325,6 +330,21 @@ export function registerCore(bind: CanvasBindings) {
   const imageGridSplitSource = computed(() => {
     const g = graph.value
     const id = gridSplitSourceNodeId.value || selectedNodeId.value
+    if (!g || !id) return null
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return null
+    const data = cell.getData() as CanvasNodeData
+    if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) return null
+    return {
+      previewUrl: data.previewUrl,
+      mediaWidth: data.mediaWidth,
+      mediaHeight: data.mediaHeight,
+    }
+  })
+
+  const imageEraseSource = computed(() => {
+    const g = graph.value
+    const id = eraseSourceNodeId.value || selectedNodeId.value
     if (!g || !id) return null
     const cell = g.getCellById(id)
     if (!cell?.isNode()) return null
@@ -453,6 +473,7 @@ export function registerCore(bind: CanvasBindings) {
       label: payload.label,
       assetId: resolveImageAssetId(data),
     }
+    console.log('onImageToolbarAction', payload, event);
 
     if (event.key !== 'hd') {
       showImageHdMenu.value = false
@@ -461,6 +482,12 @@ export function registerCore(bind: CanvasBindings) {
       toggleImageDialogue()
     } else if (event.key === 'IMAGE_CROP') {
       openImageCrop()
+    } else if (event.key === 'IMAGE_REMOVE_BG') {
+      if (event.option === 'erase') {
+        handleImageEraseAction(event);
+      } else {
+        handleImageCapabilityAction(event);
+      }
     } else if (event.key === 'more') {
       openImageToolbarMore()
     } else if (event.key === 'addToDialog') {
@@ -475,6 +502,8 @@ export function registerCore(bind: CanvasBindings) {
       openImagePreview()
     } else if (event.key === 'IMAGE_GRID_SPLIT') {
       handleImageGridSplitAction(event)
+    } else if (event.key === 'erase') {
+      handleImageEraseAction(event)
     } else {
       handleImageCapabilityAction(event)
     }
@@ -533,6 +562,7 @@ export function registerCore(bind: CanvasBindings) {
     showImageToolbarMore.value = false
     showImageToolbarMoreMenu.value = false
     closeImageCrop()
+    closeImageErase()
 
     gridSplitSourceNodeId.value = selectedNodeId.value
     gridSplitRows.value = rows
@@ -857,6 +887,71 @@ export function registerCore(bind: CanvasBindings) {
     }
   }
 
+  /**
+   * 擦除
+   * @param event 
+   */
+  function handleImageEraseAction(_event: ImageToolbarClickEvent) {
+    openImageErase()
+  }
+
+  function openImageErase() {
+    const data = getSelectedNodeData()
+    if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) {
+      message.warning('请等待图片加载完成后再擦除')
+      return
+    }
+
+    showImageHdMenu.value = false
+    showImageDialogue.value = false
+    showImageToolbarMore.value = false
+    showImageToolbarMoreMenu.value = false
+    closeImageCrop()
+    closeImageGridSplit()
+
+    eraseSourceNodeId.value = selectedNodeId.value
+    showImageErase.value = true
+    updateNodeToolbar()
+  }
+
+  function closeImageErase() {
+    showImageErase.value = false
+    eraseSourceNodeId.value = ''
+    updateNodeToolbar()
+  }
+
+  function onImageEraseComplete(payload: { dataUrl: string; width: number; height: number }) {
+    const g = graph.value
+    const id = eraseSourceNodeId.value || selectedNodeId.value
+    if (!g || !id) {
+      closeImageErase()
+      return
+    }
+
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) {
+      closeImageErase()
+      return
+    }
+
+    const sourceNode = cell as Node
+    const erasedNode = spawnErasedImageNode(g, sourceNode, payload)
+    selectedNodeId.value = erasedNode.id
+    selectedKind.value = 'image'
+    syncNodeSelectionHighlight(erasedNode.id)
+    syncNodeCount()
+    closeImageErase()
+
+    nextTick(() => {
+      const scroller = getScroller(g)
+      const bbox = erasedNode.getBBox()
+      scroller?.transitionToPoint(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, {
+        duration: '280ms',
+      })
+      updateNodeToolbar()
+    })
+  }
+
   function handleImageCapabilityAction(event: ImageToolbarClickEvent) {
     const title = buildImageActionResultTitle(event.label)
     const namePrefix = event.label?.trim() || '生成'
@@ -1129,6 +1224,7 @@ export function registerCore(bind: CanvasBindings) {
     showImageToolbarMore.value = false
     showImageToolbarMoreMenu.value = false
     closeImageGridSplit()
+    closeImageErase()
     cropSourceNodeId.value = selectedNodeId.value
     showImageCrop.value = true
     updateNodeToolbar()
@@ -3355,6 +3451,9 @@ export function registerCore(bind: CanvasBindings) {
     if (showImageGridSplit.value) {
       imageGridSplitPos.value = getNodeCropOverlayPosition(g, node, overlayRoot, 360, 480)
     }
+    if (showImageErase.value) {
+      imageErasePos.value = getNodeCropOverlayPosition(g, node, overlayRoot)
+    }
     if (data.kind === 'video' && showVideoHdPanel.value) {
       videoHdPos.value = getNodeSidePanelPosition(g, node, overlayRoot)
     }
@@ -4080,6 +4179,10 @@ export function registerCore(bind: CanvasBindings) {
     }
     if (showImageGridSplit.value) {
       closeImageGridSplit()
+      return true
+    }
+    if (showImageErase.value) {
+      closeImageErase()
       return true
     }
     if (nodeOverlaysRef.value?.dismissVideoGenPromptOverlay()) {
@@ -5116,7 +5219,9 @@ export function registerCore(bind: CanvasBindings) {
     closeConnectMenu,
     closeHistoryPanel,
     closeImageCrop,
+    closeImageErase,
     closeImageGridSplit,
+    onImageEraseComplete,
     onImageGridSplitComplete,
     closeImageGenPromptBar,
     closeImagePreview,
@@ -5187,6 +5292,7 @@ export function registerCore(bind: CanvasBindings) {
     handleUserMenuAction,
     hasCanvasFileDrag,
     imageCropSource,
+    imageEraseSource,
     imageGridSplitSource,
     imageDialoguePreviewUrl,
     imageDialoguePreviews,
@@ -5234,6 +5340,7 @@ export function registerCore(bind: CanvasBindings) {
     openConnectMenuByNodeId,
     openFileUploadPicker,
     openImageCrop,
+    openImageErase,
     openImageDialogue,
     openImageGenPromptBar,
     openImagePreview,

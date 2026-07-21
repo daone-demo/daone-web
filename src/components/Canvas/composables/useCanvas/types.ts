@@ -60,6 +60,11 @@ export type CanvasBindings = CanvasState & {
     mediaWidth: number
     mediaHeight: number
   } | null>
+  imageEraseSource: ComputedRef<{
+    previewUrl: string
+    mediaWidth: number
+    mediaHeight: number
+  } | null>
   imageDialoguePreviews: ComputedRef<import('../../constants').ImageSourceRef[]>
   imageDialoguePreviewUrl: ComputedRef<string>
   showNodeToolbar: ComputedRef<boolean>
@@ -67,12 +72,14 @@ export type CanvasBindings = CanvasState & {
   showToolbarFeatureButtons: ComputedRef<boolean>
   isLightNodeToolbar: ComputedRef<boolean>
   closeImageGridSplit: () => void
+  closeImageErase: () => void
   onImageGridSplitComplete: (payload: {
     rows: number
     cols: number
     rowStops: number[]
     colStops: number[]
   }) => Promise<void>
+  onImageEraseComplete: (payload: { dataUrl: string; width: number; height: number }) => void
   handleImageDialogueSubmit: (payload: import('../../constants').ImageDialogueSubmitPayload) => void
   graph: ShallowRef<Graph | null>
   [key: string]: unknown

@@ -194,6 +194,35 @@ export function spawnCroppedImageNode(
   return node
 }
 
+export function spawnErasedImageNode(
+  graph: Graph,
+  sourceNode: Node,
+  payload: { dataUrl: string; width: number; height: number },
+) {
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  const bbox = sourceNode.getBBox()
+  const outgoingCount = graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceNode.id).length
+  const overrides: Partial<CanvasNodeData> = {
+    kind: 'image',
+    mode: 'editor',
+    title: '擦除结果',
+    previewUrl: payload.dataUrl,
+    mediaWidth: payload.width,
+    mediaHeight: payload.height,
+    uploadState: 'done',
+    fileName: sourceData.fileName ? `擦除-${sourceData.fileName}` : '擦除结果.png',
+  }
+  const size = getNodeSize('image', 'editor', overrides)
+  const point = {
+    x: bbox.x + bbox.width + GEN_GAP + outgoingCount * (size.width + GEN_GAP) + size.width / 2,
+    y: bbox.y + bbox.height / 2,
+  }
+
+  const node = addCanvasNode(graph, 'image', point, overrides)
+  connectGenEdge(graph, sourceNode.id, node.id)
+  return node
+}
+
 /** 在源节点右侧生成「生成中」结果节点，并连线 */
 export function spawnGenerationResultNode(
   graph: Graph,

@@ -268,6 +268,27 @@
   </div>
 
   <div
+    v-if="showImageErase && selectedKind === 'image'"
+    class="canvas__image-erase"
+    :style="{
+      left: `${imageErasePos.left}px`,
+      top: `${imageErasePos.top}px`,
+      width: `${imageErasePos.width}px`,
+      height: `${imageErasePos.height}px`,
+    }"
+    @mousedown.stop
+  >
+    <ImageEraseOverlay
+      v-if="imageEraseSource"
+      :image-url="imageEraseSource.previewUrl"
+      :natural-width="imageEraseSource.mediaWidth"
+      :natural-height="imageEraseSource.mediaHeight"
+      @cancel="emit('close-image-erase')"
+      @complete="emit('image-erase-complete', $event)"
+    />
+  </div>
+
+  <div
     v-if="showImageDialogue && selectedKind === 'image'"
     class="canvas__node-dialogue"
     :style="{
@@ -347,6 +368,7 @@ import VideoGenPromptPanel from '../VideoGenPromptPanel.vue'
 import ImageDialoguePanel from '../ImageDialoguePanel.vue'
 import ImageCropOverlay from '../ImageCropOverlay.vue'
 import ImageGridSplitOverlay from '../ImageGridSplitOverlay.vue'
+import ImageEraseOverlay from '../ImageEraseOverlay.vue'
 import VideoDialoguePanel from '../VideoDialoguePanel.vue'
 import VideoHdPanel from '../VideoHdPanel.vue'
 import VideoFramesPanel from '../VideoFramesPanel.vue'
@@ -389,11 +411,13 @@ const props = defineProps<{
   videoGenPromptPos: { left: number; top: number; width: number }
   imageCropPos: { left: number; top: number; width: number; height: number }
   imageGridSplitPos: { left: number; top: number; width: number; height: number }
+  imageErasePos: { left: number; top: number; width: number; height: number }
   dialoguePos: { left: number; top: number; width: number }
   videoHdPos: { left: number; top: number; width: number }
   selectedKind: NodeKind | null
   showImageCrop: boolean
   showImageGridSplit: boolean
+  showImageErase: boolean
   gridSplitRows: number
   gridSplitCols: number
   showImageDialogue: boolean
@@ -406,6 +430,11 @@ const props = defineProps<{
     mediaHeight: number
   } | null
   imageGridSplitSource: {
+    previewUrl: string
+    mediaWidth: number
+    mediaHeight: number
+  } | null
+  imageEraseSource: {
     previewUrl: string
     mediaWidth: number
     mediaHeight: number
@@ -462,6 +491,8 @@ const emit = defineEmits<{
     rowStops: number[]
     colStops: number[]
   }]
+  'close-image-erase': []
+  'image-erase-complete': [payload: { dataUrl: string; width: number; height: number }]
   'reset-video-hd-panel': []
   'video-hd-start': []
   'video-gen-drag-start': [event: MouseEvent]

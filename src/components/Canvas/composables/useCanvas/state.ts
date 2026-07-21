@@ -143,6 +143,9 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const gridSplitSourceNodeId = ref('')
   const gridSplitRows = ref(2)
   const gridSplitCols = ref(2)
+  const showImageErase = ref(false)
+  const eraseSourceNodeId = ref('')
+  const imageErasePos = ref({ left: 0, top: 0, width: 360, height: 420 })
   const showVideoDialogue = ref(false)
   const showVideoHdPanel = ref(false)
   const showVideoFramesPanel = ref(false)
@@ -263,6 +266,9 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     gridSplitSourceNodeId,
     gridSplitRows,
     gridSplitCols,
+    showImageErase,
+    eraseSourceNodeId,
+    imageErasePos,
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,

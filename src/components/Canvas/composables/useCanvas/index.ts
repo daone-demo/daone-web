@@ -10,9 +10,9 @@ export type { CanvasEmit, CanvasDomRefs } from './types'
 
 type GridSplitCanvasApi = Pick<
   CanvasState,
-  'showImageGridSplit' | 'imageGridSplitPos' | 'gridSplitRows' | 'gridSplitCols'
+  'showImageGridSplit' | 'imageGridSplitPos' | 'gridSplitRows' | 'gridSplitCols' | 'showImageErase' | 'eraseSourceNodeId' | 'imageErasePos'
 > &
-  Pick<CanvasBindings, 'closeImageGridSplit' | 'onImageGridSplitComplete' | 'imageGridSplitSource' | 'handleImageDialogueSubmit'>
+  Pick<CanvasBindings, 'closeImageGridSplit' | 'onImageGridSplitComplete' | 'imageGridSplitSource' | 'closeImageErase' | 'onImageEraseComplete' | 'imageEraseSource' | 'handleImageDialogueSubmit'>
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {
   const state = createCanvasState(emit, domRefs)

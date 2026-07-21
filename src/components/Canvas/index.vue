@@ -106,7 +106,7 @@
     />
 
     <CanvasNodeToolbar
-      v-if="showNodeToolbar && !showMultiSelectToolbar && !showGroupToolbar && showToolbarFeatureButtons && !showImageCrop && !showImageGridSplit"
+      v-if="showNodeToolbar && !showMultiSelectToolbar && !showGroupToolbar && showToolbarFeatureButtons && !showImageCrop && !showImageGridSplit && !showImageErase"
       :position="toolbarPos"
       :is-light="isLightNodeToolbar"
       :show-feature-buttons="showToolbarFeatureButtons"
@@ -166,11 +166,13 @@
       :video-gen-prompt-pos="videoGenPromptPos"
       :image-crop-pos="imageCropPos"
       :image-grid-split-pos="imageGridSplitPos"
+      :image-erase-pos="imageErasePos"
       :dialogue-pos="dialoguePos"
       :video-hd-pos="videoHdPos"
       :selected-kind="selectedKind"
       :show-image-crop="showImageCrop"
       :show-image-grid-split="showImageGridSplit"
+      :show-image-erase="showImageErase"
       :grid-split-rows="gridSplitRows"
       :grid-split-cols="gridSplitCols"
       :show-image-dialogue="showImageDialogue"
@@ -179,6 +181,7 @@
       :show-video-frames-panel="showVideoFramesPanel"
       :image-crop-source="imageCropSource"
       :image-grid-split-source="imageGridSplitSource"
+      :image-erase-source="imageEraseSource"
       :prompt-text="promptText"
       :prompt-source-preview-url="promptSourcePreviewUrl"
       :prompt-source-previews="promptSourcePreviews"
@@ -225,6 +228,8 @@
       @image-crop-complete="onImageCropComplete"
       @close-image-grid-split="closeImageGridSplit"
       @image-grid-split-complete="onImageGridSplitComplete"
+      @close-image-erase="closeImageErase"
+      @image-erase-complete="onImageEraseComplete"
       @reset-video-hd-panel="resetVideoHdPanel"
       @video-hd-start="onVideoHdStart"
       @video-gen-drag-start="onVideoGenPromptDragStart"
@@ -417,6 +422,7 @@ const {
   closeHistoryPanel,
   closeAssetCenterPanel,
   closeImageCrop,
+  closeImageErase,
   closeImageGridSplit,
   closeImagePreview,
   closeImageToolbarMore,
@@ -463,7 +469,9 @@ const {
   imageCropPos,
   imageCropSource,
   imageGridSplitPos,
+  imageErasePos,
   imageGridSplitSource,
+  imageEraseSource,
   gridSplitRows,
   gridSplitCols,
   imageDialoguePreviewUrl,
@@ -491,6 +499,7 @@ const {
   onGroupOverlayDragStart,
   onImageCropComplete,
   onImageGridSplitComplete,
+  onImageEraseComplete,
   onImageDialogueAddCanvasNode,
   onImageDialogueUploadFiles,
   onImageToolbarAction,
@@ -538,6 +547,7 @@ const {
   showHistoryPanel,
   showImageCreativeToolbar,
   showImageCrop,
+  showImageErase,
   showImageGridSplit,
   showImageDialogue,
   showImageGenPromptBar,
