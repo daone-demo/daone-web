@@ -1,6 +1,13 @@
 import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData, ImageGenTask } from './constants'
+import { IMAGE_NODE_META_HEIGHT } from './constants'
 import { addCanvasNode, getNodeSize } from './graph'
+import {
+  buildGridSplitEdges,
+  buildSplitAxisLayout,
+  computeGridSplitGap,
+} from './gridSplitUtils'
+import { assignGroupId } from './nodeGroup'
 
 import { getFlowEdgeAttrs } from './edgeStyle'
 
@@ -311,7 +318,10 @@ export function findOutgoingLoadingGenerationNode(graph: Graph, sourceId: string
   return null
 }
 
-/** 宫格拆分：在源节点右侧按 rows×cols 网格排布结果节点（带间距）并连线 */
+/**
+ * 宫格拆分：在源图预览区原地拆成带白色缝隙的碎片节点，并自动分组。
+ * 对齐 newimagex「拆图完成」效果。
+ */
 export function spawnGridSplitResultNodes(
   graph: Graph,
   sourceNode: Node,
@@ -327,55 +337,73 @@ export function spawnGridSplitResultNodes(
     titlePrefix?: string
     rows: number
     cols: number
+    rowStops?: number[]
+    colStops?: number[]
   },
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
   const bbox = sourceNode.getBBox()
   const titlePrefix = options.titlePrefix?.trim() || '宫格'
-  const gap = 16
+  const rows = Math.max(1, options.rows)
+  const cols = Math.max(1, options.cols)
+
+  const contentX = bbox.x
+  const contentY = bbox.y + (sourceData.compactPreview ? 0 : IMAGE_NODE_META_HEIGHT)
+  const contentW = bbox.width
+  const contentH = Math.max(1, bbox.height - (sourceData.compactPreview ? 0 : IMAGE_NODE_META_HEIGHT))
+  const gap = computeGridSplitGap(contentW, contentH)
+
+  const xEdges = buildGridSplitEdges(cols, options.colStops)
+  const yEdges = buildGridSplitEdges(rows, options.rowStops)
+  const colLayout = buildSplitAxisLayout(xEdges, contentW, gap)
+  const rowLayout = buildSplitAxisLayout(yEdges, contentH, gap)
+
   const nodes: Node[] = []
+  const tileMap = new Map(tiles.map((tile) => [`${tile.row}-${tile.col}`, tile]))
 
-  const probe = tiles[0]
-  const probeOverrides: Partial<CanvasNodeData> = {
-    kind: 'image',
-    mode: 'editor',
-    previewUrl: probe?.dataUrl,
-    mediaWidth: probe?.width,
-    mediaHeight: probe?.height,
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const tile = tileMap.get(`${row + 1}-${col + 1}`)
+      if (!tile) continue
+
+      const width = colLayout.sizes[col]
+      const height = rowLayout.sizes[row]
+      const overrides: Partial<CanvasNodeData> = {
+        kind: 'image',
+        mode: 'editor',
+        title: `${titlePrefix} ${tile.label}`,
+        previewUrl: tile.dataUrl,
+        mediaWidth: tile.width,
+        mediaHeight: tile.height,
+        editorWidth: width,
+        editorHeight: height,
+        compactPreview: true,
+        viewScale: 1,
+        uploadState: 'done',
+        fileName: sourceData.fileName
+          ? `${titlePrefix}-${tile.label}-${sourceData.fileName}`
+          : `${titlePrefix}-${tile.label}.png`,
+        sourceNodeId: sourceNode.id,
+        sourcePreviewUrl: sourceData.previewUrl ?? '',
+        sourceFileName: sourceData.fileName ?? '',
+        sourceAssetId: sourceData.assetId,
+      }
+
+      const point = {
+        x: contentX + colLayout.offsets[col] + width / 2,
+        y: contentY + rowLayout.offsets[row] + height / 2,
+      }
+      nodes.push(addCanvasNode(graph, 'image', point, overrides))
+    }
   }
-  const cellSize = getNodeSize('image', 'editor', probeOverrides)
-  const gridHeight = options.rows * cellSize.height + (options.rows - 1) * gap
-  const originX = bbox.x + bbox.width + GEN_GAP
-  const originY = bbox.y + bbox.height / 2 - gridHeight / 2
 
-  tiles.forEach((tile) => {
-    const overrides: Partial<CanvasNodeData> = {
-      kind: 'image',
-      mode: 'editor',
-      title: `${titlePrefix} ${tile.label}`,
-      previewUrl: tile.dataUrl,
-      mediaWidth: tile.width,
-      mediaHeight: tile.height,
-      uploadState: 'done',
-      fileName: sourceData.fileName
-        ? `${titlePrefix}-${tile.label}-${sourceData.fileName}`
-        : `${titlePrefix}-${tile.label}.png`,
-      sourceNodeId: sourceNode.id,
-      sourcePreviewUrl: sourceData.previewUrl ?? '',
-      sourceFileName: sourceData.fileName ?? '',
-      sourceAssetId: sourceData.assetId,
-    }
-    const size = getNodeSize('image', 'editor', overrides)
-    const colIndex = tile.col - 1
-    const rowIndex = tile.row - 1
-    const point = {
-      x: originX + colIndex * (cellSize.width + gap) + size.width / 2,
-      y: originY + rowIndex * (cellSize.height + gap) + size.height / 2,
-    }
-    const node = addCanvasNode(graph, 'image', point, overrides)
-    connectGenEdge(graph, sourceNode.id, node.id)
-    nodes.push(node)
-  })
+  if (nodes.length) {
+    assignGroupId(
+      graph,
+      nodes.map((node) => node.id),
+    )
+    graph.removeCell(sourceNode)
+  }
 
   return nodes
 }

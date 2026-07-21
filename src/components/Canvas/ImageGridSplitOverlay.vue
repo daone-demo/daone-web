@@ -425,10 +425,10 @@ onBeforeUnmount(() => {
   position: relative;
   max-width: 100%;
   max-height: 100%;
-  border-radius: 12px;
+  border-radius: 4px;
   overflow: hidden;
   box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14);
-  background: #f3f4f6;
+  background: #fff;
   touch-action: none;
   user-select: none;
 }
@@ -453,20 +453,21 @@ onBeforeUnmount(() => {
 .image-grid-split-overlay__cell {
   position: absolute;
   box-sizing: border-box;
-  border: 1px solid rgba(99, 102, 241, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 
 .image-grid-split-overlay__line {
   position: absolute;
   z-index: 2;
-  background: #6366f1;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
 
   &--col {
     top: 0;
     bottom: 0;
-    width: 2px;
-    margin-left: -1px;
+    width: 3px;
+    margin-left: -1.5px;
     cursor: col-resize;
     pointer-events: auto;
 
@@ -483,8 +484,8 @@ onBeforeUnmount(() => {
   &--row {
     left: 0;
     right: 0;
-    height: 2px;
-    margin-top: -1px;
+    height: 3px;
+    margin-top: -1.5px;
     cursor: row-resize;
     pointer-events: auto;
 
@@ -499,8 +500,8 @@ onBeforeUnmount(() => {
   }
 
   &--active {
-    background: #4f46e5;
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+    background: #f8fafc;
+    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.18);
   }
 }
 </style>

@@ -320,6 +320,12 @@ export function getBaseNodeSize(
     return NODE_SIZE.model3d.editor
   }
   if (kind === 'image') {
+    if (data?.editorWidth && data?.editorHeight) {
+      return {
+        width: data.editorWidth,
+        height: data.editorHeight,
+      }
+    }
     if (data?.imageGenTask === 'picker') return NODE_SIZE.image.genPicker
     if (data?.imageGenTask === 'img2img') return NODE_SIZE.image.img2img
     if (data?.imageGenTask === 'hd') return NODE_SIZE.image.hd
@@ -666,6 +672,7 @@ function getNodeToolbarAnchorY(node: Node) {
     data.kind === 'image' &&
     data.mode === 'editor' &&
     !data.imageGenTask &&
+    !data.compactPreview &&
     data.previewUrl
   ) {
     return bbox.y + IMAGE_NODE_META_HEIGHT

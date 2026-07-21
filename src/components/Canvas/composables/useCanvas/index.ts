@@ -3,9 +3,16 @@ import { useRouter } from 'vue-router'
 import { TEXT_EDITOR_PLACEHOLDER } from '../../constants'
 import { createCanvasState } from './state'
 import type { CanvasBindings, CanvasDomRefs, CanvasEmit } from './types'
+import type { CanvasState } from './state'
 import { registerCore } from './registerCore'
 
 export type { CanvasEmit, CanvasDomRefs } from './types'
+
+type GridSplitCanvasApi = Pick<
+  CanvasState,
+  'showImageGridSplit' | 'imageGridSplitPos' | 'gridSplitRows' | 'gridSplitCols'
+> &
+  Pick<CanvasBindings, 'closeImageGridSplit' | 'onImageGridSplitComplete' | 'imageGridSplitSource'>
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {
   const state = createCanvasState(emit, domRefs)
@@ -38,5 +45,5 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     ...bind,
     TEXT_EDITOR_PLACEHOLDER,
     getNodeCount: () => bind.nodeCount.value,
-  } as unknown as ReturnType<typeof import('./_legacy').useCanvas>
+  } as unknown as ReturnType<typeof import('./_legacy').useCanvas> & GridSplitCanvasApi
 }

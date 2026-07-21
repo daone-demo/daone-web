@@ -55,12 +55,24 @@ export type CanvasBindings = CanvasState & {
     mediaWidth: number
     mediaHeight: number
   } | null>
+  imageGridSplitSource: ComputedRef<{
+    previewUrl: string
+    mediaWidth: number
+    mediaHeight: number
+  } | null>
   imageDialoguePreviews: ComputedRef<import('../../constants').ImageSourceRef[]>
   imageDialoguePreviewUrl: ComputedRef<string>
   showNodeToolbar: ComputedRef<boolean>
   showMultiSelectToolbar: ComputedRef<boolean>
   showToolbarFeatureButtons: ComputedRef<boolean>
   isLightNodeToolbar: ComputedRef<boolean>
+  closeImageGridSplit: () => void
+  onImageGridSplitComplete: (payload: {
+    rows: number
+    cols: number
+    rowStops: number[]
+    colStops: number[]
+  }) => Promise<void>
   graph: ShallowRef<Graph | null>
   [key: string]: unknown
 }

@@ -69,6 +69,8 @@ export interface CanvasNodeData {
   viewScale?: number
   editorWidth?: number
   editorHeight?: number
+  /** 宫格拆分碎片：无标题栏，节点尺寸即预览区 */
+  compactPreview?: boolean
   textPickerTask?: 'img2prompt' | 'text2video' | 'write' | ''
   /** 自由输入提示词生成后，底部输入框保持显示 */
   promptBarPinned?: boolean

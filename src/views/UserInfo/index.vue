@@ -573,7 +573,6 @@ const payUrl = ref('');
 const showPayModal = ref(false);
 const payType = ref('');
 
-let trialCountdownTimer: ReturnType<typeof setInterval> | null = null
 let orderPollingTimer: ReturnType<typeof setInterval> | null = null
 const ORDER_POLLING_INTERVAL = 3000
 

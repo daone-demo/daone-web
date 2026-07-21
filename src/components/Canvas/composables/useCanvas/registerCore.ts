@@ -591,15 +591,19 @@ async function onImageGridSplitComplete(payload: {
       titlePrefix: '宫格',
       rows: payload.rows,
       cols: payload.cols,
+      rowStops: payload.rowStops,
+      colStops: payload.colStops,
     })
 
     closeImageGridSplit()
 
-    const focusNode = nodes[0]
-    if (focusNode) {
-      selectedNodeId.value = focusNode.id
+    const nodeIds = nodes.map((node) => node.id)
+    if (nodeIds.length) {
+      selectedNodeIds.value = nodeIds
+      selectedNodeId.value = nodeIds[0]
       selectedKind.value = 'image'
-      syncNodeSelectionHighlight(focusNode.id)
+      syncNodeSelectionHighlight(nodeIds)
+      g.select(nodeIds)
     }
     syncNodeCount()
     bumpToolbarRevision()
@@ -609,15 +613,14 @@ async function onImageGridSplitComplete(payload: {
     nextTick(() => {
       const scroller = getScroller(g)
       if (!scroller || !nodes.length) return
-      const first = nodes[0].getBBox()
-      const last = nodes[nodes.length - 1].getBBox()
-      scroller.transitionToPoint(
-        (first.x + last.x + last.width) / 2,
-        (first.y + last.y + last.height) / 2,
-        { duration: '280ms' },
-      )
+      const boxes = nodes.map((node) => node.getBBox())
+      const minX = Math.min(...boxes.map((box) => box.x))
+      const minY = Math.min(...boxes.map((box) => box.y))
+      const maxX = Math.max(...boxes.map((box) => box.x + box.width))
+      const maxY = Math.max(...boxes.map((box) => box.y + box.height))
+      scroller.transitionToPoint((minX + maxX) / 2, (minY + maxY) / 2, { duration: '280ms' })
     })
-    message.success(`已拆分为 ${tiles.length} 个宫格`)
+    message.success('已生成多张图片')
   } catch (error) {
     console.error('[grid-split] failed', error)
     message.error(error instanceof Error ? error.message : '宫格拆分失败，请稍后重试')

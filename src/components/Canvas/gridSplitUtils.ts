@@ -16,6 +16,42 @@ export type GridSplitStops = {
   colStops?: number[]
 }
 
+/** 宫格缝隙占短边的比例，对齐 newimagex 拆图效果 */
+export const GRID_SPLIT_GAP_RATIO = 0.025
+
+export function computeGridSplitGap(width: number, height: number) {
+  return Math.max(6, Math.round(Math.min(width, height) * GRID_SPLIT_GAP_RATIO))
+}
+
+export function buildSplitAxisLayout(edges: number[], total: number, gap: number) {
+  const count = Math.max(1, edges.length - 1)
+  const gapTotal = Math.max(0, count - 1) * gap
+  const available = Math.max(count, total - gapTotal)
+  const sizes = Array.from({ length: count }, (_, index) => {
+    const ratio = Math.max(0, edges[index + 1] - edges[index])
+    return Math.max(1, Math.round(ratio * available))
+  })
+  const sum = sizes.reduce((acc, value) => acc + value, 0)
+  sizes[sizes.length - 1] = Math.max(1, sizes[sizes.length - 1] + (available - sum))
+
+  const offsets: number[] = []
+  let cursor = 0
+  for (let i = 0; i < count; i += 1) {
+    offsets.push(cursor)
+    cursor += sizes[i] + (i < count - 1 ? gap : 0)
+  }
+  return { sizes, offsets }
+}
+
+export function buildGridSplitEdges(count: number, stops?: number[]) {
+  const n = Math.max(1, Math.floor(count))
+  const equal = createEqualStops(n)
+  if (!Array.isArray(stops) || stops.length !== n - 1) {
+    return [0, ...equal, 1]
+  }
+  return [0, ...stops, 1]
+}
+
 function loadImageElement(url: string, crossOrigin?: boolean): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()

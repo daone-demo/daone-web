@@ -6,10 +6,12 @@
       'image-node--selected': data.isSelected,
       'image-node--light': isLightTheme,
       'image-node--card-only': !data.previewUrl,
+      'image-node--compact': data.compactPreview,
       'image-node--uploading': data.uploadState === 'uploading',
     }"
   >
     <button
+      v-if="!data.compactPreview"
       type="button"
       class="node-port-plus"
       title="添加连线节点"
@@ -19,7 +21,7 @@
     </button>
 
     <button
-      v-if="!data.previewUrl"
+      v-if="!data.previewUrl || data.compactPreview"
       type="button"
       class="canvas-node__delete-float"
       title="删除节点"
@@ -29,7 +31,7 @@
       ×
     </button>
 
-    <div v-if="data.previewUrl" class="image-node__meta canvas-node__meta">
+    <div v-if="data.previewUrl && !data.compactPreview" class="image-node__meta canvas-node__meta">
       <span class="image-node__title">
         <!-- <span class="image-node__title-icon">▣</span> -->
         <i class="iconfont icon-tupian" style="font-size: 18px;" />
@@ -49,7 +51,7 @@
 
     <div class="image-node__body">
       <button
-        v-if="data.previewUrl"
+        v-if="data.previewUrl && !data.compactPreview"
         type="button"
         class="image-node__scale-btn"
         :class="{ 'image-node__scale-btn--active': isResizing }"
@@ -355,6 +357,33 @@ onMounted(() => {
 
 .image-node--portrait .image-node__preview {
   min-height: 0;
+}
+
+.image-node--compact {
+  background: #fff;
+  box-shadow: 0 0 0 3px #fff;
+
+  .image-node__body {
+    height: 100%;
+  }
+
+  .image-node__preview {
+    border-radius: 0;
+    background: #fff;
+
+    img {
+      object-fit: fill;
+    }
+  }
+
+  .canvas-node__delete-float {
+    opacity: 0;
+  }
+
+  &:hover .canvas-node__delete-float,
+  &.image-node--selected .canvas-node__delete-float {
+    opacity: 1;
+  }
 }
 
 .image-node__success {
