@@ -39,7 +39,7 @@ import {
   markGenerationNodeFailed,
   markTextGenerationNodeFailed,
   pickModelGenerationResult,
-  pickPrimaryGenerationResult,
+  pickImageGenerationResults,
   pickTextGenerationResult,
   pollGenerationTask,
   updateGenerationNodeProgress,
@@ -927,6 +927,21 @@ function normalizeCutoutMode(option?: string) {
   return option
 }
 
+function resolveGenerationResultFileName(
+  buildFileName: (sourceFileName: string) => string,
+  sourceFileName: string,
+  index: number,
+  total: number,
+) {
+  const base = buildFileName(sourceFileName)
+  if (total <= 1) return base
+  const dot = base.lastIndexOf('.')
+  if (dot > 0) {
+    return `${base.slice(0, dot)}-${index + 1}${base.slice(dot)}`
+  }
+  return `${base}-${index + 1}`
+}
+
 async function runImageGenerationTask(
   event: ImageToolbarClickEvent,
   config: {
@@ -1021,28 +1036,58 @@ async function runImageGenerationTask(
       return
     }
 
-    const result = pickPrimaryGenerationResult(finalTask)
-    if (!result?.previewUrl) {
+    const results = pickImageGenerationResults(finalTask).filter((item) => item.previewUrl?.trim())
+    if (!results.length) {
       markGenerationNodeFailed(resultNode, '未返回结果图片')
       message.error('生成完成，但未返回结果图片')
       return
     }
 
-    applyGenerationResultToNode(resultNode, result, {
-      title: config.title,
-      fileName: config.buildFileName(sourceData.fileName || sourceData.title || ''),
+    const sourceFileName = sourceData.fileName || sourceData.title || ''
+    const resultNodes: Node[] = [resultNode]
+
+    results.forEach((result, index) => {
+      const node =
+        index === 0
+          ? resultNode
+          : spawnGenerationResultNode(g, sourceNode, {
+              title: config.title,
+              fileName: config.buildFileName(sourceFileName),
+            })
+
+      if (index > 0) {
+        resultNodes.push(node)
+      }
+
+      applyGenerationResultToNode(node, result, {
+        title: config.title,
+        fileName: resolveGenerationResultFileName(
+          config.buildFileName,
+          sourceFileName,
+          index,
+          results.length,
+        ),
+      })
     })
 
-    selectedNodeId.value = resultNode.id
-    syncNodeSelectionHighlight(resultNode.id)
+    const focusNode = resultNodes[resultNodes.length - 1] ?? resultNode
+    selectedNodeId.value = focusNode.id
+    selectedKind.value = 'image'
+    syncNodeSelectionHighlight(focusNode.id)
+    syncNodeCount()
     bumpToolbarRevision()
     updateNodeToolbar()
     scheduleHistoryPush()
 
     nextTick(() => {
       const scroller = getScroller(g)
-      const bbox = resultNode.getBBox()
-      scroller?.transitionToPoint(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, {
+      if (!scroller || !resultNodes.length) return
+      const boxes = resultNodes.map((node) => node.getBBox())
+      const minX = Math.min(...boxes.map((box) => box.x))
+      const maxX = Math.max(...boxes.map((box) => box.x + box.width))
+      const minY = Math.min(...boxes.map((box) => box.y))
+      const maxY = Math.max(...boxes.map((box) => box.y + box.height))
+      scroller.transitionToPoint((minX + maxX) / 2, (minY + maxY) / 2, {
         duration: '280ms',
       })
     })

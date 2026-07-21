@@ -27,9 +27,12 @@ export function isGenerationTaskTerminal(status: string) {
   return TERMINAL_STATUSES.has(status)
 }
 
+export function pickImageGenerationResults(task: GenerationTaskDetail): GenerationTaskResult[] {
+  return task.results?.filter((item) => item.previewUrl || item.assetId) ?? []
+}
+
 export function pickPrimaryGenerationResult(task: GenerationTaskDetail): GenerationTaskResult | null {
-  const results = task.results?.filter((item) => item.previewUrl || item.assetId) ?? []
-  return results[0] ?? null
+  return pickImageGenerationResults(task)[0] ?? null
 }
 
 /** 优先取 type=MODEL 的 GLB；否则回退到 .glb URL 或首个结果 */
