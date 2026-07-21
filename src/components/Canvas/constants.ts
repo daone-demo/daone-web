@@ -505,6 +505,36 @@ export function normalizeImageCapabilities(
 
 export const IMAGE_GENERAL_CAPABILITY_CODE = 'IMAGE_GENERAL_V1'
 
+export type ChatTools = {
+  image?: ImageCapability | null
+  text?: ImageCapability | null
+  video?: ImageCapability | null
+}
+
+export type ImageDialogueSource =
+  | ImageCapability[]
+  | ImageCapability
+  | ChatTools
+  | null
+  | undefined
+  | Record<string, unknown>
+
+/** 解析图片对话面板数据源：优先 chatTools.image，其次 capabilities 列表 */
+export function findImageDialogueSource(source: ImageDialogueSource): ImageCapability | null {
+  if (!source || typeof source !== 'object') return null
+
+  if ('image' in source) {
+    const image = (source as ChatTools).image
+    if (image && typeof image === 'object') return image
+  }
+
+  if ('parameters' in source && ('code' in source || 'nodeType' in source)) {
+    return source as ImageCapability
+  }
+
+  return findImageGeneralCapability(source)
+}
+
 /** 从 capabilities 中取指定 code 的能力项 */
 export function findImageCapability(
   capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
@@ -568,9 +598,9 @@ export type ImageDialogueAspectRatioOption = {
 }
 
 export function buildImageDialogueAspectRatiosFromCapabilities(
-  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+  source: ImageDialogueSource,
 ): ImageDialogueAspectRatioOption[] {
-  const capability = findImageGeneralCapability(capabilities)
+  const capability = findImageDialogueSource(source)
   const ratios = parseCapabilityStringArray(capability?.parameters?.aspectRatio)
   if (!ratios.length) {
     return IMAGE_GEN_ASPECT_RATIOS.map((item) => ({
@@ -587,18 +617,18 @@ export function buildImageDialogueAspectRatiosFromCapabilities(
 }
 
 export function buildImageDialogueResolutionsFromCapabilities(
-  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+  source: ImageDialogueSource,
 ): string[] {
-  const capability = findImageGeneralCapability(capabilities)
+  const capability = findImageDialogueSource(source)
   const resolutions = parseCapabilityStringArray(capability?.parameters?.resolution)
   if (resolutions.length) return resolutions
   return IMAGE_DESIGN_IPS_MENU.map((item) => item.label)
 }
 
 export function buildImageDialogueModelsFromCapabilities(
-  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+  source: ImageDialogueSource,
 ): ImageDialogueModelItem[] {
-  const capability = findImageGeneralCapability(capabilities)
+  const capability = findImageDialogueSource(source)
   const models = parseCapabilityStringArray(capability?.parameters?.model)
   if (!models.length) return IMAGE_DIALOGUE_MODEL_MENU
 
@@ -611,9 +641,9 @@ export function buildImageDialogueModelsFromCapabilities(
 }
 
 export function buildImageDialogueCountOptionsFromCapabilities(
-  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+  source: ImageDialogueSource,
 ): number[] {
-  const capability = findImageGeneralCapability(capabilities)
+  const capability = findImageDialogueSource(source)
   const fromApi = parseCapabilityCountRange(capability?.parameters)
   if (fromApi.length) return fromApi
   return [...IMAGE_DIALOGUE_COUNT_OPTIONS]

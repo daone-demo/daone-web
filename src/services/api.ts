@@ -633,5 +633,8 @@ const api = {
   queryAiCapabilities<T = unknown>(params:any) {
     return http.get<T>('/canvas/capabilities', { params })
   },
+  queryChatTools<T = unknown>(params:any) {
+    return http.get<T>('/canvas/chat-tools', { params })
+  },
 }
 export default api

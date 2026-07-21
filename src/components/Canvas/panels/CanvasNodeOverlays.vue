@@ -281,7 +281,7 @@
       :model-value="imageDialogueText"
       :preview-url="imageDialoguePreviewUrl"
       :previews="imageDialoguePreviews"
-      :image-capabilities="imageCapabilities"
+      :chat-tools="chatTools"
       @update:model-value="emit('update:imageDialogueText', $event)"
       @remove="emit('remove-image-dialogue-preview', $event)"
       @upload-images="emit('upload-image-dialogue-images', $event)"
@@ -354,6 +354,7 @@ import {
   TEXT_PROMPT_MODEL_LABEL,
   TEXT_PROMPT_MODEL_MENU,
   type ImageSourceRef,
+  type ChatTools,
   type ImageCapability,
   type NodeKind,
   type TextPromptModelItem,
@@ -373,6 +374,7 @@ const mentionApi = createPromptMentionApi('canvas__prompt-mention')
 let skipPromptWatch = false
 
 const props = defineProps<{
+  chatTools: ChatTools | null
   canvasBgTheme: CanvasBgTheme
   showPromptBar: boolean
   showImageGenPromptBar: boolean

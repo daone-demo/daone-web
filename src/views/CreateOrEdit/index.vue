@@ -8,16 +8,17 @@
     <template v-else>
       <Canvas
         ref="canvasRef"
-        @focus-chat="focusChatPanel"
-        @add-to-chat="onAddToChat"
-        @add-asset-to-chat="onAddAssetToChat"
         :projects-list="projectsList"
-        @new-project="onNewProject"
-        @rename-project="onRenameProject"
-        @delete-project="onDeleteProject"
         :image-capabilities="ImageCapabilities"
         :video-capabilities="VideoCapabilities"
         :text-capabilities="TextCapabilities"
+        :chat-tools="chatTools"
+        @focus-chat="focusChatPanel"
+        @add-to-chat="onAddToChat"
+        @add-asset-to-chat="onAddAssetToChat"
+        @new-project="onNewProject"
+        @rename-project="onRenameProject"
+        @delete-project="onDeleteProject"
       />
       <ChatSidePanel
         ref="chatPanelRef"
@@ -67,6 +68,7 @@ const project_Id = ref('');
 const historySessions = ref<any[]>([]);
 const currentSessionId = ref('');
 const sessionName = ref('');
+const chatTools = ref<any>({});
 
 type CanvasExpose = {
   addImagesFromFiles: (files: File[]) => Promise<Node[]>
@@ -256,6 +258,11 @@ const onLoadAiCapabilities = async (key: string) => {
   }
 }
 
+const onLoadChatTools = async () => {
+  const res: any = await api.queryChatTools({})
+  chatTools.value = res?.data ?? res ?? {}
+}
+
 async function initializePage() {
   pageLoading.value = true
   pendingCanvasPayload.value = null
@@ -267,6 +274,7 @@ async function initializePage() {
       onLoadWorkflows(),
       onLoadTools(),
       onLoadChatModels(),
+      onLoadChatTools(),
       onLoadAiCapabilities('TEXT'),
       onLoadAiCapabilities('IMAGE'),
       onLoadAiCapabilities('VIDEO'),

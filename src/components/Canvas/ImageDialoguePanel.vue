@@ -171,7 +171,7 @@
               v-model:aspect-ratio="genAspectRatio"
               v-model:resolution="genResolution"
               v-model:image-count="genImageCount"
-              :image-capabilities="imageCapabilities"
+              :chat-tools="chatTools"
               @close="showGenSettings = false"
             />
           </div>
@@ -257,8 +257,8 @@ import {
   buildImageDialogueCountOptionsFromCapabilities,
   buildImageDialogueModelsFromCapabilities,
   buildImageDialogueResolutionsFromCapabilities,
-  findImageGeneralCapability,
-  type ImageCapability,
+  findImageDialogueSource,
+  type ChatTools,
   type ImageDialogueModelItem,
   type ImageSourceRef,
   type ImageStyleCard,
@@ -268,7 +268,7 @@ const props = defineProps<{
   modelValue: string
   previewUrl?: string
   previews?: ImageSourceRef[]
-  imageCapabilities?: ImageCapability[]
+  chatTools?: ChatTools | null
 }>()
 
 const emit = defineEmits<{
@@ -315,16 +315,16 @@ const selectedModelKey = ref(IMAGE_DIALOGUE_MODEL_MENU[0].key)
 const selectedWorkFlow = ref('')
 
 const modelMenu = computed(() =>
-  buildImageDialogueModelsFromCapabilities(props.imageCapabilities),
+  buildImageDialogueModelsFromCapabilities(props.chatTools),
 )
 const countOptions = computed(() =>
-  buildImageDialogueCountOptionsFromCapabilities(props.imageCapabilities),
+  buildImageDialogueCountOptionsFromCapabilities(props.chatTools),
 )
 const aspectRatioOptions = computed(() =>
-  buildImageDialogueAspectRatiosFromCapabilities(props.imageCapabilities),
+  buildImageDialogueAspectRatiosFromCapabilities(props.chatTools),
 )
 const resolutionOptions = computed(() =>
-  buildImageDialogueResolutionsFromCapabilities(props.imageCapabilities),
+  buildImageDialogueResolutionsFromCapabilities(props.chatTools),
 )
 
 const selectedModelName = computed(
@@ -339,7 +339,7 @@ const qualityLabel = computed(() => {
   return `${aspectLabel} · 标准画质 · ${genResolution.value}`
 })
 
-function syncDialogueDefaultsFromCapabilities() {
+function syncDialogueDefaultsFromChatTools() {
   const models = modelMenu.value
   if (models.length && !models.some((model) => model.key === selectedModelKey.value)) {
     selectedModelKey.value = models[0].key
@@ -360,7 +360,7 @@ function syncDialogueDefaultsFromCapabilities() {
     genImageCount.value = counts[0]
   }
 
-  const capability = findImageGeneralCapability(props.imageCapabilities)
+  const capability = findImageDialogueSource(props.chatTools)
   const countParam = capability?.parameters?.count
   if (countParam && typeof countParam === 'object' && !Array.isArray(countParam)) {
     const defaultCount = Number((countParam as { default?: number }).default)
@@ -371,9 +371,9 @@ function syncDialogueDefaultsFromCapabilities() {
 }
 
 watch(
-  () => props.imageCapabilities,
+  () => props.chatTools,
   () => {
-    syncDialogueDefaultsFromCapabilities()
+    syncDialogueDefaultsFromChatTools()
   },
   { immediate: true, deep: true },
 )

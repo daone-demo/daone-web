@@ -79,8 +79,8 @@ import {
   buildImageDialogueAspectRatiosFromCapabilities,
   buildImageDialogueResolutionsFromCapabilities,
   buildImageDialogueCountOptionsFromCapabilities,
+  type ChatTools,
   type ImageDialogueAspectRatioOption,
-  type ImageCapability,
 } from './constants'
 
 const props = withDefaults(
@@ -88,7 +88,7 @@ const props = withDefaults(
     aspectRatio?: string
     resolution?: string
     imageCount?: number
-    imageCapabilities?: ImageCapability[]
+    chatTools?: ChatTools | null
     aspectRatios?: ImageDialogueAspectRatioOption[]
     resolutions?: string[]
     imageCounts?: number[]
@@ -97,7 +97,7 @@ const props = withDefaults(
     aspectRatio: 'auto',
     resolution: '2K',
     imageCount: 1,
-    imageCapabilities: () => [],
+    chatTools: null,
   },
 )
 
@@ -110,7 +110,7 @@ const emit = defineEmits<{
 
 const aspectRatioOptions = computed(() => {
   if (props.aspectRatios?.length) return props.aspectRatios
-  const fromApi = buildImageDialogueAspectRatiosFromCapabilities(props.imageCapabilities)
+  const fromApi = buildImageDialogueAspectRatiosFromCapabilities(props.chatTools)
   if (fromApi.length) return fromApi
   return IMAGE_GEN_ASPECT_RATIOS.map((item) => ({
     key: item.key,
@@ -121,12 +121,12 @@ const aspectRatioOptions = computed(() => {
 
 const resolutionOptions = computed(() => {
   if (props.resolutions?.length) return props.resolutions
-  return buildImageDialogueResolutionsFromCapabilities(props.imageCapabilities)
+  return buildImageDialogueResolutionsFromCapabilities(props.chatTools)
 })
 
 const imageCountOptions = computed(() => {
   if (props.imageCounts?.length) return props.imageCounts
-  return buildImageDialogueCountOptionsFromCapabilities(props.imageCapabilities)
+  return buildImageDialogueCountOptionsFromCapabilities(props.chatTools)
 })
 
 const aspectRatio = computed({

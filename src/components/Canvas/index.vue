@@ -200,6 +200,7 @@
       :video-hd-magnification="videoHdMagnification"
       :video-num="videoNum"
       :image-capabilities="imageCapabilities"
+      :chat-tools="chatTools"
       @update:prompt-text="promptText = $event"
       @update:video-num="videoNum = $event"
       @persist-prompt-bar-draft="persistPromptBarDraft"
@@ -361,7 +362,7 @@ const emit = defineEmits<{
   'new-project': []
   'rename-project': [projectId: string, name: string],
   'delete-project': [projectId: string],
-}>()
+}>();
 
 const assetsList = ref<AssetView[]>([]);
 const skillList = ref<ElementGroupRecord[]>([]);
@@ -615,6 +616,7 @@ defineProps<{
   imageCapabilities: ImageCapability[]
   videoCapabilities: any[]
   textCapabilities: any[]
+  chatTools: any
 }>()
 
 const onChangeAssetsTab = (tab: ProjectTabKey) => {
