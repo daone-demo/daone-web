@@ -157,8 +157,27 @@ const onLoadProjects = async () => {
   projectsList.value = res.records as CanvasProjectItem[];
 }
 
+function getNextUntitledProjectTitle() {
+  const usedNumbers = new Set<number>()
+  const pattern = /^未命名-(\d+)$/
+
+  for (const project of projectsList.value) {
+    const match = project.title?.match(pattern)
+    if (match) {
+      usedNumbers.add(Number(match[1]))
+    }
+  }
+
+  let index = 0
+  while (usedNumbers.has(index)) {
+    index += 1
+  }
+
+  return `未命名-${index}`
+}
+
 const onNewProject = async () => {
-  const res = await api.createProject({ title: `未命名-${Date.now()}` });
+  const res = await api.createProject({ title: getNextUntitledProjectTitle() });
   projectsList.value.push(res as CanvasProjectItem);
 }
 
@@ -185,14 +204,9 @@ const onRefreshProjects = () => {
   onLoadProjects();
 }
 
-const onLoadTools = async () => {
-  /* const res = */ await api.getTools();
-  // console.log('tools', res);
-}
-
 const onLoadWorkflows = async () => {
-  /* const res = */ await api.getWorkflows({ page: 1, pageSize: 50 });
-  // console.log('workflows', res);
+  const res = await api.getWorkflows({ page: 1, pageSize: 50 });
+  console.log('workflows', res);
 }
 
 const onLoadChatModels = async () => {
@@ -272,7 +286,6 @@ async function initializePage() {
     await Promise.all([
       onLoadProjects(),
       onLoadWorkflows(),
-      onLoadTools(),
       onLoadChatModels(),
       onLoadChatTools(),
       onLoadAiCapabilities('TEXT'),

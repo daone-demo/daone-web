@@ -161,8 +161,27 @@ function formatCount(value: number) {
   return value.toLocaleString('en-US')
 }
 
+function getNextUntitledProjectTitle() {
+  const usedNumbers = new Set<number>()
+  const pattern = /^未命名-(\d+)$/
+
+  for (const project of recentProjects.value) {
+    const match = project.title?.match(pattern)
+    if (match) {
+      usedNumbers.add(Number(match[1]))
+    }
+  }
+
+  let index = 0
+  while (usedNumbers.has(index)) {
+    index += 1
+  }
+
+  return `未命名-${index}`
+}
+
 function openNewProject() {
-  api.createProject({ title: `未命名-${Date.now()}` }).then((res: any) => {
+  api.createProject({ title: getNextUntitledProjectTitle() }).then((res: any) => {
     router.push({ name: 'createProject', params: { id: res.id } })
   })
 }

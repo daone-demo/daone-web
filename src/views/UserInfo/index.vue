@@ -546,6 +546,7 @@ import { message } from 'ant-design-vue';
 const modalStore = useModalStore();
 const userInfoStore = useUserInfo();
 type InvoiceHeaderType = 'personal' | 'enterprise'
+type PayMethod = 'ALIPAY' | 'WECHAT' | 'BANK_TRANSFER'
 const router = useRouter();
 
 const PAYMENT_METHODS: Array<{ key: PayMethod; label: string }> = [
@@ -645,7 +646,7 @@ function openInvoiceModal(orderNo: string) {
   showInvoiceModal.value = true
 }
 
-async function openPayModal(key: string, payTypes: string) {
+async function openPayModal(key: string, payTypes: PayMethod) {
   orderNo.value = key;
   showPayModal.value = true;
   selectedPayMethod.value = payTypes;
