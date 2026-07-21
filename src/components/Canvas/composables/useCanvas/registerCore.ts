@@ -652,10 +652,10 @@ async function runImagePromptReverseTask(event: ImageToolbarClickEvent) {
   const sourceData = sourceNode.getData() as CanvasNodeData
   if (!sourceData.previewUrl || sourceData.uploadState === 'uploading') return
 
-  if (findOutgoingLoadingGenerationNode(g, sourceNodeId)) {
-    message.info('当前图片已有进行中的生成任务')
-    return
-  }
+  // if (findOutgoingLoadingGenerationNode(g, sourceNodeId)) {
+  //   message.info('当前图片已有进行中的生成任务')
+  //   return
+  // }
 
   const title = buildImageActionResultTitle(event.label || '图片反推提示词')
   const resultNode = spawnTextPromptResultNode(g, sourceNode, { title })
@@ -764,10 +764,10 @@ async function runImageTo3DTask(event: ImageToolbarClickEvent) {
   const sourceData = sourceNode.getData() as CanvasNodeData
   if (!sourceData.previewUrl || sourceData.uploadState === 'uploading') return
 
-  if (findOutgoingLoadingGenerationNode(g, sourceNodeId)) {
-    message.info('当前图片已有进行中的生成任务')
-    return
-  }
+  // if (findOutgoingLoadingGenerationNode(g, sourceNodeId)) {
+  //   message.info('当前图片已有进行中的生成任务')
+  //   return
+  // }
 
   const title = buildImageActionResultTitle(event.label || '图片转3D')
   const resultNode = spawnModel3DResultNode(g, sourceNode, {
@@ -974,10 +974,10 @@ async function runImageGenerationTask(
   if (requireSourcePreview && !sourceData.previewUrl) return
   if (sourceData.uploadState === 'uploading') return
 
-  if (findOutgoingLoadingGenerationNode(g, sourceNodeId)) {
-    message.info('当前图片已有进行中的生成任务')
-    return
-  }
+  // if (findOutgoingLoadingGenerationNode(g, sourceNodeId)) {
+  //   message.info('当前图片已有进行中的生成任务')
+  //   return
+  // }
 
   resetImageDialogue()
 
@@ -4952,9 +4952,9 @@ onMounted(() => {
     clearInterval(autoSaveTimer)
     autoSaveTimer = null
   }
-  // autoSaveTimer = window.setInterval(() => {
-  //   handleSaveCanvas('AUTO')
-  // }, 8000)
+  autoSaveTimer = window.setInterval(() => {
+    handleSaveCanvas('AUTO')
+  }, 8000)
 })
 
 function waitForNodeUploadDone(node: Node) {
