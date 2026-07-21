@@ -226,7 +226,13 @@
           {{ IMAGE_DIALOGUE_CREDITS }}
         </span>
 
-        <button type="button" class="image-dialogue__send" title="发送">
+        <button
+          type="button"
+          class="image-dialogue__send"
+          title="发送"
+          @mousedown.stop
+          @click.stop="onSend"
+        >
           <span class="image-dialogue__send-icon" aria-hidden="true" />
         </button>
       </div>
@@ -260,6 +266,7 @@ import {
   findImageDialogueSource,
   type ChatTools,
   type ImageDialogueModelItem,
+  type ImageDialogueSubmitPayload,
   type ImageSourceRef,
   type ImageStyleCard,
 } from './constants'
@@ -276,6 +283,7 @@ const emit = defineEmits<{
   remove: [sourceNodeId?: string]
   'upload-images': [files: File[]]
   'add-canvas-node': [nodeId: string]
+  submit: [payload: ImageDialogueSubmitPayload]
 }>()
 
 const { isLightTheme } = useCanvasBgTheme()
@@ -456,6 +464,12 @@ function onPromptInput() {
 }
 
 function onPromptKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    onSend()
+    return
+  }
+
   if (event.key !== 'Backspace' && event.key !== 'Delete') return
 
   const el = promptInputRef.value
@@ -539,6 +553,20 @@ function selectModel(model: ImageDialogueModelItem) {
 function selectCount(count: number) {
   genImageCount.value = count
   showCountMenu.value = false
+}
+
+function onSend() {
+  const prompt = props.modelValue.trim()
+  if (!prompt) return
+
+  const payload: ImageDialogueSubmitPayload = {
+    prompt,
+    model: selectedModelKey.value,
+    aspectRatio: genAspectRatio.value,
+    count: genImageCount.value,
+    resolution: genResolution.value,
+  }
+  emit('submit', payload)
 }
 
 function hasDialogueDropContent(event: DragEvent) {

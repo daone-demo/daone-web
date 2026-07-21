@@ -50,8 +50,10 @@ import type { CanvasElementGroupDragPayload } from '../../constants'
 import {
   resolveImageAssetId,
   buildImageActionResultTitle,
+  IMAGE_GENERAL_CAPABILITY_CODE,
   type ImageToolbarClickPayload,
   type ImageToolbarClickEvent,
+  type ImageDialogueSubmitPayload,
 } from '../../constants'
 import { splitImageIntoGrid } from '../../gridSplitUtils'
 import {
@@ -875,6 +877,48 @@ function handleImageCapabilityAction(event: ImageToolbarClickEvent) {
   })
 }
 
+function handleImageDialogueSubmit(payload: ImageDialogueSubmitPayload) {
+  const prompt = payload.prompt.trim()
+  if (!prompt) {
+    message.warning('请输入提示词')
+    return
+  }
+
+  const data = getSelectedNodeData()
+  const referenceAssetIds = imageDialoguePreviews.value
+    .map((item) => item.assetId)
+    .filter((id): id is string => Boolean(id))
+  const assetId = referenceAssetIds[0] || resolveImageAssetId(data) || ''
+
+  const event: ImageToolbarClickEvent = {
+    key: IMAGE_GENERAL_CAPABILITY_CODE,
+    label: '文生图',
+    assetId,
+  }
+
+  void runImageGenerationTask(event, {
+    capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+    title: buildImageActionResultTitle('文生图'),
+    prompt,
+    requireAssetId: false,
+    requireSourcePreview: false,
+    resolveReferenceAssetIds: () => referenceAssetIds,
+    buildFileName: (sourceFileName) =>
+      sourceFileName ? `文生图-${sourceFileName}` : '文生图.png',
+    buildParameters: () => {
+      const params: Record<string, unknown> = {
+        model: payload.model,
+        aspectRatio: payload.aspectRatio,
+        count: payload.count,
+      }
+      if (payload.resolution) {
+        params.resolution = payload.resolution
+      }
+      return params
+    },
+  })
+}
+
 function normalizeCutoutMode(option?: string) {
   if (!option) return 'quick'
   if (option === '快速') return 'quick'
@@ -888,11 +932,16 @@ async function runImageGenerationTask(
   config: {
     capabilityCode: string
     title: string
+    prompt?: string
+    requireAssetId?: boolean
+    requireSourcePreview?: boolean
     buildFileName: (sourceFileName: string) => string
     buildParameters: (event: ImageToolbarClickEvent) => Record<string, unknown>
+    resolveReferenceAssetIds?: (event: ImageToolbarClickEvent) => string[]
   },
 ) {
-  if (!event.assetId) {
+  const requireAssetId = config.requireAssetId !== false
+  if (requireAssetId && !event.assetId) {
     message.warning('图片素材 ID 不存在，请等待上传完成')
     return
   }
@@ -906,7 +955,9 @@ async function runImageGenerationTask(
 
   const sourceNode = sourceCell as Node
   const sourceData = sourceNode.getData() as CanvasNodeData
-  if (!sourceData.previewUrl || sourceData.uploadState === 'uploading') return
+  const requireSourcePreview = config.requireSourcePreview !== false
+  if (requireSourcePreview && !sourceData.previewUrl) return
+  if (sourceData.uploadState === 'uploading') return
 
   if (findOutgoingLoadingGenerationNode(g, sourceNodeId)) {
     message.info('当前图片已有进行中的生成任务')
@@ -932,15 +983,19 @@ async function runImageGenerationTask(
       : `gen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
   try {
+    const referenceAssetIds =
+      config.resolveReferenceAssetIds?.(event) ??
+      (event.assetId ? [event.assetId] : [])
+
     const created = await api.createGenerationTask<GenerationTaskDetail>(
       {
         taskType: 'IMAGE',
         capabilityCode: config.capabilityCode,
-        prompt: '',
+        prompt: config.prompt?.trim() ?? '',
         parameters: config.buildParameters(event),
         projectId: activeProjectId.value,
         nodeId: sourceNodeId,
-        referenceAssetIds: [event.assetId],
+        referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
       },
       idempotencyKey,
     )
@@ -5031,6 +5086,7 @@ const openNewProject = () => {
     filterUploadFiles,
     finishConnectSpawn,
     generateImageFromPrompt,
+    handleImageDialogueSubmit,
     getActiveSelectedNodeIds,
     getEdgeReleasePoint,
     getGraphCenter,

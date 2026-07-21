@@ -217,6 +217,7 @@
       @remove-image-dialogue-preview="clearImageDialoguePreview"
       @upload-image-dialogue-images="onImageDialogueUploadFiles"
       @add-image-dialogue-canvas-node="onImageDialogueAddCanvasNode"
+      @submit-image-dialogue="handleImageDialogueSubmit"
       @update:video-dialogue-text="videoDialogueText = $event"
       @update:video-hd-magnification="videoHdMagnification = $event"
       @close-image-crop="closeImageCrop"
@@ -421,6 +422,7 @@ const {
   fileInputAccept,
   fileInputMultiple,
   generateImageFromPrompt,
+  handleImageDialogueSubmit,
   goUserCenter,
   gridVisible,
   groupOverlayBox,

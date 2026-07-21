@@ -73,6 +73,7 @@ export type CanvasBindings = CanvasState & {
     rowStops: number[]
     colStops: number[]
   }) => Promise<void>
+  handleImageDialogueSubmit: (payload: import('../../constants').ImageDialogueSubmitPayload) => void
   graph: ShallowRef<Graph | null>
   [key: string]: unknown
 }

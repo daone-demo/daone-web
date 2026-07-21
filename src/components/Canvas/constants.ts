@@ -505,6 +505,15 @@ export function normalizeImageCapabilities(
 
 export const IMAGE_GENERAL_CAPABILITY_CODE = 'IMAGE_GENERAL_V1'
 
+/** 图片对话面板点击发送时上报的生成参数 */
+export type ImageDialogueSubmitPayload = {
+  prompt: string
+  model: string
+  aspectRatio: string
+  count: number
+  resolution?: string
+}
+
 export type ChatTools = {
   image?: ImageCapability | null
   text?: ImageCapability | null

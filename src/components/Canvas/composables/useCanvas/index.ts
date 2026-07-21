@@ -12,7 +12,7 @@ type GridSplitCanvasApi = Pick<
   CanvasState,
   'showImageGridSplit' | 'imageGridSplitPos' | 'gridSplitRows' | 'gridSplitCols'
 > &
-  Pick<CanvasBindings, 'closeImageGridSplit' | 'onImageGridSplitComplete' | 'imageGridSplitSource'>
+  Pick<CanvasBindings, 'closeImageGridSplit' | 'onImageGridSplitComplete' | 'imageGridSplitSource' | 'handleImageDialogueSubmit'>
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {
   const state = createCanvasState(emit, domRefs)

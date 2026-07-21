@@ -286,6 +286,7 @@
       @remove="emit('remove-image-dialogue-preview', $event)"
       @upload-images="emit('upload-image-dialogue-images', $event)"
       @add-canvas-node="emit('add-image-dialogue-canvas-node', $event)"
+      @submit="emit('submit-image-dialogue', $event)"
     />
   </div>
 
@@ -356,6 +357,7 @@ import {
   type ImageSourceRef,
   type ChatTools,
   type ImageCapability,
+  type ImageDialogueSubmitPayload,
   type NodeKind,
   type TextPromptModelItem,
   type VideoHdMagnification,
@@ -442,6 +444,7 @@ const emit = defineEmits<{
   'remove-image-dialogue-preview': [sourceNodeId?: string]
   'upload-image-dialogue-images': [files: File[]]
   'add-image-dialogue-canvas-node': [nodeId: string]
+  'submit-image-dialogue': [payload: ImageDialogueSubmitPayload]
   'update:videoDialogueText': [value: string]
   'update:videoHdMagnification': [value: VideoHdMagnification]
   'persist-prompt-bar-draft': []
