@@ -150,8 +150,8 @@ export function applyGenerationResultToNode(
   if (!previewUrl) return false
 
   const data = { ...(node.getData() as CanvasNodeData) }
-  data.imageGenState = 'done'
-  data.imageGenProgress = 100
+  data.imageGenState = undefined
+  data.imageGenProgress = undefined
   data.imageGenTask = undefined
   data.mode = 'editor'
   data.uploadState = 'done'

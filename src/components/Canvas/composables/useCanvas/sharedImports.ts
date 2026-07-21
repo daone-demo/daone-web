@@ -27,6 +27,7 @@ export {
   connectGenEdge,
   spawnCroppedImageNode,
   spawnGenerationResultNode,
+  spawnCompletedImageResultNode,
   spawnGridSplitResultNodes,
   spawnModel3DResultNode,
   spawnTextPromptResultNode,

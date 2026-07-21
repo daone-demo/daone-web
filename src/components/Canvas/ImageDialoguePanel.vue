@@ -191,41 +191,10 @@
         <button type="button" class="image-dialogue__icon" title="翻译">
           <span class="image-dialogue__icon-glyph" data-icon="translate" aria-hidden="true" />
         </button>
-
-        <div class="image-dialogue__count-wrap">
-          <button
-            type="button"
-            class="image-dialogue__tool image-dialogue__tool--count"
-            :class="{ 'image-dialogue__tool--active': showCountMenu }"
-            title="生成张数"
-            @click="toggleCountMenu"
-          >
-            {{ genImageCount }}张
-            <span class="image-dialogue__select-arrow" aria-hidden="true" />
-          </button>
-          <div
-            v-if="showCountMenu"
-            class="image-dialogue__count-menu"
-            @mousedown.stop
-          >
-            <button
-              v-for="count in countOptions"
-              :key="count"
-              type="button"
-              class="image-dialogue__count-item"
-              :class="{ 'image-dialogue__count-item--active': count === genImageCount }"
-              @click="selectCount(count)"
-            >
-              {{ count }}张
-            </button>
-          </div>
-        </div>
-
         <span class="image-dialogue__credits">
           <span class="image-dialogue__credits-icon" aria-hidden="true" />
           {{ IMAGE_DIALOGUE_CREDITS }}
         </span>
-
         <button
           type="button"
           class="image-dialogue__send"
@@ -237,7 +206,6 @@
         </button>
       </div>
     </div>
-
     <Teleport to="body">
       <ImageStylePanel
         v-if="showStyleModal"

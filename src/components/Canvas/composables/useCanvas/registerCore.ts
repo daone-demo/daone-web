@@ -16,7 +16,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME, NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnGenerationResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnTextPromptResultNode, findOutgoingLoadingGenerationNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
+  spawnCroppedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnTextPromptResultNode, findOutgoingLoadingGenerationNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
   getConnectMenuPosition, getLinkedSpawnPoint, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -979,6 +979,8 @@ async function runImageGenerationTask(
     return
   }
 
+  resetImageDialogue()
+
   const resultNode = spawnGenerationResultNode(g, sourceNode, {
     title: config.title,
     fileName: config.buildFileName(sourceData.fileName || sourceData.title || ''),
@@ -1047,12 +1049,23 @@ async function runImageGenerationTask(
     const resultNodes: Node[] = [resultNode]
 
     results.forEach((result, index) => {
+      const fileName = resolveGenerationResultFileName(
+        config.buildFileName,
+        sourceFileName,
+        index,
+        results.length,
+      )
+
       const node =
         index === 0
           ? resultNode
-          : spawnGenerationResultNode(g, sourceNode, {
+          : spawnCompletedImageResultNode(g, sourceNode, {
               title: config.title,
-              fileName: config.buildFileName(sourceFileName),
+              fileName,
+              previewUrl: result.previewUrl,
+              assetId: result.assetId,
+              mediaWidth: result.width ?? undefined,
+              mediaHeight: result.height ?? undefined,
             })
 
       if (index > 0) {
@@ -1061,14 +1074,11 @@ async function runImageGenerationTask(
 
       applyGenerationResultToNode(node, result, {
         title: config.title,
-        fileName: resolveGenerationResultFileName(
-          config.buildFileName,
-          sourceFileName,
-          index,
-          results.length,
-        ),
+        fileName,
       })
     })
+
+    resetImageDialogue()
 
     const focusNode = resultNodes[resultNodes.length - 1] ?? resultNode
     selectedNodeId.value = focusNode.id

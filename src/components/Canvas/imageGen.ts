@@ -231,6 +231,50 @@ export function spawnGenerationResultNode(
   return node
 }
 
+/** 在源节点右侧生成已完成的普通图片节点（无生成占位态），并连线 */
+export function spawnCompletedImageResultNode(
+  graph: Graph,
+  sourceNode: Node,
+  options: {
+    title: string
+    fileName?: string
+    previewUrl?: string
+    assetId?: string
+    mediaWidth?: number
+    mediaHeight?: number
+  },
+) {
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  const bbox = sourceNode.getBBox()
+  const outgoingCount = graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceNode.id).length
+  const overrides: Partial<CanvasNodeData> = {
+    kind: 'image',
+    mode: 'editor',
+    title: options.title,
+    fileName: options.fileName || options.title,
+    previewUrl: options.previewUrl,
+    assetId: options.assetId,
+    mediaWidth: options.mediaWidth,
+    mediaHeight: options.mediaHeight,
+    uploadState: 'done',
+    uploadProgress: 100,
+    sourceNodeId: sourceNode.id,
+    sourcePreviewUrl: sourceData.previewUrl ?? '',
+    sourceFileName: sourceData.fileName ?? '',
+    sourceAssetId: sourceData.assetId,
+    inputUpdated: Boolean(sourceData.previewUrl),
+  }
+  const size = getNodeSize('image', 'editor', overrides)
+  const point = {
+    x: bbox.x + bbox.width + GEN_GAP + outgoingCount * (size.width + GEN_GAP) + size.width / 2,
+    y: bbox.y + bbox.height / 2,
+  }
+
+  const node = addCanvasNode(graph, 'image', point, overrides)
+  connectGenEdge(graph, sourceNode.id, node.id)
+  return node
+}
+
 /** 在源节点右侧生成「图转 3D」加载中节点，并连线 */
 export function spawnModel3DResultNode(
   graph: Graph,
