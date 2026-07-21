@@ -483,7 +483,25 @@
               ×
             </button>
             <section class="combo-confirm__pay">
-              <p class="combo-confirm__pay-title">支付方式</p>
+              <div class="combo-confirm__pay-options" role="radiogroup" aria-label="支付方式">
+              <button
+                v-for="method in PAYMENT_METHODS"
+                :key="method.key"
+                type="button"
+                role="radio"
+                class="combo-confirm__pay-option"
+                :class="{ 'combo-confirm__pay-option--active': selectedPayMethod === method.key }"
+                :aria-checked="selectedPayMethod === method.key"
+                @click="selectedPayMethod = method.key"
+              >
+                <span
+                  class="combo-confirm__pay-icon"
+                  :class="`combo-confirm__pay-icon--${method.key.toLowerCase()}`"
+                  aria-hidden="true"
+                />
+                <span class="combo-confirm__pay-label">{{ method.label }}</span>
+              </button>
+            </div>
               <div class="combo-confirm__pay-options" role="radiogroup" aria-label="支付方式">
                 {{ payType === 'WECHAT' ? '微信支付' : '支付宝支付' }}
               </div>
@@ -505,7 +523,7 @@
 
 <script setup lang="ts">
 import { useModalStore } from '@stores/useModal';
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import QRCode from 'qrcode';
 import {
   BILL_STATUS_LABEL,
@@ -529,6 +547,12 @@ const modalStore = useModalStore();
 const userInfoStore = useUserInfo();
 type InvoiceHeaderType = 'personal' | 'enterprise'
 const router = useRouter();
+
+const PAYMENT_METHODS: Array<{ key: PayMethod; label: string }> = [
+  { key: 'ALIPAY', label: '支付宝' },
+  { key: 'WECHAT', label: '微信' },
+  // { key: 'BANK_TRANSFER', label: '对公转账' },
+]
 
 const activeTab = ref<UserInfoTabKey>('account')
 const pointsFilter = ref<PointsLogFilterKey>('all')
@@ -572,6 +596,7 @@ const orderNo = ref('');
 const payUrl = ref('');
 const showPayModal = ref(false);
 const payType = ref('');
+const selectedPayMethod = ref<PayMethod>('WECHAT')
 
 let orderPollingTimer: ReturnType<typeof setInterval> | null = null
 const ORDER_POLLING_INTERVAL = 3000
@@ -623,24 +648,9 @@ function openInvoiceModal(orderNo: string) {
 async function openPayModal(key: string, payTypes: string) {
   orderNo.value = key;
   showPayModal.value = true;
-  payType.value = payTypes;
+  selectedPayMethod.value = payTypes;
   try {
-    const res:any = await api.createPayment<PaymentResponse>(orderNo.value, {
-      payType: payTypes
-    })
-    if (!res) return
-    if (payTypes === 'WECHAT') {
-      payUrl.value = await QRCode.toDataURL(res.redirectUrl, {
-        width: 260,
-        margin: 2,
-      })
-    } else {
-      // payUrl.value = await QRCode.toDataURL(res.qrCodeContent, {
-      //   width: 260,
-      //   margin: 2,
-      // }
-      payUrl.value = res.qrCodeContent
-    }
+    onLoadPayUrl();
     startOrderPolling();
   } catch (error) {
     console.error('onLoadPayUrl', error)
@@ -648,7 +658,26 @@ async function openPayModal(key: string, payTypes: string) {
   }
 }
 
+const onLoadPayUrl = async () => {
+  try {
+    const res:any = await api.createPayment<PaymentResponse>(orderNo.value, {
+      payType: selectedPayMethod.value,
+    })
+    if (!res) return
 
+    if (selectedPayMethod.value === 'WECHAT') {
+      payUrl.value = await QRCode.toDataURL(res.redirectUrl, {
+        width: 260,
+        margin: 2,
+      })
+    } else {
+      payUrl.value = res.qrCodeContent
+    }
+  } catch (error) {
+    console.error('onLoadPayUrl', error)
+    payUrl.value = ''
+  }
+}
 
 const queryOrder = () => {
   if (!orderNo.value) return
@@ -872,6 +901,13 @@ const onChangePointsPage = (key: number) => {
 //   });
 //   console.log('openPointsLogDetail', id);
 // }
+watch([orderNo, selectedPayMethod], ([no, method]) => {
+  if (no && method !== 'BANK_TRANSFER') {
+    onLoadPayUrl();
+  } else {
+    payUrl.value = '';
+  }
+});
 
 onMounted(()=>{
   onLoadUserInfo();
