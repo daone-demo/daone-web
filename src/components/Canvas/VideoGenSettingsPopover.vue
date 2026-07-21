@@ -17,7 +17,7 @@
     <section class="video-gen-settings__section video-gen-settings__section--ratio">
       <div class="video-gen-settings__ratio-grid">
         <button
-          v-for="ratio in VIDEO_GEN_ASPECT_RATIOS"
+          v-for="ratio in aspectRatioOptions"
           :key="ratio.key"
           type="button"
           class="video-gen-settings__ratio"
@@ -42,7 +42,7 @@
       <p class="video-gen-settings__title">{{ VIDEO_GEN_RESOLUTION_LABEL }}</p>
       <div class="video-gen-settings__resolution-grid">
         <button
-          v-for="item in VIDEO_GEN_RESOLUTIONS"
+          v-for="item in resolutionOptions"
           :key="item"
           type="button"
           class="video-gen-settings__chip"
@@ -61,15 +61,15 @@
           v-model.number="duration"
           class="video-gen-settings__duration-slider"
           type="range"
-          :min="VIDEO_GEN_DURATIONS[0]"
-          :max="VIDEO_GEN_DURATIONS[VIDEO_GEN_DURATIONS.length - 1]"
+          :min="durationRange.min"
+          :max="durationRange.max"
           step="1"
         />
         <span class="video-gen-settings__duration-value">{{ duration }}s</span>
       </div>
     </section>
 
-    <section class="video-gen-settings__section">
+    <section v-if="showGenerateAudio" class="video-gen-settings__section">
       <p class="video-gen-settings__title">
         {{ VIDEO_GEN_AUDIO_LABEL }}
         <span class="video-gen-settings__help" title="开启后将生成配套音频">?</span>
@@ -79,6 +79,7 @@
           type="button"
           class="video-gen-settings__chip video-gen-settings__chip--wide"
           :class="{ 'video-gen-settings__chip--active': generateAudio }"
+          :disabled="!canEnableAudio"
           @click="generateAudio = true"
         >
           开启
@@ -87,6 +88,7 @@
           type="button"
           class="video-gen-settings__chip video-gen-settings__chip--wide"
           :class="{ 'video-gen-settings__chip--active': !generateAudio }"
+          :disabled="!canDisableAudio"
           @click="generateAudio = false"
         >
           关闭
@@ -110,13 +112,16 @@
 import { computed } from 'vue'
 import {
   VIDEO_GEN_ASPECT_RATIO_LABEL,
-  VIDEO_GEN_ASPECT_RATIOS,
   VIDEO_GEN_AUDIO_LABEL,
   VIDEO_GEN_DURATION_LABEL,
-  VIDEO_GEN_DURATIONS,
   VIDEO_GEN_RESOLUTION_LABEL,
   VIDEO_GEN_RESOLUTIONS,
+  buildVideoDialogueAspectRatiosFromCapabilities,
+  buildVideoDialogueClaritiesFromCapabilities,
+  buildVideoDialogueDurationRangeFromCapabilities,
+  buildVideoDialogueGenerateAudioOptions,
   formatVideoGenSettings,
+  type ChatTools,
   type VideoGenAspectRatio,
   type VideoGenDuration,
   type VideoGenResolution,
@@ -124,46 +129,68 @@ import {
 
 const props = withDefaults(
   defineProps<{
-    duration?: VideoGenDuration
-    aspectRatio?: VideoGenAspectRatio
-    resolution?: VideoGenResolution
+    duration?: number
+    aspectRatio?: string
+    resolution?: string
     generateAudio?: boolean
+    chatTools?: ChatTools | null
   }>(),
   {
     duration: 5,
     aspectRatio: '16:9',
     resolution: '720P',
     generateAudio: true,
+    chatTools: null,
   },
 )
 
 const emit = defineEmits<{
-  'update:duration': [value: VideoGenDuration]
-  'update:aspectRatio': [value: VideoGenAspectRatio]
-  'update:resolution': [value: VideoGenResolution]
+  'update:duration': [value: number]
+  'update:aspectRatio': [value: string]
+  'update:resolution': [value: string]
   'update:generateAudio': [value: boolean]
   close: []
 }>()
 
+const aspectRatioOptions = computed(() =>
+  buildVideoDialogueAspectRatiosFromCapabilities(props.chatTools),
+)
+
+const resolutionOptions = computed(() => {
+  const fromApi = buildVideoDialogueClaritiesFromCapabilities(props.chatTools)
+  if (fromApi.length) return fromApi
+  return [...VIDEO_GEN_RESOLUTIONS]
+})
+
+const durationRange = computed(() =>
+  buildVideoDialogueDurationRangeFromCapabilities(props.chatTools),
+)
+
+const generateAudioOptions = computed(() =>
+  buildVideoDialogueGenerateAudioOptions(props.chatTools),
+)
+
+const showGenerateAudio = computed(() => generateAudioOptions.value.length > 0)
+const canEnableAudio = computed(() => generateAudioOptions.value.includes(true))
+const canDisableAudio = computed(() => generateAudioOptions.value.includes(false))
+
 const duration = computed({
   get: () => props.duration,
   set: (value: number) => {
-    const clamped = Math.min(
-      VIDEO_GEN_DURATIONS[VIDEO_GEN_DURATIONS.length - 1],
-      Math.max(VIDEO_GEN_DURATIONS[0], Math.round(value)),
-    ) as VideoGenDuration
+    const { min, max } = durationRange.value
+    const clamped = Math.min(max, Math.max(min, Math.round(value)))
     emit('update:duration', clamped)
   },
 })
 
 const aspectRatio = computed({
   get: () => props.aspectRatio,
-  set: (value: VideoGenAspectRatio) => emit('update:aspectRatio', value),
+  set: (value: string) => emit('update:aspectRatio', value),
 })
 
 const resolution = computed({
   get: () => props.resolution,
-  set: (value: VideoGenResolution) => emit('update:resolution', value),
+  set: (value: string) => emit('update:resolution', value),
 })
 
 const generateAudio = computed({
@@ -172,7 +199,11 @@ const generateAudio = computed({
 })
 
 const settingsSummary = computed(() =>
-  formatVideoGenSettings(duration.value, aspectRatio.value, resolution.value),
+  formatVideoGenSettings(
+    duration.value as VideoGenDuration,
+    aspectRatio.value as VideoGenAspectRatio,
+    resolution.value as VideoGenResolution,
+  ),
 )
 </script>
 

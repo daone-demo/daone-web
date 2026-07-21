@@ -302,6 +302,7 @@
   >
     <VideoDialoguePanel
       :model-value="videoDialogueText"
+      :chat-tools="chatTools"
       @update:model-value="emit('update:videoDialogueText', $event)"
     />
   </div>

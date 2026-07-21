@@ -1148,6 +1148,149 @@ export function formatVideoGenSettings(
   return `${ratioLabel} · ${resolution} · ${duration}s`
 }
 
+export const VIDEO_GENERAL_CAPABILITY_CODE = 'VIDEO_GENERAL_V1'
+
+export type VideoDialogueSource = ImageDialogueSource
+
+/** 解析视频对话面板数据源：优先 chatTools.video */
+export function findVideoDialogueSource(source: VideoDialogueSource): ImageCapability | null {
+  if (!source || typeof source !== 'object') return null
+
+  if ('data' in source) {
+    const data = (source as { data?: unknown }).data
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      const capability = findVideoDialogueSource(data as VideoDialogueSource)
+      if (capability) return capability
+    }
+  }
+
+  if ('video' in source) {
+    const video = (source as ChatTools).video
+    if (video && typeof video === 'object') return video
+  }
+
+  if ('parameters' in source && ('code' in source || 'nodeType' in source)) {
+    const capability = source as ImageCapability
+    if (capability.nodeType === 'VIDEO' || capability.code?.includes('VIDEO')) {
+      return capability
+    }
+  }
+
+  const list = normalizeImageCapabilities(source)
+  return (
+    list.find((item) => item.code === VIDEO_GENERAL_CAPABILITY_CODE) ??
+    list.find((item) => item.nodeType === 'VIDEO' || item.code?.includes('VIDEO')) ??
+    null
+  )
+}
+
+export function normalizeVideoClarityLabel(value: string): string {
+  const match = value.trim().match(/^(\d+)\s*p$/i)
+  if (match) return `${match[1]}P`
+  return value.trim().toUpperCase()
+}
+
+export function buildVideoDialogueAspectRatiosFromCapabilities(
+  source: VideoDialogueSource,
+): ImageDialogueAspectRatioOption[] {
+  const capability = findVideoDialogueSource(source)
+  const ratios = parseCapabilityStringArray(capability?.parameters?.ratio)
+  if (!ratios.length) {
+    return VIDEO_GEN_ASPECT_RATIOS.map((item) => ({
+      key: item.key,
+      label: item.label,
+      preview: item.preview,
+    }))
+  }
+  return ratios.map((ratio) => ({
+    key: ratio,
+    label: ratio === 'auto' ? 'Auto' : ratio,
+    preview: resolveAspectRatioPreview(ratio),
+  }))
+}
+
+export function buildVideoDialogueClaritiesFromCapabilities(source: VideoDialogueSource): string[] {
+  const capability = findVideoDialogueSource(source)
+  const clarities = parseCapabilityStringArray(capability?.parameters?.clarity)
+  if (clarities.length) return clarities.map(normalizeVideoClarityLabel)
+  return [...VIDEO_GEN_RESOLUTIONS]
+}
+
+export type VideoDialogueDurationRange = {
+  min: number
+  max: number
+  defaultValue?: number
+}
+
+export function buildVideoDialogueDurationRangeFromCapabilities(
+  source: VideoDialogueSource,
+): VideoDialogueDurationRange {
+  const capability = findVideoDialogueSource(source)
+  const duration = capability?.parameters?.duration
+  if (duration && typeof duration === 'object' && !Array.isArray(duration)) {
+    const range = duration as { min?: number; max?: number; default?: number }
+    const min = Math.max(1, Math.floor(Number(range.min) || VIDEO_GEN_DURATIONS[0]))
+    const max = Math.max(
+      min,
+      Math.floor(Number(range.max) || VIDEO_GEN_DURATIONS[VIDEO_GEN_DURATIONS.length - 1]),
+    )
+    const defaultValue = Number.isFinite(Number(range.default))
+      ? Math.min(max, Math.max(min, Math.floor(Number(range.default))))
+      : undefined
+    return { min, max, defaultValue }
+  }
+  return {
+    min: VIDEO_GEN_DURATIONS[0],
+    max: VIDEO_GEN_DURATIONS[VIDEO_GEN_DURATIONS.length - 1],
+  }
+}
+
+export function buildVideoDialogueGenerateAudioOptions(source: VideoDialogueSource): boolean[] {
+  const capability = findVideoDialogueSource(source)
+  const options = capability?.parameters?.generateAudio
+  if (Array.isArray(options)) {
+    return options.filter((item): item is boolean => typeof item === 'boolean')
+  }
+  return [true, false]
+}
+
+export type VideoDialogueModelIcon = 'lib' | 'seedream' | 'seedance' | 'kling' | 'happy-horse' | 'wan'
+
+export type VideoDialogueModelItem = {
+  key: string
+  name: string
+  icon: VideoDialogueModelIcon
+}
+
+export const VIDEO_DIALOGUE_MODEL_MENU: VideoDialogueModelItem[] = [
+  { key: 'seedance-2.0', name: 'seedance-2.0', icon: 'seedance' },
+  { key: 'happy-horse-1.0', name: 'happy-horse-1.0', icon: 'happy-horse' },
+  { key: 'kling-3.0', name: 'kling-3.0', icon: 'kling' },
+]
+
+function resolveVideoDialogueModelIcon(key: string, index: number): VideoDialogueModelIcon {
+  const lower = key.toLowerCase()
+  if (lower.includes('seedance')) return 'seedance'
+  if (lower.includes('kling')) return 'kling'
+  if (lower.includes('happy') || lower.includes('horse')) return 'happy-horse'
+  if (lower.includes('wan')) return 'wan'
+  return index === 0 ? 'lib' : 'seedream'
+}
+
+export function buildVideoDialogueModelsFromCapabilities(
+  source: VideoDialogueSource,
+): VideoDialogueModelItem[] {
+  const capability = findVideoDialogueSource(source)
+  const models = parseCapabilityStringArray(capability?.parameters?.model)
+  if (!models.length) return VIDEO_DIALOGUE_MODEL_MENU
+
+  return models.map((key, index) => ({
+    key,
+    name: key,
+    icon: resolveVideoDialogueModelIcon(key, index),
+  }))
+}
+
 export type VideoGenModelId =
   | 'seedance-2-vip'
   | 'seedance-2-fast-vip'

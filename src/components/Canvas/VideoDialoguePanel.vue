@@ -71,18 +71,50 @@
     />
 
     <div class="video-dialogue__footer">
-      <div class="video-dialogue__tools">
+      <div class="video-dialogue__footer-left">
+        <div class="video-dialogue__model-wrap">
+          <button
+            type="button"
+            class="video-dialogue__model"
+            :class="{ 'video-dialogue__model--active': showModelMenu }"
+            @click="toggleModelMenu"
+          >
+            <span class="video-dialogue__model-icon" aria-hidden="true" />
+            {{ selectedModelName }}
+            <span class="video-dialogue__model-caret" aria-hidden="true" />
+          </button>
+          <div
+            v-if="showModelMenu"
+            class="video-dialogue__model-menu"
+            @mousedown.stop
+          >
+            <button
+              v-for="model in modelMenu"
+              :key="model.key"
+              type="button"
+              class="video-dialogue__model-item"
+              :class="{ 'video-dialogue__model-item--active': model.key === selectedModelKey }"
+              @click="selectModel(model)"
+            >
+              <span
+                class="video-dialogue__model-item-icon"
+                :data-icon="model.icon"
+                aria-hidden="true"
+              />
+              <span class="video-dialogue__model-item-name">{{ model.name }}</span>
+            </button>
+          </div>
+        </div>
+        <div class="video-dialogue__tools">
         <button type="button" class="video-dialogue__tool" title="图片">
           <span class="video-dialogue__tool-icon" data-icon="image" aria-hidden="true" />
         </button>
         <button type="button" class="video-dialogue__tool" title="选择">
           <span class="video-dialogue__tool-icon" data-icon="cursor" aria-hidden="true" />
         </button>
+        </div>
       </div>
       <div class="video-dialogue__actions">
-        <button type="button" class="video-dialogue__cube" title="模型">
-          <span class="video-dialogue__cube-icon" aria-hidden="true" />
-        </button>
         <button type="button" class="video-dialogue__auto">
           全能参考
           <span class="video-dialogue__select-arrow" aria-hidden="true" />
@@ -106,6 +138,8 @@
               v-model:duration="videoDuration"
               v-model:aspect-ratio="videoAspectRatio"
               v-model:resolution="videoResolution"
+              v-model:generate-audio="generateAudio"
+              :chat-tools="chatTools"
               @close="showVideoSettings = false"
             />
           </div>
@@ -138,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import VideoGenSettingsPopover from './VideoGenSettingsPopover.vue'
 import VideoStoryboardPanel from './VideoStoryboardPanel.vue'
 import {
@@ -146,7 +180,15 @@ import {
   VIDEO_DIALOGUE_CREDITS,
   VIDEO_DIALOGUE_GREETING,
   VIDEO_DIALOGUE_PLACEHOLDER,
+  buildVideoDialogueAspectRatiosFromCapabilities,
+  buildVideoDialogueClaritiesFromCapabilities,
+  buildVideoDialogueDurationRangeFromCapabilities,
+  buildVideoDialogueGenerateAudioOptions,
+  buildVideoDialogueModelsFromCapabilities,
   formatVideoGenSettings,
+  VIDEO_DIALOGUE_MODEL_MENU,
+  type ChatTools,
+  type VideoDialogueModelItem,
   type VideoGenAspectRatio,
   type VideoGenDuration,
   type VideoGenResolution,
@@ -154,8 +196,9 @@ import {
   type VideoStoryboardRatio,
 } from './constants'
 
-defineProps<{
+const props = defineProps<{
   modelValue: string
+  chatTools?: ChatTools | null
 }>()
 
 const emit = defineEmits<{
@@ -165,6 +208,7 @@ const emit = defineEmits<{
 const showAdvisorMenu = ref(false)
 const showStoryboardPanel = ref(false)
 const showVideoSettings = ref(false)
+const showModelMenu = ref(false)
 const activeAdvisorKey = ref<(typeof VIDEO_ADVISOR_MENU)[number]['key']>('dynamic')
 const storyboardDuration = ref<VideoStoryboardDuration>(5)
 const storyboardDescription = ref('')
@@ -172,6 +216,67 @@ const storyboardRatio = ref<VideoStoryboardRatio>('16:9')
 const videoDuration = ref<VideoGenDuration>(5)
 const videoAspectRatio = ref<VideoGenAspectRatio>('16:9')
 const videoResolution = ref<VideoGenResolution>('720P')
+const generateAudio = ref(true)
+const selectedModelKey = ref(VIDEO_DIALOGUE_MODEL_MENU[0].key)
+
+const modelMenu = computed(() =>
+  buildVideoDialogueModelsFromCapabilities(props.chatTools),
+)
+const selectedModelName = computed(
+  () =>
+    modelMenu.value.find((model) => model.key === selectedModelKey.value)?.name ??
+    modelMenu.value[0]?.name ??
+    VIDEO_DIALOGUE_MODEL_MENU[0].name,
+)
+
+const aspectRatioOptions = computed(() =>
+  buildVideoDialogueAspectRatiosFromCapabilities(props.chatTools),
+)
+const clarityOptions = computed(() =>
+  buildVideoDialogueClaritiesFromCapabilities(props.chatTools),
+)
+const durationRange = computed(() =>
+  buildVideoDialogueDurationRangeFromCapabilities(props.chatTools),
+)
+const generateAudioOptions = computed(() =>
+  buildVideoDialogueGenerateAudioOptions(props.chatTools),
+)
+
+function syncDialogueDefaultsFromChatTools() {
+  const models = modelMenu.value
+  if (models.length && !models.some((model) => model.key === selectedModelKey.value)) {
+    selectedModelKey.value = models[0].key
+  }
+
+  const ratios = aspectRatioOptions.value
+  if (ratios.length && !ratios.some((ratio) => ratio.key === videoAspectRatio.value)) {
+    videoAspectRatio.value = ratios[0].key as VideoGenAspectRatio
+  }
+
+  const clarities = clarityOptions.value
+  if (clarities.length && !clarities.includes(videoResolution.value)) {
+    videoResolution.value = clarities[0] as VideoGenResolution
+  }
+
+  const range = durationRange.value
+  const currentDuration = videoDuration.value
+  if (currentDuration < range.min || currentDuration > range.max) {
+    videoDuration.value = (range.defaultValue ?? range.min) as VideoGenDuration
+  }
+
+  const audioOptions = generateAudioOptions.value
+  if (audioOptions.length && !audioOptions.includes(generateAudio.value)) {
+    generateAudio.value = audioOptions[0]
+  }
+}
+
+watch(
+  () => props.chatTools,
+  () => {
+    syncDialogueDefaultsFromChatTools()
+  },
+  { immediate: true, deep: true },
+)
 
 const videoSettingsLabel = computed(() =>
   formatVideoGenSettings(videoDuration.value, videoAspectRatio.value, videoResolution.value),
@@ -183,6 +288,23 @@ function onInput(event: Event) {
 
 function toggleVideoSettings() {
   showVideoSettings.value = !showVideoSettings.value
+  if (showVideoSettings.value) {
+    showModelMenu.value = false
+  }
+}
+
+function toggleModelMenu() {
+  showModelMenu.value = !showModelMenu.value
+  if (showModelMenu.value) {
+    showVideoSettings.value = false
+    showAdvisorMenu.value = false
+    showStoryboardPanel.value = false
+  }
+}
+
+function selectModel(model: VideoDialogueModelItem) {
+  selectedModelKey.value = model.key
+  showModelMenu.value = false
 }
 
 function toggleAdvisorMenu() {
@@ -191,6 +313,7 @@ function toggleAdvisorMenu() {
     activeAdvisorKey.value = 'dynamic'
     showStoryboardPanel.value = false
     showVideoSettings.value = false
+    showModelMenu.value = false
   }
 }
 
@@ -199,6 +322,7 @@ function toggleStoryboardPanel() {
   if (showStoryboardPanel.value) {
     showAdvisorMenu.value = false
     showVideoSettings.value = false
+    showModelMenu.value = false
   }
 }
 
@@ -444,6 +568,126 @@ function selectAdvisorItem() {
   margin-top: 10px;
 }
 
+.video-dialogue__footer-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.video-dialogue__model-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.video-dialogue__model {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid #ebedf0;
+  border-radius: 999px;
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+
+  &:hover {
+    background: #f9fafb;
+  }
+}
+
+.video-dialogue__model--active {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.video-dialogue__model-icon {
+  width: 14px;
+  height: 14px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' viewBox='0 0 14 14'%3E%3Cpath fill='%237c8cff' d='M7 1.5 8.3 5 11.8 6.3 8.3 7.6 7 11.1 5.7 7.6 2.2 6.3 5.7 5z'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
+}
+
+.video-dialogue__model-caret {
+  width: 10px;
+  height: 10px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' viewBox='0 0 10 10'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.2' d='M2.5 6.25 5 3.75 7.5 6.25'/%3E%3C/svg%3E") center / 10px 10px no-repeat;
+}
+
+.video-dialogue__model-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 6;
+  min-width: 240px;
+  max-width: 320px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #ebedf0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+}
+
+.video-dialogue__model-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: #f6f7f9;
+  }
+}
+
+.video-dialogue__model-item--active {
+  background: #f3f4f6;
+}
+
+.video-dialogue__model-item-icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background-color: #f3f4f6;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 18px 18px;
+
+  &[data-icon='lib'] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' viewBox='0 0 18 18'%3E%3Ccircle cx='9' cy='9' r='6' stroke='%236b7280' stroke-width='1.3'/%3E%3Ccircle cx='9' cy='9' r='2.2' stroke='%236b7280' stroke-width='1.3'/%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-width='1.3' d='M9 3v1.6M9 13.4V15M3 9h1.6M13.4 9H15'/%3E%3C/svg%3E");
+  }
+
+  &[data-icon='seedream'] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' viewBox='0 0 18 18'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.3' d='M4 13V8M9 13V5M14 13v-3'/%3E%3C/svg%3E");
+  }
+
+  &[data-icon='seedance'],
+  &[data-icon='kling'],
+  &[data-icon='happy-horse'],
+  &[data-icon='wan'] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' viewBox='0 0 18 18'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.3' d='M4 13V8M9 13V5M14 13v-3'/%3E%3C/svg%3E");
+  }
+}
+
+.video-dialogue__model-item-name {
+  flex: 1;
+  min-width: 0;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.3;
+  word-break: break-all;
+}
+
 .video-dialogue__tools,
 .video-dialogue__actions {
   display: flex;
@@ -484,27 +728,10 @@ function selectAdvisorItem() {
   }
 }
 
-.video-dialogue__cube {
-  display: inline-flex;
+.video-dialogue__actions {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
-  cursor: pointer;
-
-  &:hover {
-    background: #f9fafb;
-  }
-}
-
-.video-dialogue__cube-icon {
-  width: 14px;
-  height: 14px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' viewBox='0 0 14 14'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.2' d='M7 1.5 11.5 4v6L7 12.5 2.5 10V4z'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
+  gap: 4px;
 }
 
 .video-dialogue__credits {

@@ -32,19 +32,6 @@
     </div>
 
     <div class="image-dialogue__head">
-      <!-- <button
-        type="button"
-        class="image-dialogue__chip"
-        @mousedown.stop
-        @click.stop="openStyleModal"
-      >
-        <span class="image-dialogue__chip-icon" data-icon="style" aria-hidden="true" />
-        风格
-      </button>
-      <button type="button" class="image-dialogue__chip">
-        <span class="image-dialogue__chip-icon" data-icon="mark" aria-hidden="true" />
-        标记
-      </button> -->
       <div class="image-dialogue__thumbs">
         <div
           v-for="(item, index) in previewList"
@@ -245,7 +232,6 @@ const props = defineProps<{
   previews?: ImageSourceRef[]
   chatTools?: ChatTools | null
 }>()
-
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   remove: [sourceNodeId?: string]
@@ -505,22 +491,9 @@ function toggleModelMenu() {
   }
 }
 
-function toggleCountMenu() {
-  showCountMenu.value = !showCountMenu.value
-  if (showCountMenu.value) {
-    showGenSettings.value = false
-    showModelMenu.value = false
-  }
-}
-
 function selectModel(model: ImageDialogueModelItem) {
   selectedModelKey.value = model.key
   showModelMenu.value = false
-}
-
-function selectCount(count: number) {
-  genImageCount.value = count
-  showCountMenu.value = false
 }
 
 function onSend() {
