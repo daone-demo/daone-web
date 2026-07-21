@@ -33,7 +33,7 @@
           @click.stop="togglePromptWorkFlow"
         >
           <span class="canvas__prompt-model-mark" aria-hidden="true" />
-          {{ selectedPromptWorkFlowName }}
+          {{ selectedPromptWorkFlowName }}123
           <span class="canvas__prompt-model-arrow">▾</span>
         </button>
         <div
@@ -126,7 +126,7 @@
     </div>
     <div class="canvas__prompt-footer">
       <div class="canvas__prompt-model-wrap">
-        <button
+        <!-- <button
           type="button"
           class="canvas__prompt-model-chip"
           :class="{ 'canvas__prompt-model-chip--active': showPromptModelMenu }"
@@ -157,7 +157,7 @@
             </span>
             <span class="canvas__prompt-model-item-time">{{ model.duration }}</span>
           </button>
-        </div>
+        </div> -->
       </div>
       <div class="canvas__prompt-actions">
         <button type="button" class="canvas__prompt-icon" title="翻译">文A</button>

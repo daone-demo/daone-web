@@ -26,7 +26,7 @@ import {
   getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
-  ensureImageTextEdge, findIncomingImageNode, mockImg2Prompt, mockTextGenerate, syncTextNodeImageSource,
+  ensureImageTextEdge, findIncomingImageNode, mockImg2Prompt, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
   useCanvasKeyboard, api, exampleImage, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
@@ -1893,6 +1893,9 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   async function submitTextPrompt() {
+    console.log('modelType', modelType.value);
+    console.log('promptText', promptText.value);
+    // return;
     if (!canSubmitTextPrompt.value || promptSubmitting.value) return
 
     const g = graph.value
@@ -1956,50 +1959,103 @@ export function registerCore(bind: CanvasBindings) {
         scheduleHistoryPush()
         return
       }
-
-      const trimmedPrompt = promptText.value.trim()
-      const loadingData = {
-        ...(cell.getData() as CanvasNodeData),
-        mode: 'editor' as const,
-        textGenState: 'loading' as const,
-        textGenProgress: 0,
-        genPrompt: trimmedPrompt,
-        promptBarPinned: true,
-        textPickerTask: '' as const,
-      }
-      cell.setData(loadingData)
-
-      let progress = 0
-      const timer = window.setInterval(() => {
-        progress = Math.min(95, progress + Math.round(8 + Math.random() * 12))
-        cell.setData({
+      if (modelType.value == 'free') {
+        const trimmedPrompt = promptText.value.trim()
+        const loadingData = {
           ...(cell.getData() as CanvasNodeData),
-          textGenProgress: progress,
-        })
-      }, 280)
+          mode: 'editor' as const,
+          textGenState: 'loading' as const,
+          textGenProgress: 0,
+          genPrompt: trimmedPrompt,
+          promptBarPinned: true,
+          textPickerTask: '' as const,
+        }
+        cell.setData(loadingData)
 
-      let result = ''
-      try {
-        result = await mockTextGenerate(trimmedPrompt)
-      } finally {
-        window.clearInterval(timer)
+        let progress = 0
+        const timer = window.setInterval(() => {
+          progress = Math.min(95, progress + Math.round(8 + Math.random() * 12))
+          cell.setData({
+            ...(cell.getData() as CanvasNodeData),
+            textGenProgress: progress,
+          })
+        }, 280)
+
+        let result = ''
+        const idempotencyKey =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `text-copy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+        try {
+          const created = await api.createGenerationTask<GenerationTaskDetail>(
+            {
+              taskType: 'TEXT',
+              capabilityCode: 'TEXT_COPY_V1',
+              prompt: trimmedPrompt,
+              parameters: {
+                style: 'creative',
+              },
+              projectId: activeProjectId.value,
+              nodeId,
+            },
+            idempotencyKey,
+          )
+
+          const taskId = created.id
+          if (!taskId) {
+            throw new Error('创建文案生成任务失败')
+          }
+
+          updateTextGenerationNodeProgress(cell as Node, created.progress ?? 5)
+
+          const finalTask =
+            created.status === 'SUCCEEDED'
+              ? created
+              : await pollGenerationTask(taskId, {
+                onProgress: (task) => updateTextGenerationNodeProgress(cell as Node, task.progress ?? 0),
+              })
+
+          if (finalTask.status !== 'SUCCEEDED') {
+            const reason = finalTask.error?.message || '文案生成任务失败'
+            markTextGenerationNodeFailed(cell as Node, reason)
+            message.error(reason)
+            return
+          }
+
+          const textResult = pickTextGenerationResult(finalTask)
+          result = textResult?.content?.trim() || ''
+          if (!result) {
+            markTextGenerationNodeFailed(cell as Node, '未返回文案')
+            message.error('生成完成，但未返回文案内容')
+            return
+          }
+        } catch (error) {
+          markTextGenerationNodeFailed(cell as Node)
+          message.error(isRequestError(error) ? error.message : '文案生成失败，请稍后重试')
+          return
+        } finally {
+          window.clearInterval(timer)
+        }
+
+        const data = { ...(cell.getData() as CanvasNodeData) }
+        data.content = plainTextToEditorHtml(result)
+        data.mode = 'editor'
+        data.textGenState = 'done'
+        data.textGenProgress = 100
+        data.genPrompt = trimmedPrompt
+        data.promptBarPinned = true
+        data.textPickerTask = ''
+        cell.setData(data)
+        selectedNodeId.value = nodeId
+        selectedKind.value = 'text'
+        syncNodeSelectionHighlight(nodeId)
+        bumpToolbarRevision()
+        updateNodeToolbar()
+        scheduleHistoryPush()
       }
 
-      const data = { ...(cell.getData() as CanvasNodeData) }
-      data.content = plainTextToEditorHtml(result)
-      data.mode = 'editor'
-      data.textGenState = 'done'
-      data.textGenProgress = 100
-      data.genPrompt = trimmedPrompt
-      data.promptBarPinned = true
-      data.textPickerTask = ''
-      cell.setData(data)
-      selectedNodeId.value = nodeId
-      selectedKind.value = 'text'
-      syncNodeSelectionHighlight(nodeId)
-      bumpToolbarRevision()
-      updateNodeToolbar()
-      scheduleHistoryPush()
+      
     } finally {
       promptSubmitting.value = false
     }
