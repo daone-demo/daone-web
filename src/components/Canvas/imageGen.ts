@@ -310,3 +310,72 @@ export function findOutgoingLoadingGenerationNode(graph: Graph, sourceId: string
   }
   return null
 }
+
+/** 宫格拆分：在源节点右侧按 rows×cols 网格排布结果节点（带间距）并连线 */
+export function spawnGridSplitResultNodes(
+  graph: Graph,
+  sourceNode: Node,
+  tiles: Array<{
+    dataUrl: string
+    width: number
+    height: number
+    row: number
+    col: number
+    label: string
+  }>,
+  options: {
+    titlePrefix?: string
+    rows: number
+    cols: number
+  },
+) {
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  const bbox = sourceNode.getBBox()
+  const titlePrefix = options.titlePrefix?.trim() || '宫格'
+  const gap = 16
+  const nodes: Node[] = []
+
+  const probe = tiles[0]
+  const probeOverrides: Partial<CanvasNodeData> = {
+    kind: 'image',
+    mode: 'editor',
+    previewUrl: probe?.dataUrl,
+    mediaWidth: probe?.width,
+    mediaHeight: probe?.height,
+  }
+  const cellSize = getNodeSize('image', 'editor', probeOverrides)
+  const gridHeight = options.rows * cellSize.height + (options.rows - 1) * gap
+  const originX = bbox.x + bbox.width + GEN_GAP
+  const originY = bbox.y + bbox.height / 2 - gridHeight / 2
+
+  tiles.forEach((tile) => {
+    const overrides: Partial<CanvasNodeData> = {
+      kind: 'image',
+      mode: 'editor',
+      title: `${titlePrefix} ${tile.label}`,
+      previewUrl: tile.dataUrl,
+      mediaWidth: tile.width,
+      mediaHeight: tile.height,
+      uploadState: 'done',
+      fileName: sourceData.fileName
+        ? `${titlePrefix}-${tile.label}-${sourceData.fileName}`
+        : `${titlePrefix}-${tile.label}.png`,
+      sourceNodeId: sourceNode.id,
+      sourcePreviewUrl: sourceData.previewUrl ?? '',
+      sourceFileName: sourceData.fileName ?? '',
+      sourceAssetId: sourceData.assetId,
+    }
+    const size = getNodeSize('image', 'editor', overrides)
+    const colIndex = tile.col - 1
+    const rowIndex = tile.row - 1
+    const point = {
+      x: originX + colIndex * (cellSize.width + gap) + size.width / 2,
+      y: originY + rowIndex * (cellSize.height + gap) + size.height / 2,
+    }
+    const node = addCanvasNode(graph, 'image', point, overrides)
+    connectGenEdge(graph, sourceNode.id, node.id)
+    nodes.push(node)
+  })
+
+  return nodes
+}

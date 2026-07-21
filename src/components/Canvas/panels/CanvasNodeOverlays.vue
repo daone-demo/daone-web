@@ -245,6 +245,29 @@
   </div>
 
   <div
+    v-if="showImageGridSplit && selectedKind === 'image'"
+    class="canvas__image-grid-split"
+    :style="{
+      left: `${imageGridSplitPos.left}px`,
+      top: `${imageGridSplitPos.top}px`,
+      width: `${imageGridSplitPos.width}px`,
+      height: `${imageGridSplitPos.height}px`,
+    }"
+    @mousedown.stop
+  >
+    <ImageGridSplitOverlay
+      v-if="imageGridSplitSource"
+      :image-url="imageGridSplitSource.previewUrl"
+      :natural-width="imageGridSplitSource.mediaWidth"
+      :natural-height="imageGridSplitSource.mediaHeight"
+      :rows="gridSplitRows"
+      :cols="gridSplitCols"
+      @cancel="emit('close-image-grid-split')"
+      @complete="emit('image-grid-split-complete', $event)"
+    />
+  </div>
+
+  <div
     v-if="showImageDialogue && selectedKind === 'image'"
     class="canvas__node-dialogue"
     :style="{
@@ -319,6 +342,7 @@ import ImageGenPromptPanel from '../ImageGenPromptPanel.vue'
 import VideoGenPromptPanel from '../VideoGenPromptPanel.vue'
 import ImageDialoguePanel from '../ImageDialoguePanel.vue'
 import ImageCropOverlay from '../ImageCropOverlay.vue'
+import ImageGridSplitOverlay from '../ImageGridSplitOverlay.vue'
 import VideoDialoguePanel from '../VideoDialoguePanel.vue'
 import VideoHdPanel from '../VideoHdPanel.vue'
 import VideoFramesPanel from '../VideoFramesPanel.vue'
@@ -355,15 +379,24 @@ const props = defineProps<{
   imageGenPromptPos: { left: number; top: number; width: number }
   videoGenPromptPos: { left: number; top: number; width: number }
   imageCropPos: { left: number; top: number; width: number; height: number }
+  imageGridSplitPos: { left: number; top: number; width: number; height: number }
   dialoguePos: { left: number; top: number; width: number }
   videoHdPos: { left: number; top: number; width: number }
   selectedKind: NodeKind | null
   showImageCrop: boolean
+  showImageGridSplit: boolean
+  gridSplitRows: number
+  gridSplitCols: number
   showImageDialogue: boolean
   showVideoDialogue: boolean
   showVideoHdPanel: boolean
   showVideoFramesPanel: boolean
   imageCropSource: {
+    previewUrl: string
+    mediaWidth: number
+    mediaHeight: number
+  } | null
+  imageGridSplitSource: {
     previewUrl: string
     mediaWidth: number
     mediaHeight: number
@@ -411,6 +444,13 @@ const emit = defineEmits<{
   'generate-image': []
   'close-image-crop': []
   'image-crop-complete': [payload: { dataUrl: string; width: number; height: number }]
+  'close-image-grid-split': []
+  'image-grid-split-complete': [payload: {
+    rows: number
+    cols: number
+    rowStops: number[]
+    colStops: number[]
+  }]
   'reset-video-hd-panel': []
   'video-hd-start': []
   'video-gen-drag-start': [event: MouseEvent]

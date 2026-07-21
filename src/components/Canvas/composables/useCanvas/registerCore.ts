@@ -16,7 +16,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME, NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnGenerationResultNode, spawnModel3DResultNode, spawnTextPromptResultNode, findOutgoingLoadingGenerationNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
+  spawnCroppedImageNode, spawnGenerationResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnTextPromptResultNode, findOutgoingLoadingGenerationNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
   getConnectMenuPosition, getLinkedSpawnPoint, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -53,6 +53,7 @@ import {
   type ImageToolbarClickPayload,
   type ImageToolbarClickEvent,
 } from '../../constants'
+import { splitImageIntoGrid } from '../../gridSplitUtils'
 import {
   createSkillId,
   listSavedCanvasSkills,
@@ -155,6 +156,7 @@ export function registerCore(bind: CanvasBindings) {
     showElementSelectMode,
     elementSelectReturnNodeId,
     imageCropPos,
+    imageGridSplitPos,
     videoHdPos,
     selectedKind,
     showImageToolbarMore,
@@ -163,6 +165,10 @@ export function registerCore(bind: CanvasBindings) {
     showImageDialogue,
     showImageCrop,
     cropSourceNodeId,
+    showImageGridSplit,
+    gridSplitSourceNodeId,
+    gridSplitRows,
+    gridSplitCols,
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,
@@ -242,7 +248,7 @@ const showGroupToolbar = computed(() => activeGroupSelection.value != null)
 const showPromptBar = computed(() => {
   if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
   const id = activePickerNodeId.value
-  if (!id || nodeCount.value === 0 || showImageCrop.value) return false
+  if (!id || nodeCount.value === 0 || showImageCrop.value || showImageGridSplit.value) return false
   return true
 })
 const showImageGenPromptBar = computed(
@@ -251,7 +257,8 @@ const showImageGenPromptBar = computed(
     !showGroupToolbar.value &&
     Boolean(activeImageGenPromptNodeId.value) &&
     nodeCount.value > 0 &&
-    !showImageCrop.value,
+    !showImageCrop.value &&
+    !showImageGridSplit.value,
 )
 const showVideoGenPromptBar = computed(
   () =>
@@ -259,7 +266,8 @@ const showVideoGenPromptBar = computed(
     !showGroupToolbar.value &&
     Boolean(activeVideoGenPromptNodeId.value) &&
     nodeCount.value > 0 &&
-    !showImageCrop.value,
+    !showImageCrop.value &&
+    !showImageGridSplit.value,
 )
 
 const videoGenSourceRefs = computed(() => {
@@ -279,7 +287,7 @@ const showImageCreativeToolbar = computed(() => {
 const showTextFormatToolbar = computed(() => {
   void toolbarRevision.value
   if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
-  if (!selectedNodeId.value || showImageCrop.value || textExpandOpen.value) return false
+  if (!selectedNodeId.value || showImageCrop.value || showImageGridSplit.value || textExpandOpen.value) return false
   const data = getSelectedNodeData()
   return (
     data?.kind === 'text' &&
@@ -304,6 +312,21 @@ const canSubmitTextPrompt = computed(() => {
 
 const imageCropSource = computed(() => {
   const data = getSelectedNodeData()
+  if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) return null
+  return {
+    previewUrl: data.previewUrl,
+    mediaWidth: data.mediaWidth,
+    mediaHeight: data.mediaHeight,
+  }
+})
+
+const imageGridSplitSource = computed(() => {
+  const g = graph.value
+  const id = gridSplitSourceNodeId.value || selectedNodeId.value
+  if (!g || !id) return null
+  const cell = g.getCellById(id)
+  if (!cell?.isNode()) return null
+  const data = cell.getData() as CanvasNodeData
   if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) return null
   return {
     previewUrl: data.previewUrl,
@@ -446,6 +469,10 @@ function onImageToolbarAction(payload: ImageToolbarClickPayload) {
     handleImageTo3DAction(event)
   } else if (event.key === 'IMAGE_PROMPT_REVERSE') {
     handleImagePromptReverseAction(event)
+  } else if (event.key === 'IMAGE_PREVIEW') {
+    openImagePreview()
+  } else if (event.key === 'IMAGE_GRID_SPLIT') {
+    handleImageGridSplitAction(event)
   } else {
     handleImageCapabilityAction(event)
   }
@@ -486,6 +513,117 @@ function onImageToolbarAction(payload: ImageToolbarClickPayload) {
   //   default:
   //     break
   // }
+}
+
+function handleImageGridSplitAction(_event: ImageToolbarClickEvent) {
+  openImageGridSplit()
+}
+
+function openImageGridSplit(rows = 2, cols = 2) {
+  const data = getSelectedNodeData()
+  if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) {
+    message.warning('请等待图片加载完成后再拆分')
+    return
+  }
+
+  showImageHdMenu.value = false
+  showImageDialogue.value = false
+  showImageToolbarMore.value = false
+  showImageToolbarMoreMenu.value = false
+  closeImageCrop()
+
+  gridSplitSourceNodeId.value = selectedNodeId.value
+  gridSplitRows.value = rows
+  gridSplitCols.value = cols
+  showImageGridSplit.value = true
+  updateNodeToolbar()
+}
+
+function closeImageGridSplit() {
+  showImageGridSplit.value = false
+  gridSplitSourceNodeId.value = ''
+  updateNodeToolbar()
+}
+
+function resetImageGridSplit() {
+  showImageGridSplit.value = false
+  gridSplitSourceNodeId.value = ''
+}
+
+async function onImageGridSplitComplete(payload: {
+  rows: number
+  cols: number
+  rowStops: number[]
+  colStops: number[]
+}) {
+  const g = graph.value
+  const sourceNodeId = gridSplitSourceNodeId.value || selectedNodeId.value
+  if (!g || !sourceNodeId) {
+    closeImageGridSplit()
+    return
+  }
+
+  const sourceCell = g.getCellById(sourceNodeId)
+  if (!sourceCell?.isNode()) {
+    closeImageGridSplit()
+    return
+  }
+
+  const sourceNode = sourceCell as Node
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  if (!sourceData.previewUrl) {
+    closeImageGridSplit()
+    return
+  }
+
+  const hide = message.loading(`正在拆分为 ${payload.rows}×${payload.cols} 宫格...`, 0)
+  try {
+    const tiles = await splitImageIntoGrid(sourceData.previewUrl, payload.rows, payload.cols, {
+      rowStops: payload.rowStops,
+      colStops: payload.colStops,
+    })
+    if (!tiles.length) {
+      message.warning('拆分结果为空')
+      return
+    }
+
+    const nodes = spawnGridSplitResultNodes(g, sourceNode, tiles, {
+      titlePrefix: '宫格',
+      rows: payload.rows,
+      cols: payload.cols,
+    })
+
+    closeImageGridSplit()
+
+    const focusNode = nodes[0]
+    if (focusNode) {
+      selectedNodeId.value = focusNode.id
+      selectedKind.value = 'image'
+      syncNodeSelectionHighlight(focusNode.id)
+    }
+    syncNodeCount()
+    bumpToolbarRevision()
+    updateNodeToolbar()
+    scheduleHistoryPush()
+
+    nextTick(() => {
+      const scroller = getScroller(g)
+      if (!scroller || !nodes.length) return
+      const first = nodes[0].getBBox()
+      const last = nodes[nodes.length - 1].getBBox()
+      scroller.transitionToPoint(
+        (first.x + last.x + last.width) / 2,
+        (first.y + last.y + last.height) / 2,
+        { duration: '280ms' },
+      )
+    })
+    message.success(`已拆分为 ${tiles.length} 个宫格`)
+  } catch (error) {
+    console.error('[grid-split] failed', error)
+    message.error(error instanceof Error ? error.message : '宫格拆分失败，请稍后重试')
+  } finally {
+    hide()
+  }
 }
 
 function handleImagePromptReverseAction(event: ImageToolbarClickEvent) {
@@ -877,6 +1015,7 @@ function openImageCrop() {
   showImageDialogue.value = false
   showImageToolbarMore.value = false
   showImageToolbarMoreMenu.value = false
+  closeImageGridSplit()
   cropSourceNodeId.value = selectedNodeId.value
   showImageCrop.value = true
   updateNodeToolbar()
@@ -3100,6 +3239,9 @@ function updateNodeToolbar() {
   if (showImageCrop.value) {
     imageCropPos.value = getNodeCropOverlayPosition(g, node, overlayRoot)
   }
+  if (showImageGridSplit.value) {
+    imageGridSplitPos.value = getNodeCropOverlayPosition(g, node, overlayRoot, 360, 480)
+  }
   if (data.kind === 'video' && showVideoHdPanel.value) {
     videoHdPos.value = getNodeSidePanelPosition(g, node, overlayRoot)
   }
@@ -3695,6 +3837,7 @@ function removeSelectedNodes() {
   resetImageToolbarMore()
   resetImageDialogue()
   resetImageCrop()
+  resetImageGridSplit()
   resetVideoDialogue()
   resetVideoHdPanel()
   resetVideoFramesPanel()
@@ -3734,6 +3877,7 @@ function handleNodeClick({ node, e }: { node: Node; e?: MouseEvent }) {
   resetImageToolbarMore()
   resetImageDialogue()
   resetImageCrop()
+  resetImageGridSplit()
   resetVideoDialogue()
   resetVideoHdPanel()
   resetVideoFramesPanel()
@@ -3791,6 +3935,7 @@ function resetCanvasInteractionState() {
   resetImageToolbarMore()
   resetImageDialogue()
   resetImageCrop()
+  resetImageGridSplit()
   resetVideoDialogue()
   resetVideoHdPanel()
   resetVideoFramesPanel()
@@ -3818,6 +3963,10 @@ function dismissOneCanvasLayer() {
   }
   if (showImageCrop.value) {
     closeImageCrop()
+    return true
+  }
+  if (showImageGridSplit.value) {
+    closeImageGridSplit()
     return true
   }
   if (nodeOverlaysRef.value?.dismissVideoGenPromptOverlay()) {
@@ -3925,6 +4074,7 @@ function dismissOneCanvasLayer() {
     resetImageToolbarMore()
     resetImageDialogue()
     resetImageCrop()
+    resetImageGridSplit()
     resetVideoDialogue()
     resetVideoHdPanel()
     resetVideoFramesPanel()
@@ -4853,6 +5003,8 @@ const openNewProject = () => {
     closeConnectMenu,
     closeHistoryPanel,
     closeImageCrop,
+    closeImageGridSplit,
+    onImageGridSplitComplete,
     closeImageGenPromptBar,
     closeImagePreview,
     closeImageToolbarMore,
@@ -4921,6 +5073,7 @@ const openNewProject = () => {
     handleUserMenuAction,
     hasCanvasFileDrag,
     imageCropSource,
+    imageGridSplitSource,
     imageDialoguePreviewUrl,
     imageDialoguePreviews,
     isImageUploadFile,
@@ -4991,6 +5144,7 @@ const openNewProject = () => {
     requestCanvasUpload,
     resetCanvasInteractionState,
     resetImageCrop,
+    resetImageGridSplit,
     resetImageDialogue,
     resetImageToolbarMore,
     resetVideoDialogue,

@@ -130,6 +130,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showElementSelectMode = ref(false)
   const elementSelectReturnNodeId = ref('')
   const imageCropPos = ref({ left: 0, top: 0, width: 360, height: 420 })
+  const imageGridSplitPos = ref({ left: 0, top: 0, width: 420, height: 520 })
   const videoHdPos = ref({ left: 0, top: 0, width: 320 })
   const selectedKind = ref<NodeKind | null>(null)
   const showImageToolbarMore = ref(false)
@@ -138,6 +139,10 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showImageDialogue = ref(false)
   const showImageCrop = ref(false)
   const cropSourceNodeId = ref('')
+  const showImageGridSplit = ref(false)
+  const gridSplitSourceNodeId = ref('')
+  const gridSplitRows = ref(2)
+  const gridSplitCols = ref(2)
   const showVideoDialogue = ref(false)
   const showVideoHdPanel = ref(false)
   const showVideoFramesPanel = ref(false)
@@ -245,6 +250,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showElementSelectMode,
     elementSelectReturnNodeId,
     imageCropPos,
+    imageGridSplitPos,
     videoHdPos,
     selectedKind,
     showImageToolbarMore,
@@ -253,6 +259,10 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showImageDialogue,
     showImageCrop,
     cropSourceNodeId,
+    showImageGridSplit,
+    gridSplitSourceNodeId,
+    gridSplitRows,
+    gridSplitCols,
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,

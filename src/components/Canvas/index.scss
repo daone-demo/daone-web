@@ -937,6 +937,13 @@
   overflow: visible;
 }
 
+.canvas__image-grid-split {
+  position: absolute;
+  z-index: 20;
+  pointer-events: auto;
+  overflow: visible;
+}
+
 .canvas__img2img-prompt,
 .canvas__video-gen-prompt {
   position: absolute;

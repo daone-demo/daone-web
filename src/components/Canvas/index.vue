@@ -106,7 +106,7 @@
     />
 
     <CanvasNodeToolbar
-      v-if="showNodeToolbar && !showMultiSelectToolbar && !showGroupToolbar && showToolbarFeatureButtons && !showImageCrop"
+      v-if="showNodeToolbar && !showMultiSelectToolbar && !showGroupToolbar && showToolbarFeatureButtons && !showImageCrop && !showImageGridSplit"
       :position="toolbarPos"
       :is-light="isLightNodeToolbar"
       :show-feature-buttons="showToolbarFeatureButtons"
@@ -165,15 +165,20 @@
       :image-gen-prompt-pos="imageGenPromptPos"
       :video-gen-prompt-pos="videoGenPromptPos"
       :image-crop-pos="imageCropPos"
+      :image-grid-split-pos="imageGridSplitPos"
       :dialogue-pos="dialoguePos"
       :video-hd-pos="videoHdPos"
       :selected-kind="selectedKind"
       :show-image-crop="showImageCrop"
+      :show-image-grid-split="showImageGridSplit"
+      :grid-split-rows="gridSplitRows"
+      :grid-split-cols="gridSplitCols"
       :show-image-dialogue="showImageDialogue"
       :show-video-dialogue="showVideoDialogue"
       :show-video-hd-panel="showVideoHdPanel"
       :show-video-frames-panel="showVideoFramesPanel"
       :image-crop-source="imageCropSource"
+      :image-grid-split-source="imageGridSplitSource"
       :prompt-text="promptText"
       :prompt-source-preview-url="promptSourcePreviewUrl"
       :prompt-source-previews="promptSourcePreviews"
@@ -214,6 +219,8 @@
       @update:video-hd-magnification="videoHdMagnification = $event"
       @close-image-crop="closeImageCrop"
       @image-crop-complete="onImageCropComplete"
+      @close-image-grid-split="closeImageGridSplit"
+      @image-grid-split-complete="onImageGridSplitComplete"
       @reset-video-hd-panel="resetVideoHdPanel"
       @video-hd-start="onVideoHdStart"
       @video-gen-drag-start="onVideoGenPromptDragStart"
@@ -397,6 +404,7 @@ const {
   closeHistoryPanel,
   closeAssetCenterPanel,
   closeImageCrop,
+  closeImageGridSplit,
   closeImagePreview,
   closeImageToolbarMore,
   closeShortcutsPanel,
@@ -440,6 +448,10 @@ const {
   handleUserMenuAction,
   imageCropPos,
   imageCropSource,
+  imageGridSplitPos,
+  imageGridSplitSource,
+  gridSplitRows,
+  gridSplitCols,
   imageDialoguePreviewUrl,
   imageDialoguePreviews,
   imageDialogueText,
@@ -464,6 +476,7 @@ const {
   onGoHome,
   onGroupOverlayDragStart,
   onImageCropComplete,
+  onImageGridSplitComplete,
   onImageDialogueAddCanvasNode,
   onImageDialogueUploadFiles,
   onImageToolbarAction,
@@ -511,6 +524,7 @@ const {
   showHistoryPanel,
   showImageCreativeToolbar,
   showImageCrop,
+  showImageGridSplit,
   showImageDialogue,
   showImageGenPromptBar,
   showImageHdMenu,
