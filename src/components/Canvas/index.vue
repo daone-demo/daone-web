@@ -201,6 +201,7 @@
       :video-num="videoNum"
       :image-capabilities="imageCapabilities"
       :chat-tools="chatTools"
+      :workflows="workflows"
       @update:prompt-text="promptText = $event"
       @update:video-num="videoNum = $event"
       @persist-prompt-bar-draft="persistPromptBarDraft"
@@ -364,6 +365,15 @@ const emit = defineEmits<{
   'rename-project': [projectId: string, name: string],
   'delete-project': [projectId: string],
 }>();
+
+defineProps<{
+  projectsList: CanvasProjectItem[]
+  imageCapabilities: ImageCapability[]
+  videoCapabilities: any[]
+  textCapabilities: any[]
+  chatTools: any
+  workflows: any[]
+}>()
 
 const assetsList = ref<AssetView[]>([]);
 const skillList = ref<ElementGroupRecord[]>([]);
@@ -612,14 +622,6 @@ export type CanvasProjectItem = {
   createdAt: string
   updatedAt: string
 }
-
-defineProps<{
-  projectsList: CanvasProjectItem[]
-  imageCapabilities: ImageCapability[]
-  videoCapabilities: any[]
-  textCapabilities: any[]
-  chatTools: any
-}>()
 
 const onChangeAssetsTab = (tab: ProjectTabKey) => {
   assetsTab.value = tab

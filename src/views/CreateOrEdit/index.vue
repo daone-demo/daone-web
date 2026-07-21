@@ -13,6 +13,7 @@
         :video-capabilities="VideoCapabilities"
         :text-capabilities="TextCapabilities"
         :chat-tools="chatTools"
+        :workflows="workflows"
         @focus-chat="focusChatPanel"
         @add-to-chat="onAddToChat"
         @add-asset-to-chat="onAddAssetToChat"
@@ -69,6 +70,7 @@ const historySessions = ref<any[]>([]);
 const currentSessionId = ref('');
 const sessionName = ref('');
 const chatTools = ref<any>({});
+const workflows = ref<any[]>([]);
 
 type CanvasExpose = {
   addImagesFromFiles: (files: File[]) => Promise<Node[]>
@@ -206,7 +208,7 @@ const onRefreshProjects = () => {
 
 const onLoadWorkflows = async () => {
   const res = await api.getWorkflows({ page: 1, pageSize: 50 });
-  console.log('workflows', res);
+  workflows.value = res.records as any[];
 }
 
 const onLoadChatModels = async () => {

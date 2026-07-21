@@ -22,9 +22,13 @@
         class="image-dialogue__model-select"
         placeholder="选择工作流"
       >
-        <a-select-option value="1"></a-select-option>
-        <a-select-option value="2">小红书种草文案</a-select-option>
-        <!-- <a-select-option value="3">3</a-select-option> -->
+        <a-select-option
+          v-for="workflow in workflowOptions"
+          :key="workflow.id"
+          :value="workflow.id"
+        >
+          {{ workflow.name }}
+        </a-select-option>
       </a-select>
       <button type="button" class="image-dialogue__expand" title="展开">
         <span class="image-dialogue__expand-icon" aria-hidden="true" />
@@ -204,11 +208,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useCanvasBgTheme } from './useCanvasBgTheme'
-import ImageGenSettingsPopover from './ImageGenSettingsPopover.vue'
-import ImageStylePanel from './ImageStylePanel.vue'
-import { createPromptMentionApi, needsSpaceBeforeMention } from './promptMention'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useCanvasBgTheme } from './useCanvasBgTheme';
+import ImageGenSettingsPopover from './ImageGenSettingsPopover.vue';
+import ImageStylePanel from './ImageStylePanel.vue';
+import { createPromptMentionApi, needsSpaceBeforeMention } from './promptMention';
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
   IMAGE_DIALOGUE_PLACEHOLDER,
@@ -224,14 +228,17 @@ import {
   type ImageDialogueSubmitPayload,
   type ImageSourceRef,
   type ImageStyleCard,
-} from './constants'
+  type WorkflowRecord,
+} from './constants';
 
 const props = defineProps<{
   modelValue: string
   previewUrl?: string
   previews?: ImageSourceRef[]
   chatTools?: ChatTools | null
-}>()
+  workflows: WorkflowRecord[]
+}>();
+
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   remove: [sourceNodeId?: string]
@@ -241,7 +248,6 @@ const emit = defineEmits<{
 }>()
 
 const { isLightTheme } = useCanvasBgTheme()
-
 const mentionApi = createPromptMentionApi('image-dialogue__mention')
 const promptInputRef = ref<HTMLElement | null>(null)
 let skipPromptWatch = false
@@ -275,6 +281,20 @@ const genResolution = ref('2K')
 const genImageCount = ref(1)
 const selectedModelKey = ref(IMAGE_DIALOGUE_MODEL_MENU[0].key)
 const selectedWorkFlow = ref('')
+
+const workflowOptions = computed(() =>
+  (Array.isArray(props.workflows) ? props.workflows : [])
+    .filter((workflow) => workflow?.id !== undefined && workflow?.id !== null)
+    .map((workflow) => ({
+      ...workflow,
+      id: String(workflow.id),
+      name: String(workflow.name || workflow.description || workflow.id),
+    })),
+)
+
+const selectedWorkflowRecord = computed(() =>
+  workflowOptions.value.find((workflow) => workflow.id === selectedWorkFlow.value),
+)
 
 const modelMenu = computed(() =>
   buildImageDialogueModelsFromCapabilities(props.chatTools),
@@ -338,6 +358,20 @@ watch(
     syncDialogueDefaultsFromChatTools()
   },
   { immediate: true, deep: true },
+)
+
+watch(
+  workflowOptions,
+  (options) => {
+    if (!options.length) {
+      selectedWorkFlow.value = ''
+      return
+    }
+    if (!options.some((workflow) => workflow.id === selectedWorkFlow.value)) {
+      selectedWorkFlow.value = options[0].id
+    }
+  },
+  { immediate: true },
 )
 
 function emitPrompt(text: string) {
@@ -506,6 +540,8 @@ function onSend() {
     aspectRatio: genAspectRatio.value,
     count: genImageCount.value,
     resolution: genResolution.value,
+    workflowId: selectedWorkflowRecord.value?.id,
+    workflow: selectedWorkflowRecord.value,
   }
   emit('submit', payload)
 }

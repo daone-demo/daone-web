@@ -512,6 +512,16 @@ export type ImageDialogueSubmitPayload = {
   aspectRatio: string
   count: number
   resolution?: string
+  workflowId?: string
+  workflow?: WorkflowRecord
+}
+
+export type WorkflowRecord = {
+  id: string | number
+  name: string
+  description?: string
+  workflowJson?: string
+  [key: string]: unknown
 }
 
 export type ChatTools = {

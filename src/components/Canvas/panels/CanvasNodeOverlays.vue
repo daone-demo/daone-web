@@ -282,6 +282,7 @@
       :preview-url="imageDialoguePreviewUrl"
       :previews="imageDialoguePreviews"
       :chat-tools="chatTools"
+      :workflows="workflows"
       @update:model-value="emit('update:imageDialogueText', $event)"
       @remove="emit('remove-image-dialogue-preview', $event)"
       @upload-images="emit('upload-image-dialogue-images', $event)"
@@ -378,6 +379,7 @@ let skipPromptWatch = false
 
 const props = defineProps<{
   chatTools: ChatTools | null
+  workflows: any[]
   canvasBgTheme: CanvasBgTheme
   showPromptBar: boolean
   showImageGenPromptBar: boolean
