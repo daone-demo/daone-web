@@ -26,7 +26,7 @@ import {
   getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
-  ensureImageTextEdge, findIncomingImageNode, mockImg2Prompt, syncTextNodeImageSource,
+  ensureImageTextEdge, findIncomingImageNode, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
   useCanvasKeyboard, api, exampleImage, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
@@ -711,6 +711,7 @@ export function registerCore(bind: CanvasBindings) {
           prompt: '',
           parameters: {
             assetId: event.assetId,
+            prompt: promptText.value.trim(),
           },
           projectId: activeProjectId.value,
           nodeId: sourceNodeId,
@@ -1708,6 +1709,24 @@ export function registerCore(bind: CanvasBindings) {
     return refs
   }
 
+  function resolvePromptReferenceAssetIds(data: CanvasNodeData): string[] {
+    const g = graph.value
+    if (!g) return []
+
+    return seedPromptImageRefs(data)
+      .map((item) => {
+        if (item.assetId) return item.assetId
+        if (item.nodeId) {
+          const imageCell = g.getCellById(item.nodeId)
+          if (imageCell?.isNode()) {
+            return resolveImageAssetId(imageCell.getData() as CanvasNodeData)
+          }
+        }
+        return ''
+      })
+      .filter((id): id is string => Boolean(id))
+  }
+
   function refreshPromptSourcePreviews(data: CanvasNodeData) {
     promptSourcePreviewUrl.value = data.sourcePreviewUrl ?? ''
     promptSourceFileName.value = data.sourceFileName ?? ''
@@ -1910,8 +1929,15 @@ export function registerCore(bind: CanvasBindings) {
 
     try {
       if (modelType.value === 'img2prompt' || isImg2PromptTask.value) {
-        const imageNode = findIncomingImageNode(g, nodeId)
-        const imgData = imageNode?.getData() as CanvasNodeData | undefined
+        const syncedData = syncTextNodeImageSource(g, cell as Node)
+        const referenceAssetIds = resolvePromptReferenceAssetIds(syncedData)
+        const assetId = referenceAssetIds[0] || resolveImageAssetId(syncedData) || ''
+
+        if (!assetId) {
+          message.warning('图片素材 ID 不存在，请等待上传完成')
+          return
+        }
+
         const loadingData = {
           ...(cell.getData() as CanvasNodeData),
           mode: 'editor' as const,
@@ -1920,7 +1946,6 @@ export function registerCore(bind: CanvasBindings) {
         }
         cell.setData(loadingData)
 
-        // 模拟生成进度：准备中 → 生成中 X%
         let progress = 0
         const timer = window.setInterval(() => {
           progress = Math.min(95, progress + Math.round(8 + Math.random() * 12))
@@ -1931,13 +1956,60 @@ export function registerCore(bind: CanvasBindings) {
         }, 280)
 
         let result = ''
+        const idempotencyKey =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `img2prompt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
         try {
-          result = await mockImg2Prompt(promptText.value, {
-            previewUrl: imgData?.previewUrl ?? promptSourcePreviewUrl.value,
-            fileName: imgData?.fileName ?? promptSourceFileName.value,
-            mediaWidth: imgData?.mediaWidth,
-            mediaHeight: imgData?.mediaHeight,
-          })
+          const created = await api.createGenerationTask<GenerationTaskDetail>(
+            {
+              taskType: 'TEXT',
+              capabilityCode: 'IMAGE_PROMPT_REVERSE',
+              prompt: '',
+              parameters: {
+                assetId,
+                prompt: promptText.value.trim(),
+              },
+              projectId: activeProjectId.value,
+              nodeId,
+              referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : [assetId],
+            },
+            idempotencyKey,
+          )
+
+          const taskId = created.id
+          if (!taskId) {
+            throw new Error('创建反推提示词任务失败')
+          }
+
+          updateTextGenerationNodeProgress(cell as Node, created.progress ?? 5)
+
+          const finalTask =
+            created.status === 'SUCCEEDED'
+              ? created
+              : await pollGenerationTask(taskId, {
+                onProgress: (task) => updateTextGenerationNodeProgress(cell as Node, task.progress ?? 0),
+              })
+
+          if (finalTask.status !== 'SUCCEEDED') {
+            const reason = finalTask.error?.message || '反推提示词任务失败'
+            markTextGenerationNodeFailed(cell as Node, reason)
+            message.error(reason)
+            return
+          }
+
+          const textResult = pickTextGenerationResult(finalTask)
+          result = textResult?.content?.trim() || ''
+          if (!result) {
+            markTextGenerationNodeFailed(cell as Node, '未返回提示词')
+            message.error('生成完成，但未返回提示词文本')
+            return
+          }
+        } catch (error) {
+          markTextGenerationNodeFailed(cell as Node)
+          message.error(isRequestError(error) ? error.message : '反推提示词失败，请稍后重试')
+          return
         } finally {
           window.clearInterval(timer)
         }
@@ -4970,6 +5042,7 @@ export function registerCore(bind: CanvasBindings) {
     instance.__openConnectMenu = openConnectMenuByNodeId
     instance.__openImageDialogue = openImageDialogue
     instance.__deleteCanvasNode = removeNodeById
+    instance.__uploadFileToCanvasNode = uploadFileToCanvasNode
     instance.__requestTextExpand = openTextExpand
     instance.__onTextPickerAction = handleTextPickerAction
     instance.__onTextNodeEdgeLinked = handleNodeEdgeLinked

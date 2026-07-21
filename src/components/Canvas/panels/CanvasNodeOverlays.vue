@@ -33,7 +33,7 @@
           @click.stop="togglePromptWorkFlow"
         >
           <span class="canvas__prompt-model-mark" aria-hidden="true" />
-          {{ selectedPromptWorkFlowName }}123
+          {{ selectedPromptWorkFlowName }}
           <span class="canvas__prompt-model-arrow">▾</span>
         </button>
         <div
@@ -66,7 +66,7 @@
       }"
     >
       <span v-if="isImg2PromptTask" class="canvas__prompt-refs">
-        <span
+        <!-- <span
           v-for="(item, index) in promptRefList"
           :key="item.key"
           class="canvas__prompt-ref"
@@ -101,7 +101,7 @@
           @click.stop="openPromptFilePicker"
         >
           <img src="@assets/images/add.png" alt="" class="image-dialogue__upload_icon" />
-        </button>
+        </button> -->
         <input
           ref="promptFileInputRef"
           type="file"
@@ -161,7 +161,7 @@
       </div>
       <div class="canvas__prompt-actions">
         <button type="button" class="canvas__prompt-icon" title="翻译">文A</button>
-        <span class="canvas__prompt-credits">⚡ 1</span>
+        <span class="canvas__prompt-credits">⚡ 12</span>
         <button
           type="button"
           class="canvas__prompt-send"
