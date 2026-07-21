@@ -295,7 +295,7 @@ const props = defineProps<{
   sessionName?: string
 }>()
 
-const API_BASE = import.meta.env.VITE_API_BASE_HOST + '/api/v1';
+const API_BASE = 'https://dev.meilian.pangguimi.com/daone_dev/api/v1';
 
 const { loading, connected, connect, close } = useSSE()
 const isStreaming = computed(() => loading.value || connected.value)

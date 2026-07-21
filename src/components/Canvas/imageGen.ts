@@ -319,8 +319,7 @@ export function findOutgoingLoadingGenerationNode(graph: Graph, sourceId: string
 }
 
 /**
- * 宫格拆分：在源图预览区原地拆成带白色缝隙的碎片节点，并自动分组。
- * 对齐 newimagex「拆图完成」效果。
+ * 宫格拆分：在源图右侧生成带白色缝隙的碎片节点并自动分组，不修改/删除原图。
  */
 export function spawnGridSplitResultNodes(
   graph: Graph,
@@ -347,16 +346,21 @@ export function spawnGridSplitResultNodes(
   const rows = Math.max(1, options.rows)
   const cols = Math.max(1, options.cols)
 
-  const contentX = bbox.x
-  const contentY = bbox.y + (sourceData.compactPreview ? 0 : IMAGE_NODE_META_HEIGHT)
+  const previewOffsetY = sourceData.compactPreview ? 0 : IMAGE_NODE_META_HEIGHT
   const contentW = bbox.width
-  const contentH = Math.max(1, bbox.height - (sourceData.compactPreview ? 0 : IMAGE_NODE_META_HEIGHT))
+  const contentH = Math.max(1, bbox.height - previewOffsetY)
   const gap = computeGridSplitGap(contentW, contentH)
 
   const xEdges = buildGridSplitEdges(cols, options.colStops)
   const yEdges = buildGridSplitEdges(rows, options.rowStops)
   const colLayout = buildSplitAxisLayout(xEdges, contentW, gap)
   const rowLayout = buildSplitAxisLayout(yEdges, contentH, gap)
+
+  const gridHeight = rowLayout.sizes.reduce((sum, size, index) => sum + size + (index < rows - 1 ? gap : 0), 0)
+
+  // 结果宫格排在源图右侧，垂直与源图预览区居中对齐
+  const contentX = bbox.x + bbox.width + GEN_GAP
+  const contentY = bbox.y + previewOffsetY + (contentH - gridHeight) / 2
 
   const nodes: Node[] = []
   const tileMap = new Map(tiles.map((tile) => [`${tile.row}-${tile.col}`, tile]))
@@ -402,7 +406,6 @@ export function spawnGridSplitResultNodes(
       graph,
       nodes.map((node) => node.id),
     )
-    graph.removeCell(sourceNode)
   }
 
   return nodes
