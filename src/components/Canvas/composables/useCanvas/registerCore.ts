@@ -5119,9 +5119,9 @@ export function registerCore(bind: CanvasBindings) {
       clearInterval(autoSaveTimer)
       autoSaveTimer = null
     }
-    // autoSaveTimer = window.setInterval(() => {
-    //   handleSaveCanvas('AUTO')
-    // }, 8000)
+    autoSaveTimer = window.setInterval(() => {
+      handleSaveCanvas('AUTO')
+    }, 8000)
   })
 
   function waitForNodeUploadDone(node: Node) {
