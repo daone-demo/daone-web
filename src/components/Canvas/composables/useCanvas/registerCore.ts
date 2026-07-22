@@ -4130,6 +4130,9 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function onGraphDrop(event: DragEvent) {
+    // graph 在 capture 阶段监听 drop，若不阻止冒泡，.canvas 根节点会再处理一次导致重复建节点
+    event.preventDefault()
+    event.stopPropagation()
     onCanvasFileDrop(event)
   }
 
