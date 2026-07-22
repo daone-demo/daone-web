@@ -85,7 +85,7 @@ export type CanvasBindings = CanvasState & {
     rowStops: number[]
     colStops: number[]
   }) => Promise<void>
-  onImageEraseComplete: (payload: { dataUrl: string; width: number; height: number }) => void
+  onImageEraseComplete: (payload: { dataUrl: string; width: number; height: number }) => Promise<void>
   onImageInpaintComplete: (payload: {
     prompt: string
     mask: { dataUrl: string; width: number; height: number }

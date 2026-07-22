@@ -119,7 +119,7 @@ const stageRef = ref<HTMLElement | null>(null)
 const displayCanvasRef = ref<HTMLCanvasElement | null>(null)
 const cursorRef = ref<HTMLElement | null>(null)
 const stageSize = ref({ width: 360, height: 420 })
-const brushSize = ref(36)
+const brushSize = ref(10)
 const showBrushPanel = ref(false)
 const completing = ref(false)
 

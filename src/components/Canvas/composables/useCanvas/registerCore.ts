@@ -194,6 +194,8 @@ export function registerCore(bind: CanvasBindings) {
   let canvasHistory: ReturnType<typeof createCanvasHistory> | null = null
   let historyPushTimer: ReturnType<typeof setTimeout> | null = null
   let autoSaveTimer: number | null = null
+  let autoSaveEnabled = true
+  let canvasContentReady = false
   let saveInFlight = false
   let pendingRemoteSaveType: 'MANUAL' | 'AUTO' | null = null
   let scrollerScrollTarget: HTMLElement | null = null
@@ -1037,36 +1039,81 @@ export function registerCore(bind: CanvasBindings) {
     updateNodeToolbar()
   }
 
-  function onImageEraseComplete(payload: { dataUrl: string; width: number; height: number }) {
+  async function onImageEraseComplete(payload: { dataUrl: string; width: number; height: number }) {
     const g = graph.value
-    const id = eraseSourceNodeId.value || selectedNodeId.value
-    if (!g || !id) {
+    const sourceNodeId = eraseSourceNodeId.value || selectedNodeId.value
+    if (!g || !sourceNodeId) {
       closeImageErase()
       return
     }
 
-    const cell = g.getCellById(id)
+    const cell = g.getCellById(sourceNodeId)
     if (!cell?.isNode()) {
       closeImageErase()
       return
     }
 
     const sourceNode = cell as Node
-    const erasedNode = spawnErasedImageNode(g, sourceNode, payload)
-    selectedNodeId.value = erasedNode.id
-    selectedKind.value = 'image'
-    syncNodeSelectionHighlight(erasedNode.id)
-    syncNodeCount()
+    const sourceData = sourceNode.getData() as CanvasNodeData
+    const fileName = sourceData.fileName ? `擦除-${sourceData.fileName}` : '擦除结果.png'
+
     closeImageErase()
 
-    nextTick(() => {
-      const scroller = getScroller(g)
-      const bbox = erasedNode.getBBox()
-      scroller?.transitionToPoint(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, {
-        duration: '280ms',
+    const hideLoading = message.loading('正在上传擦除结果...', 0)
+    try {
+      const file = await dataUrlToFile(payload.dataUrl, fileName)
+      const upload = await uploadAssetFile(file, { projectId: activeProjectId.value })
+      if (!upload.url || !upload.assetId) {
+        throw new Error('擦除结果上传失败')
+      }
+
+      const erasedNode = spawnErasedImageNode(g, sourceNode, {
+        dataUrl: upload.url,
+        width: upload.width ?? payload.width,
+        height: upload.height ?? payload.height,
       })
-      updateNodeToolbar()
-    })
+      applyRemoteImageToNode(erasedNode, {
+        assetId: upload.assetId,
+        previewUrl: upload.url,
+        fileName,
+        width: upload.width ?? payload.width,
+        height: upload.height ?? payload.height,
+      })
+
+      selectedNodeId.value = erasedNode.id
+      selectedKind.value = 'image'
+      syncNodeSelectionHighlight(erasedNode.id)
+      syncNodeCount()
+      scheduleHistoryPush()
+
+      nextTick(() => {
+        const scroller = getScroller(g)
+        const bbox = erasedNode.getBBox()
+        scroller?.transitionToPoint(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, {
+          duration: '280ms',
+        })
+        updateNodeToolbar()
+      })
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '擦除结果上传失败，请稍后重试')
+
+      const erasedNode = spawnErasedImageNode(g, sourceNode, payload)
+      selectedNodeId.value = erasedNode.id
+      selectedKind.value = 'image'
+      syncNodeSelectionHighlight(erasedNode.id)
+      syncNodeCount()
+
+      nextTick(() => {
+        const scroller = getScroller(g)
+        const bbox = erasedNode.getBBox()
+        scroller?.transitionToPoint(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, {
+          duration: '280ms',
+        })
+        updateNodeToolbar()
+      })
+    } finally {
+      hideLoading()
+    }
   }
 
   function handleImageCapabilityAction(event: ImageToolbarClickEvent) {
@@ -2559,11 +2606,42 @@ export function registerCore(bind: CanvasBindings) {
     return true
   }
 
+  function stopAutoSave() {
+    autoSaveEnabled = false
+    canvasContentReady = false
+    if (autoSaveTimer) {
+      clearInterval(autoSaveTimer)
+      autoSaveTimer = null
+    }
+    pendingRemoteSaveType = null
+  }
+
+  function startAutoSave() {
+    if (!autoSaveEnabled || !canvasContentReady) return
+    if (autoSaveTimer) {
+      clearInterval(autoSaveTimer)
+      autoSaveTimer = null
+    }
+    autoSaveTimer = window.setInterval(() => {
+      handleSaveCanvas('AUTO')
+    }, 8000)
+  }
+
+  function markCanvasContentReady() {
+    canvasContentReady = true
+    startAutoSave()
+  }
+
+  function onPageUnload() {
+    stopAutoSave()
+  }
+
   function loadProjectCanvas(payload: ProjectCanvasResponse) {
     pendingProjectCanvas = payload
     const loaded = applyProjectCanvasPayload(payload)
     if (loaded) {
       pendingProjectCanvas = null
+      markCanvasContentReady()
     }
     return loaded
   }
@@ -2641,6 +2719,8 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   async function flushRemoteCanvasSave(saveType: 'MANUAL' | 'AUTO') {
+    if (!autoSaveEnabled) return
+    if (saveType === 'AUTO' && !canvasContentReady) return
     if (saveInFlight) {
       pendingRemoteSaveType = mergePendingSaveType(saveType)
       return
@@ -2657,13 +2737,14 @@ export function registerCore(bind: CanvasBindings) {
     pendingRemoteSaveType = null
 
     try {
+      if (!autoSaveEnabled) return
       await persistCanvasToServer(projectId, snapshot, saveType, project)
     } catch (error) {
       console.error('[Canvas] save to server failed', error)
       if (project) project.saved = false
     } finally {
       saveInFlight = false
-      if (pendingRemoteSaveType) {
+      if (pendingRemoteSaveType && autoSaveEnabled) {
         const nextSaveType = pendingRemoteSaveType
         pendingRemoteSaveType = null
         void flushRemoteCanvasSave(nextSaveType)
@@ -2672,6 +2753,8 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function handleSaveCanvas(saveType: 'MANUAL' | 'AUTO' = 'MANUAL') {
+    if (!autoSaveEnabled) return
+    if (saveType === 'AUTO' && !canvasContentReady) return
     const snapshot = buildCanvasSnapshot()
     if (!snapshot) return
 
@@ -5119,6 +5202,11 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   onMounted(() => {
+    autoSaveEnabled = true
+    canvasContentReady = false
+    window.addEventListener('beforeunload', onPageUnload)
+    window.addEventListener('pagehide', onPageUnload)
+
     setCanvasUploadProjectId(() => activeProjectId.value || undefined)
     void onLoadProjects()
 
@@ -5261,8 +5349,11 @@ export function registerCore(bind: CanvasBindings) {
       syncViewportNodeVisibility()
 
       if (pendingProjectCanvas) {
-        applyProjectCanvasPayload(pendingProjectCanvas)
+        const loaded = applyProjectCanvasPayload(pendingProjectCanvas)
         pendingProjectCanvas = null
+        if (loaded) {
+          markCanvasContentReady()
+        }
       }
     })
 
@@ -5272,14 +5363,6 @@ export function registerCore(bind: CanvasBindings) {
 
     bindGraphDropListeners(graphRef.value)
     setCanvasAssetDropHandler(handleCanvasAssetDrop)
-
-    if (autoSaveTimer) {
-      clearInterval(autoSaveTimer)
-      autoSaveTimer = null
-    }
-    autoSaveTimer = window.setInterval(() => {
-      handleSaveCanvas('AUTO')
-    }, 8000)
   })
 
   function waitForNodeUploadDone(node: Node) {
@@ -5387,16 +5470,13 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', onPageUnload)
+    window.removeEventListener('pagehide', onPageUnload)
+    stopAutoSave()
     unbindKeyboard()
     unbindGraphDropListeners()
     setCanvasAssetDropHandler(null)
     clearCanvasAssetDrag()
-    if (autoSaveTimer) {
-      clearInterval(autoSaveTimer)
-      autoSaveTimer = null
-    }
-    pendingRemoteSaveType = null
-    saveInFlight = false
     if (historyPushTimer) clearTimeout(historyPushTimer)
     if (edgeHoverLeaveTimer) window.clearTimeout(edgeHoverLeaveTimer)
     if (altVoiceTimer.value) clearTimeout(altVoiceTimer.value)
