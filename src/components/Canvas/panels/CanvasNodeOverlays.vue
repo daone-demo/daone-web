@@ -46,7 +46,7 @@
             :key="model.key"
             type="button"
             class="canvas__prompt-model-item"
-            :class="{ 'canvas__prompt-model-item--active': model.key === selectedPromptModelKey }"
+            :class="{ 'canvas__prompt-model-item--active': model.key === selectedPromptWorkFlowKey }"
             @click="selectPromptWorkFlow(model)"
           >
             <span class="canvas__prompt-model-item-mark" aria-hidden="true" />
@@ -66,50 +66,7 @@
       }"
     >
       <span v-if="isImg2PromptTask" class="canvas__prompt-refs">
-        <!-- <span
-          v-for="(item, index) in promptRefList"
-          :key="item.key"
-          class="canvas__prompt-ref"
-          :title="`点击插入 @图片${index + 1}`"
-          @mousedown.stop
-          @click.stop="insertRefMention(index + 1)"
-          @mouseenter="hoveredPromptRef = item.key"
-          @mouseleave="hoveredPromptRef = null"
-        >
-          <img :src="item.previewUrl" alt="" />
-          <button
-            v-if="hoveredPromptRef === item.key"
-            type="button"
-            class="canvas__prompt-ref-remove"
-            title="移除"
-            @mousedown.stop
-            @click.stop="emit('remove-prompt-source', item.nodeId)"
-          >
-            <span class="canvas__prompt-ref-remove-icon" aria-hidden="true" />
-          </button>
-          <span v-else class="canvas__prompt-ref-badge">{{ index + 1 }}</span>
-
-          <div v-if="hoveredPromptRef === item.key" class="canvas__prompt-ref-preview">
-            <img :src="item.previewUrl" alt="" />
-          </div>
-        </span>
-        <button
-          type="button"
-          class="image-dialogue__upload"
-          title="添加图片"
-          @mousedown.stop
-          @click.stop="openPromptFilePicker"
-        >
-          <img src="@assets/images/add.png" alt="" class="image-dialogue__upload_icon" />
-        </button> -->
-        <input
-          ref="promptFileInputRef"
-          type="file"
-          class="canvas__prompt-file-input"
-          accept="image/*"
-          multiple
-          @change="onPromptFileInputChange"
-        />
+        <!-- 图片引用与上传入口暂隐藏，保留拖拽上传 -->
       </span>
       <div
         ref="promptInputRef"
@@ -147,7 +104,7 @@
             :key="model.key"
             type="button"
             class="canvas__prompt-model-item"
-            :class="{ 'canvas__prompt-model-item--active': model.key === selectedPromptModelKey }"
+            :class="{ 'canvas__prompt-model-item--active': model.key === selectedPromptWorkFlowKey }"
             @click="selectPromptModel(model)"
           >
             <span class="canvas__prompt-model-item-mark" aria-hidden="true" />
@@ -375,7 +332,6 @@ import VideoHdPanel from '../VideoHdPanel.vue'
 import VideoFramesPanel from '../VideoFramesPanel.vue'
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
-  IMAGE_DIALOGUE_MODEL_MENU,
   PROMPT_PLACEHOLDER,
   TEXT_PROMPT_MODEL_LABEL,
   TEXT_PROMPT_MODEL_MENU,
@@ -388,14 +344,12 @@ import {
   type VideoHdMagnification,
 } from '../constants'
 import type { CanvasBgTheme } from '../canvasTheme'
-import { createPromptMentionApi, needsSpaceBeforeMention } from '../promptMention'
+import { createPromptMentionApi } from '../promptMention'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { VideoSourceRef } from '../videoGen'
 
 const videoGenPromptPanelRef = ref<InstanceType<typeof VideoGenPromptPanel> | null>(null)
-const hoveredPromptRef = ref<string | null>(null)
 const isPromptDragOver = ref(false)
-const promptFileInputRef = ref<HTMLInputElement | null>(null)
 const promptInputRef = ref<HTMLElement | null>(null)
 const mentionApi = createPromptMentionApi('canvas__prompt-mention')
 let skipPromptWatch = false
@@ -503,49 +457,16 @@ const emit = defineEmits<{
   'add-video-gen-canvas-node': [nodeId: string]
 }>()
 
-const showPromptModelMenu = ref(false)
 const showPromptWorkFlow = ref(false)
-const selectedPromptModelKey = ref(IMAGE_DIALOGUE_MODEL_MENU[0]?.key ?? '')
 const selectedPromptWorkFlowKey = ref(TEXT_PROMPT_MODEL_MENU[0]?.key ?? '')
 const selectedPromptWorkFlowName = computed(
   () =>
     TEXT_PROMPT_MODEL_MENU.find((model) => model.key === selectedPromptWorkFlowKey.value)?.name ??
     TEXT_PROMPT_MODEL_LABEL,
 )
-const selectedPromptModelName = computed(
-  () =>
-  IMAGE_DIALOGUE_MODEL_MENU.find((model) => model.key === selectedPromptModelKey.value)?.name ??
-    TEXT_PROMPT_MODEL_LABEL,
-)
-
-const promptRefList = computed(() => {
-  if (props.promptSourcePreviews.length) {
-    return props.promptSourcePreviews.map((item, index) => ({
-      key: item.nodeId || `src-${index}`,
-      nodeId: item.nodeId,
-      previewUrl: item.previewUrl,
-    }))
-  }
-  if (props.promptSourcePreviewUrl) {
-    return [{ key: 'src-0', nodeId: '', previewUrl: props.promptSourcePreviewUrl }]
-  }
-  return []
-})
-
-function togglePromptModelMenu() {
-  showPromptWorkFlow.value = false;
-  showPromptModelMenu.value = !showPromptModelMenu.value
-}
 
 function togglePromptWorkFlow() {
-  showPromptModelMenu.value = false;
   showPromptWorkFlow.value = !showPromptWorkFlow.value
-}
-
-function selectPromptModel(model: TextPromptModelItem) {
-  // console.log(model)
-  selectedPromptModelKey.value = model.key
-  showPromptModelMenu.value = false
 }
 
 function selectPromptWorkFlow(model: TextPromptModelItem) {
@@ -555,10 +476,10 @@ function selectPromptWorkFlow(model: TextPromptModelItem) {
 }
 
 function onPromptModelDocMouseDown(event: MouseEvent) {
-  if (!showPromptModelMenu.value) return
+  if (!showPromptWorkFlow.value) return
   const target = event.target as HTMLElement | null
   if (target?.closest('.canvas__prompt-model-wrap')) return
-  showPromptModelMenu.value = false
+  showPromptWorkFlow.value = false
 }
 
 function emitPrompt(text: string) {
@@ -582,52 +503,6 @@ function syncPromptView(text = props.promptText) {
 
   mentionApi.renderPromptToEl(el, text)
   mentionApi.setPlainTextOffset(el, offset)
-}
-
-function insertRefMention(index: number) {
-  const token = `@图片${index}`
-  const el = promptInputRef.value
-  if (!el) {
-    const current = props.promptText
-    const needsSpace = current.length > 0 && !/[\s]$/.test(current)
-    emitPrompt(`${current}${needsSpace ? ' ' : ''}${token} `)
-    return
-  }
-
-  el.focus()
-  const sel = window.getSelection()
-  if (!sel?.rangeCount) {
-    emitPrompt(`${props.promptText}${props.promptText && !/[\s]$/.test(props.promptText) ? ' ' : ''}${token} `)
-    nextTick(() => syncPromptView())
-    return
-  }
-
-  const range = sel.getRangeAt(0)
-  if (!el.contains(range.commonAncestorContainer)) {
-    range.selectNodeContents(el)
-    range.collapse(false)
-  }
-
-  range.deleteContents()
-
-  if (needsSpaceBeforeMention(range, el, mentionApi.isMentionEl)) {
-    range.insertNode(document.createTextNode(' '))
-    range.collapse(false)
-  }
-
-  const mention = mentionApi.createMentionSpan(token)
-  range.insertNode(mention)
-  const space = document.createTextNode(' ')
-  mention.after(space)
-
-  const nextRange = document.createRange()
-  nextRange.setStartAfter(space)
-  nextRange.collapse(true)
-  sel.removeAllRanges()
-  sel.addRange(nextRange)
-
-  emitPrompt(mentionApi.serializePromptEl(el))
-  nextTick(() => syncPromptView())
 }
 
 function onPromptInput() {
@@ -702,17 +577,6 @@ function onPromptDrop(event: DragEvent) {
     file.type.startsWith('image/'),
   )
   if (files.length) emit('upload-prompt-images', files)
-}
-
-function openPromptFilePicker() {
-  promptFileInputRef.value?.click()
-}
-
-function onPromptFileInputChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = Array.from(input.files ?? []).filter((file) => file.type.startsWith('image/'))
-  if (files.length) emit('upload-prompt-images', files)
-  input.value = ''
 }
 
 watch(
