@@ -172,6 +172,9 @@ export function registerCore(bind: CanvasBindings) {
     showImageErase,
     eraseSourceNodeId,
     imageErasePos,
+    showImageInpaint,
+    inpaintSourceNodeId,
+    imageInpaintPos,
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,
@@ -251,7 +254,7 @@ export function registerCore(bind: CanvasBindings) {
   const showPromptBar = computed(() => {
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
     const id = activePickerNodeId.value
-    if (!id || nodeCount.value === 0 || showImageCrop.value || showImageGridSplit.value || showImageErase.value) return false
+    if (!id || nodeCount.value === 0 || showImageCrop.value || showImageGridSplit.value || showImageErase.value || showImageInpaint.value) return false
     return true
   })
   const showImageGenPromptBar = computed(
@@ -262,7 +265,8 @@ export function registerCore(bind: CanvasBindings) {
       nodeCount.value > 0 &&
       !showImageCrop.value &&
       !showImageGridSplit.value &&
-      !showImageErase.value,
+      !showImageErase.value &&
+      !showImageInpaint.value,
   )
   const showVideoGenPromptBar = computed(
     () =>
@@ -272,7 +276,8 @@ export function registerCore(bind: CanvasBindings) {
       nodeCount.value > 0 &&
       !showImageCrop.value &&
       !showImageGridSplit.value &&
-      !showImageErase.value,
+      !showImageErase.value &&
+      !showImageInpaint.value,
   )
 
   const videoGenSourceRefs = computed(() => {
@@ -292,7 +297,7 @@ export function registerCore(bind: CanvasBindings) {
   const showTextFormatToolbar = computed(() => {
     void toolbarRevision.value
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
-    if (!selectedNodeId.value || showImageCrop.value || showImageGridSplit.value || showImageErase.value || textExpandOpen.value) return false
+    if (!selectedNodeId.value || showImageCrop.value || showImageGridSplit.value || showImageErase.value || showImageInpaint.value || textExpandOpen.value) return false
     const data = getSelectedNodeData()
     return (
       data?.kind === 'text' &&
@@ -343,6 +348,21 @@ export function registerCore(bind: CanvasBindings) {
   const imageEraseSource = computed(() => {
     const g = graph.value
     const id = eraseSourceNodeId.value || selectedNodeId.value
+    if (!g || !id) return null
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return null
+    const data = cell.getData() as CanvasNodeData
+    if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) return null
+    return {
+      previewUrl: data.previewUrl,
+      mediaWidth: data.mediaWidth,
+      mediaHeight: data.mediaHeight,
+    }
+  })
+
+  const imageInpaintSource = computed(() => {
+    const g = graph.value
+    const id = inpaintSourceNodeId.value || selectedNodeId.value
     if (!g || !id) return null
     const cell = g.getCellById(id)
     if (!cell?.isNode()) return null
@@ -502,6 +522,8 @@ export function registerCore(bind: CanvasBindings) {
       handleImageGridSplitAction(event)
     } else if (event.key === 'erase') {
       handleImageEraseAction(event)
+    } else if (event.key === 'IMAGE_INPAINT') {
+      handleImageInpaintAction(event)
     } else {
       handleImageCapabilityAction(event)
     }
@@ -561,6 +583,7 @@ export function registerCore(bind: CanvasBindings) {
     showImageToolbarMoreMenu.value = false
     closeImageCrop()
     closeImageErase()
+    closeImageInpaint()
 
     gridSplitSourceNodeId.value = selectedNodeId.value
     gridSplitRows.value = rows
@@ -862,6 +885,132 @@ export function registerCore(bind: CanvasBindings) {
     openImageErase()
   }
 
+  /**
+   * 局部修改
+   * @param _event 
+   */
+  function handleImageInpaintAction(_event: ImageToolbarClickEvent) {
+    openImageInpaint()
+  }
+
+  function openImageInpaint() {
+    const data = getSelectedNodeData()
+    if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) {
+      message.warning('请等待图片加载完成后再进行局部修改')
+      return
+    }
+
+    showImageHdMenu.value = false
+    showImageDialogue.value = false
+    showImageToolbarMore.value = false
+    showImageToolbarMoreMenu.value = false
+    closeImageCrop()
+    closeImageGridSplit()
+    closeImageErase()
+
+    inpaintSourceNodeId.value = selectedNodeId.value
+    showImageInpaint.value = true
+    updateNodeToolbar()
+  }
+
+  function closeImageInpaint() {
+    showImageInpaint.value = false
+    inpaintSourceNodeId.value = ''
+    updateNodeToolbar()
+  }
+
+  async function dataUrlToFile(dataUrl: string, fileName: string) {
+    const response = await fetch(dataUrl)
+    const blob = await response.blob()
+    return new File([blob], fileName, { type: blob.type || 'image/png' })
+  }
+
+  async function onImageInpaintComplete(payload: {
+    prompt: string
+    mask: { dataUrl: string; width: number; height: number }
+  }) {
+    await handleImageInpaintSubmit(payload)
+  }
+
+  function handleImageInpaintCapabilityAction(
+    event: ImageToolbarClickEvent,
+    options: {
+      prompt: string
+      maskAssetId: string
+    },
+  ) {
+    const title = buildImageActionResultTitle(event.label || '局部修改')
+    const namePrefix = event.label?.trim() || '局部修改'
+    void runImageGenerationTask(event, {
+      capabilityCode: 'IMAGE_INPAINT',
+      title,
+      prompt: options.prompt,
+      buildFileName: (sourceFileName) =>
+        sourceFileName ? `${namePrefix}-${sourceFileName}` : `${title}.png`,
+      buildParameters: (ctx) => ({
+        assetId: ctx.assetId,
+        maskAssetId: options.maskAssetId,
+      }),
+      resolveReferenceAssetIds: () => [event.assetId, options.maskAssetId].filter(Boolean),
+    })
+  }
+
+  async function handleImageInpaintSubmit(payload: {
+    prompt: string
+    mask: { dataUrl: string; width: number; height: number }
+  }) {
+    const g = graph.value
+    const sourceNodeId = inpaintSourceNodeId.value || selectedNodeId.value
+    if (!g || !sourceNodeId) {
+      closeImageInpaint()
+      return
+    }
+
+    const cell = g.getCellById(sourceNodeId)
+    if (!cell?.isNode()) {
+      closeImageInpaint()
+      return
+    }
+
+    const sourceData = cell.getData() as CanvasNodeData
+    const assetId = resolveImageAssetId(sourceData)
+    if (!assetId) {
+      message.warning('图片素材 ID 不存在，请等待上传完成')
+      return
+    }
+
+    const hideLoading = message.loading('正在上传遮罩并提交任务...', 0)
+    try {
+      const maskFile = await dataUrlToFile(payload.mask.dataUrl, 'inpaint-mask.png')
+      const maskUpload = await uploadAssetFile(maskFile, { projectId: activeProjectId.value })
+      if (!maskUpload.assetId) {
+        throw new Error('遮罩上传失败')
+      }
+
+      closeImageInpaint()
+
+      selectedNodeId.value = sourceNodeId
+      selectedKind.value = 'image'
+      syncNodeSelectionHighlight(sourceNodeId)
+
+      handleImageInpaintCapabilityAction(
+        {
+          key: 'IMAGE_INPAINT',
+          label: '局部修改',
+          assetId,
+        },
+        {
+          prompt: payload.prompt,
+          maskAssetId: maskUpload.assetId,
+        },
+      )
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '局部修改提交失败，请稍后重试')
+    } finally {
+      hideLoading()
+    }
+  }
+
   function openImageErase() {
     const data = getSelectedNodeData()
     if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) {
@@ -875,6 +1024,7 @@ export function registerCore(bind: CanvasBindings) {
     showImageToolbarMoreMenu.value = false
     closeImageCrop()
     closeImageGridSplit()
+    closeImageInpaint()
 
     eraseSourceNodeId.value = selectedNodeId.value
     showImageErase.value = true
@@ -1174,6 +1324,7 @@ export function registerCore(bind: CanvasBindings) {
     showImageToolbarMoreMenu.value = false
     closeImageGridSplit()
     closeImageErase()
+    closeImageInpaint()
     cropSourceNodeId.value = selectedNodeId.value
     showImageCrop.value = true
     updateNodeToolbar()
@@ -3515,6 +3666,9 @@ export function registerCore(bind: CanvasBindings) {
     if (showImageErase.value) {
       imageErasePos.value = getNodeCropOverlayPosition(g, node, overlayRoot)
     }
+    if (showImageInpaint.value) {
+      imageInpaintPos.value = getNodeCropOverlayPosition(g, node, overlayRoot, 520, 520)
+    }
     if (data.kind === 'video' && showVideoHdPanel.value) {
       videoHdPos.value = getNodeSidePanelPosition(g, node, overlayRoot)
     }
@@ -4244,6 +4398,10 @@ export function registerCore(bind: CanvasBindings) {
     }
     if (showImageErase.value) {
       closeImageErase()
+      return true
+    }
+    if (showImageInpaint.value) {
+      closeImageInpaint()
       return true
     }
     if (nodeOverlaysRef.value?.dismissVideoGenPromptOverlay()) {
@@ -5284,8 +5442,10 @@ export function registerCore(bind: CanvasBindings) {
     closeHistoryPanel,
     closeImageCrop,
     closeImageErase,
+    closeImageInpaint,
     closeImageGridSplit,
     onImageEraseComplete,
+    onImageInpaintComplete,
     onImageGridSplitComplete,
     closeImageGenPromptBar,
     closeImagePreview,
@@ -5357,6 +5517,7 @@ export function registerCore(bind: CanvasBindings) {
     hasCanvasFileDrag,
     imageCropSource,
     imageEraseSource,
+    imageInpaintSource,
     imageGridSplitSource,
     imageDialoguePreviewUrl,
     imageDialoguePreviews,
@@ -5405,6 +5566,7 @@ export function registerCore(bind: CanvasBindings) {
     openFileUploadPicker,
     openImageCrop,
     openImageErase,
+    openImageInpaint,
     openImageDialogue,
     openImageGenPromptBar,
     openImagePreview,

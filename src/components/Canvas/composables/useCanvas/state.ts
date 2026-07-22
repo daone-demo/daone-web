@@ -146,6 +146,9 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showImageErase = ref(false)
   const eraseSourceNodeId = ref('')
   const imageErasePos = ref({ left: 0, top: 0, width: 360, height: 420 })
+  const showImageInpaint = ref(false)
+  const inpaintSourceNodeId = ref('')
+  const imageInpaintPos = ref({ left: 0, top: 0, width: 360, height: 520 })
   const showVideoDialogue = ref(false)
   const showVideoHdPanel = ref(false)
   const showVideoFramesPanel = ref(false)
@@ -269,6 +272,9 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showImageErase,
     eraseSourceNodeId,
     imageErasePos,
+    showImageInpaint,
+    inpaintSourceNodeId,
+    imageInpaintPos,
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,

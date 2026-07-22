@@ -247,6 +247,27 @@
   </div>
 
   <div
+    v-if="showImageInpaint && selectedKind === 'image'"
+    class="canvas__image-inpaint"
+    :style="{
+      left: `${imageInpaintPos.left}px`,
+      top: `${imageInpaintPos.top}px`,
+      width: `${imageInpaintPos.width}px`,
+      height: `${imageInpaintPos.height}px`,
+    }"
+    @mousedown.stop
+  >
+    <ImageInpaintOverlay
+      v-if="imageInpaintSource"
+      :image-url="imageInpaintSource.previewUrl"
+      :natural-width="imageInpaintSource.mediaWidth"
+      :natural-height="imageInpaintSource.mediaHeight"
+      @cancel="emit('close-image-inpaint')"
+      @complete="emit('image-inpaint-complete', $event)"
+    />
+  </div>
+
+  <div
     v-if="showImageDialogue && selectedKind === 'image'"
     class="canvas__node-dialogue"
     :style="{
@@ -327,6 +348,7 @@ import ImageDialoguePanel from '../ImageDialoguePanel.vue'
 import ImageCropOverlay from '../ImageCropOverlay.vue'
 import ImageGridSplitOverlay from '../ImageGridSplitOverlay.vue'
 import ImageEraseOverlay from '../ImageEraseOverlay.vue'
+import ImageInpaintOverlay from '../ImageInpaintOverlay.vue'
 import VideoDialoguePanel from '../VideoDialoguePanel.vue'
 import VideoHdPanel from '../VideoHdPanel.vue'
 import VideoFramesPanel from '../VideoFramesPanel.vue'
@@ -367,12 +389,14 @@ const props = defineProps<{
   imageCropPos: { left: number; top: number; width: number; height: number }
   imageGridSplitPos: { left: number; top: number; width: number; height: number }
   imageErasePos: { left: number; top: number; width: number; height: number }
+  imageInpaintPos: { left: number; top: number; width: number; height: number }
   dialoguePos: { left: number; top: number; width: number }
   videoHdPos: { left: number; top: number; width: number }
   selectedKind: NodeKind | null
   showImageCrop: boolean
   showImageGridSplit: boolean
   showImageErase: boolean
+  showImageInpaint: boolean
   gridSplitRows: number
   gridSplitCols: number
   showImageDialogue: boolean
@@ -390,6 +414,11 @@ const props = defineProps<{
     mediaHeight: number
   } | null
   imageEraseSource: {
+    previewUrl: string
+    mediaWidth: number
+    mediaHeight: number
+  } | null
+  imageInpaintSource: {
     previewUrl: string
     mediaWidth: number
     mediaHeight: number
@@ -448,6 +477,11 @@ const emit = defineEmits<{
   }]
   'close-image-erase': []
   'image-erase-complete': [payload: { dataUrl: string; width: number; height: number }]
+  'close-image-inpaint': []
+  'image-inpaint-complete': [payload: {
+    prompt: string
+    mask: { dataUrl: string; width: number; height: number }
+  }]
   'reset-video-hd-panel': []
   'video-hd-start': []
   'video-gen-drag-start': [event: MouseEvent]

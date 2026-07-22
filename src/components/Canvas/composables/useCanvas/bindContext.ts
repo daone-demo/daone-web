@@ -27,6 +27,7 @@ export const BIND_KEYS = [
   'showImageToolbarMore', 'showImageToolbarMoreMenu', 'showImageHdMenu', 'showImageDialogue',
   'showImageCrop', 'cropSourceNodeId', 'showImageGridSplit', 'gridSplitSourceNodeId',
   'gridSplitRows', 'gridSplitCols', 'showImageErase', 'eraseSourceNodeId', 'imageErasePos',
+  'showImageInpaint', 'inpaintSourceNodeId', 'imageInpaintPos',
   'showVideoDialogue', 'showVideoHdPanel',
   'showVideoFramesPanel', 'imageDialogueText', 'videoDialogueText', 'videoHdMagnification',
   'canvasCredits', 'textFormatToolbarPos', 'textDownloadPos', 'textExpandOpen',
@@ -36,7 +37,7 @@ export const BIND_KEYS = [
   'activeGroupSelection', 'showGroupToolbar', 'showPromptBar', 'showImageGenPromptBar',
   'showVideoGenPromptBar', 'videoGenSourceRefs', 'showImageCreativeToolbar',
   'showTextFormatToolbar', 'isImg2PromptTask', 'canSubmitTextPrompt', 'imageCropSource',
-  'imageGridSplitSource', 'imageEraseSource', 'imageDialoguePreviews', 'imageDialoguePreviewUrl', 'showNodeToolbar', 'showMultiSelectToolbar',
+  'imageGridSplitSource', 'imageEraseSource', 'imageInpaintSource', 'imageDialoguePreviews', 'imageDialoguePreviewUrl', 'showNodeToolbar', 'showMultiSelectToolbar',
   'showToolbarFeatureButtons', 'isLightNodeToolbar', 'altVoiceTimer', 'bindKeyboard',
   'unbindKeyboard', 'endSpacePan',
 ] as const

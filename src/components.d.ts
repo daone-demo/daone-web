@@ -60,6 +60,7 @@ declare module 'vue' {
     ImageGenPromptPanel: typeof import('./components/Canvas/ImageGenPromptPanel.vue')['default']
     ImageGenSettingsPopover: typeof import('./components/Canvas/ImageGenSettingsPopover.vue')['default']
     ImageGridSplitOverlay: typeof import('./components/Canvas/ImageGridSplitOverlay.vue')['default']
+    ImageInpaintOverlay: typeof import('./components/Canvas/ImageInpaintOverlay.vue')['default']
     ImageNode: typeof import('./components/Canvas/nodes/ImageNode.vue')['default']
     ImageStylePanel: typeof import('./components/Canvas/ImageStylePanel.vue')['default']
     Login: typeof import('./components/Login/index.vue')['default']
