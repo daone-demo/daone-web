@@ -124,6 +124,7 @@ import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
+import { syncNodeViewData } from './syncNodeViewData'
 
 const { isLightTheme } = useCanvasBgTheme()
 const getNode = inject<() => Node>('getNode')!
@@ -187,9 +188,9 @@ function onDrop(event: DragEvent) {
 
 onMounted(() => {
   const node = getNode()
-  Object.assign(data, node.getData() as CanvasNodeData)
+  syncNodeViewData(data, node.getData() as CanvasNodeData)
   node.on('change:data', ({ current }) => {
-    Object.assign(data, current as CanvasNodeData)
+    syncNodeViewData(data, current as CanvasNodeData)
   })
 })
 </script>
@@ -264,7 +265,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: calc(100% - 24px);
-  padding: 10px;
   border: 1px solid #4b4b55;
   border-radius: 14px;
   background: #1e1e22;

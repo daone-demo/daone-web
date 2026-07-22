@@ -33,17 +33,15 @@ import {
 } from './sharedImports';
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import {
-  applyModelGenerationResultToNode,
-  applyTextGenerationResultToNode,
+  bindGenerationTaskId,
+  followModelGenerationTaskOnNode,
+  followTextGenerationTaskOnNode,
   markGenerationNodeFailed,
   markTextGenerationNodeFailed,
-  pickModelGenerationResult,
-  pickTextGenerationResult,
-  pollGenerationTask,
-  resolveGenerationResultPreview,
+  normalizeGenerationTaskDetail,
+  resetResumedGenerationTaskCache,
+  resumePendingGenerationTasks,
   runImageGenerationOnNode,
-  updateGenerationNodeProgress,
-  updateTextGenerationNodeProgress,
   type GenerationTaskDetail,
 } from '../../generationTask'
 import type { CanvasElementGroupDragPayload } from '../../constants'
@@ -704,20 +702,22 @@ export function registerCore(bind: CanvasBindings) {
         : `prompt-reverse-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     try {
-      const created = await api.createGenerationTask<GenerationTaskDetail>(
-        {
-          taskType: 'TEXT',
-          capabilityCode: 'IMAGE_PROMPT_REVERSE',
-          prompt: '',
-          parameters: {
-            assetId: event.assetId,
-            prompt: promptText.value.trim(),
+      const created = normalizeGenerationTaskDetail(
+        await api.createGenerationTask<GenerationTaskDetail>(
+          {
+            taskType: 'TEXT',
+            capabilityCode: 'IMAGE_PROMPT_REVERSE',
+            prompt: '',
+            parameters: {
+              assetId: event.assetId,
+              prompt: promptText.value.trim(),
+            },
+            projectId: activeProjectId.value,
+            nodeId: resultNode.id,
+            referenceAssetIds: [event.assetId],
           },
-          projectId: activeProjectId.value,
-          nodeId: resultNode.id,
-          referenceAssetIds: [event.assetId],
-        },
-        idempotencyKey,
+          idempotencyKey,
+        ),
       )
 
       const taskId = created.id
@@ -725,34 +725,16 @@ export function registerCore(bind: CanvasBindings) {
         throw new Error('创建反推提示词任务失败')
       }
 
-      updateTextGenerationNodeProgress(resultNode, created.progress ?? 5)
+      bindGenerationTaskId(resultNode, taskId, 'TEXT')
+      persistGenerationTaskBinding()
 
-      const finalTask =
-        created.status === 'SUCCEEDED'
-          ? created
-          : await pollGenerationTask(taskId, {
-            onProgress: (task) => updateTextGenerationNodeProgress(resultNode, task.progress ?? 0),
-          })
-
-      if (finalTask.status !== 'SUCCEEDED') {
-        const reason = finalTask.error?.message || '反推提示词任务失败'
-        markTextGenerationNodeFailed(resultNode, reason)
-        message.error(reason)
-        return
-      }
-
-      const result = pickTextGenerationResult(finalTask)
-      const content = result?.content?.trim() || ''
-      if (!content) {
-        markTextGenerationNodeFailed(resultNode, '未返回提示词')
-        message.error('生成完成，但未返回提示词文本')
-        return
-      }
-
-      applyTextGenerationResultToNode(resultNode, content, {
+      const succeeded = await followTextGenerationTaskOnNode(resultNode, taskId, {
         title,
         toHtml: plainTextToEditorHtml,
+        onError: (reason) => message.error(reason),
       })
+
+      if (!succeeded) return
 
       selectedNodeId.value = resultNode.id
       selectedKind.value = 'text'
@@ -820,19 +802,21 @@ export function registerCore(bind: CanvasBindings) {
         : `model3d-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     try {
-      const created = await api.createGenerationTask<GenerationTaskDetail>(
-        {
-          taskType: 'MODEL',
-          capabilityCode: 'IMAGE_TO_3D',
-          prompt: '',
-          parameters: {
-            assetId: event.assetId,
+      const created = normalizeGenerationTaskDetail(
+        await api.createGenerationTask<GenerationTaskDetail>(
+          {
+            taskType: 'MODEL',
+            capabilityCode: 'IMAGE_TO_3D',
+            prompt: '',
+            parameters: {
+              assetId: event.assetId,
+            },
+            projectId: activeProjectId.value,
+            nodeId: resultNode.id,
+            referenceAssetIds: [event.assetId],
           },
-          projectId: activeProjectId.value,
-          nodeId: resultNode.id,
-          referenceAssetIds: [event.assetId],
-        },
-        idempotencyKey,
+          idempotencyKey,
+        ),
       )
 
       const taskId = created.id
@@ -840,34 +824,15 @@ export function registerCore(bind: CanvasBindings) {
         throw new Error('创建 3D 生成任务失败')
       }
 
-      updateGenerationNodeProgress(resultNode, created.progress ?? 5)
+      bindGenerationTaskId(resultNode, taskId, 'MODEL')
+      persistGenerationTaskBinding()
 
-      const finalTask =
-        created.status === 'SUCCEEDED'
-          ? created
-          : await pollGenerationTask(taskId, {
-            onProgress: (task) => updateGenerationNodeProgress(resultNode, task.progress ?? 0),
-          })
-
-      if (finalTask.status !== 'SUCCEEDED') {
-        const reason = finalTask.error?.message || '3D 生成任务失败'
-        markGenerationNodeFailed(resultNode, reason)
-        message.error(reason)
-        return
-      }
-
-      const result = pickModelGenerationResult(finalTask)
-      const resolved = result ? await resolveGenerationResultPreview(result) : null
-      if (!resolved?.previewUrl) {
-        markGenerationNodeFailed(resultNode, '未返回 3D 模型')
-        message.error('生成完成，但未返回 GLB 模型')
-        return
-      }
-
-      applyModelGenerationResultToNode(resultNode, resolved, {
+      const succeeded = await followModelGenerationTaskOnNode(resultNode, taskId, {
         title,
-        fileName: resolved.previewUrl.split('/').pop()?.split('?')[0] || `${title}.glb`,
+        onError: (reason) => message.error(reason),
       })
+
+      if (!succeeded) return
 
       selectedNodeId.value = resultNode.id
       selectedKind.value = 'model3d'
@@ -1142,6 +1107,7 @@ export function registerCore(bind: CanvasBindings) {
             idempotencyKey,
           )
         },
+        onTaskBound: () => persistGenerationTaskBinding(),
         onError: (reason) => message.error(reason),
       })
     })
@@ -1926,38 +1892,30 @@ export function registerCore(bind: CanvasBindings) {
           textGenState: 'loading' as const,
           textGenProgress: 0,
         }
-        cell.setData(loadingData)
+        cell.setData(loadingData, { overwrite: true })
 
-        let progress = 0
-        const timer = window.setInterval(() => {
-          progress = Math.min(95, progress + Math.round(8 + Math.random() * 12))
-          cell.setData({
-            ...(cell.getData() as CanvasNodeData),
-            textGenProgress: progress,
-          })
-        }, 280)
-
-        let result = ''
         const idempotencyKey =
           typeof crypto !== 'undefined' && 'randomUUID' in crypto
             ? crypto.randomUUID()
             : `img2prompt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         try {
-          const created = await api.createGenerationTask<GenerationTaskDetail>(
-            {
-              taskType: 'TEXT',
-              capabilityCode: 'IMAGE_PROMPT_REVERSE',
-              prompt: '',
-              parameters: {
-                assetId,
-                prompt: promptText.value.trim(),
+          const created = normalizeGenerationTaskDetail(
+            await api.createGenerationTask<GenerationTaskDetail>(
+              {
+                taskType: 'TEXT',
+                capabilityCode: 'IMAGE_PROMPT_REVERSE',
+                prompt: '',
+                parameters: {
+                  assetId,
+                  prompt: promptText.value.trim(),
+                },
+                projectId: activeProjectId.value,
+                nodeId,
+                referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : [assetId],
               },
-              projectId: activeProjectId.value,
-              nodeId,
-              referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : [assetId],
-            },
-            idempotencyKey,
+              idempotencyKey,
+            ),
           )
 
           const taskId = created.id
@@ -1965,45 +1923,25 @@ export function registerCore(bind: CanvasBindings) {
             throw new Error('创建反推提示词任务失败')
           }
 
-          updateTextGenerationNodeProgress(cell as Node, created.progress ?? 5)
+          bindGenerationTaskId(cell as Node, taskId, 'TEXT')
+          persistGenerationTaskBinding()
 
-          const finalTask =
-            created.status === 'SUCCEEDED'
-              ? created
-              : await pollGenerationTask(taskId, {
-                onProgress: (task) => updateTextGenerationNodeProgress(cell as Node, task.progress ?? 0),
-              })
+          const succeeded = await followTextGenerationTaskOnNode(cell as Node, taskId, {
+            toHtml: plainTextToEditorHtml,
+            onError: (reason) => message.error(reason),
+          })
 
-          if (finalTask.status !== 'SUCCEEDED') {
-            const reason = finalTask.error?.message || '反推提示词任务失败'
-            markTextGenerationNodeFailed(cell as Node, reason)
-            message.error(reason)
-            return
-          }
+          if (!succeeded) return
 
-          const textResult = pickTextGenerationResult(finalTask)
-          result = textResult?.content?.trim() || ''
-          if (!result) {
-            markTextGenerationNodeFailed(cell as Node, '未返回提示词')
-            message.error('生成完成，但未返回提示词文本')
-            return
-          }
+          const data = { ...(cell.getData() as CanvasNodeData) }
+          data.genPrompt = promptText.value
+          cell.setData(data, { overwrite: true })
         } catch (error) {
           markTextGenerationNodeFailed(cell as Node)
           message.error(isRequestError(error) ? error.message : '反推提示词失败，请稍后重试')
           return
-        } finally {
-          window.clearInterval(timer)
         }
 
-        const data = { ...(cell.getData() as CanvasNodeData) }
-        data.content = plainTextToEditorHtml(result)
-        data.mode = 'editor'
-        data.textPickerTask = ''
-        data.textGenState = 'done'
-        data.textGenProgress = 100
-        data.genPrompt = promptText.value
-        cell.setData(data)
         selectedNodeId.value = nodeId
         selectedKind.value = 'text'
         syncNodeSelectionHighlight(nodeId)
@@ -2024,36 +1962,28 @@ export function registerCore(bind: CanvasBindings) {
           promptBarPinned: true,
           textPickerTask: '' as const,
         }
-        cell.setData(loadingData)
+        cell.setData(loadingData, { overwrite: true })
 
-        let progress = 0
-        const timer = window.setInterval(() => {
-          progress = Math.min(95, progress + Math.round(8 + Math.random() * 12))
-          cell.setData({
-            ...(cell.getData() as CanvasNodeData),
-            textGenProgress: progress,
-          })
-        }, 280)
-
-        let result = ''
         const idempotencyKey =
           typeof crypto !== 'undefined' && 'randomUUID' in crypto
             ? crypto.randomUUID()
             : `text-copy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         try {
-          const created = await api.createGenerationTask<GenerationTaskDetail>(
-            {
-              taskType: 'TEXT',
-              capabilityCode: 'TEXT_COPY_V1',
-              prompt: trimmedPrompt,
-              parameters: {
-                style: 'creative',
+          const created = normalizeGenerationTaskDetail(
+            await api.createGenerationTask<GenerationTaskDetail>(
+              {
+                taskType: 'TEXT',
+                capabilityCode: 'TEXT_COPY_V1',
+                prompt: trimmedPrompt,
+                parameters: {
+                  style: 'creative',
+                },
+                projectId: activeProjectId.value,
+                nodeId,
               },
-              projectId: activeProjectId.value,
-              nodeId,
-            },
-            idempotencyKey,
+              idempotencyKey,
+            ),
           )
 
           const taskId = created.id
@@ -2061,46 +1991,26 @@ export function registerCore(bind: CanvasBindings) {
             throw new Error('创建文案生成任务失败')
           }
 
-          updateTextGenerationNodeProgress(cell as Node, created.progress ?? 5)
+          bindGenerationTaskId(cell as Node, taskId, 'TEXT')
+          persistGenerationTaskBinding()
 
-          const finalTask =
-            created.status === 'SUCCEEDED'
-              ? created
-              : await pollGenerationTask(taskId, {
-                onProgress: (task) => updateTextGenerationNodeProgress(cell as Node, task.progress ?? 0),
-              })
+          const succeeded = await followTextGenerationTaskOnNode(cell as Node, taskId, {
+            toHtml: plainTextToEditorHtml,
+            onError: (reason) => message.error(reason),
+          })
 
-          if (finalTask.status !== 'SUCCEEDED') {
-            const reason = finalTask.error?.message || '文案生成任务失败'
-            markTextGenerationNodeFailed(cell as Node, reason)
-            message.error(reason)
-            return
-          }
+          if (!succeeded) return
 
-          const textResult = pickTextGenerationResult(finalTask)
-          result = textResult?.content?.trim() || ''
-          if (!result) {
-            markTextGenerationNodeFailed(cell as Node, '未返回文案')
-            message.error('生成完成，但未返回文案内容')
-            return
-          }
+          const data = { ...(cell.getData() as CanvasNodeData) }
+          data.genPrompt = trimmedPrompt
+          data.promptBarPinned = true
+          cell.setData(data, { overwrite: true })
         } catch (error) {
           markTextGenerationNodeFailed(cell as Node)
           message.error(isRequestError(error) ? error.message : '文案生成失败，请稍后重试')
           return
-        } finally {
-          window.clearInterval(timer)
         }
 
-        const data = { ...(cell.getData() as CanvasNodeData) }
-        data.content = plainTextToEditorHtml(result)
-        data.mode = 'editor'
-        data.textGenState = 'done'
-        data.textGenProgress = 100
-        data.genPrompt = trimmedPrompt
-        data.promptBarPinned = true
-        data.textPickerTask = ''
-        cell.setData(data)
         selectedNodeId.value = nodeId
         selectedKind.value = 'text'
         syncNodeSelectionHighlight(nodeId)
@@ -2140,7 +2050,7 @@ export function registerCore(bind: CanvasBindings) {
       imageGenState: 'loading',
       imageGenProgress: 0,
       genPrompt: prompt,
-    })
+    }, { overwrite: true })
 
     const referenceAssetIds = resolvePromptReferenceAssetIds(currentData)
     const fileName = currentData.fileName || currentData.title || '文生图.png'
@@ -2168,6 +2078,7 @@ export function registerCore(bind: CanvasBindings) {
             idempotencyKey,
           )
         },
+        onTaskBound: () => persistGenerationTaskBinding(),
         onError: (reason) => message.error(reason),
       })
 
@@ -2431,9 +2342,23 @@ export function registerCore(bind: CanvasBindings) {
     })
   }
 
+  function resumeCanvasGenerationTasks() {
+    const g = graph.value
+    if (!g) return
+
+    resumePendingGenerationTasks(g, {
+      toHtml: plainTextToEditorHtml,
+      onError: (reason) => message.error(reason),
+      onTaskBound: () => persistGenerationTaskBinding(),
+      onTaskComplete: () => persistGenerationTaskBinding(),
+    })
+  }
+
   function applyProjectCanvasPayload(payload: ProjectCanvasResponse) {
     const g = graph.value
     if (!g) return false
+
+    resetResumedGenerationTaskCache()
 
     const canvasData = payload.canvasData ?? payload.canvas
     if (!canvasData) return false
@@ -2477,6 +2402,7 @@ export function registerCore(bind: CanvasBindings) {
       ensureInfiniteCanvasArea(g)
       syncViewportNodeVisibility()
       updateNodeToolbar()
+      resumeCanvasGenerationTasks()
     })
 
     return true
@@ -2614,6 +2540,11 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     void flushRemoteCanvasSave(saveType)
+  }
+
+  function persistGenerationTaskBinding() {
+    scheduleHistoryPush()
+    handleSaveCanvas('AUTO')
   }
 
   function handleExportCanvas() {
@@ -5156,6 +5087,8 @@ export function registerCore(bind: CanvasBindings) {
     canvasHistory.seed(instance)
     syncHistoryState()
 
+    resetResumedGenerationTaskCache()
+
     const scroller = getScroller(instance)
     scroller?.togglePanning(panMode.value)
     setRubberbandEnabled(!panMode.value)
@@ -5186,9 +5119,9 @@ export function registerCore(bind: CanvasBindings) {
       clearInterval(autoSaveTimer)
       autoSaveTimer = null
     }
-    autoSaveTimer = window.setInterval(() => {
-      handleSaveCanvas('AUTO')
-    }, 8000)
+    // autoSaveTimer = window.setInterval(() => {
+    //   handleSaveCanvas('AUTO')
+    // }, 8000)
   })
 
   function waitForNodeUploadDone(node: Node) {

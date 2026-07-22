@@ -114,6 +114,7 @@ import type { CanvasGraph } from '../graph'
 import { useNodeConnect } from './useNodeConnect'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import type { TextEditorApi } from './useTextEditorRegistry'
+import { syncNodeViewData } from './syncNodeViewData'
 import { VueShapeView } from '@antv/x6-vue-shape'
 
 /**
@@ -525,7 +526,7 @@ let detachDataListener: (() => void) | undefined
 onMounted(() => {
   const node = getNode()
   nodeIdForCleanup = node.id
-  Object.assign(data, node.getData() as CanvasNodeData)
+  syncNodeViewData(data, node.getData() as CanvasNodeData)
   syncEditorHtmlWhenReady()
 
   editorApi = {
@@ -539,7 +540,7 @@ onMounted(() => {
   editorRegistry?.register(node.id, editorApi)
 
   const onDataChange = ({ current }: { current: unknown }) => {
-    Object.assign(data, current as CanvasNodeData)
+    syncNodeViewData(data, current as CanvasNodeData)
     syncEditorHtmlWhenReady()
   }
   node.on('change:data', onDataChange)

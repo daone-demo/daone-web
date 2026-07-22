@@ -82,8 +82,10 @@ export interface CanvasNodeData {
   imageGenState?: 'idle' | 'loading' | 'done'
   /** 文生图生成进度（0-100） */
   imageGenProgress?: number
-  /** 关联的后端生成任务 ID，用于多任务并发时独立追踪 */
+  /** 关联的后端生成任务 ID，用于多任务并发追踪与刷新后恢复 */
   generationTaskId?: string
+  /** 关联生成任务类型，刷新后用于恢复轮询 */
+  generationTaskType?: 'IMAGE' | 'TEXT' | 'MODEL'
 }
 
 /** 图片反推提示词默认示例图文件名 */

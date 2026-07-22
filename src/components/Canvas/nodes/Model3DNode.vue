@@ -74,6 +74,7 @@ import type { CanvasNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
+import { syncNodeViewData } from './syncNodeViewData'
 
 const getNode = inject<() => Node>('getNode')!
 const { removeSelf } = useNodeDelete()
@@ -240,9 +241,9 @@ function reloadModel() {
 
 onMounted(() => {
   const node = getNode()
-  Object.assign(data, node.getData() as CanvasNodeData)
+  syncNodeViewData(data, node.getData() as CanvasNodeData)
   node.on('change:data', ({ current }) => {
-    Object.assign(data, current as CanvasNodeData)
+    syncNodeViewData(data, current as CanvasNodeData)
   })
 
   initViewer()

@@ -142,6 +142,7 @@ import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
 import { useNodeViewScale } from './useNodeViewScale'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
+import { syncNodeViewData } from './syncNodeViewData'
 
 const getNode = inject<() => Node>('getNode')!
 const requestCanvasUpload = inject<(nodeId: string) => void>('requestCanvasUpload')
@@ -252,9 +253,9 @@ function onUploadInputChange(event: Event) {
 
 onMounted(() => {
   const node = getNode()
-  Object.assign(data, node.getData() as CanvasNodeData)
+  syncNodeViewData(data, node.getData() as CanvasNodeData)
   node.on('change:data', ({ current }) => {
-    Object.assign(data, current as CanvasNodeData)
+    syncNodeViewData(data, current as CanvasNodeData)
   })
 })
 </script>

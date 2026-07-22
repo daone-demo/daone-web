@@ -1,4 +1,4 @@
-import type { Node } from '@antv/x6'
+import type { Graph, Node } from '@antv/x6'
 import api from '@/services/api'
 import type { CanvasNodeData } from './constants'
 import { syncNodeShapeFromData, getNodeSize } from './graph'
@@ -21,6 +21,8 @@ export type GenerationTaskDetail = {
   results?: GenerationTaskResult[]
   error?: { code?: string; message?: string } | null
 }
+
+export type GenerationTaskType = 'IMAGE' | 'TEXT' | 'MODEL'
 
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELED'])
 
@@ -69,8 +71,12 @@ function normalizeGenerationTaskResult(raw: unknown): GenerationTaskResult | nul
       '',
   ).trim()
 
-  const width = readResultField<number | null>(item, 'width') ?? readResultField<number | null>(nestedAsset ?? {}, 'width')
-  const height = readResultField<number | null>(item, 'height') ?? readResultField<number | null>(nestedAsset ?? {}, 'height')
+  const width =
+    readResultField<number | null>(item, 'width') ??
+    readResultField<number | null>(nestedAsset ?? {}, 'width')
+  const height =
+    readResultField<number | null>(item, 'height') ??
+    readResultField<number | null>(nestedAsset ?? {}, 'height')
 
   if (!previewUrl && !assetId && !content) return null
 
@@ -92,7 +98,11 @@ export function normalizeGenerationTaskDetail(raw: unknown): GenerationTaskDetai
   }
 
   const task = raw as Record<string, unknown>
-  const resultsRaw = Array.isArray(task.results) ? task.results : []
+  const resultsRaw = Array.isArray(task.results)
+    ? task.results
+    : Array.isArray(task.resultThumbnails)
+      ? task.resultThumbnails
+      : []
   const results = resultsRaw
     .map((item) => normalizeGenerationTaskResult(item))
     .filter((item): item is GenerationTaskResult => Boolean(item))
@@ -120,9 +130,9 @@ export function pickModelGenerationResult(task: GenerationTaskDetail): Generatio
   if (!results.length) return null
 
   const byType = results.find((item) => String(item.type || '').toUpperCase() === 'MODEL')
-  if (byType?.previewUrl) return byType
+  if (byType) return byType
 
-  const byExt = results.find((item) => /\.glb(\?|$)/i.test(item.previewUrl || ''))
+  const byExt = results.find((item) => /\.glb(\?|$)/i.test(item.previewUrl || item.url || ''))
   if (byExt) return byExt
 
   return results[0] ?? null
@@ -146,16 +156,17 @@ function isNodeOnGraph(node: Node) {
   return Boolean(node.model?.graph)
 }
 
-function bindGenerationTaskId(node: Node, taskId: string) {
-  if (!isNodeOnGraph(node)) return
-  const data = { ...(node.getData() as CanvasNodeData), generationTaskId: taskId }
-  setNodeData(node, data)
-}
-
-function clearGenerationTaskId(node: Node) {
-  if (!isNodeOnGraph(node)) return
-  const data = { ...(node.getData() as CanvasNodeData) }
-  delete data.generationTaskId
+/** 将 taskId 绑定到节点，随画布快照一并持久化 */
+export function bindGenerationTaskId(
+  node: Node,
+  taskId: string,
+  taskType?: GenerationTaskType,
+) {
+  if (!isNodeOnGraph(node) || !taskId.trim()) return
+  const data = { ...(node.getData() as CanvasNodeData), generationTaskId: taskId.trim() }
+  if (taskType) {
+    data.generationTaskType = taskType
+  }
   setNodeData(node, data)
 }
 
@@ -182,7 +193,6 @@ export function applyTextGenerationResultToNode(
   data.textPickerTask = ''
   data.title = options.title || data.title || '反推提示词'
   data.content = options.toHtml ? options.toHtml(text) : text
-  delete data.generationTaskId
   setNodeData(node, data)
   syncNodeShapeFromData(node)
   const size = getNodeSize(data.kind, data.mode, data)
@@ -194,7 +204,6 @@ export function markTextGenerationNodeFailed(node: Node, errorMessage?: string) 
   const data = { ...(node.getData() as CanvasNodeData) }
   data.textGenState = 'idle'
   data.textGenProgress = 0
-  delete data.generationTaskId
   if (errorMessage) data.title = '生成失败'
   setNodeData(node, data)
 }
@@ -224,7 +233,6 @@ export function applyModelGenerationResultToNode(
     (previewUrl.split('/').pop()?.split('?')[0] || 'model.glb')
   data.mediaWidth = data.mediaWidth || 320
   data.mediaHeight = data.mediaHeight || 360
-  delete data.generationTaskId
 
   setNodeData(node, data)
   syncNodeShapeFromData(node)
@@ -250,10 +258,9 @@ export function applyGenerationResultToNode(
   if (!previewUrl) return false
 
   const data = { ...(node.getData() as CanvasNodeData) }
-  delete data.imageGenState
-  delete data.imageGenProgress
+  data.imageGenState = 'done'
+  data.imageGenProgress = 100
   delete data.imageGenTask
-  delete data.generationTaskId
   data.mode = 'editor'
   data.uploadState = 'done'
   data.uploadProgress = 100
@@ -296,7 +303,6 @@ export function markGenerationNodeFailed(node: Node, errorMessage?: string) {
   const data = { ...(node.getData() as CanvasNodeData) }
   data.imageGenState = 'idle'
   data.imageGenProgress = 0
-  delete data.generationTaskId
   data.title = errorMessage ? `生成失败` : data.title
   setNodeData(node, data)
 }
@@ -397,40 +403,26 @@ function isImageResultApplied(node: Node) {
   return Boolean(data.previewUrl?.trim()) && data.imageGenState !== 'loading'
 }
 
-function normalizeCreatedTask(raw: GenerationTaskDetail): GenerationTaskDetail {
-  return normalizeGenerationTaskDetail(raw)
+function isTextResultApplied(node: Node) {
+  const data = node.getData() as CanvasNodeData
+  return data.textGenState === 'done' && Boolean(String(data.content || '').trim())
 }
 
-/** 在单个结果节点上独立创建、轮询并回写图片生成结果（支持轮询阶段提前返回） */
-export async function runImageGenerationOnNode(
+async function pollAndApplyImageTaskOnNode(
   node: Node,
+  taskId: string,
   options: {
     title: string
     fileName: string
-    createTask: () => Promise<GenerationTaskDetail>
     onError?: (message: string) => void
+    initialTask?: GenerationTaskDetail
+    onTaskBound?: (taskId: string) => void
   },
 ): Promise<boolean> {
   if (!isNodeOnGraph(node)) return false
 
-  let created: GenerationTaskDetail
-  try {
-    created = normalizeCreatedTask(await options.createTask())
-  } catch (error) {
-    markGenerationNodeFailed(node)
-    options.onError?.(error instanceof Error ? error.message : '创建生成任务失败')
-    return false
-  }
-
-  const taskId = created.id
-  if (!taskId) {
-    markGenerationNodeFailed(node, '创建生成任务失败')
-    options.onError?.('创建生成任务失败')
-    return false
-  }
-
-  bindGenerationTaskId(node, taskId)
-  updateGenerationNodeProgress(node, created.progress ?? 5)
+  bindGenerationTaskId(node, taskId, 'IMAGE')
+  options.onTaskBound?.(taskId)
 
   let appliedDuringPoll = false
   let resolvingResult = false
@@ -452,19 +444,33 @@ export async function runImageGenerationOnNode(
   }
 
   try {
-    const finalTask =
-      created.status === 'SUCCEEDED'
-        ? created
-        : await pollGenerationTask(taskId, {
-          onProgress: (task) => {
-            if (!isNodeOnGraph(node)) return
-            const data = node.getData() as CanvasNodeData
-            if (data.imageGenState !== 'loading') return
+    const first =
+      options.initialTask ??
+      normalizeGenerationTaskDetail(await api.getGenerationTask<GenerationTaskDetail>(taskId))
 
-            updateGenerationNodeProgress(node, task.progress ?? 0)
+    if (isImageResultApplied(node)) return true
+
+    updateGenerationNodeProgress(node, first.progress ?? 5)
+    tryApplyDuringPoll(first)
+
+    const finalTask = isGenerationTaskTerminal(first.status)
+      ? first
+      : await pollGenerationTask(taskId, {
+        onProgress: (task) => {
+          if (!isNodeOnGraph(node)) return
+          if (isImageResultApplied(node)) return
+          if (isGenerationTaskTerminal(task.status)) {
             tryApplyDuringPoll(task)
-          },
-        })
+            return
+          }
+
+          const data = node.getData() as CanvasNodeData
+          if (data.imageGenState !== 'loading') return
+
+          updateGenerationNodeProgress(node, task.progress ?? 0)
+          tryApplyDuringPoll(task)
+        },
+      })
 
     if (!isNodeOnGraph(node)) return appliedDuringPoll
 
@@ -473,7 +479,6 @@ export async function runImageGenerationOnNode(
     }
 
     if (isImageResultApplied(node)) {
-      clearGenerationTaskId(node)
       return true
     }
 
@@ -495,7 +500,6 @@ export async function runImageGenerationOnNode(
       return false
     }
 
-    clearGenerationTaskId(node)
     return true
   } catch (error) {
     if (isNodeOnGraph(node) && !isImageResultApplied(node)) {
@@ -504,4 +508,244 @@ export async function runImageGenerationOnNode(
     options.onError?.(error instanceof Error ? error.message : '生成失败，请稍后重试')
     return false
   }
+}
+
+/** 继续追踪已有 taskId 的图片生成任务 */
+export function followImageGenerationTaskOnNode(
+  node: Node,
+  taskId: string,
+  options: {
+    title: string
+    fileName: string
+    onError?: (message: string) => void
+    onTaskBound?: (taskId: string) => void
+  },
+) {
+  return pollAndApplyImageTaskOnNode(node, taskId, options)
+}
+
+/** 继续追踪已有 taskId 的文本生成任务 */
+export async function followTextGenerationTaskOnNode(
+  node: Node,
+  taskId: string,
+  options: {
+    title?: string
+    toHtml?: (text: string) => string
+    onError?: (message: string) => void
+  } = {},
+): Promise<boolean> {
+  if (!isNodeOnGraph(node)) return false
+
+  bindGenerationTaskId(node, taskId, 'TEXT')
+
+  try {
+    if (isTextResultApplied(node)) return true
+
+    const first = normalizeGenerationTaskDetail(
+      await api.getGenerationTask<GenerationTaskDetail>(taskId),
+    )
+    updateTextGenerationNodeProgress(node, first.progress ?? 5)
+
+    const finalTask = isGenerationTaskTerminal(first.status)
+      ? first
+      : await pollGenerationTask(taskId, {
+        onProgress: (task) => updateTextGenerationNodeProgress(node, task.progress ?? 0),
+      })
+
+    if (isTextResultApplied(node)) return true
+
+    if (finalTask.status !== 'SUCCEEDED') {
+      const reason = finalTask.error?.message || '文本生成任务失败'
+      markTextGenerationNodeFailed(node, reason)
+      options.onError?.(reason)
+      return false
+    }
+
+    const result = pickTextGenerationResult(finalTask)
+    const content = result?.content?.trim() || ''
+    if (!content) {
+      markTextGenerationNodeFailed(node, '未返回文本')
+      options.onError?.('生成完成，但未返回文本内容')
+      return false
+    }
+
+    applyTextGenerationResultToNode(node, content, {
+      title: options.title,
+      toHtml: options.toHtml,
+    })
+    return true
+  } catch (error) {
+    if (!isTextResultApplied(node)) {
+      markTextGenerationNodeFailed(node)
+    }
+    options.onError?.(error instanceof Error ? error.message : '文本生成失败，请稍后重试')
+    return false
+  }
+}
+
+/** 继续追踪已有 taskId 的 3D 生成任务 */
+export async function followModelGenerationTaskOnNode(
+  node: Node,
+  taskId: string,
+  options: {
+    title?: string
+    onError?: (message: string) => void
+  } = {},
+): Promise<boolean> {
+  if (!isNodeOnGraph(node)) return false
+
+  bindGenerationTaskId(node, taskId, 'MODEL')
+
+  try {
+    const data = node.getData() as CanvasNodeData
+    if (data.previewUrl && data.imageGenState !== 'loading') return true
+
+    const first = normalizeGenerationTaskDetail(
+      await api.getGenerationTask<GenerationTaskDetail>(taskId),
+    )
+    updateGenerationNodeProgress(node, first.progress ?? 5)
+
+    const finalTask = isGenerationTaskTerminal(first.status)
+      ? first
+      : await pollGenerationTask(taskId, {
+        onProgress: (task) => updateGenerationNodeProgress(node, task.progress ?? 0),
+      })
+
+    if (data.previewUrl && (node.getData() as CanvasNodeData).imageGenState !== 'loading') {
+      return true
+    }
+
+    if (finalTask.status !== 'SUCCEEDED') {
+      const reason = finalTask.error?.message || '3D 生成任务失败'
+      markGenerationNodeFailed(node, reason)
+      options.onError?.(reason)
+      return false
+    }
+
+    const result = pickModelGenerationResult(finalTask)
+    const resolved = result ? await resolveGenerationResultPreview(result) : null
+    if (!resolved?.previewUrl) {
+      markGenerationNodeFailed(node, '未返回 3D 模型')
+      options.onError?.('生成完成，但未返回 GLB 模型')
+      return false
+    }
+
+    applyModelGenerationResultToNode(node, resolved, {
+      title: options.title,
+      fileName: resolved.previewUrl.split('/').pop()?.split('?')[0] || `${options.title || '3D 模型'}.glb`,
+    })
+    return true
+  } catch (error) {
+    markGenerationNodeFailed(node)
+    options.onError?.(error instanceof Error ? error.message : '3D 生成失败，请稍后重试')
+    return false
+  }
+}
+
+const resumedTaskIds = new Set<string>()
+
+function shouldResumeNode(data: CanvasNodeData) {
+  const taskId = String(data.generationTaskId ?? '').trim()
+  if (!taskId || resumedTaskIds.has(taskId)) return false
+
+  const imageLoading = data.imageGenState === 'loading'
+  const textLoading = data.textGenState === 'loading'
+  if (!imageLoading && !textLoading) return false
+
+  if (data.kind === 'image' && imageLoading && !data.previewUrl) return true
+  if (data.kind === 'text' && textLoading && !String(data.content || '').trim()) return true
+  if (data.kind === 'model3d' && imageLoading && !data.previewUrl) return true
+
+  return false
+}
+
+/** 画布加载后，恢复所有带 taskId 且仍在生成中的节点 */
+export function resumePendingGenerationTasks(
+  graph: Graph,
+  options: {
+    toHtml?: (text: string) => string
+    onError?: (message: string) => void
+    onTaskBound?: () => void
+    onTaskComplete?: () => void
+  } = {},
+) {
+  graph.getNodes().forEach((node) => {
+    const data = node.getData() as CanvasNodeData
+    if (!shouldResumeNode(data)) return
+
+    const taskId = String(data.generationTaskId).trim()
+    resumedTaskIds.add(taskId)
+    options.onTaskBound?.()
+
+    const notifyComplete = (succeeded: boolean) => {
+      if (succeeded) options.onTaskComplete?.()
+    }
+
+    if (data.kind === 'image' && data.imageGenState === 'loading') {
+      void followImageGenerationTaskOnNode(node, taskId, {
+        title: data.title || '生成结果',
+        fileName: data.fileName || data.title || '生成结果.png',
+        onError: options.onError,
+      }).then(notifyComplete)
+      return
+    }
+
+    if (data.kind === 'text' && data.textGenState === 'loading') {
+      void followTextGenerationTaskOnNode(node, taskId, {
+        title: data.title,
+        toHtml: options.toHtml,
+        onError: options.onError,
+      }).then(notifyComplete)
+      return
+    }
+
+    if (data.kind === 'model3d' && data.imageGenState === 'loading') {
+      void followModelGenerationTaskOnNode(node, taskId, {
+        title: data.title || '3D 模型',
+        onError: options.onError,
+      }).then(notifyComplete)
+    }
+  })
+}
+
+export function resetResumedGenerationTaskCache() {
+  resumedTaskIds.clear()
+}
+
+/** 在单个结果节点上创建任务、绑定 taskId 并回写图片生成结果 */
+export async function runImageGenerationOnNode(
+  node: Node,
+  options: {
+    title: string
+    fileName: string
+    createTask: () => Promise<GenerationTaskDetail>
+    onError?: (message: string) => void
+    onTaskBound?: (taskId: string) => void
+  },
+): Promise<boolean> {
+  if (!isNodeOnGraph(node)) return false
+
+  let created: GenerationTaskDetail
+  try {
+    created = normalizeGenerationTaskDetail(await options.createTask())
+  } catch (error) {
+    markGenerationNodeFailed(node)
+    options.onError?.(error instanceof Error ? error.message : '创建生成任务失败')
+    return false
+  }
+
+  const taskId = created.id
+  if (!taskId) {
+    markGenerationNodeFailed(node, '创建生成任务失败')
+    options.onError?.('创建生成任务失败')
+    return false
+  }
+
+  return pollAndApplyImageTaskOnNode(node, taskId, {
+    title: options.title,
+    fileName: options.fileName,
+    onError: options.onError,
+    onTaskBound: options.onTaskBound,
+    initialTask: created,
+  })
 }
