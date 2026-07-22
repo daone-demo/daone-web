@@ -252,7 +252,7 @@ export function registerCore(bind: CanvasBindings) {
     return getCompleteGroupSelection(g, selectedNodeIds.value)
   })
 
-  const showGroupToolbar = computed(() => activeGroupSelection.value != null)
+  const showGroupToolbar = computed(() => activeGroupSelection.value != null && !imagePreviewUrl.value)
 
   const showPromptBar = computed(() => {
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
@@ -412,10 +412,10 @@ export function registerCore(bind: CanvasBindings) {
   })
 
   const showNodeToolbar = computed(
-    () => Boolean(selectedNodeId.value) && !showGroupToolbar.value,
+    () => Boolean(selectedNodeId.value) && !showGroupToolbar.value && !imagePreviewUrl.value,
   )
   const showMultiSelectToolbar = computed(
-    () => selectedNodeIds.value.length >= 2 && !showGroupToolbar.value,
+    () => selectedNodeIds.value.length >= 2 && !showGroupToolbar.value && !imagePreviewUrl.value,
   )
 
   function onGoHome() {
@@ -562,7 +562,7 @@ export function registerCore(bind: CanvasBindings) {
       handleImageTo3DAction(event)
     } else if (event.key === 'IMAGE_PROMPT_REVERSE') {
       handleImagePromptReverseAction(event)
-    } else if (event.key === 'IMAGE_PREVIEW') {
+    } else if (event.key === 'IMAGE_PREVIEW' || event.key === 'preview') {
       openImagePreview()
     } else if (event.key === 'IMAGE_GRID_SPLIT') {
       handleImageGridSplitAction(event)
@@ -5204,6 +5204,8 @@ export function registerCore(bind: CanvasBindings) {
     if (!node) return
     const data = node.getData() as CanvasNodeData
     if (data.kind !== 'image' || !data.previewUrl) return
+    closeImageToolbarMore()
+    showImageHdMenu.value = false
     imagePreviewUrl.value = data.previewUrl
   }
 
