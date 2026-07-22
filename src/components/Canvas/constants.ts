@@ -71,6 +71,13 @@ export interface CanvasNodeData {
   editorHeight?: number
   /** 宫格拆分碎片：无标题栏，节点尺寸即预览区 */
   compactPreview?: boolean
+  /** 宫格拆分碎片在网格中的位置，用于绘制 1px 蓝色分割线 */
+  gridSplitTile?: {
+    row: number
+    col: number
+    rows: number
+    cols: number
+  }
   textPickerTask?: 'img2prompt' | 'text2video' | 'write' | ''
   /** 自由输入提示词生成后，底部输入框保持显示 */
   promptBarPinned?: boolean

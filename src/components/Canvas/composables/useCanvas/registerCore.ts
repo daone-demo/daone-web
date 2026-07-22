@@ -683,6 +683,7 @@ export function registerCore(bind: CanvasBindings) {
         return
       }
 
+      // 先用前端合成图拉出节点，再后台无感上传 OSS
       const nodes = spawnGridSplitResultNodes(g, sourceNode, tiles, {
         titlePrefix: '宫格',
         rows: payload.rows,
@@ -716,13 +717,32 @@ export function registerCore(bind: CanvasBindings) {
         const maxY = Math.max(...boxes.map((box) => box.y + box.height))
         scroller.transitionToPoint((minX + maxX) / 2, (minY + maxY) / 2, { duration: '280ms' })
       })
-      message.success('已生成多张图片')
+
+      void uploadGridSplitImagesInBackground(nodes)
     } catch (error) {
       console.error('[grid-split] failed', error)
       message.error(error instanceof Error ? error.message : '宫格拆分失败，请稍后重试')
     } finally {
       hide()
     }
+  }
+
+  async function uploadGridSplitImagesInBackground(nodes: Node[]) {
+    const uploads = nodes.map(async (node) => {
+      const data = node.getData() as CanvasNodeData
+      const localPreviewUrl = data.previewUrl
+      if (!localPreviewUrl || (!localPreviewUrl.startsWith('blob:') && !localPreviewUrl.startsWith('data:'))) {
+        return
+      }
+      await uploadLocalImageNodeInBackground(node, localPreviewUrl, data.fileName || '宫格.png', {
+        width: data.mediaWidth,
+        height: data.mediaHeight,
+        preserveTitle: true,
+      })
+    })
+
+    await Promise.allSettled(uploads)
+    scheduleHistoryPush()
   }
 
   function handleImagePromptReverseAction(event: ImageToolbarClickEvent) {
@@ -1091,11 +1111,11 @@ export function registerCore(bind: CanvasBindings) {
     })
   }
 
-  async function uploadErasedImageInBackground(
+  async function uploadLocalImageNodeInBackground(
     node: Node,
     localPreviewUrl: string,
     fileName: string,
-    payload: { width: number; height: number },
+    payload: { width: number; height: number; preserveTitle?: boolean },
   ) {
     try {
       const file = await dataUrlToFile(localPreviewUrl, fileName)
@@ -1105,24 +1125,27 @@ export function registerCore(bind: CanvasBindings) {
       const g = graph.value
       if (!g?.getCellById(node.id)) return
 
-      const current = node.getData() as CanvasNodeData
+      const current = { ...(node.getData() as CanvasNodeData) }
       if (current.previewUrl !== localPreviewUrl) return
 
-      applyRemoteImageToNode(node, {
-        assetId: upload.assetId,
-        previewUrl: upload.url,
-        fileName,
-        width: upload.width ?? payload.width,
-        height: upload.height ?? payload.height,
-      })
+      const prevTitle = current.title
+      current.assetId = upload.assetId
+      current.previewUrl = upload.url
+      current.uploadState = 'done'
+      current.uploadProgress = 100
+      current.fileName = fileName || current.fileName
+      current.mediaWidth = upload.width ?? payload.width
+      current.mediaHeight = upload.height ?? payload.height
+      if (payload.preserveTitle && prevTitle) {
+        current.title = prevTitle
+      }
+      node.setData(current)
 
       if (localPreviewUrl.startsWith('blob:')) {
         URL.revokeObjectURL(localPreviewUrl)
       }
-
-      scheduleHistoryPush()
     } catch (error) {
-      console.error('[Canvas] erased image background upload failed', error)
+      console.error('[Canvas] local image background upload failed', error)
     }
   }
 
@@ -1150,7 +1173,9 @@ export function registerCore(bind: CanvasBindings) {
     const erasedNode = spawnErasedImageNode(g, sourceNode, payload)
     focusErasedResultNode(g, erasedNode)
 
-    void uploadErasedImageInBackground(erasedNode, localPreviewUrl, fileName, payload)
+    void uploadLocalImageNodeInBackground(erasedNode, localPreviewUrl, fileName, payload).then(() => {
+      scheduleHistoryPush()
+    })
   }
 
   function handleImageCapabilityAction(event: ImageToolbarClickEvent) {

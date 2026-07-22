@@ -16,11 +16,11 @@ export type GridSplitStops = {
   colStops?: number[]
 }
 
-/** 宫格缝隙占短边的比例，对齐 newimagex 拆图效果 */
-export const GRID_SPLIT_GAP_RATIO = 0.025
+/** 宫格碎片节点之间的布局间隙（分割线由节点边框绘制，布局 gap 为 0） */
+export const GRID_SPLIT_GAP = 0
 
-export function computeGridSplitGap(width: number, height: number) {
-  return Math.max(6, Math.round(Math.min(width, height) * GRID_SPLIT_GAP_RATIO))
+export function computeGridSplitGap(_width?: number, _height?: number) {
+  return GRID_SPLIT_GAP
 }
 
 export function buildSplitAxisLayout(edges: number[], total: number, gap: number) {

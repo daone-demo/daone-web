@@ -453,21 +453,19 @@ onBeforeUnmount(() => {
 .image-grid-split-overlay__cell {
   position: absolute;
   box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
 }
 
 .image-grid-split-overlay__line {
   position: absolute;
   z-index: 2;
-  background: #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+  background: #2563eb;
 
   &--col {
     top: 0;
     bottom: 0;
-    width: 3px;
-    margin-left: -1.5px;
+    width: 1px;
+    margin-left: -0.5px;
     cursor: col-resize;
     pointer-events: auto;
 
@@ -484,8 +482,8 @@ onBeforeUnmount(() => {
   &--row {
     left: 0;
     right: 0;
-    height: 3px;
-    margin-top: -1.5px;
+    height: 1px;
+    margin-top: -0.5px;
     cursor: row-resize;
     pointer-events: auto;
 
@@ -500,8 +498,8 @@ onBeforeUnmount(() => {
   }
 
   &--active {
-    background: #f8fafc;
-    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.18);
+    background: #1d4ed8;
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35);
   }
 }
 </style>

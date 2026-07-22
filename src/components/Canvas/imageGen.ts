@@ -392,7 +392,7 @@ export function findOutgoingLoadingGenerationNode(graph: Graph, sourceId: string
 }
 
 /**
- * 宫格拆分：在源图右侧生成带白色缝隙的碎片节点并自动分组，不修改/删除原图。
+ * 宫格拆分：在源图右侧生成无缝拼接的碎片节点（1px 蓝色分割线）并自动分组，不修改/删除原图。
  */
 export function spawnGridSplitResultNodes(
   graph: Graph,
@@ -455,6 +455,7 @@ export function spawnGridSplitResultNodes(
         editorWidth: width,
         editorHeight: height,
         compactPreview: true,
+        gridSplitTile: { row: row + 1, col: col + 1, rows, cols },
         viewScale: 1,
         uploadState: 'done',
         fileName: sourceData.fileName

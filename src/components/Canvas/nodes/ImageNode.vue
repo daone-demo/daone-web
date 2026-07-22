@@ -7,6 +7,7 @@
       'image-node--light': isLightTheme,
       'image-node--card-only': !data.previewUrl,
       'image-node--compact': data.compactPreview,
+      'image-node--grid-split': !!data.gridSplitTile,
       'image-node--uploading': data.uploadState === 'uploading',
     }"
   >
@@ -98,6 +99,7 @@
           'image-node__preview--uploading': data.uploadState === 'uploading',
           'image-node__preview--dragover': isDragOver,
         }"
+        :style="gridSplitBorderStyle"
         @click="onPreviewClick"
         @dblclick.stop="onPreviewDblClick"
         @dragenter.prevent="onDragOver"
@@ -165,6 +167,15 @@ const isPortraitLayout = computed(() =>
     ? isPortrait(data.mediaWidth, data.mediaHeight)
     : false,
 )
+
+const gridSplitBorderStyle = computed(() => {
+  const tile = data.gridSplitTile
+  if (!tile) return undefined
+  return {
+    borderRight: tile.col < tile.cols ? '1px solid #2563eb' : undefined,
+    borderBottom: tile.row < tile.rows ? '1px solid #2563eb' : undefined,
+  }
+})
 let uploadClickTimer: ReturnType<typeof setTimeout> | null = null
 const UPLOAD_CLICK_DELAY = 280
 
@@ -457,16 +468,20 @@ onMounted(() => {
 }
 
 .image-node--compact {
-  background: #fff;
-  box-shadow: 0 0 0 3px #fff;
+  background: transparent;
+  box-shadow: none;
 
   .image-node__body {
     height: 100%;
+    border: none;
+    border-radius: 0;
+    background: transparent;
   }
 
   .image-node__preview {
     border-radius: 0;
-    background: #fff;
+    background: transparent;
+    box-sizing: border-box;
 
     img {
       object-fit: fill;
