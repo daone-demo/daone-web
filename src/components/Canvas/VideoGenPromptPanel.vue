@@ -215,7 +215,17 @@
         </button>
       </a-tooltip>
       <span class="video-gen-prompt-panel__tools">
-        <button type="button" class="video-gen-prompt-panel__tool" title="翻译">文</button>
+        <button
+          type="button"
+          class="video-gen-prompt-panel__tool"
+          :class="{ 'video-gen-prompt-panel__tool--loading': translating }"
+          title="翻译"
+          :disabled="translating"
+          @mousedown.stop
+          @click.stop="onTranslatePrompt"
+        >
+          文
+        </button>
         <!-- <button type="button" class="video-gen-prompt-panel__tool" title="设置">☰</button> -->
       </span>
       <a-select
@@ -247,6 +257,9 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
+import api, { type PromptTranslationData } from '@/services/api'
+import { isRequestError } from '@/utils/request'
 import { useCanvasBgTheme } from './useCanvasBgTheme'
 import { createPromptMentionApi, needsSpaceBeforeMention } from './promptMention'
 import {
@@ -504,6 +517,7 @@ function selectTab(key: string) {
 
 const promptInputRef = ref<HTMLElement | null>(null)
 let skipPromptWatch = false
+const translating = ref(false)
 
 function getRefDisplayName(ref: VideoSourceRef) {
   return `图片${ref.index}`
@@ -515,6 +529,34 @@ function emitPrompt(text: string) {
   nextTick(() => {
     skipPromptWatch = false
   })
+}
+
+async function onTranslatePrompt() {
+  const text = props.prompt.trim()
+  if (!text) {
+    message.warning('请输入需要翻译的提示词')
+    return
+  }
+  if (translating.value) return
+
+  translating.value = true
+  try {
+    const result = await api.translatePrompt<PromptTranslationData>({
+      text,
+      targetLanguage: 'EN',
+    })
+    const translated = result?.translatedText?.trim()
+    if (!translated) {
+      message.warning('翻译结果为空')
+      return
+    }
+    emitPrompt(translated)
+    nextTick(() => syncPromptView(translated))
+  } catch (error) {
+    message.error(isRequestError(error) ? error.message : '提示词翻译失败，请稍后重试')
+  } finally {
+    translating.value = false
+  }
 }
 
 function syncPromptView(text = props.prompt) {
@@ -1201,15 +1243,24 @@ onMounted(() => {
   font-size: 12px;
   cursor: pointer;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: #252528;
     color: #e5e7eb;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  &--loading {
+    opacity: 0.55;
   }
 
   .video-gen-prompt-panel--light & {
     color: #6b7280;
 
-    &:hover {
+    &:hover:not(:disabled) {
       background: #f3f4f6;
       color: #374151;
     }

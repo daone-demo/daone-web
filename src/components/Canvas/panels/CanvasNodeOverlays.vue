@@ -117,7 +117,17 @@
         </div> -->
       </div>
       <div class="canvas__prompt-actions">
-        <button type="button" class="canvas__prompt-icon" title="翻译">文A</button>
+        <button
+          type="button"
+          class="canvas__prompt-icon"
+          :class="{ 'canvas__prompt-icon--loading': translating }"
+          title="翻译"
+          :disabled="translating"
+          @mousedown.stop
+          @click.stop="onTranslatePrompt"
+        >
+          文A
+        </button>
         <span class="canvas__prompt-credits">⚡ 12</span>
         <button
           type="button"
@@ -368,6 +378,9 @@ import {
 import type { CanvasBgTheme } from '../canvasTheme'
 import { createPromptMentionApi } from '../promptMention'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
+import api, { type PromptTranslationData } from '@/services/api'
+import { isRequestError } from '@/utils/request'
 import type { VideoSourceRef } from '../videoGen'
 
 const videoGenPromptPanelRef = ref<InstanceType<typeof VideoGenPromptPanel> | null>(null)
@@ -375,6 +388,7 @@ const isPromptDragOver = ref(false)
 const promptInputRef = ref<HTMLElement | null>(null)
 const mentionApi = createPromptMentionApi('canvas__prompt-mention')
 let skipPromptWatch = false
+const translating = ref(false)
 
 const props = defineProps<{
   chatTools: ChatTools | null
@@ -523,6 +537,34 @@ function emitPrompt(text: string) {
   nextTick(() => {
     skipPromptWatch = false
   })
+}
+
+async function onTranslatePrompt() {
+  const text = props.promptText.trim()
+  if (!text) {
+    message.warning('请输入需要翻译的提示词')
+    return
+  }
+  if (translating.value) return
+
+  translating.value = true
+  try {
+    const result = await api.translatePrompt<PromptTranslationData>({
+      text,
+      targetLanguage: 'EN',
+    })
+    const translated = result?.translatedText?.trim()
+    if (!translated) {
+      message.warning('翻译结果为空')
+      return
+    }
+    emitPrompt(translated)
+    nextTick(() => syncPromptView(translated))
+  } catch (error) {
+    message.error(isRequestError(error) ? error.message : '提示词翻译失败，请稍后重试')
+  } finally {
+    translating.value = false
+  }
 }
 
 function syncPromptView(text = props.promptText) {

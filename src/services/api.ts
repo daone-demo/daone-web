@@ -156,6 +156,12 @@ export interface PromptTranslateRequest {
   targetLanguage: string
 }
 
+export interface PromptTranslationData {
+  sourceText?: string
+  targetLanguage?: string
+  translatedText: string
+}
+
 export interface GenerationTaskCreateRequest {
   projectId?: Id
   nodeId?: Id
@@ -478,7 +484,7 @@ const api = {
     return http.post<T>('/ai/point-estimates', data)
   },
   /** 将提示词翻译成指定语言。 */
-  translatePrompt<T = unknown>(data: PromptTranslateRequest) {
+  translatePrompt<T = PromptTranslationData>(data: PromptTranslateRequest) {
     return http.post<T>('/ai/prompt-translations', data)
   },
   /** 分页查询生成任务，可按项目和任务状态筛选。 */

@@ -179,7 +179,15 @@
         <button type="button" class="image-dialogue__icon" title="标记">
           <span class="image-dialogue__chip-icon" data-icon="mark" aria-hidden="true" />
         </button>
-        <button type="button" class="image-dialogue__icon" title="翻译">
+        <button
+          type="button"
+          class="image-dialogue__icon"
+          :class="{ 'image-dialogue__icon--loading': translating }"
+          title="翻译"
+          :disabled="translating"
+          @mousedown.stop
+          @click.stop="onTranslatePrompt"
+        >
           <span class="image-dialogue__icon-glyph" data-icon="translate" aria-hidden="true" />
         </button>
         <span class="image-dialogue__credits">
@@ -209,6 +217,9 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { message } from 'ant-design-vue';
+import api, { type PromptTranslationData } from '@/services/api';
+import { isRequestError } from '@/utils/request';
 import { useCanvasBgTheme } from './useCanvasBgTheme';
 import ImageGenSettingsPopover from './ImageGenSettingsPopover.vue';
 import ImageStylePanel from './ImageStylePanel.vue';
@@ -281,6 +292,7 @@ const genResolution = ref('2K')
 const genImageCount = ref(1)
 const selectedModelKey = ref(IMAGE_DIALOGUE_MODEL_MENU[0].key)
 const selectedWorkFlow = ref('')
+const translating = ref(false)
 
 const workflowOptions = computed(() =>
   (Array.isArray(props.workflows) ? props.workflows : [])
@@ -528,6 +540,34 @@ function toggleModelMenu() {
 function selectModel(model: ImageDialogueModelItem) {
   selectedModelKey.value = model.key
   showModelMenu.value = false
+}
+
+async function onTranslatePrompt() {
+  const text = props.modelValue.trim()
+  if (!text) {
+    message.warning('请输入需要翻译的提示词')
+    return
+  }
+  if (translating.value) return
+
+  translating.value = true
+  try {
+    const result = await api.translatePrompt<PromptTranslationData>({
+      text,
+      targetLanguage: 'EN',
+    })
+    const translated = result?.translatedText?.trim()
+    if (!translated) {
+      message.warning('翻译结果为空')
+      return
+    }
+    emitPrompt(translated)
+    nextTick(() => syncPromptView(translated))
+  } catch (error) {
+    message.error(isRequestError(error) ? error.message : '提示词翻译失败，请稍后重试')
+  } finally {
+    translating.value = false
+  }
 }
 
 function onSend() {
@@ -1367,12 +1407,21 @@ onBeforeUnmount(() => {
   background: transparent;
   cursor: pointer;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: #2a2a30;
   }
 
-  .image-dialogue--light &:hover {
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .image-dialogue--light &:hover:not(:disabled) {
     background: #f3f4f6;
+  }
+
+  &--loading .image-dialogue__icon-glyph[data-icon='translate'] {
+    opacity: 0.35;
   }
 }
 

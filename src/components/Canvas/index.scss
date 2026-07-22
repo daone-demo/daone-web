@@ -1148,6 +1148,15 @@
   background: #3d3d45;
   color: #d1d5db;
   font-size: 12px;
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  &--loading {
+    opacity: 0.55;
+  }
 }
 
 .canvas__prompt-count {
