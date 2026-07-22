@@ -1,8 +1,10 @@
 /**
  * Vercel Serverless：同源代理阿里云 OSS，供 canvas 读取像素。
  * 访问：/media-proxy?url=https%3A%2F%2F....（由 vercel.json 转到本函数）
+ *
+ * 注意：项目 package.json 为 "type": "module"，此处必须使用 ESM default export。
  */
-module.exports = async function mediaProxy(req, res) {
+export default async function mediaProxy(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
