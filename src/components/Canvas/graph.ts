@@ -7,6 +7,7 @@ import { register } from '@antv/x6-vue-shape'
 import { getDefaultEdgeStroke } from './canvasTheme'
 import { bindFlowEdgeInteraction, getFlowEdgeAttrs, getPreviewEdgeAttrs } from './edgeStyle'
 import { canOpenConnectMenu } from './nodeConnect'
+import { resolveImageNaturalSize } from './upload'
 import '@antv/x6-vue-shape'
 import TextNode from './nodes/TextNode.vue'
 import ImageNode from './nodes/ImageNode.vue'
@@ -917,4 +918,42 @@ export function refreshCanvasNodeViews(graph: Graph) {
     const view = graph.findViewByCell(node) as VueShapeViewLike | null
     view?.renderVueComponent?.()
   })
+}
+
+function needsImageDimensionHydration(data: CanvasNodeData) {
+  return (
+    data.kind === 'image' &&
+    Boolean(data.previewUrl?.trim()) &&
+    !(data.mediaWidth > 0 && data.mediaHeight > 0)
+  )
+}
+
+export async function hydrateImageNodeDimensions(node: Node) {
+  const data = node.getData() as CanvasNodeData
+  if (!needsImageDimensionHydration(data)) {
+    return data.mediaWidth > 0 && data.mediaHeight > 0
+  }
+
+  try {
+    const { width, height } = await resolveImageNaturalSize(data.previewUrl)
+    const current = { ...(node.getData() as CanvasNodeData) }
+    if (current.previewUrl !== data.previewUrl) return false
+    current.mediaWidth = width
+    current.mediaHeight = height
+    node.setData(current)
+    syncNodeShapeFromData(node)
+    const size = getNodeSize(current.kind, current.mode, current)
+    node.resize(size.width, size.height)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 画布恢复后，为缺失尺寸的图片节点补全 mediaWidth/mediaHeight */
+export async function hydrateMissingImageNodeDimensions(graph: Graph) {
+  const nodes = graph.getNodes().filter((node) =>
+    needsImageDimensionHydration(node.getData() as CanvasNodeData),
+  )
+  await Promise.allSettled(nodes.map((node) => hydrateImageNodeDimensions(node)))
 }

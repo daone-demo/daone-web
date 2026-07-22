@@ -94,6 +94,23 @@ function fileToBase64(file: File, onReadProgress?: (ratio: number) => void): Pro
   })
 }
 
+export function resolveImageNaturalSize(
+  previewUrl: string,
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      if (!img.naturalWidth || !img.naturalHeight) {
+        reject(new Error('invalid image dimensions'))
+        return
+      }
+      resolve({ width: img.naturalWidth, height: img.naturalHeight })
+    }
+    img.onerror = () => reject(new Error('failed to load image'))
+    img.src = previewUrl
+  })
+}
+
 /** 上传本地文件到 OSS，返回素材访问地址。 */
 export async function uploadAssetFile(
   file: File,

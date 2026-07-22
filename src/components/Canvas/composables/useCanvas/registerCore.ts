@@ -24,6 +24,7 @@ import {
   getNodeVideoGenPromptPosition, getNodePromptPosition, getNodeSidePanelPosition, getNodeTextDownloadPosition,
   getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition, getNodeToolbarPosition,
   getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes,
+  hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, findIncomingImageNode, syncTextNodeImageSource,
@@ -427,6 +428,49 @@ export function registerCore(bind: CanvasBindings) {
     return graph.value?.getCellById(id)?.getData() as CanvasNodeData | undefined
   }
 
+  async function ensureSelectedImageNodeDimensions(): Promise<CanvasNodeData | null> {
+    const g = graph.value
+    const id = selectedNodeId.value
+    if (!g || !id) return null
+
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return null
+
+    const data = cell.getData() as CanvasNodeData
+    if (!data.previewUrl?.trim()) return null
+    if (data.mediaWidth > 0 && data.mediaHeight > 0) return data
+
+    const hydrated = await hydrateImageNodeDimensions(cell as Node)
+    if (!hydrated) return null
+
+    bumpToolbarRevision()
+    return cell.getData() as CanvasNodeData
+  }
+
+  async function ensureImageEditorReady(
+    actionLabel: string,
+    loadingText = '正在读取图片尺寸...',
+  ): Promise<CanvasNodeData | null> {
+    const data = getSelectedNodeData()
+    if (!data?.previewUrl) {
+      message.warning(`请等待图片加载完成后再${actionLabel}`)
+      return null
+    }
+
+    const needsHydration = !(data.mediaWidth > 0 && data.mediaHeight > 0)
+    const hideLoading = needsHydration ? message.loading(loadingText, 0) : null
+    try {
+      const ready = await ensureSelectedImageNodeDimensions()
+      if (!ready?.mediaWidth || !ready?.mediaHeight) {
+        message.warning(`请等待图片加载完成后再${actionLabel}`)
+        return null
+      }
+      return ready
+    } finally {
+      hideLoading?.()
+    }
+  }
+
   function canShowImageToolbar(data: CanvasNodeData | undefined) {
     if (!data || data.kind !== 'image') return false
     if (data.imageGenTask === 'picker') return false
@@ -569,15 +613,12 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function handleImageGridSplitAction(_event: ImageToolbarClickEvent) {
-    openImageGridSplit()
+    void openImageGridSplit()
   }
 
-  function openImageGridSplit(rows = 2, cols = 2) {
-    const data = getSelectedNodeData()
-    if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) {
-      message.warning('请等待图片加载完成后再拆分')
-      return
-    }
+  async function openImageGridSplit(rows = 2, cols = 2) {
+    const ready = await ensureImageEditorReady('拆分')
+    if (!ready) return
 
     showImageHdMenu.value = false
     showImageDialogue.value = false
@@ -884,7 +925,7 @@ export function registerCore(bind: CanvasBindings) {
    * @param event 
    */
   function handleImageEraseAction(_event: ImageToolbarClickEvent) {
-    openImageErase()
+    void openImageErase()
   }
 
   /**
@@ -892,15 +933,12 @@ export function registerCore(bind: CanvasBindings) {
    * @param _event 
    */
   function handleImageInpaintAction(_event: ImageToolbarClickEvent) {
-    openImageInpaint()
+    void openImageInpaint()
   }
 
-  function openImageInpaint() {
-    const data = getSelectedNodeData()
-    if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) {
-      message.warning('请等待图片加载完成后再进行局部修改')
-      return
-    }
+  async function openImageInpaint() {
+    const ready = await ensureImageEditorReady('进行局部修改')
+    if (!ready) return
 
     showImageHdMenu.value = false
     showImageDialogue.value = false
@@ -1013,12 +1051,9 @@ export function registerCore(bind: CanvasBindings) {
     }
   }
 
-  function openImageErase() {
-    const data = getSelectedNodeData()
-    if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) {
-      message.warning('请等待图片加载完成后再擦除')
-      return
-    }
+  async function openImageErase() {
+    const ready = await ensureImageEditorReady('擦除')
+    if (!ready) return
 
     showImageHdMenu.value = false
     showImageDialogue.value = false
@@ -1039,6 +1074,58 @@ export function registerCore(bind: CanvasBindings) {
     updateNodeToolbar()
   }
 
+  function focusErasedResultNode(g: Graph, erasedNode: Node) {
+    selectedNodeId.value = erasedNode.id
+    selectedKind.value = 'image'
+    syncNodeSelectionHighlight(erasedNode.id)
+    syncNodeCount()
+    scheduleHistoryPush()
+
+    nextTick(() => {
+      const scroller = getScroller(g)
+      const bbox = erasedNode.getBBox()
+      scroller?.transitionToPoint(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, {
+        duration: '280ms',
+      })
+      updateNodeToolbar()
+    })
+  }
+
+  async function uploadErasedImageInBackground(
+    node: Node,
+    localPreviewUrl: string,
+    fileName: string,
+    payload: { width: number; height: number },
+  ) {
+    try {
+      const file = await dataUrlToFile(localPreviewUrl, fileName)
+      const upload = await uploadAssetFile(file, { projectId: activeProjectId.value })
+      if (!upload.url || !upload.assetId) return
+
+      const g = graph.value
+      if (!g?.getCellById(node.id)) return
+
+      const current = node.getData() as CanvasNodeData
+      if (current.previewUrl !== localPreviewUrl) return
+
+      applyRemoteImageToNode(node, {
+        assetId: upload.assetId,
+        previewUrl: upload.url,
+        fileName,
+        width: upload.width ?? payload.width,
+        height: upload.height ?? payload.height,
+      })
+
+      if (localPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(localPreviewUrl)
+      }
+
+      scheduleHistoryPush()
+    } catch (error) {
+      console.error('[Canvas] erased image background upload failed', error)
+    }
+  }
+
   async function onImageEraseComplete(payload: { dataUrl: string; width: number; height: number }) {
     const g = graph.value
     const sourceNodeId = eraseSourceNodeId.value || selectedNodeId.value
@@ -1056,64 +1143,14 @@ export function registerCore(bind: CanvasBindings) {
     const sourceNode = cell as Node
     const sourceData = sourceNode.getData() as CanvasNodeData
     const fileName = sourceData.fileName ? `擦除-${sourceData.fileName}` : '擦除结果.png'
+    const localPreviewUrl = payload.dataUrl
 
     closeImageErase()
 
-    const hideLoading = message.loading('正在上传擦除结果...', 0)
-    try {
-      const file = await dataUrlToFile(payload.dataUrl, fileName)
-      const upload = await uploadAssetFile(file, { projectId: activeProjectId.value })
-      if (!upload.url || !upload.assetId) {
-        throw new Error('擦除结果上传失败')
-      }
+    const erasedNode = spawnErasedImageNode(g, sourceNode, payload)
+    focusErasedResultNode(g, erasedNode)
 
-      const erasedNode = spawnErasedImageNode(g, sourceNode, {
-        dataUrl: upload.url,
-        width: upload.width ?? payload.width,
-        height: upload.height ?? payload.height,
-      })
-      applyRemoteImageToNode(erasedNode, {
-        assetId: upload.assetId,
-        previewUrl: upload.url,
-        fileName,
-        width: upload.width ?? payload.width,
-        height: upload.height ?? payload.height,
-      })
-
-      selectedNodeId.value = erasedNode.id
-      selectedKind.value = 'image'
-      syncNodeSelectionHighlight(erasedNode.id)
-      syncNodeCount()
-      scheduleHistoryPush()
-
-      nextTick(() => {
-        const scroller = getScroller(g)
-        const bbox = erasedNode.getBBox()
-        scroller?.transitionToPoint(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, {
-          duration: '280ms',
-        })
-        updateNodeToolbar()
-      })
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '擦除结果上传失败，请稍后重试')
-
-      const erasedNode = spawnErasedImageNode(g, sourceNode, payload)
-      selectedNodeId.value = erasedNode.id
-      selectedKind.value = 'image'
-      syncNodeSelectionHighlight(erasedNode.id)
-      syncNodeCount()
-
-      nextTick(() => {
-        const scroller = getScroller(g)
-        const bbox = erasedNode.getBBox()
-        scroller?.transitionToPoint(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, {
-          duration: '280ms',
-        })
-        updateNodeToolbar()
-      })
-    } finally {
-      hideLoading()
-    }
+    void uploadErasedImageInBackground(erasedNode, localPreviewUrl, fileName, payload)
   }
 
   function handleImageCapabilityAction(event: ImageToolbarClickEvent) {
@@ -1361,9 +1398,9 @@ export function registerCore(bind: CanvasBindings) {
     void event.assetId
   }
 
-  function openImageCrop() {
-    const data = getSelectedNodeData()
-    if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) return
+  async function openImageCrop() {
+    const ready = await ensureImageEditorReady('裁剪')
+    if (!ready) return
 
     showImageHdMenu.value = false
     showImageDialogue.value = false
@@ -2595,12 +2632,15 @@ export function registerCore(bind: CanvasBindings) {
     syncHistoryState()
 
     nextTick(() => {
-      syncAllNodeSizes(g)
-      refreshCanvasNodeViews(g)
-      ensureInfiniteCanvasArea(g)
-      syncViewportNodeVisibility()
-      updateNodeToolbar()
-      resumeCanvasGenerationTasks()
+      void hydrateMissingImageNodeDimensions(g).finally(() => {
+        syncAllNodeSizes(g)
+        refreshCanvasNodeViews(g)
+        ensureInfiniteCanvasArea(g)
+        syncViewportNodeVisibility()
+        updateNodeToolbar()
+        bumpToolbarRevision()
+        resumeCanvasGenerationTasks()
+      })
     })
 
     return true

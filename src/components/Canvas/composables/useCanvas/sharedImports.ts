@@ -71,6 +71,8 @@ export {
   graphLocalToContainerOffset,
   refreshCanvasNodeViews,
   syncAllNodeSizes,
+  hydrateImageNodeDimensions,
+  hydrateMissingImageNodeDimensions,
   type CanvasGraph,
 } from '../../graph'
 export { applyCanvasBgTheme, getCanvasBgThemeMeta } from '../../canvasTheme'
