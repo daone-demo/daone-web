@@ -16,7 +16,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME, NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
+  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
   getConnectMenuPosition, getLinkedSpawnPoint, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -43,7 +43,9 @@ import {
   resetResumedGenerationTaskCache,
   resumePendingGenerationTasks,
   runImageGenerationOnNode,
+  resolveGenerationResultPreview,
   type GenerationTaskDetail,
+  type GenerationTaskResult,
 } from '../../generationTask'
 import type { CanvasElementGroupDragPayload } from '../../constants'
 import {
@@ -1263,6 +1265,43 @@ export function registerCore(bind: CanvasBindings) {
     return `${base}-${index + 1}`
   }
 
+  async function spawnNodesForExtraGenerationResults(
+    g: Graph,
+    sourceNode: Node,
+    extraResults: GenerationTaskResult[],
+    config: {
+      title: string
+      sourceFileName: string
+      buildFileName: (sourceFileName: string) => string
+      resultIndexOffset: number
+      totalCount: number
+    },
+  ): Promise<Node[]> {
+    const nodes: Node[] = []
+
+    for (let index = 0; index < extraResults.length; index += 1) {
+      const resolved = await resolveGenerationResultPreview(extraResults[index])
+      if (!resolved?.previewUrl?.trim()) continue
+
+      const node = spawnCompletedImageResultNode(g, sourceNode, {
+        title: config.title,
+        fileName: resolveGenerationResultFileName(
+          config.buildFileName,
+          config.sourceFileName,
+          config.resultIndexOffset + index,
+          config.totalCount,
+        ),
+        previewUrl: resolved.previewUrl,
+        assetId: resolved.assetId,
+        mediaWidth: resolved.width ?? undefined,
+        mediaHeight: resolved.height ?? undefined,
+      })
+      nodes.push(node)
+    }
+
+    return nodes
+  }
+
   async function runImageGenerationTask(
     event: ImageToolbarClickEvent,
     config: {
@@ -1373,17 +1412,39 @@ export function registerCore(bind: CanvasBindings) {
 
     try {
       const outcomes = await Promise.allSettled(runners)
-      const succeededNodes = resultNodes.filter(
-        (_node, index) => outcomes[index]?.status === 'fulfilled' && outcomes[index].value === true,
-      )
+      const succeededNodes: Node[] = []
+      const spawnedExtraNodes: Node[] = []
 
-      if (!succeededNodes.length) {
+      for (let index = 0; index < outcomes.length; index += 1) {
+        const outcome = outcomes[index]
+        if (outcome.status !== 'fulfilled' || !outcome.value.success) continue
+
+        const primaryNode = resultNodes[index]
+        succeededNodes.push(primaryNode)
+
+        const extraResults = outcome.value.extraResults ?? []
+        if (!extraResults.length) continue
+
+        const totalCount = 1 + extraResults.length
+        const extraNodes = await spawnNodesForExtraGenerationResults(g, sourceNode, extraResults, {
+          title: config.title,
+          sourceFileName,
+          buildFileName: config.buildFileName,
+          resultIndexOffset: 1,
+          totalCount,
+        })
+        spawnedExtraNodes.push(...extraNodes)
+      }
+
+      const allSucceededNodes = [...succeededNodes, ...spawnedExtraNodes]
+
+      if (!allSucceededNodes.length) {
         return
       }
 
       resetImageDialogue()
 
-      const focusNode = succeededNodes[succeededNodes.length - 1] ?? primaryNode
+      const focusNode = allSucceededNodes[allSucceededNodes.length - 1] ?? primaryNode
       selectedNodeId.value = focusNode.id
       selectedKind.value = 'image'
       syncNodeSelectionHighlight(focusNode.id)
@@ -1394,8 +1455,8 @@ export function registerCore(bind: CanvasBindings) {
 
       nextTick(() => {
         const scroller = getScroller(g)
-        if (!scroller || !succeededNodes.length) return
-        const boxes = succeededNodes.map((node) => node.getBBox())
+        if (!scroller || !allSucceededNodes.length) return
+        const boxes = allSucceededNodes.map((node) => node.getBBox())
         const minX = Math.min(...boxes.map((box) => box.x))
         const maxX = Math.max(...boxes.map((box) => box.x + box.width))
         const minY = Math.min(...boxes.map((box) => box.y))
@@ -2316,7 +2377,7 @@ export function registerCore(bind: CanvasBindings) {
     const fileName = currentData.fileName || currentData.title || '文生图.png'
 
     try {
-      const succeeded = await runImageGenerationOnNode(node, {
+      const outcome = await runImageGenerationOnNode(node, {
         title: currentData.title || '文生图',
         fileName,
         createTask: async () => {
@@ -2342,7 +2403,7 @@ export function registerCore(bind: CanvasBindings) {
         onError: (reason) => message.error(reason),
       })
 
-      if (!succeeded) return
+      if (!outcome.success) return
 
       selectedNodeId.value = nodeId
       selectedKind.value = 'image'

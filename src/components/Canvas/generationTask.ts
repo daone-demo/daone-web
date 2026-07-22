@@ -120,6 +120,15 @@ export function pickImageGenerationResults(task: GenerationTaskDetail): Generati
   return task.results?.filter((item) => item.previewUrl || item.assetId) ?? []
 }
 
+export type ImageGenerationOnNodeResult = {
+  success: boolean
+  extraResults?: GenerationTaskResult[]
+}
+
+function collectExtraImageGenerationResults(task: GenerationTaskDetail): GenerationTaskResult[] {
+  return pickImageGenerationResults(task).slice(1)
+}
+
 export function pickPrimaryGenerationResult(task: GenerationTaskDetail): GenerationTaskResult | null {
   return pickImageGenerationResults(task)[0] ?? null
 }
@@ -418,8 +427,8 @@ async function pollAndApplyImageTaskOnNode(
     initialTask?: GenerationTaskDetail
     onTaskBound?: (taskId: string) => void
   },
-): Promise<boolean> {
-  if (!isNodeOnGraph(node)) return false
+): Promise<ImageGenerationOnNodeResult> {
+  if (!isNodeOnGraph(node)) return { success: false }
 
   bindGenerationTaskId(node, taskId, 'IMAGE')
   options.onTaskBound?.(taskId)
@@ -443,12 +452,19 @@ async function pollAndApplyImageTaskOnNode(
       })
   }
 
+  const buildSuccessResult = (task: GenerationTaskDetail): ImageGenerationOnNodeResult => ({
+    success: true,
+    extraResults: collectExtraImageGenerationResults(task),
+  })
+
   try {
     const first =
       options.initialTask ??
       normalizeGenerationTaskDetail(await api.getGenerationTask<GenerationTaskDetail>(taskId))
 
-    if (isImageResultApplied(node)) return true
+    if (isImageResultApplied(node)) {
+      return buildSuccessResult(first)
+    }
 
     updateGenerationNodeProgress(node, first.progress ?? 5)
     tryApplyDuringPoll(first)
@@ -472,41 +488,47 @@ async function pollAndApplyImageTaskOnNode(
         },
       })
 
-    if (!isNodeOnGraph(node)) return appliedDuringPoll
+    if (!isNodeOnGraph(node)) {
+      return appliedDuringPoll ? buildSuccessResult(finalTask) : { success: false }
+    }
 
     while (resolvingResult) {
       await new Promise((resolve) => window.setTimeout(resolve, 40))
     }
 
-    if (isImageResultApplied(node)) {
-      return true
-    }
-
     if (finalTask.status !== 'SUCCEEDED') {
+      if (isImageResultApplied(node)) {
+        return buildSuccessResult(finalTask)
+      }
       const reason = finalTask.error?.message || '生成任务失败'
       markGenerationNodeFailed(node, reason)
       options.onError?.(reason)
-      return false
+      return { success: false }
     }
 
-    const applied = await applyResolvedImageResultToNode(
-      node,
-      pickReadyImageResult(finalTask),
-      applyOptions,
-    )
-    if (!applied) {
+    const primaryResult = pickReadyImageResult(finalTask)
+    if (!primaryResult) {
       markGenerationNodeFailed(node, '未返回结果图片')
       options.onError?.('生成完成，但未返回结果图片')
-      return false
+      return { success: false }
     }
 
-    return true
+    if (!isImageResultApplied(node)) {
+      const applied = await applyResolvedImageResultToNode(node, primaryResult, applyOptions)
+      if (!applied) {
+        markGenerationNodeFailed(node, '未返回结果图片')
+        options.onError?.('生成完成，但未返回结果图片')
+        return { success: false }
+      }
+    }
+
+    return buildSuccessResult(finalTask)
   } catch (error) {
     if (isNodeOnGraph(node) && !isImageResultApplied(node)) {
       markGenerationNodeFailed(node)
     }
     options.onError?.(error instanceof Error ? error.message : '生成失败，请稍后重试')
-    return false
+    return { success: false }
   }
 }
 
@@ -521,7 +543,7 @@ export function followImageGenerationTaskOnNode(
     onTaskBound?: (taskId: string) => void
   },
 ) {
-  return pollAndApplyImageTaskOnNode(node, taskId, options)
+  return pollAndApplyImageTaskOnNode(node, taskId, options).then((result) => result.success)
 }
 
 /** 继续追踪已有 taskId 的文本生成任务 */
@@ -722,8 +744,8 @@ export async function runImageGenerationOnNode(
     onError?: (message: string) => void
     onTaskBound?: (taskId: string) => void
   },
-): Promise<boolean> {
-  if (!isNodeOnGraph(node)) return false
+): Promise<ImageGenerationOnNodeResult> {
+  if (!isNodeOnGraph(node)) return { success: false }
 
   let created: GenerationTaskDetail
   try {
@@ -731,14 +753,14 @@ export async function runImageGenerationOnNode(
   } catch (error) {
     markGenerationNodeFailed(node)
     options.onError?.(error instanceof Error ? error.message : '创建生成任务失败')
-    return false
+    return { success: false }
   }
 
   const taskId = created.id
   if (!taskId) {
     markGenerationNodeFailed(node, '创建生成任务失败')
     options.onError?.('创建生成任务失败')
-    return false
+    return { success: false }
   }
 
   return pollAndApplyImageTaskOnNode(node, taskId, {
