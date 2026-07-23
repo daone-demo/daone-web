@@ -1,5 +1,10 @@
 export const PROMPT_MENTION_REGEX = /@图片\d+/g
 
+/** 中文等 IME 组合输入过程中应暂停重绘 contenteditable，否则会打断输入 */
+export function isInputComposing(event?: Event): boolean {
+  return Boolean((event as InputEvent | KeyboardEvent | undefined)?.isComposing)
+}
+
 export function createPromptMentionApi(mentionClass: string) {
   const isMentionEl = (node: Node | null): node is HTMLElement =>
     node instanceof HTMLElement && node.classList.contains(mentionClass)

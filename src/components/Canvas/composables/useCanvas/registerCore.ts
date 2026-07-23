@@ -14,10 +14,10 @@ import {
 } from '../../canvasAssetDrag'
 import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
-  IMG2PROMPT_EXAMPLE_FILENAME, NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
+  NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
   spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
-  getConnectMenuPosition, getLinkedSpawnPoint, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
+  getConnectMenuPosition, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
@@ -27,17 +27,16 @@ import {
   hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
-  ensureImageTextEdge, findIncomingImageNode, syncTextNodeImageSource,
+  ensureImageTextEdge, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
-  useCanvasKeyboard, api, exampleImage, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
+  useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import {
   bindGenerationTaskId,
   followModelGenerationTaskOnNode,
   followTextGenerationTaskOnNode,
-  followVideoGenerationTaskOnNode,
   markGenerationNodeFailed,
   markTextGenerationNodeFailed,
   markVideoGenerationNodeFailed,
@@ -45,6 +44,8 @@ import {
   resetResumedGenerationTaskCache,
   resumePendingGenerationTasks,
   runImageGenerationOnNode,
+  startImageGenerationOnNode,
+  startVideoGenerationTaskFollow,
   resolveGenerationResultPreview,
   type GenerationTaskDetail,
   type GenerationTaskResult,
@@ -330,20 +331,30 @@ export function registerCore(bind: CanvasBindings) {
     return data?.textPickerTask === 'text2video' || modelType.value === 'text2video'
   })
 
+  const isText2ImageTask = computed(() => {
+    void toolbarRevision.value
+    const id = activePickerNodeId.value
+    if (!id) return false
+    const data = graph.value?.getCellById(id)?.getData() as CanvasNodeData | undefined
+    return data?.textPickerTask === 'text2image' || modelType.value === 'text2image'
+  })
+
   const promptSubmitLabel = computed(() => {
     if (isText2VideoTask.value || modelType.value === 'text2video') return '文生视频'
+    if (isText2ImageTask.value || modelType.value === 'text2image') return '文生图'
     if (isImg2PromptTask.value || modelType.value === 'img2prompt') return '反推提示词'
     return '自由创作'
   })
 
   const canSubmitTextPrompt = computed(() => {
+    const hasPrompt = Boolean(promptText.value.trim())
     if (isImg2PromptTask.value) {
       return Boolean(promptSourcePreviewUrl.value) && !promptSubmitting.value
     }
-    if (isText2VideoTask.value) {
-      return Boolean(promptText.value.trim()) && !promptSubmitting.value
+    if (isText2VideoTask.value || isText2ImageTask.value) {
+      return hasPrompt
     }
-    return Boolean(promptText.value.trim()) && !promptSubmitting.value
+    return hasPrompt && !promptSubmitting.value
   })
 
   const imageCropSource = computed(() => {
@@ -590,11 +601,9 @@ export function registerCore(bind: CanvasBindings) {
       toggleImageAddToDialogMenu()
     } else if (event.key === 'download') {
       handleImageDownloadAction(event)
-    } 
-    // else if (event.key === 'IMAGE_TO_3D') {
-    //   handleImageTo3DAction(event)
-    // } 
-    else if (event.key === 'IMAGE_PROMPT_REVERSE') {
+    } else if (event.key === 'IMAGE_TO_3D') {
+      void runImageTo3DTask(event)
+    } else if (event.key === 'IMAGE_PROMPT_REVERSE') {
       handleImagePromptReverseAction(event)
     } else if (event.key === 'IMAGE_PREVIEW' || event.key === 'preview') {
       openImagePreview()
@@ -873,10 +882,6 @@ export function registerCore(bind: CanvasBindings) {
       markTextGenerationNodeFailed(resultNode)
       message.error(isRequestError(error) ? error.message : '反推提示词失败，请稍后重试')
     }
-  }
-
-  function handleImageTo3DAction(event: ImageToolbarClickEvent) {
-    void runImageTo3DTask(event)
   }
 
   async function runImageTo3DTask(event: ImageToolbarClickEvent) {
@@ -1415,7 +1420,7 @@ export function registerCore(bind: CanvasBindings) {
         requestedCount,
       )
 
-      return runImageGenerationOnNode(resultNode, {
+      return startImageGenerationOnNode(resultNode, {
         title: config.title,
         fileName,
         createTask: async () => {
@@ -1439,64 +1444,52 @@ export function registerCore(bind: CanvasBindings) {
         },
         onTaskBound: () => persistGenerationTaskBinding(),
         onError: (reason) => message.error(reason),
+        onComplete: async (result) => {
+          if (!result.success) return
+
+          const extraResults = result.extraResults ?? []
+          if (!extraResults.length) return
+
+          const totalCount = 1 + extraResults.length
+          const extraNodes = await spawnNodesForExtraGenerationResults(g, sourceNode, extraResults, {
+            title: config.title,
+            sourceFileName,
+            buildFileName: config.buildFileName,
+            resultIndexOffset: 1,
+            totalCount,
+          })
+
+          if (!extraNodes.length) return
+
+          syncNodeCount()
+          bumpToolbarRevision()
+          updateNodeToolbar()
+          scheduleHistoryPush()
+
+          nextTick(() => {
+            const scroller = getScroller(g)
+            if (!scroller) return
+            const boxes = extraNodes.map((node) => node.getBBox())
+            const minX = Math.min(...boxes.map((box) => box.x))
+            const maxX = Math.max(...boxes.map((box) => box.x + box.width))
+            const minY = Math.min(...boxes.map((box) => box.y))
+            const maxY = Math.max(...boxes.map((box) => box.y + box.height))
+            scroller.transitionToPoint((minX + maxX) / 2, (minY + maxY) / 2, {
+              duration: '280ms',
+            })
+          })
+        },
       })
     })
 
     try {
       const outcomes = await Promise.allSettled(runners)
-      const succeededNodes: Node[] = []
-      const spawnedExtraNodes: Node[] = []
-
-      for (let index = 0; index < outcomes.length; index += 1) {
-        const outcome = outcomes[index]
-        if (outcome.status !== 'fulfilled' || !outcome.value.success) continue
-
-        const primaryNode = resultNodes[index]
-        succeededNodes.push(primaryNode)
-
-        const extraResults = outcome.value.extraResults ?? []
-        if (!extraResults.length) continue
-
-        const totalCount = 1 + extraResults.length
-        const extraNodes = await spawnNodesForExtraGenerationResults(g, sourceNode, extraResults, {
-          title: config.title,
-          sourceFileName,
-          buildFileName: config.buildFileName,
-          resultIndexOffset: 1,
-          totalCount,
-        })
-        spawnedExtraNodes.push(...extraNodes)
-      }
-
-      const allSucceededNodes = [...succeededNodes, ...spawnedExtraNodes]
-
-      if (!allSucceededNodes.length) {
-        return
-      }
+      const started = outcomes.some(
+        (outcome) => outcome.status === 'fulfilled' && outcome.value.started,
+      )
+      if (!started) return
 
       resetImageDialogue()
-
-      const focusNode = allSucceededNodes[allSucceededNodes.length - 1] ?? primaryNode
-      selectedNodeId.value = focusNode.id
-      selectedKind.value = 'image'
-      syncNodeSelectionHighlight(focusNode.id)
-      syncNodeCount()
-      bumpToolbarRevision()
-      updateNodeToolbar()
-      scheduleHistoryPush()
-
-      nextTick(() => {
-        const scroller = getScroller(g)
-        if (!scroller || !allSucceededNodes.length) return
-        const boxes = allSucceededNodes.map((node) => node.getBBox())
-        const minX = Math.min(...boxes.map((box) => box.x))
-        const maxX = Math.max(...boxes.map((box) => box.x + box.width))
-        const minY = Math.min(...boxes.map((box) => box.y))
-        const maxY = Math.max(...boxes.map((box) => box.y + box.height))
-        scroller.transitionToPoint((minX + maxX) / 2, (minY + maxY) / 2, {
-          duration: '280ms',
-        })
-      })
     } catch (error) {
       resultNodes.forEach((node) => markGenerationNodeFailed(node))
       message.error(isRequestError(error) ? error.message : '生成失败，请稍后重试')
@@ -1721,14 +1714,17 @@ export function registerCore(bind: CanvasBindings) {
     return refs
   }
 
-  function addImageDialogueSourceRef(payload: {
-    nodeId?: string
-    assetId?: string
-    previewUrl: string
-    fileName?: string
-  }) {
+  function addImageDialogueSourceRef(
+    payload: {
+      nodeId?: string
+      assetId?: string
+      previewUrl: string
+      fileName?: string
+    },
+    targetNodeId?: string,
+  ) {
     const g = graph.value
-    const id = selectedNodeId.value
+    const id = targetNodeId ?? selectedNodeId.value
     if (!g || !id || !payload.previewUrl) return
 
     const cell = g.getCellById(id)
@@ -1806,7 +1802,7 @@ export function registerCore(bind: CanvasBindings) {
       assetId: sourceData.assetId,
       previewUrl: sourceData.previewUrl,
       fileName: sourceData.fileName || sourceData.title || '',
-    })
+    }, targetNodeId)
     bumpToolbarRevision()
     scheduleHistoryPush()
     return true
@@ -1826,6 +1822,7 @@ export function registerCore(bind: CanvasBindings) {
     const imageFiles = files.filter((file) => file.type.startsWith('image/'))
     if (!imageFiles.length) return
 
+    const wasDialogueOpen = showImageDialogue.value
     const bbox = targetCell.getBBox()
 
     for (let index = 0; index < imageFiles.length; index += 1) {
@@ -1833,18 +1830,36 @@ export function registerCore(bind: CanvasBindings) {
         x: bbox.x - 200 - index * 48,
         y: bbox.y + index * 36,
       }
-      const node = await addImageFromFile(imageFiles[index], point)
+      const node = await addImageFromFile(imageFiles[index], point, { select: false })
       if (!node) continue
       await linkImageNodeToImageDialogue(node.id, targetNodeId)
     }
 
     selectGraphNodes(targetNodeId)
-    updateNodeToolbar()
+    if (wasDialogueOpen) {
+      openImageDialogue(targetNodeId)
+    } else {
+      updateNodeToolbar()
+    }
+    bumpToolbarRevision()
+    scheduleHistoryPush()
   }
 
   function onImageDialogueAddCanvasNode(sourceNodeId: string) {
-    void linkImageNodeToImageDialogue(sourceNodeId).then((linked) => {
-      if (linked) updateNodeToolbar()
+    const targetNodeId = selectedNodeId.value
+    const wasDialogueOpen = showImageDialogue.value
+    void linkImageNodeToImageDialogue(sourceNodeId, targetNodeId).then((linked) => {
+      if (!linked) return
+      if (targetNodeId) {
+        selectGraphNodes(targetNodeId)
+        if (wasDialogueOpen) {
+          openImageDialogue(targetNodeId)
+        } else {
+          updateNodeToolbar()
+        }
+      }
+      bumpToolbarRevision()
+      scheduleHistoryPush()
     })
   }
 
@@ -2196,6 +2211,12 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
+    if (synced.textPickerTask === 'text2image') {
+      modelType.value = 'text2image'
+      promptText.value = synced.genPrompt ?? ''
+      return
+    }
+
     modelType.value = 'free'
     promptText.value = synced.genPrompt ?? ''
   }
@@ -2219,10 +2240,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   async function submitTextPrompt() {
-    console.log('modelType', modelType.value);
-    console.log('promptText', promptText.value);
-    // return;
-    if (!canSubmitTextPrompt.value || promptSubmitting.value) return
+    if (!canSubmitTextPrompt.value) return
 
     const g = graph.value
     const nodeId = activePickerNodeId.value
@@ -2231,7 +2249,15 @@ export function registerCore(bind: CanvasBindings) {
     const cell = g.getCellById(nodeId)
     if (!cell?.isNode()) return
 
-    promptSubmitting.value = true
+    const isSpawnResultTask =
+      modelType.value === 'text2video' ||
+      isText2VideoTask.value ||
+      modelType.value === 'text2image' ||
+      isText2ImageTask.value
+
+    if (!isSpawnResultTask && promptSubmitting.value) return
+
+    if (!isSpawnResultTask) promptSubmitting.value = true
     persistPromptBarDraft()
 
     try {
@@ -2355,13 +2381,17 @@ export function registerCore(bind: CanvasBindings) {
           bindGenerationTaskId(resultNode, taskId, 'VIDEO')
           persistGenerationTaskBinding()
 
-          const succeeded = await followVideoGenerationTaskOnNode(resultNode, taskId, {
+          startVideoGenerationTaskFollow(resultNode, taskId, {
             title: '文生视频',
             fileName: '文生视频.mp4',
             onError: (reason) => message.error(reason),
+            onComplete: (success) => {
+              if (!success) return
+              bumpToolbarRevision()
+              updateNodeToolbar()
+              scheduleHistoryPush()
+            },
           })
-
-          if (!succeeded) return
 
           selectedNodeId.value = resultNode.id
           selectedKind.value = 'video'
@@ -2373,6 +2403,66 @@ export function registerCore(bind: CanvasBindings) {
         } catch (error) {
           markVideoGenerationNodeFailed(resultNode)
           message.error(isRequestError(error) ? error.message : '文生视频失败，请稍后重试')
+        }
+        return
+      }
+
+      if (modelType.value === 'text2image' || isText2ImageTask.value) {
+        const trimmedPrompt = promptText.value.trim()
+        if (!trimmedPrompt) {
+          message.warning('请输入图片描述')
+          return
+        }
+
+        persistPromptBarDraft()
+        const resultNode = spawnGenerationResultNode(g, cell as Node, {
+          title: '文生图',
+          fileName: '文生图.png',
+        })
+
+        try {
+          const started = await startImageGenerationOnNode(resultNode, {
+            title: '文生图',
+            fileName: '文生图.png',
+            createTask: async () => {
+              const idempotencyKey =
+                typeof crypto !== 'undefined' && 'randomUUID' in crypto
+                  ? crypto.randomUUID()
+                  : `text2image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+              return api.createGenerationTask<GenerationTaskDetail>(
+                {
+                  taskType: 'IMAGE',
+                  capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+                  prompt: trimmedPrompt,
+                  parameters: { count: 1 },
+                  projectId: activeProjectId.value,
+                  nodeId: resultNode.id,
+                },
+                idempotencyKey,
+              )
+            },
+            onTaskBound: () => persistGenerationTaskBinding(),
+            onError: (reason) => message.error(reason),
+            onComplete: (result) => {
+              if (!result.success) return
+              bumpToolbarRevision()
+              updateNodeToolbar()
+              scheduleHistoryPush()
+            },
+          })
+
+          if (!started.started) return
+
+          selectedNodeId.value = resultNode.id
+          selectedKind.value = 'image'
+          syncNodeSelectionHighlight(resultNode.id)
+          syncNodeCount()
+          bumpToolbarRevision()
+          updateNodeToolbar()
+          scheduleHistoryPush()
+        } catch (error) {
+          message.error(isRequestError(error) ? error.message : '文生图失败，请稍后重试')
         }
         return
       }
@@ -2447,7 +2537,7 @@ export function registerCore(bind: CanvasBindings) {
 
       
     } finally {
-      promptSubmitting.value = false
+      if (!isSpawnResultTask) promptSubmitting.value = false
     }
   }
 
@@ -3507,7 +3597,7 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
-    if (key === 'text2video' || key === 'img2prompt') {
+    if (key === 'text2video' || key === 'text2image') {
       const cell = g.getCellById(nodeId)
       if (!cell?.isNode()) return
 
@@ -3515,17 +3605,33 @@ export function registerCore(bind: CanvasBindings) {
       data.mode = 'picker'
       data.textPickerTask = key
       data.textGenState = 'idle'
-      if (key === 'img2prompt' && !data.genPrompt?.trim()) {
+      cell.setData(data)
+
+      modelType.value = key === 'text2image' ? 'text2image' : 'text2video'
+
+      activePickerNodeId.value = nodeId
+      loadPromptBarContext(nodeId)
+      bumpToolbarRevision()
+      updateNodeToolbar()
+      scheduleHistoryPush()
+      return
+    }
+
+    if (key === 'img2prompt') {
+      const cell = g.getCellById(nodeId)
+      if (!cell?.isNode()) return
+
+      const data = { ...(cell.getData() as CanvasNodeData) }
+      data.mode = 'picker'
+      data.textPickerTask = key
+      data.textGenState = 'idle'
+      if (!data.genPrompt?.trim()) {
         data.genPrompt = IMG2PROMPT_DEFAULT_INSTRUCTION
       }
       cell.setData(data)
 
-      if (key === 'img2prompt') {
-        syncTextNodeImageSource(g, cell as Node)
-        modelType.value = 'img2prompt'
-      } else {
-        modelType.value = 'text2video'
-      }
+      syncTextNodeImageSource(g, cell as Node)
+      modelType.value = 'img2prompt'
 
       activePickerNodeId.value = nodeId
       loadPromptBarContext(nodeId)
@@ -5629,7 +5735,11 @@ export function registerCore(bind: CanvasBindings) {
     })
   }
 
-  function addImageFromFile(file: File, point?: { x: number; y: number }) {
+  function addImageFromFile(
+    file: File,
+    point?: { x: number; y: number },
+    options: { select?: boolean } = {},
+  ) {
     const g = graph.value
     if (!g) return Promise.resolve(null)
 
@@ -5641,7 +5751,9 @@ export function registerCore(bind: CanvasBindings) {
     })
 
     runUploadSimulation(node, file)
-    selectGraphNodes(node)
+    if (options.select !== false) {
+      selectGraphNodes(node)
+    }
     syncNodeCount()
     scheduleHistoryPush()
 
@@ -5851,6 +5963,7 @@ export function registerCore(bind: CanvasBindings) {
     isImageUploadFile,
     isImg2PromptTask,
     isText2VideoTask,
+    isText2ImageTask,
     promptSubmitLabel,
     isLightNodeToolbar,
     isVideoUploadFile,

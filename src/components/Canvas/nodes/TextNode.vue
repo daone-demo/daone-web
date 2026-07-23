@@ -64,7 +64,6 @@
       <button
         type="button"
         class="text-node__action text-node__action--write"
-        :class="{ 'text-node__action--active': data.textPickerTask === 'write' }"
         @mousedown.stop
         @click="onAction('write')"
       >
@@ -72,13 +71,12 @@
         自己编写内容
       </button>
 
-      <p class="text-node__try">尝试：</p>
+      <!-- <p class="text-node__try">尝试：</p> -->
       <button
         v-for="action in TEXT_PICKER_TRY_ACTIONS"
         :key="action.key"
         type="button"
         class="text-node__action"
-        :class="{ 'text-node__action--active': data.textPickerTask === action.key }"
         @mousedown.stop
         @click="onAction(action.key)"
       >
@@ -94,6 +92,8 @@
         contenteditable="true"
         :data-placeholder="TEXT_EDITOR_PLACEHOLDER"
         @input="onEditorInput"
+        @compositionstart="onEditorCompositionStart"
+        @compositionend="onEditorCompositionEnd"
         @blur="onEditorBlur"
         @focus="onEditorFocus"
         @mousedown="onEditorMouseDown"
@@ -109,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import type { Node } from '@antv/x6'
 import {
   TEXT_EDITOR_PLACEHOLDER,
@@ -195,15 +195,11 @@ function removeSelf(event?: Event) {
 }
 
 const editorRef = ref<HTMLElement | null>(null)
+const isEditorComposing = ref(false)
 const data = reactive<CanvasNodeData>({
   ...createEmptyNodeData(),
   kind: 'text',
   title: '文本节点',
-})
-
-const genPillText = computed(() => {
-  const p = data.textGenProgress ?? 0
-  return p < 1 ? '准备中...' : `生成中 ${p}%...`
 })
 
 let resizeState: {
@@ -224,6 +220,7 @@ function syncData(patch: Partial<CanvasNodeData> = {}) {
 }
 
 function syncEditorHtml() {
+  if (isEditorComposing.value) return
   const el = editorRef.value
   if (!el) return
   const html = data.content || ''
@@ -242,6 +239,15 @@ function syncEditorHtmlWhenReady() {
       requestAnimationFrame(() => syncEditorHtml())
     }
   })
+}
+
+function onEditorCompositionStart() {
+  isEditorComposing.value = true
+}
+
+function onEditorCompositionEnd() {
+  isEditorComposing.value = false
+  onEditorInput()
 }
 
 function onEditorInput() {
@@ -550,7 +556,9 @@ onMounted(() => {
 
   const onDataChange = ({ current }: { current: unknown }) => {
     syncNodeViewData(data, current as CanvasNodeData)
-    syncEditorHtmlWhenReady()
+    if (!isEditorComposing.value) {
+      syncEditorHtmlWhenReady()
+    }
   }
   node.on('change:data', onDataChange)
   detachDataListener = () => node.off('change:data', onDataChange)
@@ -559,6 +567,7 @@ onMounted(() => {
 watch(
   () => [data.textGenState, data.content] as const,
   () => {
+    if (isEditorComposing.value) return
     syncEditorHtmlWhenReady()
   },
 )
@@ -760,8 +769,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: background 0.15s;
 
-  &:hover,
-  &--active {
+  &:hover {
     background: #2a2a30;
   }
 }

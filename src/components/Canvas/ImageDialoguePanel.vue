@@ -93,6 +93,8 @@
       aria-multiline="true"
       :data-placeholder="IMAGE_DIALOGUE_PLACEHOLDER"
       @input="onPromptInput"
+      @compositionstart="onPromptCompositionStart"
+      @compositionend="onPromptCompositionEnd"
       @keydown="onPromptKeydown"
       @paste="onPromptPaste"
     />
@@ -223,7 +225,7 @@ import { isRequestError } from '@/utils/request';
 import { useCanvasBgTheme } from './useCanvasBgTheme';
 import ImageGenSettingsPopover from './ImageGenSettingsPopover.vue';
 import ImageStylePanel from './ImageStylePanel.vue';
-import { createPromptMentionApi, needsSpaceBeforeMention } from './promptMention';
+import { createPromptMentionApi, isInputComposing, needsSpaceBeforeMention } from './promptMention';
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
   IMAGE_DIALOGUE_PLACEHOLDER,
@@ -262,6 +264,7 @@ const { isLightTheme } = useCanvasBgTheme()
 const mentionApi = createPromptMentionApi('image-dialogue__mention')
 const promptInputRef = ref<HTMLElement | null>(null)
 let skipPromptWatch = false
+const isPromptComposing = ref(false)
 
 const previewList = computed(() => {
   const list = Array.isArray(props.previews)
@@ -395,6 +398,7 @@ function emitPrompt(text: string) {
 }
 
 function syncPromptView(text = props.modelValue) {
+  if (isPromptComposing.value) return
   const el = promptInputRef.value
   if (!el) return
 
@@ -454,16 +458,28 @@ function insertRefMention(index: number) {
   nextTick(() => syncPromptView())
 }
 
-function onPromptInput() {
+function onPromptCompositionStart() {
+  isPromptComposing.value = true
+}
+
+function onPromptCompositionEnd() {
+  isPromptComposing.value = false
+  onPromptInput()
+}
+
+function onPromptInput(event?: Event) {
   const el = promptInputRef.value
   if (!el) return
 
   const text = mentionApi.serializePromptEl(el)
   emitPrompt(text)
+  if (isPromptComposing.value || isInputComposing(event)) return
   nextTick(() => syncPromptView(text))
 }
 
 function onPromptKeydown(event: KeyboardEvent) {
+  if (isPromptComposing.value || isInputComposing(event)) return
+
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     onSend()
@@ -498,7 +514,7 @@ function onPromptPaste(event: ClipboardEvent) {
 watch(
   () => props.modelValue,
   (value) => {
-    if (skipPromptWatch) return
+    if (skipPromptWatch || isPromptComposing.value) return
     const el = promptInputRef.value
     if (!el || mentionApi.serializePromptEl(el) === value) return
     nextTick(() => syncPromptView(value))

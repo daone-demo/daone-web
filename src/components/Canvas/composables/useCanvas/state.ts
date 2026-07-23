@@ -30,7 +30,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const minimapContainerRef = computed(() => bottomLeftDockRef.value?.minimapContainerRef ?? null)
   const textExpandEditorRef = computed(() => textExpandEditorComponentRef.value?.editorRef ?? null)
 
-  const modelType = ref<'img2prompt' | 'text2xhs' | 'free' | 'text2video'>('free')
+  const modelType = ref<'img2prompt' | 'text2xhs' | 'free' | 'text2video' | 'text2image'>('free')
   const promptSourcePreviewUrl = ref('')
   const promptSourceFileName = ref('')
   const promptSourcePreviews = ref<ImageSourceRef[]>([])

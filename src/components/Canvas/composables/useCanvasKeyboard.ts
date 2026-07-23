@@ -57,6 +57,8 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
   }
 
   function handleKeydown(event: KeyboardEvent) {
+    if (event.isComposing) return
+
     const target = event.target
     if (isEditableTarget(target)) return
 

@@ -50,6 +50,7 @@ export type CanvasBindings = CanvasState & {
   showTextFormatToolbar: ComputedRef<boolean>
   isImg2PromptTask: ComputedRef<boolean>
   isText2VideoTask: ComputedRef<boolean>
+  isText2ImageTask: ComputedRef<boolean>
   promptSubmitLabel: ComputedRef<string>
   canSubmitTextPrompt: ComputedRef<boolean>
   imageCropSource: ComputedRef<{

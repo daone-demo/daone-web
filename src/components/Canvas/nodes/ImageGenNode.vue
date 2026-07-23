@@ -171,11 +171,6 @@ const headerTitle = computed(() => {
   return data.title
 })
 
-const genHintText = computed(() => {
-  const p = data.imageGenProgress ?? 0
-  return p < 1 ? '准备中...' : `生成中 ${p}%...`
-})
-
 const isEmptyUpload = computed(
   () =>
     data.imageGenTask === 'picker' &&

@@ -77,6 +77,8 @@
         aria-multiline="true"
         :data-placeholder="PROMPT_PLACEHOLDER"
         @input="onPromptInput"
+        @compositionstart="onPromptCompositionStart"
+        @compositionend="onPromptCompositionEnd"
         @keydown="onPromptKeydown"
         @paste="onPromptPaste"
       />
@@ -377,7 +379,7 @@ import {
   type VideoHdMagnification,
 } from '../constants'
 import type { CanvasBgTheme } from '../canvasTheme'
-import { createPromptMentionApi } from '../promptMention'
+import { createPromptMentionApi, isInputComposing } from '../promptMention'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import api, { type PromptTranslationData } from '@/services/api'
@@ -389,6 +391,7 @@ const isPromptDragOver = ref(false)
 const promptInputRef = ref<HTMLElement | null>(null)
 const mentionApi = createPromptMentionApi('canvas__prompt-mention')
 let skipPromptWatch = false
+const isPromptComposing = ref(false)
 const translating = ref(false)
 
 const props = defineProps<{
@@ -572,6 +575,7 @@ async function onTranslatePrompt() {
 }
 
 function syncPromptView(text = props.promptText) {
+  if (isPromptComposing.value) return
   const el = promptInputRef.value
   if (!el) return
 
@@ -585,16 +589,28 @@ function syncPromptView(text = props.promptText) {
   mentionApi.setPlainTextOffset(el, offset)
 }
 
-function onPromptInput() {
+function onPromptCompositionStart() {
+  isPromptComposing.value = true
+}
+
+function onPromptCompositionEnd() {
+  isPromptComposing.value = false
+  onPromptInput()
+}
+
+function onPromptInput(event?: Event) {
   const el = promptInputRef.value
   if (!el) return
 
   const text = mentionApi.serializePromptEl(el)
   emitPrompt(text)
+  if (isPromptComposing.value || isInputComposing(event)) return
   nextTick(() => syncPromptView(text))
 }
 
 function onPromptKeydown(event: KeyboardEvent) {
+  if (isPromptComposing.value || isInputComposing(event)) return
+
   if (event.key !== 'Backspace' && event.key !== 'Delete') return
 
   const el = promptInputRef.value
@@ -662,7 +678,7 @@ function onPromptDrop(event: DragEvent) {
 watch(
   () => props.promptText,
   (value) => {
-    if (skipPromptWatch) return
+    if (skipPromptWatch || isPromptComposing.value) return
     const el = promptInputRef.value
     if (!el || mentionApi.serializePromptEl(el) === value) return
     nextTick(() => syncPromptView(value))

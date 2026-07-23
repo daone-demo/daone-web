@@ -78,7 +78,7 @@ export interface CanvasNodeData {
     rows: number
     cols: number
   }
-  textPickerTask?: 'img2prompt' | 'text2video' | 'write' | ''
+  textPickerTask?: 'img2prompt' | 'text2video' | 'text2image' | 'write' | ''
   /** 自由输入提示词生成后，底部输入框保持显示 */
   promptBarPinned?: boolean
   textGenState?: 'idle' | 'loading' | 'done'
@@ -328,12 +328,12 @@ export const ADD_NODE_GROUPS = [
 export const TEXT_PICKER_ACTIONS = [
   { key: 'write', label: '自己编写内容', icon: 'doc' },
   { key: 'text2video', label: '文生视频', icon: 'play' },
-  { key: 'img2prompt', label: '图片反推提示词', icon: 'image' },
+  { key: 'text2image', label: '文生图', icon: 'image' },
   // { key: 'text2music', label: '文字生音乐', icon: 'audio' },
 ]
 
 export const TEXT_PICKER_TRY_ACTIONS = TEXT_PICKER_ACTIONS.filter(
-  (action) => action.key === 'text2video' || action.key === 'img2prompt',
+  (action) => action.key === 'text2video' || action.key === 'text2image',
 )
 
 export const VIDEO_PICKER_ACTIONS = [

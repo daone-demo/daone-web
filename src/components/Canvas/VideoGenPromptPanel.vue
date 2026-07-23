@@ -131,6 +131,8 @@
       aria-multiline="true"
       :data-placeholder="VIDEO_GEN_PROMPT_PLACEHOLDER"
       @input="onPromptInput"
+      @compositionstart="onPromptCompositionStart"
+      @compositionend="onPromptCompositionEnd"
       @keydown="onPromptKeydown"
       @paste="onPromptPaste"
     />
@@ -261,7 +263,7 @@ import { message } from 'ant-design-vue'
 import api, { type PromptTranslationData } from '@/services/api'
 import { isRequestError } from '@/utils/request'
 import { useCanvasBgTheme } from './useCanvasBgTheme'
-import { createPromptMentionApi, needsSpaceBeforeMention } from './promptMention'
+import { createPromptMentionApi, isInputComposing, needsSpaceBeforeMention } from './promptMention'
 import {
   createMentionSpan,
   findMentionAfterCursor,
@@ -517,6 +519,7 @@ function selectTab(key: string) {
 
 const promptInputRef = ref<HTMLElement | null>(null)
 let skipPromptWatch = false
+const isPromptComposing = ref(false)
 const translating = ref(false)
 
 function getRefDisplayName(ref: VideoSourceRef) {
@@ -560,6 +563,7 @@ async function onTranslatePrompt() {
 }
 
 function syncPromptView(text = props.prompt) {
+  if (isPromptComposing.value) return
   const el = promptInputRef.value
   if (!el) return
 
@@ -625,16 +629,28 @@ function insertRefMention(ref: VideoSourceRef) {
   nextTick(() => syncPromptView())
 }
 
-function onPromptInput() {
+function onPromptCompositionStart() {
+  isPromptComposing.value = true
+}
+
+function onPromptCompositionEnd() {
+  isPromptComposing.value = false
+  onPromptInput()
+}
+
+function onPromptInput(event?: Event) {
   const el = promptInputRef.value
   if (!el) return
 
   const text = serializePromptEl(el)
   emitPrompt(text)
+  if (isPromptComposing.value || isInputComposing(event)) return
   nextTick(() => syncPromptView(text))
 }
 
 function onPromptKeydown(event: KeyboardEvent) {
+  if (isPromptComposing.value || isInputComposing(event)) return
+
   if (event.key !== 'Backspace' && event.key !== 'Delete') return
 
   const el = promptInputRef.value
@@ -713,7 +729,7 @@ function onFileInputChange(event: Event) {
 watch(
   () => props.prompt,
   (value) => {
-    if (skipPromptWatch) return
+    if (skipPromptWatch || isPromptComposing.value) return
     const el = promptInputRef.value
     if (!el || serializePromptEl(el) === value) return
     nextTick(() => syncPromptView(value))

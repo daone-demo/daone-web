@@ -177,6 +177,108 @@ function isNodeOnGraph(node: Node) {
   return Boolean(node.model?.graph)
 }
 
+const activePollingTaskIds = new Set<string>()
+
+/** 通过节点上绑定的 generationTaskId 查找对应节点 */
+export function findNodeByGenerationTaskId(graph: Graph, taskId: string): Node | null {
+  const trimmed = taskId.trim()
+  if (!trimmed) return null
+
+  for (const cell of graph.getNodes()) {
+    const data = cell.getData() as CanvasNodeData
+    if (String(data.generationTaskId ?? '').trim() === trimmed) {
+      return cell as Node
+    }
+  }
+
+  return null
+}
+
+function getNodeGraph(node: Node): Graph | null {
+  return (node.model?.graph as Graph | undefined) ?? null
+}
+
+/** 轮询过程中优先按 taskId 定位节点，避免并行任务互相覆盖 */
+function resolveTaskNode(graph: Graph | null, fallback: Node, taskId: string): Node | null {
+  if (graph) {
+    const found = findNodeByGenerationTaskId(graph, taskId)
+    if (found) return found
+  }
+  return isNodeOnGraph(fallback) ? fallback : null
+}
+
+function scheduleGenerationTaskFollow(taskId: string, follow: () => Promise<unknown>) {
+  const key = taskId.trim()
+  if (!key || activePollingTaskIds.has(key)) return false
+
+  activePollingTaskIds.add(key)
+  void Promise.resolve()
+    .then(follow)
+    .finally(() => {
+      activePollingTaskIds.delete(key)
+    })
+  return true
+}
+
+export function startVideoGenerationTaskFollow(
+  node: Node,
+  taskId: string,
+  options: {
+    title?: string
+    fileName?: string
+    onError?: (message: string) => void
+    onComplete?: (success: boolean) => void
+  } = {},
+) {
+  const { onComplete, ...followOptions } = options
+  scheduleGenerationTaskFollow(taskId, () =>
+    followVideoGenerationTaskOnNode(node, taskId, followOptions).then((success) => {
+      onComplete?.(success)
+      return success
+    }),
+  )
+}
+
+export function startTextGenerationTaskFollow(
+  node: Node,
+  taskId: string,
+  options: {
+    title?: string
+    toHtml?: (text: string) => string
+    onError?: (message: string) => void
+    onComplete?: (success: boolean) => void
+  } = {},
+) {
+  const { onComplete, ...followOptions } = options
+  scheduleGenerationTaskFollow(taskId, () =>
+    followTextGenerationTaskOnNode(node, taskId, followOptions).then((success) => {
+      onComplete?.(success)
+      return success
+    }),
+  )
+}
+
+export function startImageGenerationTaskFollow(
+  node: Node,
+  taskId: string,
+  options: {
+    title: string
+    fileName: string
+    onError?: (message: string) => void
+    onTaskBound?: (taskId: string) => void
+    onComplete?: (result: ImageGenerationOnNodeResult) => void
+    initialTask?: GenerationTaskDetail
+  },
+) {
+  options.onTaskBound?.(taskId)
+  scheduleGenerationTaskFollow(taskId, () =>
+    pollAndApplyImageTaskOnNode(node, taskId, options).then((result) => {
+      options.onComplete?.(result)
+      return result
+    }),
+  )
+}
+
 /** 将 taskId 绑定到节点，随画布快照一并持久化 */
 export function bindGenerationTaskId(
   node: Node,
@@ -481,9 +583,12 @@ async function pollAndApplyImageTaskOnNode(
     onTaskBound?: (taskId: string) => void
   },
 ): Promise<ImageGenerationOnNodeResult> {
-  if (!isNodeOnGraph(node)) return { success: false }
+  const graph = getNodeGraph(node)
+  const resolveNode = () => resolveTaskNode(graph, node, taskId)
+  const current = resolveNode()
+  if (!current) return { success: false }
 
-  bindGenerationTaskId(node, taskId, 'IMAGE')
+  bindGenerationTaskId(current, taskId, 'IMAGE')
   options.onTaskBound?.(taskId)
 
   let appliedDuringPoll = false
@@ -491,12 +596,13 @@ async function pollAndApplyImageTaskOnNode(
   const applyOptions = { title: options.title, fileName: options.fileName }
 
   const tryApplyDuringPoll = (task: GenerationTaskDetail) => {
-    if (appliedDuringPoll || resolvingResult || !isGenerationTaskTerminal(task.status)) return
+    const target = resolveNode()
+    if (!target || appliedDuringPoll || resolvingResult || !isGenerationTaskTerminal(task.status)) return
     const raw = pickReadyImageResult(task)
     if (!raw) return
 
     resolvingResult = true
-    void applyResolvedImageResultToNode(node, raw, applyOptions)
+    void applyResolvedImageResultToNode(target, raw, applyOptions)
       .then((applied) => {
         if (applied) appliedDuringPoll = true
       })
@@ -515,33 +621,40 @@ async function pollAndApplyImageTaskOnNode(
       options.initialTask ??
       normalizeGenerationTaskDetail(await api.getGenerationTask<GenerationTaskDetail>(taskId))
 
-    if (isImageResultApplied(node)) {
+    const initialTarget = resolveNode()
+    if (!initialTarget) {
+      return appliedDuringPoll ? buildSuccessResult(first) : { success: false }
+    }
+
+    if (isImageResultApplied(initialTarget)) {
       return buildSuccessResult(first)
     }
 
-    updateGenerationNodeProgress(node, first.progress ?? 5)
+    updateGenerationNodeProgress(initialTarget, first.progress ?? 5)
     tryApplyDuringPoll(first)
 
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
         onProgress: (task) => {
-          if (!isNodeOnGraph(node)) return
-          if (isImageResultApplied(node)) return
+          const target = resolveNode()
+          if (!target) return
+          if (isImageResultApplied(target)) return
           if (isGenerationTaskTerminal(task.status)) {
             tryApplyDuringPoll(task)
             return
           }
 
-          const data = node.getData() as CanvasNodeData
+          const data = target.getData() as CanvasNodeData
           if (data.imageGenState !== 'loading') return
 
-          updateGenerationNodeProgress(node, task.progress ?? 0)
+          updateGenerationNodeProgress(target, task.progress ?? 0)
           tryApplyDuringPoll(task)
         },
       })
 
-    if (!isNodeOnGraph(node)) {
+    const finalTarget = resolveNode()
+    if (!finalTarget) {
       return appliedDuringPoll ? buildSuccessResult(finalTask) : { success: false }
     }
 
@@ -550,26 +663,26 @@ async function pollAndApplyImageTaskOnNode(
     }
 
     if (finalTask.status !== 'SUCCEEDED') {
-      if (isImageResultApplied(node)) {
+      if (isImageResultApplied(finalTarget)) {
         return buildSuccessResult(finalTask)
       }
       const reason = finalTask.error?.message || '生成任务失败'
-      markGenerationNodeFailed(node, reason)
+      markGenerationNodeFailed(finalTarget, reason)
       options.onError?.(reason)
       return { success: false }
     }
 
     const primaryResult = pickReadyImageResult(finalTask)
     if (!primaryResult) {
-      markGenerationNodeFailed(node, '未返回结果图片')
+      markGenerationNodeFailed(finalTarget, '未返回结果图片')
       options.onError?.('生成完成，但未返回结果图片')
       return { success: false }
     }
 
-    if (!isImageResultApplied(node)) {
-      const applied = await applyResolvedImageResultToNode(node, primaryResult, applyOptions)
+    if (!isImageResultApplied(finalTarget)) {
+      const applied = await applyResolvedImageResultToNode(finalTarget, primaryResult, applyOptions)
       if (!applied) {
-        markGenerationNodeFailed(node, '未返回结果图片')
+        markGenerationNodeFailed(finalTarget, '未返回结果图片')
         options.onError?.('生成完成，但未返回结果图片')
         return { success: false }
       }
@@ -577,8 +690,9 @@ async function pollAndApplyImageTaskOnNode(
 
     return buildSuccessResult(finalTask)
   } catch (error) {
-    if (isNodeOnGraph(node) && !isImageResultApplied(node)) {
-      markGenerationNodeFailed(node)
+    const target = resolveNode()
+    if (target && !isImageResultApplied(target)) {
+      markGenerationNodeFailed(target)
     }
     options.onError?.(error instanceof Error ? error.message : '生成失败，请稍后重试')
     return { success: false }
@@ -609,29 +723,37 @@ export async function followTextGenerationTaskOnNode(
     onError?: (message: string) => void
   } = {},
 ): Promise<boolean> {
-  if (!isNodeOnGraph(node)) return false
+  const graph = getNodeGraph(node)
+  const resolveNode = () => resolveTaskNode(graph, node, taskId)
+  const current = resolveNode()
+  if (!current) return false
 
-  bindGenerationTaskId(node, taskId, 'TEXT')
+  bindGenerationTaskId(current, taskId, 'TEXT')
 
   try {
-    if (isTextResultApplied(node)) return true
+    if (isTextResultApplied(current)) return true
 
     const first = normalizeGenerationTaskDetail(
       await api.getGenerationTask<GenerationTaskDetail>(taskId),
     )
-    updateTextGenerationNodeProgress(node, first.progress ?? 5)
+    updateTextGenerationNodeProgress(current, first.progress ?? 5)
 
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
-        onProgress: (task) => updateTextGenerationNodeProgress(node, task.progress ?? 0),
+        onProgress: (task) => {
+          const target = resolveNode()
+          if (target) updateTextGenerationNodeProgress(target, task.progress ?? 0)
+        },
       })
 
-    if (isTextResultApplied(node)) return true
+    const finalTarget = resolveNode()
+    if (!finalTarget) return false
+    if (isTextResultApplied(finalTarget)) return true
 
     if (finalTask.status !== 'SUCCEEDED') {
       const reason = finalTask.error?.message || '文本生成任务失败'
-      markTextGenerationNodeFailed(node, reason)
+      markTextGenerationNodeFailed(finalTarget, reason)
       options.onError?.(reason)
       return false
     }
@@ -639,19 +761,20 @@ export async function followTextGenerationTaskOnNode(
     const result = pickTextGenerationResult(finalTask)
     const content = result?.content?.trim() || ''
     if (!content) {
-      markTextGenerationNodeFailed(node, '未返回文本')
+      markTextGenerationNodeFailed(finalTarget, '未返回文本')
       options.onError?.('生成完成，但未返回文本内容')
       return false
     }
 
-    applyTextGenerationResultToNode(node, content, {
+    applyTextGenerationResultToNode(finalTarget, content, {
       title: options.title,
       toHtml: options.toHtml,
     })
     return true
   } catch (error) {
-    if (!isTextResultApplied(node)) {
-      markTextGenerationNodeFailed(node)
+    const target = resolveNode()
+    if (target && !isTextResultApplied(target)) {
+      markTextGenerationNodeFailed(target)
     }
     options.onError?.(error instanceof Error ? error.message : '文本生成失败，请稍后重试')
     return false
@@ -667,32 +790,41 @@ export async function followModelGenerationTaskOnNode(
     onError?: (message: string) => void
   } = {},
 ): Promise<boolean> {
-  if (!isNodeOnGraph(node)) return false
+  const graph = getNodeGraph(node)
+  const resolveNode = () => resolveTaskNode(graph, node, taskId)
+  const current = resolveNode()
+  if (!current) return false
 
-  bindGenerationTaskId(node, taskId, 'MODEL')
+  bindGenerationTaskId(current, taskId, 'MODEL')
 
   try {
-    const data = node.getData() as CanvasNodeData
-    if (data.previewUrl && data.imageGenState !== 'loading') return true
+    const currentData = current.getData() as CanvasNodeData
+    if (currentData.previewUrl && currentData.imageGenState !== 'loading') return true
 
     const first = normalizeGenerationTaskDetail(
       await api.getGenerationTask<GenerationTaskDetail>(taskId),
     )
-    updateGenerationNodeProgress(node, first.progress ?? 5)
+    updateGenerationNodeProgress(current, first.progress ?? 5)
 
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
-        onProgress: (task) => updateGenerationNodeProgress(node, task.progress ?? 0),
+        onProgress: (task) => {
+          const target = resolveNode()
+          if (target) updateGenerationNodeProgress(target, task.progress ?? 0)
+        },
       })
 
-    if (data.previewUrl && (node.getData() as CanvasNodeData).imageGenState !== 'loading') {
+    const finalTarget = resolveNode()
+    if (!finalTarget) return false
+    const finalData = finalTarget.getData() as CanvasNodeData
+    if (finalData.previewUrl && finalData.imageGenState !== 'loading') {
       return true
     }
 
     if (finalTask.status !== 'SUCCEEDED') {
       const reason = finalTask.error?.message || '3D 生成任务失败'
-      markGenerationNodeFailed(node, reason)
+      markGenerationNodeFailed(finalTarget, reason)
       options.onError?.(reason)
       return false
     }
@@ -700,18 +832,19 @@ export async function followModelGenerationTaskOnNode(
     const result = pickModelGenerationResult(finalTask)
     const resolved = result ? await resolveGenerationResultPreview(result) : null
     if (!resolved?.previewUrl) {
-      markGenerationNodeFailed(node, '未返回 3D 模型')
+      markGenerationNodeFailed(finalTarget, '未返回 3D 模型')
       options.onError?.('生成完成，但未返回 GLB 模型')
       return false
     }
 
-    applyModelGenerationResultToNode(node, resolved, {
+    applyModelGenerationResultToNode(finalTarget, resolved, {
       title: options.title,
       fileName: resolved.previewUrl.split('/').pop()?.split('?')[0] || `${options.title || '3D 模型'}.glb`,
     })
     return true
   } catch (error) {
-    markGenerationNodeFailed(node)
+    const target = resolveNode()
+    if (target) markGenerationNodeFailed(target)
     options.onError?.(error instanceof Error ? error.message : '3D 生成失败，请稍后重试')
     return false
   }
@@ -727,32 +860,41 @@ export async function followVideoGenerationTaskOnNode(
     onError?: (message: string) => void
   } = {},
 ): Promise<boolean> {
-  if (!isNodeOnGraph(node)) return false
+  const graph = getNodeGraph(node)
+  const resolveNode = () => resolveTaskNode(graph, node, taskId)
+  const current = resolveNode()
+  if (!current) return false
 
-  bindGenerationTaskId(node, taskId, 'VIDEO')
+  bindGenerationTaskId(current, taskId, 'VIDEO')
 
   try {
-    const data = node.getData() as CanvasNodeData
-    if (data.previewUrl && data.uploadState !== 'uploading') return true
+    const currentData = current.getData() as CanvasNodeData
+    if (currentData.previewUrl && currentData.uploadState !== 'uploading') return true
 
     const first = normalizeGenerationTaskDetail(
       await api.getGenerationTask<GenerationTaskDetail>(taskId),
     )
-    updateVideoGenerationNodeProgress(node, first.progress ?? 5)
+    updateVideoGenerationNodeProgress(current, first.progress ?? 5)
 
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
-        onProgress: (task) => updateVideoGenerationNodeProgress(node, task.progress ?? 0),
+        onProgress: (task) => {
+          const target = resolveNode()
+          if (target) updateVideoGenerationNodeProgress(target, task.progress ?? 0)
+        },
       })
 
-    if (data.previewUrl && (node.getData() as CanvasNodeData).uploadState !== 'uploading') {
+    const finalTarget = resolveNode()
+    if (!finalTarget) return false
+    const finalData = finalTarget.getData() as CanvasNodeData
+    if (finalData.previewUrl && finalData.uploadState !== 'uploading') {
       return true
     }
 
     if (finalTask.status !== 'SUCCEEDED') {
       const reason = finalTask.error?.message || '视频生成任务失败'
-      markVideoGenerationNodeFailed(node, reason)
+      markVideoGenerationNodeFailed(finalTarget, reason)
       options.onError?.(reason)
       return false
     }
@@ -760,18 +902,19 @@ export async function followVideoGenerationTaskOnNode(
     const result = pickVideoGenerationResult(finalTask)
     const resolved = result ? await resolveGenerationResultPreview(result) : null
     if (!resolved?.previewUrl) {
-      markVideoGenerationNodeFailed(node, '未返回视频')
+      markVideoGenerationNodeFailed(finalTarget, '未返回视频')
       options.onError?.('生成完成，但未返回视频')
       return false
     }
 
-    applyVideoGenerationResultToNode(node, resolved, {
+    applyVideoGenerationResultToNode(finalTarget, resolved, {
       title: options.title,
       fileName: options.fileName || resolved.fileName || '文生视频.mp4',
     })
     return true
   } catch (error) {
-    markVideoGenerationNodeFailed(node)
+    const target = resolveNode()
+    if (target) markVideoGenerationNodeFailed(target)
     options.onError?.(error instanceof Error ? error.message : '视频生成失败，请稍后重试')
     return false
   }
@@ -819,46 +962,96 @@ export function resumePendingGenerationTasks(
     }
 
     if (data.kind === 'image' && data.imageGenState === 'loading') {
-      void followImageGenerationTaskOnNode(node, taskId, {
+      startImageGenerationTaskFollow(node, taskId, {
         title: data.title || '生成结果',
         fileName: data.fileName || data.title || '生成结果.png',
         onError: options.onError,
-      }).then(notifyComplete)
+        onComplete: (result) => notifyComplete(result.success),
+      })
       return
     }
 
     if (data.kind === 'text' && data.textGenState === 'loading') {
-      void followTextGenerationTaskOnNode(node, taskId, {
+      startTextGenerationTaskFollow(node, taskId, {
         title: data.title,
         toHtml: options.toHtml,
         onError: options.onError,
-      }).then(notifyComplete)
+        onComplete: notifyComplete,
+      })
       return
     }
 
     if (data.kind === 'model3d' && data.imageGenState === 'loading') {
-      void followModelGenerationTaskOnNode(node, taskId, {
-        title: data.title || '3D 模型',
-        onError: options.onError,
-      }).then(notifyComplete)
+      scheduleGenerationTaskFollow(taskId, () =>
+        followModelGenerationTaskOnNode(node, taskId, {
+          title: data.title || '3D 模型',
+          onError: options.onError,
+        }).then(notifyComplete),
+      )
       return
     }
 
     if (data.kind === 'video' && data.uploadState === 'uploading') {
-      void followVideoGenerationTaskOnNode(node, taskId, {
+      startVideoGenerationTaskFollow(node, taskId, {
         title: data.title || '文生视频',
         fileName: data.fileName || '文生视频.mp4',
         onError: options.onError,
-      }).then(notifyComplete)
+        onComplete: notifyComplete,
+      })
     }
   })
 }
 
 export function resetResumedGenerationTaskCache() {
   resumedTaskIds.clear()
+  activePollingTaskIds.clear()
 }
 
-/** 在单个结果节点上创建任务、绑定 taskId 并回写图片生成结果 */
+/** 创建图片任务后立即返回，后台按 taskId 回写对应节点 */
+export async function startImageGenerationOnNode(
+  node: Node,
+  options: {
+    title: string
+    fileName: string
+    createTask: () => Promise<GenerationTaskDetail | unknown>
+    onError?: (message: string) => void
+    onTaskBound?: (taskId: string) => void
+    onComplete?: (result: ImageGenerationOnNodeResult) => void
+  },
+): Promise<{ started: boolean; taskId?: string }> {
+  if (!isNodeOnGraph(node)) return { started: false }
+
+  let created: GenerationTaskDetail
+  try {
+    created = normalizeGenerationTaskDetail(await options.createTask())
+  } catch (error) {
+    markGenerationNodeFailed(node)
+    options.onError?.(error instanceof Error ? error.message : '创建生成任务失败')
+    return { started: false }
+  }
+
+  const taskId = String(created.id ?? '').trim()
+  if (!taskId) {
+    markGenerationNodeFailed(node, '创建生成任务失败')
+    options.onError?.('创建生成任务失败')
+    return { started: false }
+  }
+
+  bindGenerationTaskId(node, taskId, 'IMAGE')
+  options.onTaskBound?.(taskId)
+
+  startImageGenerationTaskFollow(node, taskId, {
+    title: options.title,
+    fileName: options.fileName,
+    onError: options.onError,
+    initialTask: created,
+    onComplete: options.onComplete,
+  })
+
+  return { started: true, taskId }
+}
+
+/** 在单个结果节点上创建任务、绑定 taskId 并回写图片生成结果（阻塞直到完成） */
 export async function runImageGenerationOnNode(
   node: Node,
   options: {

@@ -36,7 +36,7 @@ export const BIND_KEYS = [
   'groupOverlayDrag', 'groupMoveState', 'zoomPercent', 'currentProjectName', 'canvasBgThemeLabel',
   'activeGroupSelection', 'showGroupToolbar', 'showPromptBar', 'showImageGenPromptBar',
   'showVideoGenPromptBar', 'videoGenSourceRefs', 'showImageCreativeToolbar',
-  'showTextFormatToolbar', 'isImg2PromptTask', 'canSubmitTextPrompt', 'imageCropSource',
+  'showTextFormatToolbar', 'isImg2PromptTask', 'isText2VideoTask', 'isText2ImageTask', 'promptSubmitLabel', 'canSubmitTextPrompt', 'imageCropSource',
   'imageGridSplitSource', 'imageEraseSource', 'imageInpaintSource', 'imageDialoguePreviews', 'imageDialoguePreviewUrl', 'showNodeToolbar', 'showMultiSelectToolbar',
   'showToolbarFeatureButtons', 'isLightNodeToolbar', 'altVoiceTimer', 'bindKeyboard',
   'unbindKeyboard', 'endSpacePan',
