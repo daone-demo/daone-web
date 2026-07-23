@@ -48,7 +48,7 @@
       <div class="text-node__skeleton text-node__skeleton--lg">
         <span v-for="n in 8" :key="n" />
       </div>
-      <div class="text-node__gen-pill">{{ genPillText }}</div>
+      <!-- <div class="text-node__gen-pill">{{ genPillText }}</div> -->
     </div>
 
     <div

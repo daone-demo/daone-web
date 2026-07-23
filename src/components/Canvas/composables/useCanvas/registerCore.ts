@@ -2718,6 +2718,14 @@ export function registerCore(bind: CanvasBindings) {
     syncHistoryState()
 
     nextTick(() => {
+      syncAllNodeSizes(g)
+      refreshCanvasNodeViews(g)
+      ensureInfiniteCanvasArea(g)
+      syncViewportNodeVisibility()
+      updateNodeToolbar()
+      bumpToolbarRevision()
+      resumeCanvasGenerationTasks()
+
       void hydrateMissingImageNodeDimensions(g).finally(() => {
         syncAllNodeSizes(g)
         refreshCanvasNodeViews(g)
@@ -2725,7 +2733,6 @@ export function registerCore(bind: CanvasBindings) {
         syncViewportNodeVisibility()
         updateNodeToolbar()
         bumpToolbarRevision()
-        resumeCanvasGenerationTasks()
       })
     })
 

@@ -5,6 +5,7 @@ import type { CanvasNodeData } from './constants'
 import { syncGenNodesFromSource } from './imageGen'
 import { syncTextNodesFromImageSource } from './textPrompt'
 import { getNodeSize, syncNodeShapeFromData } from './graph'
+import { resolveImageNaturalSizeCached } from './imageDisplayUrl'
 
 export interface UploadAssetOptions {
   projectId?: string
@@ -97,18 +98,7 @@ function fileToBase64(file: File, onReadProgress?: (ratio: number) => void): Pro
 export function resolveImageNaturalSize(
   previewUrl: string,
 ): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      if (!img.naturalWidth || !img.naturalHeight) {
-        reject(new Error('invalid image dimensions'))
-        return
-      }
-      resolve({ width: img.naturalWidth, height: img.naturalHeight })
-    }
-    img.onerror = () => reject(new Error('failed to load image'))
-    img.src = previewUrl
-  })
+  return resolveImageNaturalSizeCached(previewUrl)
 }
 
 /** 上传本地文件到 OSS，返回素材访问地址。 */

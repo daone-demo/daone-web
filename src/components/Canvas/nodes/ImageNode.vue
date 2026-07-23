@@ -116,10 +116,16 @@
           </div>
         </template>
         <template v-else-if="data.previewUrl">
+          <div v-if="isImageLoading" class="image-node__image-loading" aria-hidden="true">
+            <span class="image-node__spinner" />
+          </div>
           <img
-            :src="data.previewUrl"
+            :src="displayUrl"
             :alt="data.fileName"
+            decoding="async"
             draggable="true"
+            @load="onImageLoad"
+            @error="onImageError"
             @dragstart.stop="onPreviewDragStart"
           />
           <!-- <span v-if="showUploadSuccess" class="image-node__success">上传成功</span> -->
@@ -134,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, onMounted, reactive, ref } from 'vue'
+import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Node } from '@antv/x6'
 import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isPortrait } from '../constants'
 import type { CanvasNodeData } from '../constants'
@@ -145,6 +151,7 @@ import { useNodeConnect } from './useNodeConnect'
 import { useNodeViewScale } from './useNodeViewScale'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import { syncNodeViewData } from './syncNodeViewData'
+import { useCanvasNodeImage } from './useCanvasNodeImage'
 
 const getNode = inject<() => Node>('getNode')!
 const requestCanvasUpload = inject<(nodeId: string) => void>('requestCanvasUpload')
@@ -155,6 +162,7 @@ const { startResize, previewScale, isResizing } = useNodeViewScale()
 const { isLightTheme } = useCanvasBgTheme()
 
 const data = reactive<CanvasNodeData>({ ...createEmptyNodeData(), kind: 'image', title: '图片节点', mode: 'editor' })
+const { displayUrl, isImageLoading, onImageLoad, onImageError } = useCanvasNodeImage(toRef(data, 'previewUrl'))
 
 const dimensionLabel = computed(() => {
   const scale = previewScale.value ?? data.viewScale ?? 1
@@ -434,6 +442,16 @@ onMounted(() => {
     height: 100%;
     object-fit: cover;
   }
+}
+
+.image-node__image-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 20, 22, 0.72);
+  pointer-events: none;
 }
 
 .image-node__preview--uploading {

@@ -21,7 +21,7 @@
         <span class="model3d-node__title-text">{{ data.title || '3D 模型' }}</span>
       </span>
       <span v-if="data.imageGenState === 'loading'" class="model3d-node__hint">
-        {{ genHintText }}
+        <!-- {{ genHintText }} -->
       </span>
       <span v-else class="model3d-node__hint">拖拽旋转 · 滚轮缩放</span>
       <button

@@ -287,13 +287,6 @@ async function initializePage() {
     const projectId = typeof route.params.id === 'string' ? route.params.id.trim() : ''
     await Promise.all([
       onLoadProjects(),
-      onLoadWorkflows(),
-      onLoadChatModels(),
-      onLoadChatTools(),
-      onLoadAiCapabilities('TEXT'),
-      onLoadAiCapabilities('IMAGE'),
-      onLoadAiCapabilities('VIDEO'),
-      onLoadHistorySessions(),
       projectId ? onLoadProjectCanvas(projectId) : Promise.resolve(),
     ])
   } catch (error) {
@@ -306,6 +299,18 @@ async function initializePage() {
       pendingCanvasPayload.value = null
     }
   }
+
+  void Promise.all([
+    onLoadWorkflows(),
+    onLoadChatModels(),
+    onLoadChatTools(),
+    onLoadAiCapabilities('TEXT'),
+    onLoadAiCapabilities('IMAGE'),
+    onLoadAiCapabilities('VIDEO'),
+    onLoadHistorySessions(),
+  ]).catch((error) => {
+    console.error('[CreateOrEdit] background init failed', error)
+  })
 }
 
 watch(

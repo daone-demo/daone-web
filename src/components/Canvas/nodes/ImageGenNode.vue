@@ -55,7 +55,7 @@
         <div class="image-gen-node__preview image-gen-node__preview--empty">
           <span class="image-gen-node__spinner" aria-hidden="true" />
         </div>
-        <p class="image-gen-node__hd-hint">{{ genHintText }}</p>
+        <!-- <p class="image-gen-node__hd-hint">{{ genHintText }}</p> -->
       </div>
 
       <div
@@ -66,7 +66,18 @@
           class="image-gen-node__preview"
           :class="data.previewUrl ? 'image-gen-node__preview--output' : 'image-gen-node__preview--empty'"
         >
-          <img v-if="data.previewUrl" :src="data.previewUrl" :alt="data.fileName" />
+          <template v-if="data.previewUrl">
+            <div v-if="isImageLoading" class="image-gen-node__image-loading" aria-hidden="true">
+              <span class="image-gen-node__spinner" />
+            </div>
+            <img
+              :src="displayUrl"
+              :alt="data.fileName"
+              decoding="async"
+              @load="onImageLoad"
+              @error="onImageError"
+            />
+          </template>
           <span v-else class="image-gen-node__placeholder-icon" aria-hidden="true" />
         </div>
       </div>
@@ -101,7 +112,18 @@
           @dragleave="onDragLeave"
           @drop.prevent.stop="onDrop"
         >
-          <img v-if="data.previewUrl" :src="data.previewUrl" :alt="data.fileName" />
+          <template v-if="data.previewUrl">
+            <div v-if="isImageLoading" class="image-gen-node__image-loading" aria-hidden="true">
+              <span class="image-gen-node__spinner" />
+            </div>
+            <img
+              :src="displayUrl"
+              :alt="data.fileName"
+              decoding="async"
+              @load="onImageLoad"
+              @error="onImageError"
+            />
+          </template>
           <span v-else class="image-gen-node__placeholder-icon" aria-hidden="true" />
         </div>
       </div>
@@ -117,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, onMounted, reactive, ref } from 'vue'
+import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Node } from '@antv/x6'
 import type { CanvasNodeData } from '../constants'
 import { createEmptyNodeData } from '../constants'
@@ -125,6 +147,7 @@ import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import { syncNodeViewData } from './syncNodeViewData'
+import { useCanvasNodeImage } from './useCanvasNodeImage'
 
 const { isLightTheme } = useCanvasBgTheme()
 const getNode = inject<() => Node>('getNode')!
@@ -140,6 +163,7 @@ const data = reactive<CanvasNodeData>({
   mode: 'picker',
   imageGenTask: 'picker',
 })
+const { displayUrl, isImageLoading, onImageLoad, onImageError } = useCanvasNodeImage(toRef(data, 'previewUrl'))
 
 const headerTitle = computed(() => {
   if (data.imageGenTask === 'img2img') return '图生图'
@@ -303,6 +327,7 @@ onMounted(() => {
   &--output {
     flex: 1;
     min-height: 140px;
+    position: relative;
 
     img {
       width: 100%;
@@ -318,6 +343,16 @@ onMounted(() => {
     color: #6b7cff;
     cursor: pointer;
   }
+}
+
+.image-gen-node__image-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 20, 22, 0.72);
+  pointer-events: none;
 }
 
 .image-gen-node__placeholder-symbol {
