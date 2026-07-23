@@ -63,6 +63,7 @@
       </button>
 
       <input
+        v-if="!isGridSplitNode"
         ref="uploadInputRef"
         type="file"
         class="image-node__file-input"
@@ -70,7 +71,8 @@
         @change="onUploadInputChange"
       />
 
-      <button 
+      <button
+        v-if="!isGridSplitNode"
         type="button"
         class="image-node__upload-btn"
         :class="{ 'image-node__upload-btn--disabled': data.uploadState === 'uploading' }"
@@ -98,8 +100,8 @@
         :class="{
           'image-node__preview--uploading': data.uploadState === 'uploading',
           'image-node__preview--dragover': isDragOver,
+          'image-node__preview--readonly': isGridSplitNode,
         }"
-        :style="gridSplitBorderStyle"
         @click="onPreviewClick"
         @dblclick.stop="onPreviewDblClick"
         @dragenter.prevent="onDragOver"
@@ -124,7 +126,7 @@
             :alt="data.fileName"
             decoding="async"
             draggable="true"
-            @load="onImageLoad"
+            @load="onPreviewImageLoad"
             @error="onImageError"
             @dragstart.stop="onPreviewDragStart"
           />
@@ -144,7 +146,6 @@ import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Node } from '@antv/x6'
 import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isPortrait } from '../constants'
 import type { CanvasNodeData } from '../constants'
-import type { CanvasGraph } from '../graph'
 import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
@@ -152,6 +153,8 @@ import { useNodeViewScale } from './useNodeViewScale'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import { syncNodeViewData } from './syncNodeViewData'
 import { useCanvasNodeImage } from './useCanvasNodeImage'
+import { resolveImageNaturalSizeCached } from '../imageDisplayUrl'
+import { getNodeSize, syncNodeShapeFromData, type CanvasGraph } from '../graph'
 
 const getNode = inject<() => Node>('getNode')!
 const requestCanvasUpload = inject<(nodeId: string) => void>('requestCanvasUpload')
@@ -163,6 +166,32 @@ const { isLightTheme } = useCanvasBgTheme()
 
 const data = reactive<CanvasNodeData>({ ...createEmptyNodeData(), kind: 'image', title: '图片节点', mode: 'editor' })
 const { displayUrl, isImageLoading, onImageLoad, onImageError } = useCanvasNodeImage(toRef(data, 'previewUrl'))
+const isGridSplitNode = computed(() => Boolean(data.gridSplitTile))
+
+function applyImageNaturalSize(size: { width: number; height: number }, previewUrl: string) {
+  const node = getNode()
+  const current = { ...(node.getData() as CanvasNodeData) }
+  if (current.previewUrl?.trim() !== previewUrl) return
+  if (current.mediaWidth > 0 && current.mediaHeight > 0) return
+  current.mediaWidth = size.width
+  current.mediaHeight = size.height
+  node.setData(current)
+  syncNodeViewData(data, current)
+  syncNodeShapeFromData(node)
+  const nextSize = getNodeSize(current.kind, current.mode, current)
+  node.resize(nextSize.width, nextSize.height)
+}
+
+function onPreviewImageLoad() {
+  onImageLoad()
+  const previewUrl = data.previewUrl?.trim()
+  if (!previewUrl || (data.mediaWidth > 0 && data.mediaHeight > 0)) return
+  void resolveImageNaturalSizeCached(previewUrl)
+    .then((size) => applyImageNaturalSize(size, previewUrl))
+    .catch(() => {
+      // ignore
+    })
+}
 
 const dimensionLabel = computed(() => {
   const scale = previewScale.value ?? data.viewScale ?? 1
@@ -176,14 +205,6 @@ const isPortraitLayout = computed(() =>
     : false,
 )
 
-const gridSplitBorderStyle = computed(() => {
-  const tile = data.gridSplitTile
-  if (!tile) return undefined
-  return {
-    borderRight: tile.col < tile.cols ? '1px solid #2563eb' : undefined,
-    borderBottom: tile.row < tile.rows ? '1px solid #2563eb' : undefined,
-  }
-})
 let uploadClickTimer: ReturnType<typeof setTimeout> | null = null
 const UPLOAD_CLICK_DELAY = 280
 
@@ -195,6 +216,7 @@ function hasDraggedFiles(event: DragEvent) {
 }
 
 function onDragOver(event: DragEvent) {
+  if (isGridSplitNode.value) return
   if (!hasDraggedFiles(event)) return
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   isDragOver.value = true
@@ -221,6 +243,7 @@ function uploadImageFile(file: File) {
 }
 
 function onDrop(event: DragEvent) {
+  if (isGridSplitNode.value) return
   isDragOver.value = false
   const file = event.dataTransfer?.files?.[0]
   if (!file || !file.type.startsWith('image/')) return
@@ -239,6 +262,7 @@ function cancelPendingUpload() {
 }
 
 function onPreviewClick() {
+  if (isGridSplitNode.value) return
   cancelPendingUpload()
   uploadClickTimer = setTimeout(() => {
     requestFile()
@@ -276,6 +300,15 @@ onMounted(() => {
   node.on('change:data', ({ current }) => {
     syncNodeViewData(data, current as CanvasNodeData)
   })
+
+  const previewUrl = data.previewUrl?.trim()
+  if (previewUrl && !(data.mediaWidth > 0 && data.mediaHeight > 0)) {
+    void resolveImageNaturalSizeCached(previewUrl)
+      .then((size) => applyImageNaturalSize(size, previewUrl))
+      .catch(() => {
+        // ignore
+      })
+  }
 })
 </script>
 
@@ -474,6 +507,10 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.image-node__preview--readonly {
+  cursor: default;
+}
+
 .image-node__preview--dragover {
   outline: 2px dashed #6b7cff;
   outline-offset: -6px;
@@ -502,7 +539,7 @@ onMounted(() => {
     box-sizing: border-box;
 
     img {
-      object-fit: fill;
+      object-fit: contain;
     }
   }
 

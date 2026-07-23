@@ -16,7 +16,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   IMG2PROMPT_EXAMPLE_FILENAME, NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
+  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
   getConnectMenuPosition, getLinkedSpawnPoint, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -37,8 +37,10 @@ import {
   bindGenerationTaskId,
   followModelGenerationTaskOnNode,
   followTextGenerationTaskOnNode,
+  followVideoGenerationTaskOnNode,
   markGenerationNodeFailed,
   markTextGenerationNodeFailed,
+  markVideoGenerationNodeFailed,
   normalizeGenerationTaskDetail,
   resetResumedGenerationTaskCache,
   resumePendingGenerationTasks,
@@ -52,6 +54,7 @@ import {
   resolveImageAssetId,
   buildImageActionResultTitle,
   IMAGE_GENERAL_CAPABILITY_CODE,
+  VIDEO_GENERAL_CAPABILITY_CODE,
   type ImageToolbarClickPayload,
   type ImageToolbarClickEvent,
   type ImageDialogueSubmitPayload,
@@ -156,6 +159,7 @@ export function registerCore(bind: CanvasBindings) {
     imageGenPromptPos,
     videoGenPromptPos,
     videoGenPromptDragOffset,
+    imageInpaintDragOffset,
     showElementSelectMode,
     elementSelectReturnNodeId,
     imageCropPos,
@@ -315,12 +319,29 @@ export function registerCore(bind: CanvasBindings) {
     const id = activePickerNodeId.value
     if (!id) return false
     const data = graph.value?.getCellById(id)?.getData() as CanvasNodeData | undefined
-    return data?.textPickerTask === 'img2prompt'
+    return data?.textPickerTask === 'img2prompt' || modelType.value === 'img2prompt'
+  })
+
+  const isText2VideoTask = computed(() => {
+    void toolbarRevision.value
+    const id = activePickerNodeId.value
+    if (!id) return false
+    const data = graph.value?.getCellById(id)?.getData() as CanvasNodeData | undefined
+    return data?.textPickerTask === 'text2video' || modelType.value === 'text2video'
+  })
+
+  const promptSubmitLabel = computed(() => {
+    if (isText2VideoTask.value || modelType.value === 'text2video') return '文生视频'
+    if (isImg2PromptTask.value || modelType.value === 'img2prompt') return '反推提示词'
+    return '自由创作'
   })
 
   const canSubmitTextPrompt = computed(() => {
     if (isImg2PromptTask.value) {
       return Boolean(promptSourcePreviewUrl.value) && !promptSubmitting.value
+    }
+    if (isText2VideoTask.value) {
+      return Boolean(promptText.value.trim()) && !promptSubmitting.value
     }
     return Boolean(promptText.value.trim()) && !promptSubmitting.value
   })
@@ -462,9 +483,18 @@ export function registerCore(bind: CanvasBindings) {
     const needsHydration = !(data.mediaWidth > 0 && data.mediaHeight > 0)
     const hideLoading = needsHydration ? message.loading(loadingText, 0) : null
     try {
-      const ready = await ensureSelectedImageNodeDimensions()
+      const ready = await Promise.race([
+        ensureSelectedImageNodeDimensions(),
+        new Promise<null>((resolve) => {
+          window.setTimeout(() => resolve(null), 15_000)
+        }),
+      ])
       if (!ready?.mediaWidth || !ready?.mediaHeight) {
-        message.warning(`请等待图片加载完成后再${actionLabel}`)
+        message.warning(
+          needsHydration
+            ? `图片尺寸读取失败，请检查网络后重试`
+            : `请等待图片加载完成后再${actionLabel}`,
+        )
         return null
       }
       return ready
@@ -560,9 +590,11 @@ export function registerCore(bind: CanvasBindings) {
       toggleImageAddToDialogMenu()
     } else if (event.key === 'download') {
       handleImageDownloadAction(event)
-    } else if (event.key === 'IMAGE_TO_3D') {
-      handleImageTo3DAction(event)
-    } else if (event.key === 'IMAGE_PROMPT_REVERSE') {
+    } 
+    // else if (event.key === 'IMAGE_TO_3D') {
+    //   handleImageTo3DAction(event)
+    // } 
+    else if (event.key === 'IMAGE_PROMPT_REVERSE') {
       handleImagePromptReverseAction(event)
     } else if (event.key === 'IMAGE_PREVIEW' || event.key === 'preview') {
       openImagePreview()
@@ -696,14 +728,13 @@ export function registerCore(bind: CanvasBindings) {
 
       closeImageGridSplit()
 
-      const nodeIds = nodes.map((node) => node.id)
-      if (nodeIds.length) {
-        selectedNodeIds.value = nodeIds
-        selectedNodeId.value = nodeIds[0]
-        selectedKind.value = 'image'
-        syncNodeSelectionHighlight(nodeIds)
-        g.select(nodeIds)
-      }
+      // 宫格碎片默认不解组展示：仅保持源图选中，避免组工具栏/多选工具栏
+      selectedNodeId.value = sourceNodeId
+      selectedNodeIds.value = [sourceNodeId]
+      selectedKind.value = 'image'
+      syncNodeSelectionHighlight([sourceNodeId])
+      g.cleanSelection()
+      g.select(sourceNodeId)
       syncNodeCount()
       bumpToolbarRevision()
       updateNodeToolbar()
@@ -971,6 +1002,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageErase()
 
     inpaintSourceNodeId.value = selectedNodeId.value
+    imageInpaintDragOffset.value = { x: 0, y: 0 }
     showImageInpaint.value = true
     updateNodeToolbar()
   }
@@ -1167,7 +1199,7 @@ export function registerCore(bind: CanvasBindings) {
 
     const sourceNode = cell as Node
     const sourceData = sourceNode.getData() as CanvasNodeData
-    const fileName = sourceData.fileName ? `擦除-${sourceData.fileName}` : '擦除结果.png'
+    const fileName = sourceData.fileName ? `擦除-${sourceData.fileName}` : '擦除.png'
     const localPreviewUrl = payload.dataUrl
 
     closeImageErase()
@@ -2158,6 +2190,12 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
+    if (synced.textPickerTask === 'text2video') {
+      modelType.value = 'text2video'
+      promptText.value = synced.genPrompt ?? ''
+      return
+    }
+
     modelType.value = 'free'
     promptText.value = synced.genPrompt ?? ''
   }
@@ -2203,7 +2241,7 @@ export function registerCore(bind: CanvasBindings) {
         const assetId = referenceAssetIds[0] || resolveImageAssetId(syncedData) || ''
 
         if (!assetId) {
-          message.warning('图片素材 ID 不存在，请等待上传完成')
+          message.warning('请先连接或上传参考图片')
           return
         }
 
@@ -2225,8 +2263,8 @@ export function registerCore(bind: CanvasBindings) {
             await api.createGenerationTask<GenerationTaskDetail>(
               {
                 taskType: 'TEXT',
-                capabilityCode: 'IMAGE_PROMPT_REVERSE',
-                prompt: '',
+                capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+                prompt: promptText.value.trim(),
                 parameters: {
                   assetId,
                   prompt: promptText.value.trim(),
@@ -2272,6 +2310,73 @@ export function registerCore(bind: CanvasBindings) {
         scheduleHistoryPush()
         return
       }
+
+      if (modelType.value === 'text2video' || isText2VideoTask.value) {
+        const trimmedPrompt = promptText.value.trim()
+        if (!trimmedPrompt) {
+          message.warning('请输入视频描述')
+          return
+        }
+
+        persistPromptBarDraft()
+        const resultNode = spawnVideoGenerationResultNode(g, cell as Node, {
+          title: '文生视频',
+          fileName: '文生视频.mp4',
+        })
+
+        const idempotencyKey =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `text2video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+        try {
+          const created = normalizeGenerationTaskDetail(
+            await api.createGenerationTask<GenerationTaskDetail>(
+              {
+                taskType: 'VIDEO',
+                capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
+                prompt: trimmedPrompt,
+                parameters: {
+                  duration: 5,
+                  aspectRatio: '16:9',
+                },
+                projectId: activeProjectId.value,
+                nodeId: resultNode.id,
+              },
+              idempotencyKey,
+            ),
+          )
+
+          const taskId = created.id
+          if (!taskId) {
+            throw new Error('创建文生视频任务失败')
+          }
+
+          bindGenerationTaskId(resultNode, taskId, 'VIDEO')
+          persistGenerationTaskBinding()
+
+          const succeeded = await followVideoGenerationTaskOnNode(resultNode, taskId, {
+            title: '文生视频',
+            fileName: '文生视频.mp4',
+            onError: (reason) => message.error(reason),
+          })
+
+          if (!succeeded) return
+
+          selectedNodeId.value = resultNode.id
+          selectedKind.value = 'video'
+          syncNodeSelectionHighlight(resultNode.id)
+          syncNodeCount()
+          bumpToolbarRevision()
+          updateNodeToolbar()
+          scheduleHistoryPush()
+        } catch (error) {
+          markVideoGenerationNodeFailed(resultNode)
+          message.error(isRequestError(error) ? error.message : '文生视频失败，请稍后重试')
+        }
+        return
+      }
+
       if (modelType.value == 'free') {
         const trimmedPrompt = promptText.value.trim()
         const loadingData = {
@@ -3393,61 +3498,37 @@ export function registerCore(bind: CanvasBindings) {
     selectedKind.value = 'text'
     syncNodeSelectionHighlight(nodeId)
 
-    if (key === 'text2video') {
-      activePickerNodeId.value = nodeId
-      const source = g.getCellById(nodeId)
-      if (!source?.isNode()) return
-      const spawned = createNodeFromConnectMenu(
-        g,
-        source as Node,
-        getLinkedSpawnPoint(source as Node, 'video', { mode: 'picker' }),
-        'video',
-      )
-      if (spawned) {
-        finishConnectSpawn(spawned)
-        openVideoGenPromptBar(spawned.id, 'text2video')
-      }
+    if (key === 'write') {
+      activePickerNodeId.value = ''
+      modelType.value = 'free'
+      bumpToolbarRevision()
       updateNodeToolbar()
+      scheduleHistoryPush()
       return
     }
 
-    if (key === 'img2prompt') {
+    if (key === 'text2video' || key === 'img2prompt') {
       const cell = g.getCellById(nodeId)
       if (!cell?.isNode()) return
-      const textNode = cell as Node
 
-      const data = { ...(textNode.getData() as CanvasNodeData) }
+      const data = { ...(cell.getData() as CanvasNodeData) }
       data.mode = 'picker'
-      data.textPickerTask = 'img2prompt'
+      data.textPickerTask = key
       data.textGenState = 'idle'
-      if (!data.genPrompt?.trim()) {
+      if (key === 'img2prompt' && !data.genPrompt?.trim()) {
         data.genPrompt = IMG2PROMPT_DEFAULT_INSTRUCTION
       }
-      textNode.setData(data)
+      cell.setData(data)
 
-      // 若文本节点尚未连接图片，则在左侧自动生成一张默认示例图并连线（图片 → 文本）
-      let imageNode = findIncomingImageNode(g, nodeId)
-      if (!imageNode) {
-        const bbox = textNode.getBBox()
-        const point = { x: bbox.x - 160, y: bbox.y + bbox.height / 2 }
-        imageNode = addCanvasNode(g, 'image', point, {
-          mode: 'editor',
-          previewUrl: exampleImage,
-          fileName: IMG2PROMPT_EXAMPLE_FILENAME,
-          uploadState: 'done',
-        })
-        connectGenEdge(g, imageNode.id, nodeId)
+      if (key === 'img2prompt') {
+        syncTextNodeImageSource(g, cell as Node)
+        modelType.value = 'img2prompt'
+      } else {
+        modelType.value = 'text2video'
       }
 
-      syncTextNodeImageSource(g, textNode, imageNode)
-      modelType.value = 'img2prompt'
-
-      // 与视频一致：生成图片节点后先选中图片节点（其工具栏出现），
-      // 待用户点击文本节点时再在其下方弹出提示词输入框
-      activePickerNodeId.value = ''
-      selectedNodeId.value = imageNode.id
-      selectedKind.value = 'image'
-      syncNodeSelectionHighlight(imageNode.id)
+      activePickerNodeId.value = nodeId
+      loadPromptBarContext(nodeId)
       bumpToolbarRevision()
       updateNodeToolbar()
       scheduleHistoryPush()
@@ -3821,6 +3902,28 @@ export function registerCore(bind: CanvasBindings) {
     window.addEventListener('mouseup', onUp)
   }
 
+  function onImageInpaintDragStart(event: MouseEvent) {
+    const startX = event.clientX
+    const startY = event.clientY
+    const base = { ...imageInpaintDragOffset.value }
+
+    const onMove = (moveEvent: MouseEvent) => {
+      imageInpaintDragOffset.value = {
+        x: base.x + (moveEvent.clientX - startX),
+        y: base.y + (moveEvent.clientY - startY),
+      }
+      updateNodeToolbar()
+    }
+
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   function updateMultiSelectToolbarPosition() {
     const g = graph.value
     const overlayRoot = canvasRef.value
@@ -3883,7 +3986,12 @@ export function registerCore(bind: CanvasBindings) {
       imageErasePos.value = getNodeCropOverlayPosition(g, node, overlayRoot)
     }
     if (showImageInpaint.value) {
-      imageInpaintPos.value = getNodeCropOverlayPosition(g, node, overlayRoot, 520, 520)
+      const base = getNodeCropOverlayPosition(g, node, overlayRoot, 520, 520)
+      imageInpaintPos.value = {
+        ...base,
+        left: base.left + imageInpaintDragOffset.value.x,
+        top: base.top + imageInpaintDragOffset.value.y,
+      }
     }
     if (data.kind === 'video' && showVideoHdPanel.value) {
       videoHdPos.value = getNodeSidePanelPosition(g, node, overlayRoot)
@@ -5664,6 +5772,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageGridSplit,
     onImageEraseComplete,
     onImageInpaintComplete,
+    onImageInpaintDragStart,
     onImageGridSplitComplete,
     closeImageGenPromptBar,
     closeImagePreview,
@@ -5741,6 +5850,8 @@ export function registerCore(bind: CanvasBindings) {
     imageDialoguePreviews,
     isImageUploadFile,
     isImg2PromptTask,
+    isText2VideoTask,
+    promptSubmitLabel,
     isLightNodeToolbar,
     isVideoUploadFile,
     linkImageNodeToImageDialogue,

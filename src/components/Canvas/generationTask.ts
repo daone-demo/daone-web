@@ -1,6 +1,7 @@
 import type { Graph, Node } from '@antv/x6'
 import api from '@/services/api'
 import type { CanvasNodeData } from './constants'
+import { resolveImageNaturalSizeCached } from './imageDisplayUrl'
 import { syncNodeShapeFromData, getNodeSize } from './graph'
 
 export type GenerationTaskResult = {
@@ -22,7 +23,7 @@ export type GenerationTaskDetail = {
   error?: { code?: string; message?: string } | null
 }
 
-export type GenerationTaskType = 'IMAGE' | 'TEXT' | 'MODEL'
+export type GenerationTaskType = 'IMAGE' | 'TEXT' | 'MODEL' | 'VIDEO'
 
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELED'])
 
@@ -133,7 +134,6 @@ export function pickPrimaryGenerationResult(task: GenerationTaskDetail): Generat
   return pickImageGenerationResults(task)[0] ?? null
 }
 
-/** 优先取 type=MODEL 的 GLB；否则回退到 .glb URL 或首个结果 */
 export function pickModelGenerationResult(task: GenerationTaskDetail): GenerationTaskResult | null {
   const results = task.results?.filter((item) => item.previewUrl || item.assetId) ?? []
   if (!results.length) return null
@@ -145,6 +145,18 @@ export function pickModelGenerationResult(task: GenerationTaskDetail): Generatio
   if (byExt) return byExt
 
   return results[0] ?? null
+}
+
+/** 优先取 type=VIDEO 的结果；否则回退到视频扩展名 URL */
+export function pickVideoGenerationResult(task: GenerationTaskDetail): GenerationTaskResult | null {
+  const results = task.results?.filter((item) => item.previewUrl || item.assetId || item.url) ?? []
+  if (!results.length) return null
+
+  const byType = results.find((item) => String(item.type || '').toUpperCase() === 'VIDEO')
+  if (byType) return byType
+
+  const byExt = results.find((item) => /\.(mp4|webm|mov)(\?|$)/i.test(item.previewUrl || item.url || ''))
+  return byExt ?? results[0] ?? null
 }
 
 /** 优先取 type=TEXT 且带 content 的结果（如图片反推提示词） */
@@ -213,6 +225,45 @@ export function markTextGenerationNodeFailed(node: Node, errorMessage?: string) 
   const data = { ...(node.getData() as CanvasNodeData) }
   data.textGenState = 'idle'
   data.textGenProgress = 0
+  if (errorMessage) data.title = '生成失败'
+  setNodeData(node, data)
+}
+
+export function updateVideoGenerationNodeProgress(node: Node, progress: number) {
+  const data = { ...(node.getData() as CanvasNodeData) }
+  if (data.uploadState !== 'uploading') return
+  data.uploadProgress = Math.max(0, Math.min(100, Math.round(progress)))
+  setNodeData(node, data)
+}
+
+export function applyVideoGenerationResultToNode(
+  node: Node,
+  result: GenerationTaskResult,
+  options: { title?: string; fileName?: string } = {},
+) {
+  const previewUrl = String(result.previewUrl ?? result.url ?? '').trim()
+  if (!previewUrl) return false
+
+  const data = { ...(node.getData() as CanvasNodeData) }
+  data.kind = 'video'
+  data.mode = 'editor'
+  data.uploadState = 'done'
+  data.uploadProgress = 100
+  data.previewUrl = previewUrl
+  data.title = options.title || data.title || '文生视频'
+  data.fileName = options.fileName || result.fileName || data.fileName || '文生视频.mp4'
+  if (result.assetId) data.assetId = String(result.assetId)
+  setNodeData(node, data)
+  syncNodeShapeFromData(node)
+  const size = getNodeSize(data.kind, data.mode, data)
+  node.resize(size.width, size.height)
+  return true
+}
+
+export function markVideoGenerationNodeFailed(node: Node, errorMessage?: string) {
+  const data = { ...(node.getData() as CanvasNodeData) }
+  data.uploadState = 'idle'
+  data.uploadProgress = 0
   if (errorMessage) data.title = '生成失败'
   setNodeData(node, data)
 }
@@ -289,19 +340,21 @@ export function applyGenerationResultToNode(
   node.resize(size.width, size.height)
 
   if (!result.width || !result.height) {
-    const img = new Image()
-    img.onload = () => {
-      if (!isNodeOnGraph(node)) return
-      const current = { ...(node.getData() as CanvasNodeData) }
-      if (current.previewUrl !== previewUrl) return
-      current.mediaWidth = img.naturalWidth
-      current.mediaHeight = img.naturalHeight
-      setNodeData(node, current)
-      syncNodeShapeFromData(node)
-      const nextSize = getNodeSize(current.kind, current.mode, current)
-      node.resize(nextSize.width, nextSize.height)
-    }
-    img.src = previewUrl
+    void resolveImageNaturalSizeCached(previewUrl)
+      .then((size) => {
+        if (!isNodeOnGraph(node)) return
+        const current = { ...(node.getData() as CanvasNodeData) }
+        if (current.previewUrl !== previewUrl) return
+        current.mediaWidth = size.width
+        current.mediaHeight = size.height
+        setNodeData(node, current)
+        syncNodeShapeFromData(node)
+        const nextSize = getNodeSize(current.kind, current.mode, current)
+        node.resize(nextSize.width, nextSize.height)
+      })
+      .catch(() => {
+        // ignore
+      })
   }
 
   return true
@@ -664,6 +717,66 @@ export async function followModelGenerationTaskOnNode(
   }
 }
 
+/** 继续追踪已有 taskId 的视频生成任务 */
+export async function followVideoGenerationTaskOnNode(
+  node: Node,
+  taskId: string,
+  options: {
+    title?: string
+    fileName?: string
+    onError?: (message: string) => void
+  } = {},
+): Promise<boolean> {
+  if (!isNodeOnGraph(node)) return false
+
+  bindGenerationTaskId(node, taskId, 'VIDEO')
+
+  try {
+    const data = node.getData() as CanvasNodeData
+    if (data.previewUrl && data.uploadState !== 'uploading') return true
+
+    const first = normalizeGenerationTaskDetail(
+      await api.getGenerationTask<GenerationTaskDetail>(taskId),
+    )
+    updateVideoGenerationNodeProgress(node, first.progress ?? 5)
+
+    const finalTask = isGenerationTaskTerminal(first.status)
+      ? first
+      : await pollGenerationTask(taskId, {
+        onProgress: (task) => updateVideoGenerationNodeProgress(node, task.progress ?? 0),
+      })
+
+    if (data.previewUrl && (node.getData() as CanvasNodeData).uploadState !== 'uploading') {
+      return true
+    }
+
+    if (finalTask.status !== 'SUCCEEDED') {
+      const reason = finalTask.error?.message || '视频生成任务失败'
+      markVideoGenerationNodeFailed(node, reason)
+      options.onError?.(reason)
+      return false
+    }
+
+    const result = pickVideoGenerationResult(finalTask)
+    const resolved = result ? await resolveGenerationResultPreview(result) : null
+    if (!resolved?.previewUrl) {
+      markVideoGenerationNodeFailed(node, '未返回视频')
+      options.onError?.('生成完成，但未返回视频')
+      return false
+    }
+
+    applyVideoGenerationResultToNode(node, resolved, {
+      title: options.title,
+      fileName: options.fileName || resolved.fileName || '文生视频.mp4',
+    })
+    return true
+  } catch (error) {
+    markVideoGenerationNodeFailed(node)
+    options.onError?.(error instanceof Error ? error.message : '视频生成失败，请稍后重试')
+    return false
+  }
+}
+
 const resumedTaskIds = new Set<string>()
 
 function shouldResumeNode(data: CanvasNodeData) {
@@ -672,11 +785,13 @@ function shouldResumeNode(data: CanvasNodeData) {
 
   const imageLoading = data.imageGenState === 'loading'
   const textLoading = data.textGenState === 'loading'
-  if (!imageLoading && !textLoading) return false
+  const videoLoading = data.kind === 'video' && data.uploadState === 'uploading'
+  if (!imageLoading && !textLoading && !videoLoading) return false
 
   if (data.kind === 'image' && imageLoading && !data.previewUrl) return true
   if (data.kind === 'text' && textLoading && !String(data.content || '').trim()) return true
   if (data.kind === 'model3d' && imageLoading && !data.previewUrl) return true
+  if (data.kind === 'video' && videoLoading && !data.previewUrl) return true
 
   return false
 }
@@ -724,6 +839,15 @@ export function resumePendingGenerationTasks(
     if (data.kind === 'model3d' && data.imageGenState === 'loading') {
       void followModelGenerationTaskOnNode(node, taskId, {
         title: data.title || '3D 模型',
+        onError: options.onError,
+      }).then(notifyComplete)
+      return
+    }
+
+    if (data.kind === 'video' && data.uploadState === 'uploading') {
+      void followVideoGenerationTaskOnNode(node, taskId, {
+        title: data.title || '文生视频',
+        fileName: data.fileName || '文生视频.mp4',
         onError: options.onError,
       }).then(notifyComplete)
     }

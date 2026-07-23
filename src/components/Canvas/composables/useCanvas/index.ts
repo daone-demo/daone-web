@@ -12,7 +12,7 @@ type GridSplitCanvasApi = Pick<
   CanvasState,
   'showImageGridSplit' | 'imageGridSplitPos' | 'gridSplitRows' | 'gridSplitCols' | 'showImageErase' | 'eraseSourceNodeId' | 'imageErasePos' | 'showImageInpaint' | 'inpaintSourceNodeId' | 'imageInpaintPos'
 > &
-  Pick<CanvasBindings, 'closeImageGridSplit' | 'onImageGridSplitComplete' | 'imageGridSplitSource' | 'closeImageErase' | 'onImageEraseComplete' | 'imageEraseSource' | 'closeImageInpaint' | 'onImageInpaintComplete' | 'imageInpaintSource' | 'handleImageDialogueSubmit'>
+  Pick<CanvasBindings, 'closeImageGridSplit' | 'onImageGridSplitComplete' | 'imageGridSplitSource' | 'closeImageErase' | 'onImageEraseComplete' | 'imageEraseSource' | 'closeImageInpaint' | 'onImageInpaintComplete' | 'onImageInpaintDragStart' | 'imageInpaintSource' | 'handleImageDialogueSubmit'>
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {
   const state = createCanvasState(emit, domRefs)

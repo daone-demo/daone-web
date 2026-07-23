@@ -1,5 +1,5 @@
 <template>
-  <div class="image-inpaint-overlay" @mousedown.stop>
+  <div class="image-inpaint-overlay" @mousedown="onPanelMouseDown">
     <div class="image-inpaint-overlay__toolbar">
       <button type="button" class="image-inpaint-overlay__btn" @click="emit('cancel')">
         <span class="image-inpaint-overlay__icon image-inpaint-overlay__icon--close" aria-hidden="true" />
@@ -55,6 +55,27 @@
         </button>
       </div>
 
+      <div class="image-inpaint-overlay__zoom">
+        <button
+          type="button"
+          class="image-inpaint-overlay__icon-btn"
+          title="缩小"
+          :disabled="viewScale <= MIN_VIEW_SCALE"
+          @click="zoomOut"
+        >
+          <span class="image-inpaint-overlay__icon image-inpaint-overlay__icon--zoom-out" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          class="image-inpaint-overlay__icon-btn"
+          title="放大"
+          :disabled="viewScale >= MAX_VIEW_SCALE"
+          @click="zoomIn"
+        >
+          <span class="image-inpaint-overlay__icon image-inpaint-overlay__icon--zoom-in" aria-hidden="true" />
+        </button>
+      </div>
+
       <button
         type="button"
         class="image-inpaint-overlay__btn image-inpaint-overlay__btn--done"
@@ -69,6 +90,11 @@
     <div
       ref="stageRef"
       class="image-inpaint-overlay__stage"
+      :class="{
+        'image-inpaint-overlay__stage--panning': panning,
+        'image-inpaint-overlay__stage--grab': spaceHeld || shiftHeld,
+      }"
+      @wheel.prevent="onStageWheel"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
@@ -101,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   drawEraseDot,
@@ -125,12 +151,33 @@ const emit = defineEmits<{
     prompt: string
     mask: { dataUrl: string; width: number; height: number }
   }]
+  'drag-start': [event: MouseEvent]
 }>()
+
+const DRAG_IGNORE_SELECTOR =
+  'button, textarea, input, select, a, [contenteditable], .ant-dropdown, .ant-dropdown-menu, .image-inpaint-overlay__stage, .image-inpaint-overlay__stage *'
+
+const MIN_VIEW_SCALE = 0.25
+const MAX_VIEW_SCALE = 6
+const ZOOM_STEP = 1.2
+const ZOOM_SENSITIVITY = 0.0012
+
+function onPanelMouseDown(event: MouseEvent) {
+  event.stopPropagation()
+  const target = event.target as HTMLElement | null
+  if (target?.closest(DRAG_IGNORE_SELECTOR)) return
+  emit('drag-start', event)
+}
 
 const stageRef = ref<HTMLElement | null>(null)
 const displayCanvasRef = ref<HTMLCanvasElement | null>(null)
 const cursorRef = ref<HTMLElement | null>(null)
 const stageSize = ref({ width: 360, height: 320 })
+const viewScale = ref(1)
+const viewPan = ref({ x: 0, y: 0 })
+const spaceHeld = ref(false)
+const shiftHeld = ref(false)
+const panning = ref(false)
 const brushSize = ref(10)
 const showBrushPanel = ref(false)
 const completing = ref(false)
@@ -145,8 +192,11 @@ let currentStroke: EraseStroke | null = null
 let paintCtx: CanvasRenderingContext2D | null = null
 let rafId = 0
 let pendingPointer: { x: number; y: number } | null = null
+let panPointerId: number | null = null
+let panStart = { x: 0, y: 0 }
+let panBase = { x: 0, y: 0 }
 
-const imageBounds = computed(() =>
+const baseImageBounds = computed(() =>
   getEraseImageBounds(
     stageSize.value.width,
     stageSize.value.height,
@@ -154,6 +204,20 @@ const imageBounds = computed(() =>
     props.naturalHeight,
   ),
 )
+
+const imageBounds = computed(() => {
+  const base = baseImageBounds.value
+  const width = base.width * viewScale.value
+  const height = base.height * viewScale.value
+  const centerX = base.x + base.width / 2 + viewPan.value.x
+  const centerY = base.y + base.height / 2 + viewPan.value.y
+  return {
+    x: centerX - width / 2,
+    y: centerY - height / 2,
+    width,
+    height,
+  }
+})
 
 const imageWrapStyle = computed(() => ({
   left: `${imageBounds.value.x}px`,
@@ -164,6 +228,95 @@ const imageWrapStyle = computed(() => ({
 
 const canUndo = computed(() => strokes.value.length > 0)
 const canRedo = computed(() => redoStack.value.length > 0)
+
+function clampViewScale(scale: number) {
+  return Math.min(MAX_VIEW_SCALE, Math.max(MIN_VIEW_SCALE, scale))
+}
+
+function zoomAroundImageCenter(scaleFactor: number) {
+  const nextScale = clampViewScale(viewScale.value * scaleFactor)
+  if (nextScale === viewScale.value) return
+  viewScale.value = nextScale
+  refreshDisplayCanvas()
+}
+
+function zoomAtPoint(scaleFactor: number, pointX: number, pointY: number) {
+  const oldBounds = imageBounds.value
+  if (!oldBounds.width || !oldBounds.height) return
+
+  const nextScale = clampViewScale(viewScale.value * scaleFactor)
+  if (nextScale === viewScale.value) return
+
+  const ratioX = (pointX - oldBounds.x) / oldBounds.width
+  const ratioY = (pointY - oldBounds.y) / oldBounds.height
+  const base = baseImageBounds.value
+  const nextWidth = base.width * nextScale
+  const nextHeight = base.height * nextScale
+  const nextCenterX = pointX - ratioX * nextWidth
+  const nextCenterY = pointY - ratioY * nextHeight
+
+  viewScale.value = nextScale
+  viewPan.value = {
+    x: nextCenterX - base.x - base.width / 2,
+    y: nextCenterY - base.y - base.height / 2,
+  }
+  refreshDisplayCanvas()
+}
+
+function zoomIn() {
+  zoomAroundImageCenter(ZOOM_STEP)
+}
+
+function zoomOut() {
+  zoomAroundImageCenter(1 / ZOOM_STEP)
+}
+
+function onStageWheel(event: WheelEvent) {
+  const point = getStagePoint(event)
+  if (!point) return
+  const factor = Math.exp(-event.deltaY * ZOOM_SENSITIVITY)
+  zoomAtPoint(factor, point.x, point.y)
+}
+
+function onWindowKeyDown(event: KeyboardEvent) {
+  if (event.code === 'Space' && !event.repeat) {
+    event.preventDefault()
+    spaceHeld.value = true
+  }
+  if (event.key === 'Shift') {
+    shiftHeld.value = true
+  }
+}
+
+function onWindowKeyUp(event: KeyboardEvent) {
+  if (event.code === 'Space') {
+    spaceHeld.value = false
+    if (panning.value && panPointerId !== null) {
+      panning.value = false
+      panPointerId = null
+    }
+  }
+  if (event.key === 'Shift') {
+    shiftHeld.value = false
+  }
+}
+
+function shouldPan(event: PointerEvent, point: { x: number; y: number }) {
+  if (event.button === 1 || event.button === 2) return true
+  if (spaceHeld.value || shiftHeld.value || event.shiftKey || event.altKey) return true
+  if (event.button === 0 && !isInsideImageBounds(point.x, point.y)) return true
+  return false
+}
+
+function startPan(event: PointerEvent) {
+  event.preventDefault()
+  stageRef.value?.setPointerCapture(event.pointerId)
+  panPointerId = event.pointerId
+  panning.value = true
+  panStart = { x: event.clientX, y: event.clientY }
+  panBase = { ...viewPan.value }
+  updateCursor(0, 0, false)
+}
 
 function getBounds() {
   return imageBounds.value
@@ -242,6 +395,11 @@ function paintPointerSegment(from: ErasePoint, to: ErasePoint) {
 }
 
 function processPointerPoint(x: number, y: number) {
+  if (panning.value || spaceHeld.value || shiftHeld.value) {
+    updateCursor(x, y, false)
+    return
+  }
+
   updateCursor(x, y, isInsideImageBounds(x, y))
 
   if (!drawing || !currentStroke) return
@@ -273,7 +431,7 @@ function schedulePointerPoint(x: number, y: number) {
   })
 }
 
-function getStagePoint(event: PointerEvent) {
+function getStagePoint(event: { clientX: number; clientY: number }) {
   const rect = stageRef.value?.getBoundingClientRect()
   if (!rect) return null
   return {
@@ -283,9 +441,16 @@ function getStagePoint(event: PointerEvent) {
 }
 
 function onPointerDown(event: PointerEvent) {
-  if (event.button !== 0) return
   const point = getStagePoint(event)
-  if (!point || !isInsideImageBounds(point.x, point.y)) return
+  if (!point) return
+
+  if (shouldPan(event, point)) {
+    startPan(event)
+    return
+  }
+
+  if (event.button !== 0) return
+  if (!isInsideImageBounds(point.x, point.y)) return
 
   event.preventDefault()
   stageRef.value?.setPointerCapture(event.pointerId)
@@ -303,11 +468,28 @@ function onPointerMove(event: PointerEvent) {
   const point = getStagePoint(event)
   if (!point) return
 
+  if (panning.value && panPointerId === event.pointerId) {
+    viewPan.value = {
+      x: panBase.x + (event.clientX - panStart.x),
+      y: panBase.y + (event.clientY - panStart.y),
+    }
+    refreshDisplayCanvas()
+    updateCursor(point.x, point.y, false)
+    return
+  }
+
   if (activePointerId !== null && event.pointerId !== activePointerId) return
   schedulePointerPoint(point.x, point.y)
 }
 
 function onPointerUp(event?: PointerEvent) {
+  if (event && panPointerId !== null && event.pointerId === panPointerId) {
+    panning.value = false
+    panPointerId = null
+    stageRef.value?.releasePointerCapture(event.pointerId)
+    return
+  }
+
   if (event && activePointerId !== null && event.pointerId !== activePointerId) return
 
   if (rafId) {
@@ -383,9 +565,15 @@ function updateStageSize() {
 
 let resizeObserver: ResizeObserver | undefined
 
+watch(imageBounds, () => {
+  refreshDisplayCanvas()
+})
+
 onMounted(() => {
   updateCursor(0, 0, false)
   updateStageSize()
+  window.addEventListener('keydown', onWindowKeyDown)
+  window.addEventListener('keyup', onWindowKeyUp)
   if (stageRef.value) {
     resizeObserver = new ResizeObserver(updateStageSize)
     resizeObserver.observe(stageRef.value)
@@ -396,6 +584,8 @@ onBeforeUnmount(() => {
   if (rafId) {
     window.cancelAnimationFrame(rafId)
   }
+  window.removeEventListener('keydown', onWindowKeyDown)
+  window.removeEventListener('keyup', onWindowKeyUp)
   resizeObserver?.disconnect()
 })
 </script>
@@ -497,6 +687,14 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.image-inpaint-overlay__zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
 .image-inpaint-overlay__icon-btn {
   display: inline-flex;
   align-items: center;
@@ -566,6 +764,14 @@ onBeforeUnmount(() => {
   cursor: none;
   overflow: hidden;
   touch-action: none;
+
+  &--grab {
+    cursor: grab;
+  }
+
+  &--panning {
+    cursor: grabbing;
+  }
 }
 
 .image-inpaint-overlay__image-wrap {
@@ -667,6 +873,14 @@ onBeforeUnmount(() => {
 
   &--check {
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/%3E%3C/svg%3E");
+  }
+
+  &--zoom-in {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zm.5-7H9v2H7v1.5h2V13h1.5v-2.5H13V9h-2.5V7z'/%3E%3C/svg%3E");
+  }
+
+  &--zoom-out {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1.5H7V9z'/%3E%3C/svg%3E");
   }
 }
 </style>

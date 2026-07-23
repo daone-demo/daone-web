@@ -33,7 +33,7 @@
           @click.stop="togglePromptWorkFlow"
         >
           <span class="canvas__prompt-model-mark" aria-hidden="true" />
-          {{ selectedPromptWorkFlowName }}
+          {{ promptSubmitLabel || selectedPromptWorkFlowName }}
           <span class="canvas__prompt-model-arrow">▾</span>
         </button>
         <div
@@ -274,6 +274,7 @@
       :natural-height="imageInpaintSource.mediaHeight"
       @cancel="emit('close-image-inpaint')"
       @complete="emit('image-inpaint-complete', $event)"
+      @drag-start="emit('image-inpaint-drag-start', $event)"
     />
   </div>
 
@@ -443,6 +444,8 @@ const props = defineProps<{
   promptSubmitting: boolean
   canSubmitTextPrompt: boolean
   isImg2PromptTask: boolean
+  isText2VideoTask: boolean
+  promptSubmitLabel: string
   imageGenPromptText: string
   imageGenSeed: number
   imageGenSourcePreviewUrl: string
@@ -496,6 +499,7 @@ const emit = defineEmits<{
     prompt: string
     mask: { dataUrl: string; width: number; height: number }
   }]
+  'image-inpaint-drag-start': [event: MouseEvent]
   'reset-video-hd-panel': []
   'video-hd-start': []
   'video-gen-drag-start': [event: MouseEvent]

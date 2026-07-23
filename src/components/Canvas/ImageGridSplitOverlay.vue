@@ -11,31 +11,18 @@
         重置
       </button>
 
-      <label class="image-grid-split-overlay__field">
-        <span class="image-grid-split-overlay__field-icon image-grid-split-overlay__field-icon--row" />
-        行
-        <input
-          v-model.number="localRows"
-          class="image-grid-split-overlay__input"
-          type="number"
-          min="1"
-          max="10"
-          @mousedown.stop
-        />
-      </label>
-
-      <label class="image-grid-split-overlay__field">
-        <span class="image-grid-split-overlay__field-icon image-grid-split-overlay__field-icon--col" />
-        列
-        <input
-          v-model.number="localCols"
-          class="image-grid-split-overlay__input"
-          type="number"
-          min="1"
-          max="10"
-          @mousedown.stop
-        />
-      </label>
+      <div class="image-grid-split-overlay__preset-group" role="group" aria-label="宫格类型">
+        <button
+          v-for="item in GRID_PRESET_OPTIONS"
+          :key="item.key"
+          type="button"
+          class="image-grid-split-overlay__preset-btn"
+          :class="{ 'image-grid-split-overlay__preset-btn--active': activePreset === item.key }"
+          @click="applyPreset(item.key)"
+        >
+          {{ item.label }}
+        </button>
+      </div>
 
       <button
         type="button"
@@ -107,11 +94,19 @@ const emit = defineEmits<{
   }]
 }>()
 
+const GRID_PRESET_OPTIONS = [
+  { key: '4', label: '4宫格', rows: 2, cols: 2 },
+  { key: '9', label: '9宫格', rows: 3, cols: 3 },
+] as const
+
+type GridPreset = (typeof GRID_PRESET_OPTIONS)[number]['key']
+
 const MIN_GAP = 0.04
 
 const wrapRef = ref<HTMLElement | null>(null)
 const localRows = ref(2)
 const localCols = ref(2)
+const activePreset = ref<GridPreset>('4')
 const rowStops = ref<number[]>([])
 const colStops = ref<number[]>([])
 
@@ -121,8 +116,22 @@ type DragState = {
 }
 const dragState = ref<DragState | null>(null)
 
-const safeRows = computed(() => Math.max(1, Math.min(10, Math.floor(Number(localRows.value) || 1))))
-const safeCols = computed(() => Math.max(1, Math.min(10, Math.floor(Number(localCols.value) || 1))))
+const safeRows = computed(() => Math.max(1, Math.floor(Number(localRows.value) || 1)))
+const safeCols = computed(() => Math.max(1, Math.floor(Number(localCols.value) || 1)))
+
+function syncActivePreset() {
+  activePreset.value = safeRows.value === 3 && safeCols.value === 3 ? '9' : '4'
+}
+
+function applyPreset(preset: GridPreset) {
+  const option = GRID_PRESET_OPTIONS.find((item) => item.key === preset)
+  if (!option) return
+  activePreset.value = preset
+  localRows.value = option.rows
+  localCols.value = option.cols
+  rowStops.value = createEqualStops(option.rows)
+  colStops.value = createEqualStops(option.cols)
+}
 
 function syncStopsByCount(axis: 'row' | 'col', count: number) {
   const target = Math.max(0, count - 1)
@@ -136,8 +145,11 @@ function syncStopsByCount(axis: 'row' | 'col', count: number) {
 watch(
   () => [props.rows, props.cols] as const,
   ([rows, cols]) => {
-    localRows.value = Math.max(1, Math.min(10, rows || 2))
-    localCols.value = Math.max(1, Math.min(10, cols || 2))
+    const nextRows = Math.max(1, rows || 2)
+    const nextCols = Math.max(1, cols || 2)
+    localRows.value = nextRows
+    localCols.value = nextCols
+    syncActivePreset()
     rowStops.value = createEqualStops(localRows.value)
     colStops.value = createEqualStops(localCols.value)
   },
@@ -218,10 +230,7 @@ function startDrag(axis: 'row' | 'col', index: number, event: MouseEvent) {
 }
 
 function resetGrid() {
-  localRows.value = 2
-  localCols.value = 2
-  rowStops.value = createEqualStops(2)
-  colStops.value = createEqualStops(2)
+  applyPreset('4')
 }
 
 function handleComplete() {
@@ -295,37 +304,35 @@ onBeforeUnmount(() => {
   }
 }
 
-.image-grid-split-overlay__field {
+.image-grid-split-overlay__preset-group {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: 32px;
-  padding: 0 8px 0 10px;
+  padding: 2px;
   border-radius: 8px;
   background: #f3f4f6;
-  color: #374151;
-  font-size: 13px;
 }
 
-.image-grid-split-overlay__input {
-  width: 44px;
-  height: 24px;
-  padding: 0 6px;
-  border: 1px solid #e5e7eb;
+.image-grid-split-overlay__preset-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: none;
   border-radius: 6px;
-  background: #fff;
-  color: #111827;
+  background: transparent;
+  color: #374151;
   font-size: 13px;
-  text-align: center;
-  outline: none;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 
-  &:focus {
-    border-color: #6366f1;
+  &:hover:not(&--active) {
+    background: rgba(255, 255, 255, 0.7);
   }
 
-  &::-webkit-outer-spin-button,
-  &::-webkit-inner-spin-button {
-    margin: 0;
+  &--active {
+    background: #fff;
+    color: #111827;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
   }
 }
 
@@ -381,35 +388,6 @@ onBeforeUnmount(() => {
     border-left: 1.5px solid currentColor;
     border-bottom: 1.5px solid currentColor;
     transform: rotate(-45deg);
-  }
-}
-
-.image-grid-split-overlay__field-icon {
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
-  opacity: 0.8;
-  position: relative;
-
-  &--row::before {
-    content: '';
-    position: absolute;
-    left: 1px;
-    right: 1px;
-    top: 50%;
-    height: 1px;
-    background: currentColor;
-  }
-
-  &--col::before {
-    content: '';
-    position: absolute;
-    top: 1px;
-    bottom: 1px;
-    left: 50%;
-    width: 1px;
-    background: currentColor;
   }
 }
 

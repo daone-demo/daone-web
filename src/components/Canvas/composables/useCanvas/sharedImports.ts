@@ -31,6 +31,7 @@ export {
   spawnCompletedImageResultNode,
   spawnGridSplitResultNodes,
   spawnModel3DResultNode,
+  spawnVideoGenerationResultNode,
   spawnTextPromptResultNode,
   findOutgoingLoadingGenerationNode,
 } from '../../imageGen'

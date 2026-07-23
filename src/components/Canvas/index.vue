@@ -191,6 +191,8 @@
       :prompt-submitting="promptSubmitting"
       :can-submit-text-prompt="canSubmitTextPrompt"
       :is-img2-prompt-task="isImg2PromptTask"
+      :is-text2-video-task="isText2VideoTask"
+      :prompt-submit-label="promptSubmitLabel"
       :image-gen-prompt-text="imageGenPromptText"
       :image-gen-seed="imageGenSeed"
       :image-gen-source-preview-url="imageGenSourcePreviewUrl"
@@ -235,6 +237,7 @@
       @image-erase-complete="onImageEraseComplete"
       @close-image-inpaint="closeImageInpaint"
       @image-inpaint-complete="onImageInpaintComplete"
+      @image-inpaint-drag-start="onImageInpaintDragStart"
       @reset-video-hd-panel="resetVideoHdPanel"
       @video-hd-start="onVideoHdStart"
       @video-gen-drag-start="onVideoGenPromptDragStart"
@@ -493,6 +496,8 @@ const {
   imagePreviewUrl,
   isCanvasFileDragOver,
   isImg2PromptTask,
+  isText2VideoTask,
+  promptSubmitLabel,
   isLightNodeToolbar,
   isRecenteringToNodes,
   multiSelectToolbarPos,
@@ -509,6 +514,7 @@ const {
   onImageGridSplitComplete,
   onImageEraseComplete,
   onImageInpaintComplete,
+  onImageInpaintDragStart,
   onImageDialogueAddCanvasNode,
   onImageDialogueUploadFiles,
   onImageToolbarAction,

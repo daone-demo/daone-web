@@ -49,6 +49,8 @@ export type CanvasBindings = CanvasState & {
   showImageCreativeToolbar: ComputedRef<boolean>
   showTextFormatToolbar: ComputedRef<boolean>
   isImg2PromptTask: ComputedRef<boolean>
+  isText2VideoTask: ComputedRef<boolean>
+  promptSubmitLabel: ComputedRef<string>
   canSubmitTextPrompt: ComputedRef<boolean>
   imageCropSource: ComputedRef<{
     previewUrl: string
@@ -90,6 +92,7 @@ export type CanvasBindings = CanvasState & {
     prompt: string
     mask: { dataUrl: string; width: number; height: number }
   }) => Promise<void>
+  onImageInpaintDragStart: (event: MouseEvent) => void
   handleImageDialogueSubmit: (payload: import('../../constants').ImageDialogueSubmitPayload) => void
   graph: ShallowRef<Graph | null>
   [key: string]: unknown

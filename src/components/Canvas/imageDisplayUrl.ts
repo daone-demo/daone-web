@@ -1,8 +1,50 @@
+import { toMediaProxyUrl } from './mediaProxy'
+
 const OSS_HOST_RE = /\.aliyuncs\.com$/i
 const DEFAULT_CANVAS_IMAGE_MAX_EDGE = 960
+const NATURAL_SIZE_LOAD_TIMEOUT_MS = 12_000
 
 const naturalSizeCache = new Map<string, { width: number; height: number }>()
 const naturalSizeInflight = new Map<string, Promise<{ width: number; height: number }>>()
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), ms)
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        window.clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
+function buildNaturalSizeCandidates(previewUrl: string): string[] {
+  const source = previewUrl.trim()
+  if (!source) return []
+
+  const candidates: string[] = []
+  if (source.startsWith('/media-proxy')) {
+    candidates.push(source)
+    try {
+      const parsed = new URL(source, window.location.origin)
+      const inner = parsed.searchParams.get('url')?.trim()
+      if (inner) candidates.push(inner)
+    } catch {
+      // ignore invalid proxy url
+    }
+  } else {
+    const proxyUrl = toMediaProxyUrl(source)
+    if (proxyUrl) candidates.push(proxyUrl)
+    candidates.push(source)
+  }
+
+  return [...new Set(candidates.filter(Boolean))]
+}
 
 function isAliyunOssUrl(url: URL) {
   return OSS_HOST_RE.test(url.hostname)
@@ -57,7 +99,7 @@ export function getCanvasImageDisplayUrl(
   return processed || source
 }
 
-function loadImageNaturalSizeUncached(previewUrl: string): Promise<{ width: number; height: number }> {
+function loadImageNaturalSizeFromUrl(url: string): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => {
@@ -68,8 +110,30 @@ function loadImageNaturalSizeUncached(previewUrl: string): Promise<{ width: numb
       resolve({ width: img.naturalWidth, height: img.naturalHeight })
     }
     img.onerror = () => reject(new Error('failed to load image'))
-    img.src = previewUrl
+    img.src = url
   })
+}
+
+async function loadImageNaturalSizeUncached(previewUrl: string): Promise<{ width: number; height: number }> {
+  const candidates = buildNaturalSizeCandidates(previewUrl)
+  if (!candidates.length) {
+    throw new Error('missing preview url')
+  }
+
+  let lastError: unknown
+  for (const candidate of candidates) {
+    try {
+      return await withTimeout(
+        loadImageNaturalSizeFromUrl(candidate),
+        NATURAL_SIZE_LOAD_TIMEOUT_MS,
+        'image natural size load timeout',
+      )
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('failed to load image')
 }
 
 /** 读取图片原始尺寸（带内存缓存，避免节点展示与尺寸补全重复下载）。 */

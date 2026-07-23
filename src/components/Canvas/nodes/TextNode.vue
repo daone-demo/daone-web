@@ -54,7 +54,6 @@
     <div
       v-else-if="data.mode === 'picker'"
       class="text-node__body text-node__body--picker"
-      :class="{ 'text-node__body--img2prompt': data.textPickerTask === 'img2prompt' }"
     >
       <div class="text-node__hero-icon">
         <span />
@@ -62,21 +61,30 @@
         <span />
         <span />
       </div>
-      <template v-if="data.textPickerTask !== 'img2prompt'">
-        <p class="text-node__try">尝试：</p>
-        <button
-          v-for="action in TEXT_PICKER_ACTIONS"
-          :key="action.key"
-          type="button"
-          class="text-node__action"
-          :class="{ 'text-node__action--active': data.textPickerTask === action.key }"
-          @mousedown.stop
-          @click="onAction(action.key)"
-        >
-          <span class="text-node__action-icon" :data-icon="action.icon" />
-          {{ action.label }}
-        </button>
-      </template>
+      <button
+        type="button"
+        class="text-node__action text-node__action--write"
+        :class="{ 'text-node__action--active': data.textPickerTask === 'write' }"
+        @mousedown.stop
+        @click="onAction('write')"
+      >
+        <span class="text-node__action-icon" data-icon="doc" aria-hidden="true" />
+        自己编写内容
+      </button>
+
+      <p class="text-node__try">尝试：</p>
+      <button
+        v-for="action in TEXT_PICKER_TRY_ACTIONS"
+        :key="action.key"
+        type="button"
+        class="text-node__action"
+        :class="{ 'text-node__action--active': data.textPickerTask === action.key }"
+        @mousedown.stop
+        @click="onAction(action.key)"
+      >
+        <span class="text-node__action-icon" :data-icon="action.icon" />
+        {{ action.label }}
+      </button>
     </div>
 
     <div v-else class="text-node__body text-node__body--editor">
@@ -105,7 +113,7 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, 
 import type { Node } from '@antv/x6'
 import {
   TEXT_EDITOR_PLACEHOLDER,
-  TEXT_PICKER_ACTIONS,
+  TEXT_PICKER_TRY_ACTIONS,
   type CanvasNodeData,
   type TextFormatCommand,
 } from '../constants'
@@ -501,6 +509,7 @@ function onAction(key: string) {
     data.promptBarPinned = false
     data.textPickerTask = 'write'
     syncData()
+    canvasGraph().__onTextPickerAction?.('write', getNode().id)
     nextTickFocus()
     return
   }
@@ -730,7 +739,7 @@ onBeforeUnmount(() => {
 }
 
 .text-node__try {
-  margin: 0 0 8px;
+  margin: 10px 0 8px;
   font-size: 12px;
   color: #6b7280;
 }

@@ -7,11 +7,47 @@ import {
   buildSplitAxisLayout,
   computeGridSplitGap,
 } from './gridSplitUtils'
-import { assignGroupId } from './nodeGroup'
 
 import { getFlowEdgeAttrs } from './edgeStyle'
 
 const GEN_GAP = 56
+
+type OutgoingResultLayoutOptions = {
+  layoutSlot?: number
+  layoutTotal?: number
+}
+
+function countOutgoingSlots(graph: Graph, sourceId: string) {
+  return graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceId).length
+}
+
+/** 并行生成结果节点：同列纵向错位排布，避免落在同一水平线 */
+export function computeOutgoingResultNodePoint(
+  sourceNode: Node,
+  size: { width: number; height: number },
+  options: OutgoingResultLayoutOptions = {},
+) {
+  const bbox = sourceNode.getBBox()
+  const x = bbox.x + bbox.width + GEN_GAP + size.width / 2
+  const centerY = bbox.y + bbox.height / 2
+  const step = size.height + GEN_GAP
+  const slot = options.layoutSlot ?? 0
+  const total = options.layoutTotal
+
+  if (typeof total === 'number' && total > 1) {
+    const span = total * size.height + (total - 1) * GEN_GAP
+    const startY = centerY - span / 2 + size.height / 2
+    return { x, y: startY + slot * step }
+  }
+
+  if (slot === 0) {
+    return { x, y: centerY }
+  }
+
+  const layer = Math.ceil(slot / 2)
+  const direction = slot % 2 === 1 ? 1 : -1
+  return { x, y: centerY + direction * layer * step }
+}
 
 export function connectGenEdge(graph: Graph, sourceId: string, targetId: string) {
   return graph.addEdge({
@@ -169,10 +205,10 @@ export function spawnCroppedImageNode(
   graph: Graph,
   sourceNode: Node,
   payload: { dataUrl: string; width: number; height: number },
+  layout?: OutgoingResultLayoutOptions,
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
-  const bbox = sourceNode.getBBox()
-  const outgoingCount = graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceNode.id).length
+  const slot = layout?.layoutSlot ?? countOutgoingSlots(graph, sourceNode.id)
   const overrides: Partial<CanvasNodeData> = {
     kind: 'image',
     mode: 'editor',
@@ -184,10 +220,10 @@ export function spawnCroppedImageNode(
     fileName: sourceData.fileName ? `裁剪-${sourceData.fileName}` : '裁剪结果.png',
   }
   const size = getNodeSize('image', 'editor', overrides)
-  const point = {
-    x: bbox.x + bbox.width + GEN_GAP + outgoingCount * (size.width + GEN_GAP) + size.width / 2,
-    y: bbox.y + bbox.height / 2,
-  }
+  const point = computeOutgoingResultNodePoint(sourceNode, size, {
+    layoutSlot: slot,
+    layoutTotal: layout?.layoutTotal,
+  })
 
   const node = addCanvasNode(graph, 'image', point, overrides)
   connectGenEdge(graph, sourceNode.id, node.id)
@@ -198,10 +234,10 @@ export function spawnErasedImageNode(
   graph: Graph,
   sourceNode: Node,
   payload: { dataUrl: string; width: number; height: number },
+  layout?: OutgoingResultLayoutOptions,
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
-  const bbox = sourceNode.getBBox()
-  const outgoingCount = graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceNode.id).length
+  const slot = layout?.layoutSlot ?? countOutgoingSlots(graph, sourceNode.id)
   const overrides: Partial<CanvasNodeData> = {
     kind: 'image',
     mode: 'editor',
@@ -213,10 +249,10 @@ export function spawnErasedImageNode(
     fileName: sourceData.fileName ? `擦除-${sourceData.fileName}` : '擦除结果.png',
   }
   const size = getNodeSize('image', 'editor', overrides)
-  const point = {
-    x: bbox.x + bbox.width + GEN_GAP + outgoingCount * (size.width + GEN_GAP) + size.width / 2,
-    y: bbox.y + bbox.height / 2,
-  }
+  const point = computeOutgoingResultNodePoint(sourceNode, size, {
+    layoutSlot: slot,
+    layoutTotal: layout?.layoutTotal,
+  })
 
   const node = addCanvasNode(graph, 'image', point, overrides)
   connectGenEdge(graph, sourceNode.id, node.id)
@@ -230,11 +266,12 @@ export function spawnGenerationResultNode(
   options: {
     title: string
     fileName?: string
+    layoutSlot?: number
+    layoutTotal?: number
   },
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
-  const bbox = sourceNode.getBBox()
-  const outgoingCount = graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceNode.id).length
+  const slot = options.layoutSlot ?? countOutgoingSlots(graph, sourceNode.id)
   const overrides: Partial<CanvasNodeData> = {
     kind: 'image',
     mode: 'editor',
@@ -250,10 +287,10 @@ export function spawnGenerationResultNode(
     inputUpdated: Boolean(sourceData.previewUrl),
   }
   const size = getNodeSize('image', 'editor', overrides)
-  const point = {
-    x: bbox.x + bbox.width + GEN_GAP + outgoingCount * (size.width + GEN_GAP) + size.width / 2,
-    y: bbox.y + bbox.height / 2,
-  }
+  const point = computeOutgoingResultNodePoint(sourceNode, size, {
+    layoutSlot: slot,
+    layoutTotal: options.layoutTotal,
+  })
 
   const node = addCanvasNode(graph, 'image', point, overrides)
   connectGenEdge(graph, sourceNode.id, node.id)
@@ -271,11 +308,12 @@ export function spawnCompletedImageResultNode(
     assetId?: string
     mediaWidth?: number
     mediaHeight?: number
+    layoutSlot?: number
+    layoutTotal?: number
   },
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
-  const bbox = sourceNode.getBBox()
-  const outgoingCount = graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceNode.id).length
+  const slot = options.layoutSlot ?? countOutgoingSlots(graph, sourceNode.id)
   const overrides: Partial<CanvasNodeData> = {
     kind: 'image',
     mode: 'editor',
@@ -294,10 +332,10 @@ export function spawnCompletedImageResultNode(
     inputUpdated: Boolean(sourceData.previewUrl),
   }
   const size = getNodeSize('image', 'editor', overrides)
-  const point = {
-    x: bbox.x + bbox.width + GEN_GAP + outgoingCount * (size.width + GEN_GAP) + size.width / 2,
-    y: bbox.y + bbox.height / 2,
-  }
+  const point = computeOutgoingResultNodePoint(sourceNode, size, {
+    layoutSlot: slot,
+    layoutTotal: options.layoutTotal,
+  })
 
   const node = addCanvasNode(graph, 'image', point, overrides)
   connectGenEdge(graph, sourceNode.id, node.id)
@@ -311,11 +349,12 @@ export function spawnModel3DResultNode(
   options: {
     title: string
     fileName?: string
+    layoutSlot?: number
+    layoutTotal?: number
   },
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
-  const bbox = sourceNode.getBBox()
-  const outgoingCount = graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceNode.id).length
+  const slot = options.layoutSlot ?? countOutgoingSlots(graph, sourceNode.id)
   const overrides: Partial<CanvasNodeData> = {
     kind: 'model3d',
     mode: 'editor',
@@ -332,12 +371,49 @@ export function spawnModel3DResultNode(
     sourceAssetId: sourceData.assetId,
   }
   const size = getNodeSize('model3d', 'editor', overrides)
-  const point = {
-    x: bbox.x + bbox.width + GEN_GAP + outgoingCount * (size.width + GEN_GAP) + size.width / 2,
-    y: bbox.y + bbox.height / 2,
-  }
+  const point = computeOutgoingResultNodePoint(sourceNode, size, {
+    layoutSlot: slot,
+    layoutTotal: options.layoutTotal,
+  })
 
   const node = addCanvasNode(graph, 'model3d', point, overrides)
+  connectGenEdge(graph, sourceNode.id, node.id)
+  return node
+}
+
+/** 在源节点右侧生成「文生视频」加载中视频节点，并连线 */
+export function spawnVideoGenerationResultNode(
+  graph: Graph,
+  sourceNode: Node,
+  options: {
+    title: string
+    fileName?: string
+    layoutSlot?: number
+    layoutTotal?: number
+  },
+) {
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  const slot = options.layoutSlot ?? countOutgoingSlots(graph, sourceNode.id)
+  const overrides: Partial<CanvasNodeData> = {
+    kind: 'video',
+    mode: 'editor',
+    uploadState: 'uploading',
+    uploadProgress: 0,
+    title: options.title,
+    fileName: options.fileName || `${options.title}.mp4`,
+    previewUrl: '',
+    sourceNodeId: sourceNode.id,
+    sourcePreviewUrl: sourceData.previewUrl ?? '',
+    sourceFileName: sourceData.fileName ?? '',
+    sourceAssetId: sourceData.assetId,
+  }
+  const size = getNodeSize('video', 'editor', overrides)
+  const point = computeOutgoingResultNodePoint(sourceNode, size, {
+    layoutSlot: slot,
+    layoutTotal: options.layoutTotal,
+  })
+
+  const node = addCanvasNode(graph, 'video', point, overrides)
   connectGenEdge(graph, sourceNode.id, node.id)
   return node
 }
@@ -348,11 +424,12 @@ export function spawnTextPromptResultNode(
   sourceNode: Node,
   options: {
     title: string
+    layoutSlot?: number
+    layoutTotal?: number
   },
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
-  const bbox = sourceNode.getBBox()
-  const outgoingCount = graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceNode.id).length
+  const slot = options.layoutSlot ?? countOutgoingSlots(graph, sourceNode.id)
   const overrides: Partial<CanvasNodeData> = {
     kind: 'text',
     mode: 'editor',
@@ -368,10 +445,10 @@ export function spawnTextPromptResultNode(
     sourceAssetId: sourceData.assetId,
   }
   const size = getNodeSize('text', 'editor', overrides)
-  const point = {
-    x: bbox.x + bbox.width + GEN_GAP + outgoingCount * (size.width + GEN_GAP) + size.width / 2,
-    y: bbox.y + bbox.height / 2,
-  }
+  const point = computeOutgoingResultNodePoint(sourceNode, size, {
+    layoutSlot: slot,
+    layoutTotal: options.layoutTotal,
+  })
 
   const node = addCanvasNode(graph, 'text', point, overrides)
   connectGenEdge(graph, sourceNode.id, node.id)
@@ -392,7 +469,7 @@ export function findOutgoingLoadingGenerationNode(graph: Graph, sourceId: string
 }
 
 /**
- * 宫格拆分：在源图右侧生成无缝拼接的碎片节点（1px 蓝色分割线）并自动分组，不修改/删除原图。
+ * 宫格拆分：在源图右侧生成碎片节点（节点间距 2px），不修改/删除原图，默认不解组。
  */
 export function spawnGridSplitResultNodes(
   graph: Graph,
@@ -443,8 +520,17 @@ export function spawnGridSplitResultNodes(
       const tile = tileMap.get(`${row + 1}-${col + 1}`)
       if (!tile) continue
 
-      const width = colLayout.sizes[col]
-      const height = rowLayout.sizes[row]
+      const cellWidth = colLayout.sizes[col]
+      const cellHeight = rowLayout.sizes[row]
+      const tileAspect = tile.width / tile.height
+      const cellAspect = cellWidth / cellHeight
+      let width = cellWidth
+      let height = cellHeight
+      if (tileAspect > cellAspect) {
+        height = Math.max(1, Math.round(cellWidth / tileAspect))
+      } else if (tileAspect < cellAspect) {
+        width = Math.max(1, Math.round(cellHeight * tileAspect))
+      }
       const overrides: Partial<CanvasNodeData> = {
         kind: 'image',
         mode: 'editor',
@@ -468,18 +554,11 @@ export function spawnGridSplitResultNodes(
       }
 
       const point = {
-        x: contentX + colLayout.offsets[col] + width / 2,
-        y: contentY + rowLayout.offsets[row] + height / 2,
+        x: contentX + colLayout.offsets[col] + cellWidth / 2,
+        y: contentY + rowLayout.offsets[row] + cellHeight / 2,
       }
       nodes.push(addCanvasNode(graph, 'image', point, overrides))
     }
-  }
-
-  if (nodes.length) {
-    assignGroupId(
-      graph,
-      nodes.map((node) => node.id),
-    )
   }
 
   return nodes

@@ -30,7 +30,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const minimapContainerRef = computed(() => bottomLeftDockRef.value?.minimapContainerRef ?? null)
   const textExpandEditorRef = computed(() => textExpandEditorComponentRef.value?.editorRef ?? null)
 
-  const modelType = ref<'img2prompt' | 'text2xhs' | 'free'>('free')
+  const modelType = ref<'img2prompt' | 'text2xhs' | 'free' | 'text2video'>('free')
   const promptSourcePreviewUrl = ref('')
   const promptSourceFileName = ref('')
   const promptSourcePreviews = ref<ImageSourceRef[]>([])
@@ -127,6 +127,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const imageGenPromptPos = ref({ left: 0, top: 0, width: 480 })
   const videoGenPromptPos = ref({ left: 0, top: 0, width: 520 })
   const videoGenPromptDragOffset = ref({ x: 0, y: 0 })
+  const imageInpaintDragOffset = ref({ x: 0, y: 0 })
   const showElementSelectMode = ref(false)
   const elementSelectReturnNodeId = ref('')
   const imageCropPos = ref({ left: 0, top: 0, width: 360, height: 420 })
@@ -253,6 +254,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     imageGenPromptPos,
     videoGenPromptPos,
     videoGenPromptDragOffset,
+    imageInpaintDragOffset,
     showElementSelectMode,
     elementSelectReturnNodeId,
     imageCropPos,

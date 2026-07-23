@@ -216,18 +216,17 @@ async function finishUpload(
   if (result.width && result.height) return
 
   if (file.type.startsWith('image/')) {
-    const img = new Image()
-    img.onload = () => {
-      const current = { ...(graphNode.getData() as CanvasNodeData) }
-      if (current.previewUrl !== previewUrl) return
-      current.mediaWidth = img.naturalWidth
-      current.mediaHeight = img.naturalHeight
-      applyNodeMedia(graphNode, current)
-    }
-    img.onerror = () => {
-      // 资源地址已展示，尺寸加载失败时保留当前节点尺寸
-    }
-    img.src = previewUrl
+    void resolveImageNaturalSizeCached(previewUrl)
+      .then((size) => {
+        const current = { ...(graphNode.getData() as CanvasNodeData) }
+        if (current.previewUrl !== previewUrl) return
+        current.mediaWidth = size.width
+        current.mediaHeight = size.height
+        applyNodeMedia(graphNode, current)
+      })
+      .catch(() => {
+        // 资源地址已展示，尺寸加载失败时保留当前节点尺寸
+      })
     return
   }
 
@@ -292,15 +291,17 @@ export function applyRemoteImageToNode(
 
   applyNodeMedia(graphNode, data)
 
-  const img = new Image()
-  img.onload = () => {
-    const current = { ...(graphNode.getData() as CanvasNodeData) }
-    if (current.previewUrl !== previewUrl) return
-    current.mediaWidth = img.naturalWidth
-    current.mediaHeight = img.naturalHeight
-    applyNodeMedia(graphNode, current)
-  }
-  img.src = previewUrl
+  void resolveImageNaturalSizeCached(previewUrl)
+    .then((size) => {
+      const current = { ...(graphNode.getData() as CanvasNodeData) }
+      if (current.previewUrl !== previewUrl) return
+      current.mediaWidth = size.width
+      current.mediaHeight = size.height
+      applyNodeMedia(graphNode, current)
+    })
+    .catch(() => {
+      // ignore
+    })
 }
 
 function applyNodeMedia(graphNode: Node, data: CanvasNodeData) {

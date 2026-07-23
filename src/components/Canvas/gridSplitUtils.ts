@@ -16,8 +16,8 @@ export type GridSplitStops = {
   colStops?: number[]
 }
 
-/** 宫格碎片节点之间的布局间隙（分割线由节点边框绘制，布局 gap 为 0） */
-export const GRID_SPLIT_GAP = 0
+/** 宫格碎片节点之间的布局间隙 */
+export const GRID_SPLIT_GAP = 2
 
 export function computeGridSplitGap(_width?: number, _height?: number) {
   return GRID_SPLIT_GAP

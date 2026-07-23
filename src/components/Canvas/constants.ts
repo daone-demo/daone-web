@@ -71,7 +71,7 @@ export interface CanvasNodeData {
   editorHeight?: number
   /** 宫格拆分碎片：无标题栏，节点尺寸即预览区 */
   compactPreview?: boolean
-  /** 宫格拆分碎片在网格中的位置，用于绘制 1px 蓝色分割线 */
+  /** 宫格拆分碎片在网格中的位置 */
   gridSplitTile?: {
     row: number
     col: number
@@ -92,7 +92,7 @@ export interface CanvasNodeData {
   /** 关联的后端生成任务 ID，用于多任务并发追踪与刷新后恢复 */
   generationTaskId?: string
   /** 关联生成任务类型，刷新后用于恢复轮询 */
-  generationTaskType?: 'IMAGE' | 'TEXT' | 'MODEL'
+  generationTaskType?: 'IMAGE' | 'TEXT' | 'MODEL' | 'VIDEO'
 }
 
 /** 图片反推提示词默认示例图文件名 */
@@ -332,6 +332,10 @@ export const TEXT_PICKER_ACTIONS = [
   // { key: 'text2music', label: '文字生音乐', icon: 'audio' },
 ]
 
+export const TEXT_PICKER_TRY_ACTIONS = TEXT_PICKER_ACTIONS.filter(
+  (action) => action.key === 'text2video' || action.key === 'img2prompt',
+)
+
 export const VIDEO_PICKER_ACTIONS = [
   // { key: 'frames', label: '首尾帧生成视频', icon: 'frames' },
   // { key: 'first', label: '首帧生成视频', icon: 'spark' },
@@ -435,7 +439,7 @@ export function buildImageActionResultTitle(label?: string, fallback = '生成�
   const name = label?.trim()
   if (!name) return fallback
   if (/结果$/.test(name)) return name
-  return `${name}结果`
+  return `${name}`
 }
 
 export type ImageToolbarMenuItem = {
