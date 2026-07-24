@@ -190,6 +190,7 @@
       @remove-source-ref="emit('remove-video-source-ref', $event)"
       @upload-images="emit('upload-video-gen-images', $event)"
       @add-canvas-node="emit('add-video-gen-canvas-node', $event)"
+      @submit="emit('submit-video-gen-prompt', $event)"
     />
   </div>
 
@@ -318,6 +319,7 @@
       :model-value="videoDialogueText"
       :chat-tools="chatTools"
       @update:model-value="emit('update:videoDialogueText', $event)"
+      @submit="emit('submit-video-dialogue', $event)"
     />
   </div>
 
@@ -374,6 +376,8 @@ import {
   type ChatTools,
   type ImageCapability,
   type ImageDialogueSubmitPayload,
+  type VideoDialogueSubmitPayload,
+  type VideoGenPromptSubmitPayload,
   type NodeKind,
   type TextPromptModelItem,
   type VideoHdMagnification,
@@ -481,6 +485,8 @@ const emit = defineEmits<{
   'upload-image-dialogue-images': [files: File[]]
   'add-image-dialogue-canvas-node': [nodeId: string]
   'submit-image-dialogue': [payload: ImageDialogueSubmitPayload]
+  'submit-video-dialogue': [payload: VideoDialogueSubmitPayload]
+  'submit-video-gen-prompt': [payload: VideoGenPromptSubmitPayload]
   'update:videoDialogueText': [value: string]
   'update:videoHdMagnification': [value: VideoHdMagnification]
   'persist-prompt-bar-draft': []

@@ -238,6 +238,16 @@ export function resolveImageAssetId(
   return ''
 }
 
+/** 从视频节点数据解析素材库资源 ID（独立于图片侧） */
+export function resolveVideoAssetId(
+  source?: Pick<CanvasNodeData, 'assetId' | 'sourceAssetId'> | null,
+): string {
+  if (!source) return ''
+  if (source.assetId) return source.assetId
+  if (source.sourceAssetId) return source.sourceAssetId
+  return ''
+}
+
 export const EMPTY_HINT = '双击画布 自由生成节点'
 
 /** 图片节点标题栏高度 + 与预览区间距，用于工具栏锚定在图片区域正上方 */
@@ -434,8 +444,29 @@ export type ImageToolbarClickEvent = ImageToolbarClickPayload & {
   assetId: string
 }
 
+/** 视频节点工具栏点击事件（与图片工具栏平行，保持独立） */
+export type VideoToolbarClickPayload = {
+  key: string
+  option?: string
+  /** 能力展示名，用于结果节点 title */
+  label?: string
+}
+
+/** 视频节点工具栏点击上下文（含当前视频素材 ID） */
+export type VideoToolbarClickEvent = VideoToolbarClickPayload & {
+  assetId: string
+}
+
 /** 由工具栏 action 名生成结果节点标题 */
 export function buildImageActionResultTitle(label?: string, fallback = '生成结果') {
+  const name = label?.trim()
+  if (!name) return fallback
+  if (/结果$/.test(name)) return name
+  return `${name}`
+}
+
+/** 视频工具栏结果节点标题（独立函数，避免与图片侧耦合） */
+export function buildVideoActionResultTitle(label?: string, fallback = '视频结果') {
   const name = label?.trim()
   if (!name) return fallback
   if (/结果$/.test(name)) return name
@@ -572,6 +603,53 @@ export type ImageDialogueSubmitPayload = {
   resolution?: string
   workflowId?: string
   workflow?: WorkflowRecord
+}
+
+/** 视频对话面板点击发送时上报的生成参数（与图片对话平行，保持独立） */
+export type VideoDialogueMode =
+  | 'text-to-video'
+  | 'image-to-video'
+  | 'reference'
+  | 'first-last-frame'
+
+export type VideoDialogueSubmitPayload = {
+  prompt: string
+  model: string
+  ratio: string
+  clarity: string
+  duration: number
+  generateAudio: boolean
+  videoCount: number
+  mode: VideoDialogueMode
+}
+
+/** 视频生成提示面板提交参数（与视频对话框平行，保持独立） */
+export type VideoGenPromptSubmitPayload = {
+  prompt: string
+  model: string
+  ratio: string
+  clarity: string
+  duration: number
+  generateAudio: boolean
+  videoCount: number
+  mode: VideoDialogueMode
+  tab: string
+}
+
+/** 视频生成面板 tab → VIDEO_GENERAL_V1 mode */
+export function resolveVideoGenApiMode(tab: string): VideoDialogueMode {
+  switch (tab) {
+    case 'img2video':
+      return 'image-to-video'
+    case 'frames':
+      return 'first-last-frame'
+    case 'reference':
+    case 'imageRef':
+      return 'reference'
+    case 'text2video':
+    default:
+      return 'text-to-video'
+  }
 }
 
 export type WorkflowRecord = {
@@ -1300,6 +1378,13 @@ export function normalizeVideoClarityLabel(value: string): string {
   const match = value.trim().match(/^(\d+)\s*p$/i)
   if (match) return `${match[1]}P`
   return value.trim().toUpperCase()
+}
+
+/** 接口文档要求 clarity 形如 1080p */
+export function toVideoApiClarity(value: string): string {
+  const match = value.trim().match(/^(\d+)\s*p$/i)
+  if (match) return `${match[1]}p`
+  return value.trim().toLowerCase()
 }
 
 export function buildVideoDialogueAspectRatiosFromCapabilities(

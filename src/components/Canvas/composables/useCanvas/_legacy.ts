@@ -553,6 +553,20 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
 
   function onImageToolbarAction(_payload: import('../../constants').ImageToolbarClickPayload) {}
 
+  function onVideoToolbarAction(_payload: import('../../constants').VideoToolbarClickPayload) {}
+
+  function handleImageDialogueSubmit(
+    _payload: import('../../constants').ImageDialogueSubmitPayload,
+  ) {}
+
+  function handleVideoDialogueSubmit(
+    _payload: import('../../constants').VideoDialogueSubmitPayload,
+  ) {}
+
+  function handleVideoGenPromptSubmit(
+    _payload: import('../../constants').VideoGenPromptSubmitPayload,
+  ) {}
+
   function openImageCrop() {
     const data = getSelectedNodeData()
     if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) return
@@ -4202,6 +4216,10 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     onImageDialogueAddCanvasNode,
     onImageDialogueUploadFiles,
     onImageToolbarAction,
+    onVideoToolbarAction,
+    handleImageDialogueSubmit,
+    handleVideoDialogueSubmit,
+    handleVideoGenPromptSubmit,
     onLoadProjects,
     onMenuItem,
     onPromptAddCanvasNode,

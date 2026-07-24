@@ -250,6 +250,7 @@
         :class="{ 'video-gen-prompt-panel__send--disabled': Boolean(validationError) }"
         :disabled="Boolean(validationError)"
         title="生成"
+        @click="onSend"
       >
         ↑
       </button>
@@ -292,6 +293,8 @@ import {
   type VideoGenAspectRatio,
   type VideoGenDuration,
   type VideoGenResolution,
+  type VideoGenPromptSubmitPayload,
+  resolveVideoGenApiMode,
 } from './constants'
 import { getVideoGenTabValidation } from './videoGen'
 import type { VideoSourceRef } from './videoGen'
@@ -324,6 +327,7 @@ const emit = defineEmits<{
   'remove-source-ref': [nodeId: string]
   'upload-images': [files: File[]]
   'add-canvas-node': [nodeId: string]
+  submit: [payload: VideoGenPromptSubmitPayload]
 }>()
 
 const DRAG_IGNORE_SELECTOR =
@@ -724,6 +728,28 @@ function onFileInputChange(event: Event) {
   const files = Array.from(input.files ?? []).filter((file) => file.type.startsWith('image/'))
   if (files.length) emit('upload-images', files)
   input.value = ''
+}
+
+function onSend() {
+  if (validationError.value) return
+  const prompt = props.prompt.trim()
+  if (!prompt) {
+    message.warning('请输入提示词')
+    return
+  }
+
+  const payload: VideoGenPromptSubmitPayload = {
+    prompt,
+    model: selectedModelKey.value,
+    ratio: videoAspectRatio.value,
+    clarity: videoResolution.value,
+    duration: videoDuration.value,
+    generateAudio: generateAudio.value,
+    videoCount: props.videoNum,
+    mode: resolveVideoGenApiMode(props.activeTab),
+    tab: props.activeTab,
+  }
+  emit('submit', payload)
 }
 
 watch(

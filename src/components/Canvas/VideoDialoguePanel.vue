@@ -148,7 +148,7 @@
           <span class="video-dialogue__credits-icon" aria-hidden="true" />
           {{ VIDEO_DIALOGUE_CREDITS }}
         </span>
-        <button type="button" class="video-dialogue__send" title="发送">
+        <button type="button" class="video-dialogue__send" title="发送" @click="onSend">
           <span class="video-dialogue__send-icon" aria-hidden="true" />
         </button>
       </div>
@@ -189,6 +189,7 @@ import {
   VIDEO_DIALOGUE_MODEL_MENU,
   type ChatTools,
   type VideoDialogueModelItem,
+  type VideoDialogueSubmitPayload,
   type VideoGenAspectRatio,
   type VideoGenDuration,
   type VideoGenResolution,
@@ -203,6 +204,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  submit: [payload: VideoDialogueSubmitPayload]
 }>()
 
 const showAdvisorMenu = ref(false)
@@ -336,6 +338,24 @@ function onStoryboardConfirm() {
 
 function selectAdvisorItem() {
   showAdvisorMenu.value = false
+}
+
+function onSend() {
+  const prompt = props.modelValue.trim()
+  if (!prompt) return
+
+  const payload: VideoDialogueSubmitPayload = {
+    prompt,
+    model: selectedModelKey.value,
+    ratio: videoAspectRatio.value,
+    clarity: videoResolution.value,
+    duration: videoDuration.value,
+    generateAudio: generateAudio.value,
+    videoCount: 1,
+    // 视频节点对话默认走全能参考；无参考素材时由上层降级为 text-to-video
+    mode: 'reference',
+  }
+  emit('submit', payload)
 }
 </script>
 

@@ -123,6 +123,7 @@
       @close-image-toolbar-more="closeImageToolbarMore"
       @toggle-image-toolbar-more-menu="toggleImageToolbarMoreMenu"
       @image-toolbar-action="onImageToolbarAction"
+      @video-toolbar-action="onVideoToolbarAction"
       @toggle-video-dialogue="toggleVideoDialogue"
       @toggle-video-hd-panel="toggleVideoHdPanel"
       @toggle-video-frames-panel="toggleVideoFramesPanel"
@@ -221,6 +222,7 @@
       @update:image-gen-prompt-text="imageGenPromptText = $event; persistImageGenPrompt()"
       @update:image-gen-seed="imageGenSeed = $event; persistImageGenPrompt()"
       @generate-image="generateImageFromPrompt"
+      @submit-video-gen-prompt="handleVideoGenPromptSubmit"
       @update:video-gen-prompt-text="videoGenPromptText = $event; persistVideoGenPrompt()"
       @update:video-gen-active-tab="videoGenActiveTab = $event; persistVideoGenPrompt()"
       @update:image-dialogue-text="imageDialogueText = $event"
@@ -228,6 +230,7 @@
       @upload-image-dialogue-images="onImageDialogueUploadFiles"
       @add-image-dialogue-canvas-node="onImageDialogueAddCanvasNode"
       @submit-image-dialogue="handleImageDialogueSubmit"
+      @submit-video-dialogue="handleVideoDialogueSubmit"
       @update:video-dialogue-text="videoDialogueText = $event"
       @update:video-hd-magnification="videoHdMagnification = $event"
       @close-image-crop="closeImageCrop"
@@ -449,6 +452,8 @@ const {
   fileInputMultiple,
   generateImageFromPrompt,
   handleImageDialogueSubmit,
+  handleVideoDialogueSubmit,
+  handleVideoGenPromptSubmit,
   goUserCenter,
   gridVisible,
   groupOverlayBox,
@@ -519,6 +524,7 @@ const {
   onImageDialogueAddCanvasNode,
   onImageDialogueUploadFiles,
   onImageToolbarAction,
+  onVideoToolbarAction,
   onMenuItem,
   onPromptAddCanvasNode,
   onPromptUploadFiles,

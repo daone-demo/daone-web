@@ -110,7 +110,9 @@ export { createCanvasHistory } from '../../canvasHistory'
 export {
   disconnectImageFromVideo,
   findImageToVideoEdge,
+  findIncomingTextNodes,
   getVideoSourceRefs,
+  plainTextFromNodeContent,
   VIDEO_GEN_TAB_IMAGE_RULES,
 } from '../../videoGen'
 export { useCanvasKeyboard } from '../useCanvasKeyboard'

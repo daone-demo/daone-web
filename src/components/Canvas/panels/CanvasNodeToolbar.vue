@@ -110,7 +110,7 @@
             type="button"
             class="canvas__node-toolbar-btn"
             :class="{ 'canvas__node-toolbar-btn--active': showVideoDialogue }"
-            @click="emit('toggle-video-dialogue')"
+            @click="emitVideoAction({ key: 'chat', label: VIDEO_NODE_TOOLBAR.chat.label })"
           >
             <span class="canvas__node-toolbar-icon" data-icon="chat" aria-hidden="true" />
             {{ VIDEO_NODE_TOOLBAR.chat.label }}
@@ -122,56 +122,37 @@
             <img
               src="@assets/images/addToDialog.png"
               class="canvas__node-toolbar-addToDialog-img"
-              @click="emit('add-video-to-dialog')"
+              @click="emitVideoAction({ key: 'addToDialog', label: '' })"
             />
           </div>
-          <template v-for="item in videoToolbarActions" :key="item.key">
-            <button
-              v-if="isVideoHdAction(item)"
-              type="button"
-              class="canvas__node-toolbar-btn"
-              :class="{ 'canvas__node-toolbar-btn--active': showVideoHdPanel }"
-              @click="emit('toggle-video-hd-panel')"
-            >
-              <span
-                class="canvas__node-toolbar-icon"
-                :data-icon="item.icon || 'video-hd'"
-                aria-hidden="true"
-              />
-              {{ item.label }}
-            </button>
-            <button
-              v-else-if="isVideoFramesAction(item)"
-              type="button"
-              class="canvas__node-toolbar-btn"
-              :class="{ 'canvas__node-toolbar-btn--active': showVideoFramesPanel }"
-              @click="emit('toggle-video-frames-panel')"
-            >
-              <span
-                class="canvas__node-toolbar-icon"
-                :data-icon="item.icon || 'frames'"
-                aria-hidden="true"
-              />
-              {{ item.label }}
-            </button>
-            <button
-              v-else
-              type="button"
-              class="canvas__node-toolbar-btn"
-              @click="emitVideoAction(item)"
-            >
-              <span
-                v-if="item.icon"
-                class="canvas__node-toolbar-icon"
-                :data-icon="item.icon"
-                aria-hidden="true"
-              />
-              {{ item.label }}
-            </button>
-          </template>
+          <button
+            v-for="item in videoToolbarActions"
+            :key="item.key"
+            type="button"
+            class="canvas__node-toolbar-btn"
+            :class="{
+              'canvas__node-toolbar-btn--active':
+                (isVideoHdAction(item) && showVideoHdPanel) ||
+                (isVideoFramesAction(item) && showVideoFramesPanel),
+            }"
+            @click="emitVideoAction(item)"
+          >
+            <span
+              v-if="item.icon"
+              class="canvas__node-toolbar-icon"
+              :data-icon="item.icon"
+              aria-hidden="true"
+            />
+            {{ item.label }}
+          </button>
         </div>
         <span class="canvas__node-toolbar-divider" aria-hidden="true" />
-        <button type="button" class="canvas__node-toolbar-btn canvas__node-toolbar-btn--icon" title="下载">
+        <button
+          type="button"
+          class="canvas__node-toolbar-btn canvas__node-toolbar-btn--icon"
+          title="下载"
+          @click="emitVideoAction({ key: 'download', label: '下载' })"
+        >
           <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" />
         </button>
       </template>
@@ -195,6 +176,7 @@ import {
   resolveVideoToolbarUiKey,
   type NodeKind,
   type ImageToolbarClickPayload,
+  type VideoToolbarClickPayload,
   type ImageCapability,
   type ImageCapabilityToolbarAction,
 } from '../constants'
@@ -226,7 +208,7 @@ const emit = defineEmits<{
   'toggle-video-hd-panel': []
   'toggle-video-frames-panel': []
   'add-video-to-dialog': []
-  'video-toolbar-action': [payload: ImageToolbarClickPayload]
+  'video-toolbar-action': [payload: VideoToolbarClickPayload]
 }>()
 
 const allActions = computed<ImageCapabilityToolbarAction[]>(() => {
@@ -266,11 +248,11 @@ function emitImageAction(key: string, option?: string, label?: string) {
   emit('image-toolbar-action', payload)
 }
 
-function emitVideoAction(item: ImageCapabilityToolbarAction) {
-  emit('video-toolbar-action', {
-    key: item.key,
-    label: item.label,
-  })
+function emitVideoAction(item: { key: string; label?: string; option?: string }) {
+  const payload: VideoToolbarClickPayload = { key: item.key }
+  if (item.option) payload.option = item.option
+  if (item.label) payload.label = item.label
+  emit('video-toolbar-action', payload)
 }
 
 function onOverflowAction(key: string, option?: string, label?: string) {

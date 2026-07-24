@@ -2,11 +2,7 @@ import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData, ImageGenTask } from './constants'
 import { IMAGE_NODE_META_HEIGHT } from './constants'
 import { addCanvasNode, getNodeSize } from './graph'
-import {
-  buildGridSplitEdges,
-  buildSplitAxisLayout,
-  computeGridSplitGap,
-} from './gridSplitUtils'
+import { GRID_SPLIT_GAP } from './gridSplitUtils'
 
 import { getFlowEdgeAttrs } from './edgeStyle'
 
@@ -469,7 +465,8 @@ export function findOutgoingLoadingGenerationNode(graph: Graph, sourceId: string
 }
 
 /**
- * 宫格拆分：在源图右侧生成碎片节点（节点间距 2px），不修改/删除原图，默认不解组。
+ * 宫格拆分：在源图右侧生成碎片节点（节点间距固定 2px），不修改/删除原图，默认不解组。
+ * 按碎片原始像素等比缩放后紧密排布，避免 cell 比例与图片不一致导致的上下/左右视觉缝宽不同。
  */
 export function spawnGridSplitResultNodes(
   graph: Graph,
@@ -495,42 +492,67 @@ export function spawnGridSplitResultNodes(
   const titlePrefix = options.titlePrefix?.trim() || '宫格'
   const rows = Math.max(1, options.rows)
   const cols = Math.max(1, options.cols)
+  const gap = GRID_SPLIT_GAP
 
   const previewOffsetY = sourceData.compactPreview ? 0 : IMAGE_NODE_META_HEIGHT
   const contentW = bbox.width
   const contentH = Math.max(1, bbox.height - previewOffsetY)
-  const gap = computeGridSplitGap(contentW, contentH)
 
-  const xEdges = buildGridSplitEdges(cols, options.colStops)
-  const yEdges = buildGridSplitEdges(rows, options.rowStops)
-  const colLayout = buildSplitAxisLayout(xEdges, contentW, gap)
-  const rowLayout = buildSplitAxisLayout(yEdges, contentH, gap)
-
-  const gridHeight = rowLayout.sizes.reduce((sum, size, index) => sum + size + (index < rows - 1 ? gap : 0), 0)
-
-  // 结果宫格排在源图右侧，垂直与源图预览区居中对齐
-  const contentX = bbox.x + bbox.width + GEN_GAP
-  const contentY = bbox.y + previewOffsetY + (contentH - gridHeight) / 2
-
-  const nodes: Node[] = []
   const tileMap = new Map(tiles.map((tile) => [`${tile.row}-${tile.col}`, tile]))
 
+  // 每列/每行取碎片原始像素尺寸（同列宽一致、同行高一致）
+  const colNaturalWidths = Array.from({ length: cols }, (_, col) => {
+    let width = 1
+    for (let row = 0; row < rows; row += 1) {
+      const tile = tileMap.get(`${row + 1}-${col + 1}`)
+      if (tile) width = Math.max(width, tile.width)
+    }
+    return width
+  })
+  const rowNaturalHeights = Array.from({ length: rows }, (_, row) => {
+    let height = 1
+    for (let col = 0; col < cols; col += 1) {
+      const tile = tileMap.get(`${row + 1}-${col + 1}`)
+      if (tile) height = Math.max(height, tile.height)
+    }
+    return height
+  })
+
+  const naturalW = colNaturalWidths.reduce((sum, value) => sum + value, 0)
+  const naturalH = rowNaturalHeights.reduce((sum, value) => sum + value, 0)
+  const availableW = Math.max(cols, contentW - (cols - 1) * gap)
+  const availableH = Math.max(rows, contentH - (rows - 1) * gap)
+  const scale = Math.min(availableW / Math.max(1, naturalW), availableH / Math.max(1, naturalH))
+
+  const colWidths = colNaturalWidths.map((width) => Math.max(1, Math.round(width * scale)))
+  const rowHeights = rowNaturalHeights.map((height) => Math.max(1, Math.round(height * scale)))
+
+  const colOffsets: number[] = []
+  let cursorX = 0
+  for (let col = 0; col < cols; col += 1) {
+    colOffsets.push(cursorX)
+    cursorX += colWidths[col] + (col < cols - 1 ? gap : 0)
+  }
+
+  const rowOffsets: number[] = []
+  let cursorY = 0
+  for (let row = 0; row < rows; row += 1) {
+    rowOffsets.push(cursorY)
+    cursorY += rowHeights[row] + (row < rows - 1 ? gap : 0)
+  }
+
+  const gridHeight = cursorY
+  const contentX = bbox.x + bbox.width + GEN_GAP
+  const contentY = bbox.y + previewOffsetY + Math.max(0, (contentH - gridHeight) / 2)
+
+  const nodes: Node[] = []
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < cols; col += 1) {
       const tile = tileMap.get(`${row + 1}-${col + 1}`)
       if (!tile) continue
 
-      const cellWidth = colLayout.sizes[col]
-      const cellHeight = rowLayout.sizes[row]
-      const tileAspect = tile.width / tile.height
-      const cellAspect = cellWidth / cellHeight
-      let width = cellWidth
-      let height = cellHeight
-      if (tileAspect > cellAspect) {
-        height = Math.max(1, Math.round(cellWidth / tileAspect))
-      } else if (tileAspect < cellAspect) {
-        width = Math.max(1, Math.round(cellHeight * tileAspect))
-      }
+      const width = colWidths[col]
+      const height = rowHeights[row]
       const overrides: Partial<CanvasNodeData> = {
         kind: 'image',
         mode: 'editor',
@@ -554,8 +576,8 @@ export function spawnGridSplitResultNodes(
       }
 
       const point = {
-        x: contentX + colLayout.offsets[col] + cellWidth / 2,
-        y: contentY + rowLayout.offsets[row] + cellHeight / 2,
+        x: contentX + colOffsets[col] + width / 2,
+        y: contentY + rowOffsets[row] + height / 2,
       }
       nodes.push(addCanvasNode(graph, 'image', point, overrides))
     }

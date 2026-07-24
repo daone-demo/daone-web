@@ -11,17 +11,41 @@
         重置
       </button>
 
-      <div class="image-grid-split-overlay__preset-group" role="group" aria-label="宫格类型">
+      <div
+        class="image-grid-split-overlay__preset-dropdown"
+        :class="{ 'image-grid-split-overlay__preset-dropdown--open': presetMenuOpen }"
+        @mousedown.stop
+      >
         <button
-          v-for="item in GRID_PRESET_OPTIONS"
-          :key="item.key"
           type="button"
-          class="image-grid-split-overlay__preset-btn"
-          :class="{ 'image-grid-split-overlay__preset-btn--active': activePreset === item.key }"
-          @click="applyPreset(item.key)"
+          class="image-grid-split-overlay__preset-trigger"
+          aria-haspopup="listbox"
+          :aria-expanded="presetMenuOpen"
+          @click.stop="presetMenuOpen = !presetMenuOpen"
         >
-          {{ item.label }}
+          <span>{{ activePresetLabel }}</span>
+          <span class="image-grid-split-overlay__preset-caret" aria-hidden="true" />
         </button>
+        <div
+          v-if="presetMenuOpen"
+          class="image-grid-split-overlay__preset-menu"
+          role="listbox"
+          @mousedown.stop
+          @click.stop
+        >
+          <button
+            v-for="item in GRID_PRESET_OPTIONS"
+            :key="item.key"
+            type="button"
+            class="image-grid-split-overlay__preset-option"
+            :class="{ 'image-grid-split-overlay__preset-option--active': activePreset === item.key }"
+            role="option"
+            :aria-selected="activePreset === item.key"
+            @click="selectPreset(item.key)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
       </div>
 
       <button
@@ -73,7 +97,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createEqualStops } from './gridSplitUtils'
 
 const props = defineProps<{
@@ -107,6 +131,7 @@ const wrapRef = ref<HTMLElement | null>(null)
 const localRows = ref(2)
 const localCols = ref(2)
 const activePreset = ref<GridPreset>('4')
+const presetMenuOpen = ref(false)
 const rowStops = ref<number[]>([])
 const colStops = ref<number[]>([])
 
@@ -118,6 +143,10 @@ const dragState = ref<DragState | null>(null)
 
 const safeRows = computed(() => Math.max(1, Math.floor(Number(localRows.value) || 1)))
 const safeCols = computed(() => Math.max(1, Math.floor(Number(localCols.value) || 1)))
+
+const activePresetLabel = computed(
+  () => GRID_PRESET_OPTIONS.find((item) => item.key === activePreset.value)?.label ?? '4宫格',
+)
 
 function syncActivePreset() {
   activePreset.value = safeRows.value === 3 && safeCols.value === 3 ? '9' : '4'
@@ -131,6 +160,11 @@ function applyPreset(preset: GridPreset) {
   localCols.value = option.cols
   rowStops.value = createEqualStops(option.rows)
   colStops.value = createEqualStops(option.cols)
+}
+
+function selectPreset(preset: GridPreset) {
+  applyPreset(preset)
+  presetMenuOpen.value = false
 }
 
 function syncStopsByCount(axis: 'row' | 'col', count: number) {
@@ -231,6 +265,7 @@ function startDrag(axis: 'row' | 'col', index: number, event: MouseEvent) {
 
 function resetGrid() {
   applyPreset('4')
+  presetMenuOpen.value = false
 }
 
 function handleComplete() {
@@ -242,8 +277,21 @@ function handleComplete() {
   })
 }
 
+function closePresetMenuOnOutside(event: MouseEvent) {
+  if (!presetMenuOpen.value) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.image-grid-split-overlay__preset-dropdown')) return
+  presetMenuOpen.value = false
+}
+
+onMounted(() => {
+  window.addEventListener('mousedown', closePresetMenuOnOutside, true)
+})
+
 onBeforeUnmount(() => {
   dragState.value = null
+  presetMenuOpen.value = false
+  window.removeEventListener('mousedown', closePresetMenuOnOutside, true)
 })
 </script>
 
@@ -304,35 +352,84 @@ onBeforeUnmount(() => {
   }
 }
 
-.image-grid-split-overlay__preset-group {
+.image-grid-split-overlay__preset-dropdown {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 32px;
-  padding: 2px;
-  border-radius: 8px;
-  background: #f3f4f6;
 }
 
-.image-grid-split-overlay__preset-btn {
-  height: 28px;
-  padding: 0 12px;
+.image-grid-split-overlay__preset-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  min-width: 88px;
+  padding: 0 10px 0 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:hover {
+    background: #f9fafb;
+  }
+}
+
+.image-grid-split-overlay__preset-dropdown--open .image-grid-split-overlay__preset-trigger {
+  border-color: #d1d5db;
+  background: #f9fafb;
+}
+
+.image-grid-split-overlay__preset-caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid #6b7280;
+  margin-left: auto;
+  transition: transform 0.15s ease;
+}
+
+.image-grid-split-overlay__preset-dropdown--open .image-grid-split-overlay__preset-caret {
+  transform: rotate(180deg);
+}
+
+.image-grid-split-overlay__preset-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 8;
+  min-width: 100%;
+  padding: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.image-grid-split-overlay__preset-option {
+  display: block;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: #374151;
   font-size: 13px;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 
-  &:hover:not(&--active) {
-    background: rgba(255, 255, 255, 0.7);
+  &:hover {
+    background: #f3f4f6;
   }
 
   &--active {
-    background: #fff;
+    background: #f3f4f6;
     color: #111827;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    font-weight: 600;
   }
 }
 

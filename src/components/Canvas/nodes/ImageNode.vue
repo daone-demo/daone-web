@@ -52,7 +52,7 @@
 
     <div class="image-node__body">
       <button
-        v-if="data.previewUrl && !data.compactPreview"
+        v-if="data.previewUrl && (!data.compactPreview || isGridSplitNode)"
         type="button"
         class="image-node__scale-btn"
         :class="{ 'image-node__scale-btn--active': isResizing }"
@@ -543,12 +543,29 @@ onMounted(() => {
     }
   }
 
+  &.image-node--grid-split .image-node__preview img {
+    // 节点尺寸已按碎片像素等比缩放，铺满即可保证相邻缝宽视觉一致为 2px
+    object-fit: fill;
+  }
+
+  .image-node__scale-btn {
+    top: 8px;
+    right: 36px;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    opacity: 0;
+  }
+
   .canvas-node__delete-float {
     opacity: 0;
   }
 
+  &:hover .image-node__scale-btn,
   &:hover .canvas-node__delete-float,
-  &.image-node--selected .canvas-node__delete-float {
+  &.image-node--selected .image-node__scale-btn,
+  &.image-node--selected .canvas-node__delete-float,
+  .image-node__scale-btn--active {
     opacity: 1;
   }
 }

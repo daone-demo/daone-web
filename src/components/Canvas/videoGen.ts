@@ -38,6 +38,46 @@ export function findIncomingImageNodes(graph: Graph, videoNodeId: string): Node[
   })
 }
 
+/** 查找连入视频节点的上游文本节点（按画布位置排序） */
+export function findIncomingTextNodes(graph: Graph, videoNodeId: string): Node[] {
+  const nodes: Node[] = []
+
+  for (const edge of graph.getEdges()) {
+    const targetId = edge.getTargetCellId()
+    if (targetId !== videoNodeId) continue
+
+    const sourceId = edge.getSourceCellId()
+    if (!sourceId) continue
+
+    const source = graph.getCellById(sourceId)
+    if (!source?.isNode()) continue
+
+    const data = source.getData() as CanvasNodeData
+    if (data.kind !== 'text') continue
+
+    nodes.push(source as Node)
+  }
+
+  return nodes.sort((a, b) => {
+    const ay = a.getBBox().y
+    const by = b.getBBox().y
+    if (ay !== by) return ay - by
+    return a.getBBox().x - b.getBBox().x
+  })
+}
+
+/** 从文本节点 HTML content 提取纯文本 */
+export function plainTextFromNodeContent(content?: string): string {
+  const html = String(content || '').trim()
+  if (!html) return ''
+  if (typeof document !== 'undefined') {
+    const div = document.createElement('div')
+    div.innerHTML = html
+    return (div.textContent || div.innerText || '').trim()
+  }
+  return html.replace(/<[^>]+>/g, '').trim()
+}
+
 export function findImageToVideoEdge(
   graph: Graph,
   imageNodeId: string,

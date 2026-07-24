@@ -29,7 +29,7 @@ import {
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
-  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, getVideoSourceRefs, VIDEO_GEN_TAB_IMAGE_RULES,
+  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
@@ -53,12 +53,20 @@ import {
 import type { CanvasElementGroupDragPayload } from '../../constants'
 import {
   resolveImageAssetId,
+  resolveVideoAssetId,
   buildImageActionResultTitle,
+  buildVideoActionResultTitle,
   IMAGE_GENERAL_CAPABILITY_CODE,
   VIDEO_GENERAL_CAPABILITY_CODE,
+  resolveVideoToolbarUiKey,
+  toVideoApiClarity,
   type ImageToolbarClickPayload,
   type ImageToolbarClickEvent,
+  type VideoToolbarClickPayload,
+  type VideoToolbarClickEvent,
   type ImageDialogueSubmitPayload,
+  type VideoDialogueSubmitPayload,
+  type VideoGenPromptSubmitPayload,
 } from '../../constants'
 import { splitImageIntoGrid } from '../../gridSplitUtils'
 import {
@@ -186,6 +194,7 @@ export function registerCore(bind: CanvasBindings) {
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,
+    videoHdMagnification,
     textFormatToolbarPos,
     textDownloadPos,
     textExpandOpen,
@@ -653,6 +662,192 @@ export function registerCore(bind: CanvasBindings) {
     //   default:
     //     break
     // }
+  }
+
+  /** 视频节点工具栏点击（与图片工具栏平行，逻辑独立） */
+  function onVideoToolbarAction(payload: VideoToolbarClickPayload) {
+    const data = getSelectedNodeData()
+    const event: VideoToolbarClickEvent = {
+      key: payload.key,
+      option: payload.option,
+      label: payload.label,
+      assetId: resolveVideoAssetId(data),
+    }
+    const uiKey = resolveVideoToolbarUiKey(event.key)
+
+    if (event.key === 'chat') {
+      toggleVideoDialogue()
+      return
+    }
+    if (event.key === 'addToDialog') {
+      addVideoToDialog()
+      return
+    }
+    if (event.key === 'download') {
+      handleVideoDownloadAction(event)
+      return
+    }
+    if (uiKey === 'hd' || event.key === 'VIDEO_HD') {
+      // 工具栏点击只打开高清面板；真正开任务由面板「开始高清」触发（带 magnification）
+      if (event.option) {
+        handleVideoCapabilityAction({
+          ...event,
+          key: 'VIDEO_HD',
+          label: event.label || '高清补帧',
+        })
+      } else {
+        toggleVideoHdPanel()
+      }
+      return
+    }
+    if (uiKey === 'frames' || event.key.includes('FRAME')) {
+      toggleVideoFramesPanel()
+      return
+    }
+
+    handleVideoCapabilityAction(event)
+  }
+
+  function handleVideoCapabilityAction(event: VideoToolbarClickEvent) {
+    const title = buildVideoActionResultTitle(event.label)
+    const namePrefix = event.label?.trim() || '视频处理'
+    void runVideoGenerationTask(event, {
+      capabilityCode: event.key,
+      title,
+      buildFileName: (sourceFileName) =>
+        sourceFileName ? `${namePrefix}-${sourceFileName}` : `${title}.mp4`,
+      buildParameters: (ctx) => {
+        const params: Record<string, unknown> = {
+          assetId: ctx.assetId,
+        }
+        if (ctx.key === 'VIDEO_HD' && ctx.option) {
+          params.magnification = ctx.option
+        } else if (ctx.option) {
+          params.mode = ctx.option
+        }
+        return params
+      },
+    })
+  }
+
+  async function runVideoGenerationTask(
+    event: VideoToolbarClickEvent,
+    config: {
+      capabilityCode: string
+      title: string
+      prompt?: string
+      requireAssetId?: boolean
+      requireSourcePreview?: boolean
+      buildFileName: (sourceFileName: string) => string
+      buildParameters: (event: VideoToolbarClickEvent) => Record<string, unknown>
+      resolveReferenceAssetIds?: (event: VideoToolbarClickEvent) => string[]
+    },
+  ) {
+    const requireAssetId = config.requireAssetId !== false
+    if (requireAssetId && !event.assetId) {
+      message.warning('视频素材 ID 不存在，请等待上传完成')
+      return
+    }
+
+    const g = graph.value
+    const sourceNodeId = selectedNodeId.value
+    if (!g || !sourceNodeId) return
+
+    const sourceCell = g.getCellById(sourceNodeId)
+    if (!sourceCell?.isNode()) return
+
+    const sourceNode = sourceCell as Node
+    const sourceData = sourceNode.getData() as CanvasNodeData
+    if (sourceData.kind !== 'video') return
+
+    const requireSourcePreview = config.requireSourcePreview !== false
+    if (requireSourcePreview && !sourceData.previewUrl) return
+    if (sourceData.uploadState === 'uploading') {
+      message.warning('视频上传中，请稍后再试')
+      return
+    }
+
+    resetVideoDialogue()
+    resetVideoHdPanel()
+    resetVideoFramesPanel()
+
+    const sourceFileName = sourceData.fileName || sourceData.title || ''
+    const fileName = config.buildFileName(sourceFileName)
+    const taskParameters = config.buildParameters(event)
+    const referenceAssetIds =
+      config.resolveReferenceAssetIds?.(event) ??
+      (event.assetId ? [event.assetId] : [])
+
+    const resultNode = spawnVideoGenerationResultNode(g, sourceNode, {
+      title: config.title,
+      fileName,
+    })
+
+    selectedNodeId.value = resultNode.id
+    selectedKind.value = 'video'
+    syncNodeSelectionHighlight(resultNode.id)
+    syncNodeCount()
+    bumpToolbarRevision()
+    updateNodeToolbar()
+    scheduleHistoryPush()
+
+    const idempotencyKey =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `video-cap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    try {
+      const created = normalizeGenerationTaskDetail(
+        await api.createGenerationTask<GenerationTaskDetail>(
+          {
+            taskType: 'VIDEO',
+            capabilityCode: config.capabilityCode,
+            prompt: config.prompt?.trim() ?? '',
+            parameters: taskParameters,
+            projectId: activeProjectId.value,
+            nodeId: resultNode.id,
+            referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
+          },
+          idempotencyKey,
+        ),
+      )
+
+      const taskId = created.id
+      if (!taskId) {
+        throw new Error(`创建${config.title}任务失败`)
+      }
+
+      bindGenerationTaskId(resultNode, taskId, 'VIDEO')
+      persistGenerationTaskBinding()
+
+      startVideoGenerationTaskFollow(resultNode, taskId, {
+        title: config.title,
+        fileName,
+        onError: (reason) => message.error(reason),
+        onComplete: (success) => {
+          if (!success) return
+          bumpToolbarRevision()
+          updateNodeToolbar()
+          scheduleHistoryPush()
+        },
+      })
+    } catch (error) {
+      markVideoGenerationNodeFailed(resultNode)
+      message.error(isRequestError(error) ? error.message : `${config.title}失败，请稍后重试`)
+    }
+  }
+
+  function handleVideoDownloadAction(event: VideoToolbarClickEvent) {
+    const data = getSelectedNodeData()
+    const url = data?.previewUrl
+    if (!url) return
+    const link = document.createElement('a')
+    link.href = url
+    link.download = data?.fileName || 'video'
+    link.target = '_blank'
+    link.rel = 'noopener'
+    link.click()
+    void event.assetId
   }
 
   function handleImageGridSplitAction(_event: ImageToolbarClickEvent) {
@@ -1279,6 +1474,189 @@ export function registerCore(bind: CanvasBindings) {
     })
   }
 
+  /** 视频节点对话框提交（与图片对话框平行，逻辑独立） */
+  function handleVideoDialogueSubmit(payload: VideoDialogueSubmitPayload) {
+    const prompt = payload.prompt.trim()
+    if (!prompt) {
+      message.warning('请输入提示词')
+      return
+    }
+
+    const data = getSelectedNodeData()
+    const g = graph.value
+    const sourceNodeId = selectedNodeId.value
+    const imageAssetIds =
+      g && sourceNodeId
+        ? getVideoSourceRefs(g, sourceNodeId)
+            .map((item) => item.assetId)
+            .filter((id): id is string => Boolean(id))
+        : []
+    const imageAssetId = imageAssetIds[0] || ''
+    const videoAssetId = resolveVideoAssetId(data) || ''
+    // 有参考图片走对话面板指定 mode；无图片时降级文生视频
+    const mode = imageAssetId ? payload.mode : 'text-to-video'
+
+    const event: VideoToolbarClickEvent = {
+      key: VIDEO_GENERAL_CAPABILITY_CODE,
+      label: '视频生成',
+      assetId: imageAssetId || videoAssetId,
+    }
+
+    void runVideoGenerationTask(event, {
+      capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
+      title: buildVideoActionResultTitle('视频生成'),
+      prompt,
+      requireAssetId: false,
+      requireSourcePreview: false,
+      resolveReferenceAssetIds: () => imageAssetIds,
+      buildFileName: (sourceFileName) =>
+        sourceFileName ? `视频生成-${sourceFileName}` : '视频生成.mp4',
+      buildParameters: () => {
+        const params: Record<string, unknown> = {
+          mode,
+          model: payload.model,
+          ratio: payload.ratio,
+          clarity: toVideoApiClarity(payload.clarity),
+          duration: payload.duration,
+          generateAudio: payload.generateAudio,
+          videoCount: payload.videoCount,
+        }
+        if (imageAssetId) {
+          params.assetId = imageAssetId
+        }
+        return params
+      },
+    })
+  }
+
+  /** 视频生成提示面板提交（与图片生成提示平行，逻辑独立） */
+  function handleVideoGenPromptSubmit(payload: VideoGenPromptSubmitPayload) {
+    const prompt = payload.prompt.trim()
+    if (!prompt) {
+      message.warning('请输入提示词')
+      return
+    }
+
+    const g = graph.value
+    const sourceNodeId = activeVideoGenPromptNodeId.value
+    if (!g || !sourceNodeId) return
+
+    const sourceCell = g.getCellById(sourceNodeId)
+    if (!sourceCell?.isNode()) return
+
+    const sourceNode = sourceCell as Node
+    const sourceData = sourceNode.getData() as CanvasNodeData
+    if (sourceData.kind !== 'video') return
+    if (sourceData.uploadState === 'uploading') {
+      message.warning('视频上传中，请稍后再试')
+      return
+    }
+
+    const imageAssetIds = videoGenSourceRefs.value
+      .map((item) => item.assetId)
+      .filter((id): id is string => Boolean(id))
+    const assetId = imageAssetIds[0] || ''
+
+    const needsImage =
+      payload.mode === 'reference' ||
+      payload.mode === 'image-to-video' ||
+      payload.mode === 'first-last-frame'
+    if (needsImage && !assetId) {
+      message.warning('请先连接或上传参考图片')
+      return
+    }
+
+    const resolvedMode = assetId ? payload.mode : 'text-to-video'
+
+    persistVideoGenPrompt()
+
+    const title = buildVideoActionResultTitle('视频生成')
+    const sourceFileName = sourceData.fileName || sourceData.title || ''
+    const fileName = sourceFileName ? `视频生成-${sourceFileName}` : '视频生成.mp4'
+
+    sourceNode.setData(
+      {
+        ...sourceData,
+        kind: 'video',
+        mode: 'editor',
+        uploadState: 'uploading',
+        uploadProgress: 0,
+        genPrompt: prompt,
+        title,
+        fileName,
+      },
+      { overwrite: true },
+    )
+
+    selectedNodeId.value = sourceNodeId
+    selectedKind.value = 'video'
+    syncNodeSelectionHighlight(sourceNodeId)
+    syncNodeCount()
+    bumpToolbarRevision()
+    updateNodeToolbar()
+    scheduleHistoryPush()
+
+    const idempotencyKey =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `video-gen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    const parameters: Record<string, unknown> = {
+      mode: resolvedMode,
+      model: payload.model,
+      ratio: payload.ratio,
+      clarity: toVideoApiClarity(payload.clarity),
+      duration: payload.duration,
+      generateAudio: payload.generateAudio,
+      videoCount: payload.videoCount,
+    }
+    if (assetId) {
+      parameters.assetId = assetId
+    }
+
+    void (async () => {
+      try {
+        const created = normalizeGenerationTaskDetail(
+          await api.createGenerationTask<GenerationTaskDetail>(
+            {
+              taskType: 'VIDEO',
+              capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
+              prompt,
+              parameters,
+              projectId: activeProjectId.value,
+              nodeId: sourceNodeId,
+              referenceAssetIds: imageAssetIds.length ? imageAssetIds : undefined,
+            },
+            idempotencyKey,
+          ),
+        )
+
+        const taskId = created.id
+        if (!taskId) {
+          throw new Error('创建视频生成任务失败')
+        }
+
+        bindGenerationTaskId(sourceNode, taskId, 'VIDEO')
+        persistGenerationTaskBinding()
+
+        startVideoGenerationTaskFollow(sourceNode, taskId, {
+          title,
+          fileName,
+          onError: (reason) => message.error(reason),
+          onComplete: (success) => {
+            if (!success) return
+            bumpToolbarRevision()
+            updateNodeToolbar()
+            scheduleHistoryPush()
+          },
+        })
+      } catch (error) {
+        markVideoGenerationNodeFailed(sourceNode)
+        message.error(isRequestError(error) ? error.message : '视频生成失败，请稍后重试')
+      }
+    })()
+  }
+
   function normalizeCutoutMode(option?: string) {
     if (!option) return 'quick'
     if (option === '快速') return 'quick'
@@ -1681,7 +2059,13 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function onVideoHdStart() {
+    const magnification = videoHdMagnification.value
     resetVideoHdPanel()
+    onVideoToolbarAction({
+      key: 'VIDEO_HD',
+      option: magnification,
+      label: '高清补帧',
+    })
   }
 
   function resetImageDialogue() {
@@ -1993,8 +2377,35 @@ export function registerCore(bind: CanvasBindings) {
     const cell = g.getCellById(nodeId)
     if (!cell?.isNode()) return
     const data = cell.getData() as CanvasNodeData
-    videoGenPromptText.value = data.genPrompt ?? ''
+    let prompt = data.genPrompt?.trim() ?? ''
+    if (!prompt) {
+      prompt = resolveVideoUpstreamPrompt(nodeId)
+    }
+    videoGenPromptText.value = prompt
     videoGenActiveTab.value = data.videoGenTab ?? 'text2video'
+    if (prompt && prompt !== data.genPrompt) {
+      cell.setData({ ...data, genPrompt: prompt })
+    }
+  }
+
+  function getTextNodePlainContent(node: Node): string {
+    const api = textEditorApis.get(node.id)
+    if (api) {
+      const live = api.getPlainText().trim()
+      if (live) return live
+    }
+    const data = node.getData() as CanvasNodeData
+    return plainTextFromNodeContent(data.content)
+  }
+
+  function resolveVideoUpstreamPrompt(videoNodeId: string): string {
+    const g = graph.value
+    if (!g) return ''
+    for (const textNode of findIncomingTextNodes(g, videoNodeId)) {
+      const text = getTextNodePlainContent(textNode)
+      if (text) return text
+    }
+    return ''
   }
 
   function persistVideoGenPrompt() {
@@ -3258,6 +3669,15 @@ export function registerCore(bind: CanvasBindings) {
     } else if (data.kind === 'image') {
       // 由节点拖拽生成的图片节点（图生图占位），默认展示对话框
       openImageDialogue(spawned.id)
+    } else if (data.kind === 'video' && data.mode === 'picker') {
+      const sourceData = source.getData() as CanvasNodeData
+      const tab =
+        sourceData.kind === 'text'
+          ? 'text2video'
+          : sourceData.kind === 'image'
+            ? 'reference'
+            : 'text2video'
+      openVideoGenPromptBar(spawned.id, tab)
     }
   }
 
@@ -3668,6 +4088,10 @@ export function registerCore(bind: CanvasBindings) {
       syncTextNodeImageSource(g, cell as Node)
       if (activePickerNodeId.value === targetNodeId) {
         loadPromptBarContext(targetNodeId)
+      }
+    } else if (data.kind === 'video') {
+      if (activeVideoGenPromptNodeId.value === targetNodeId) {
+        loadVideoGenPromptFields(targetNodeId)
       }
     } else if (data.kind === 'image' && canImageNodeAcceptIncoming(data)) {
       const source = sourceNodeId ? g.getCellById(sourceNodeId) : null
@@ -5935,6 +6359,8 @@ export function registerCore(bind: CanvasBindings) {
     finishConnectSpawn,
     generateImageFromPrompt,
     handleImageDialogueSubmit,
+    handleVideoDialogueSubmit,
+    handleVideoGenPromptSubmit,
     getActiveSelectedNodeIds,
     getEdgeReleasePoint,
     getGraphCenter,
@@ -6011,6 +6437,7 @@ export function registerCore(bind: CanvasBindings) {
     onImageDialogueAddCanvasNode,
     onImageDialogueUploadFiles,
     onImageToolbarAction,
+    onVideoToolbarAction,
     onLoadProjects,
     onMenuItem,
     onPromptAddCanvasNode,
