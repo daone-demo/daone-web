@@ -3196,7 +3196,13 @@ export function registerCore(bind: CanvasBindings) {
     )
     connectMenuPos.value = { left, top }
     showConnectMenu.value = true
-      ; (g as CanvasGraph).__suppressBlankCloseForConnect = true
+    // 仅吞掉打开菜单同一次 mouseup 随后触发的 blank:click，避免立刻关掉。
+    // 用 setTimeout(0) 在 click 事件之后清 flag，避免 nextTick 过早清掉导致菜单闪关，
+    // 也避免 flag 粘住导致后续点击画布关不掉。
+    ;(g as CanvasGraph).__suppressBlankCloseForConnect = true
+    window.setTimeout(() => {
+      ;(g as CanvasGraph).__suppressBlankCloseForConnect = false
+    }, 0)
     nextTick(() => syncConnectPreviewEdgeTarget())
   }
 
@@ -3878,11 +3884,22 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function handleEdgeClick({ edge, e }: { edge: Edge; e?: MouseEvent }) {
-    if (!isPersistedEdge(edge)) return
+    // 预览连线（添加上下文）上的点击应关闭菜单，而非忽略
+    if (!isPersistedEdge(edge)) {
+      if (showConnectMenu.value) {
+        e?.stopPropagation()
+        closeConnectMenu()
+      }
+      return
+    }
     e?.stopPropagation()
 
     const g = graph.value
     if (!g) return
+
+    if (showConnectMenu.value) {
+      closeConnectMenu()
+    }
 
     g.cleanSelection()
     selectedNodeId.value = ''
@@ -4713,6 +4730,10 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function handleNodeClick({ node, e }: { node: Node; e?: MouseEvent }) {
+    if (showConnectMenu.value) {
+      closeConnectMenu()
+    }
+
     let data = node.getData() as CanvasNodeData
     if (data.kind === 'video' && data.previewUrl && data.mode === 'picker') {
       data = { ...data, mode: 'editor' }
@@ -4853,13 +4874,17 @@ export function registerCore(bind: CanvasBindings) {
       return true
     }
     const g = graph.value as CanvasGraph | null
-    if (g?.__suppressBlankCloseForConnect) {
-      g.__suppressBlankCloseForConnect = false
-      return true
-    }
     if (showConnectMenu.value) {
+      // 打开菜单当次 mouseup 可能同步触发 blank:click，用 flag 跳过这一次
+      if (g?.__suppressBlankCloseForConnect) {
+        g.__suppressBlankCloseForConnect = false
+        return true
+      }
       closeConnectMenu()
       return true
+    }
+    if (g?.__suppressBlankCloseForConnect) {
+      g.__suppressBlankCloseForConnect = false
     }
     if (showAddMenu.value) {
       closeAddMenu()

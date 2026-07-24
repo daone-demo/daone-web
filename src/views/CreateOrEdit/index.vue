@@ -60,8 +60,8 @@ import {
 } from '@/components/Canvas/constants'
 
 const ImageCapabilities = ref<ImageCapability[]>([])
-const VideoCapabilities = ref<any[]>([])
-const TextCapabilities = ref<any[]>([])
+const VideoCapabilities = ref<ImageCapability[]>([])
+const TextCapabilities = ref<ImageCapability[]>([])
 const modalStore = useModalStore();
 
 const projectName = ref('');

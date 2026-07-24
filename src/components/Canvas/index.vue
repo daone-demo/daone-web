@@ -128,6 +128,7 @@
       @toggle-video-frames-panel="toggleVideoFramesPanel"
       @add-video-to-dialog="addVideoToDialog"
       :image-capabilities="imageCapabilities"
+      :video-capabilities="videoCapabilities"
     />
 
     <CanvasAssetsPanel
@@ -382,7 +383,7 @@ const emit = defineEmits<{
 defineProps<{
   projectsList: CanvasProjectItem[]
   imageCapabilities: ImageCapability[]
-  videoCapabilities: any[]
+  videoCapabilities: ImageCapability[]
   textCapabilities: any[]
   chatTools: any
   workflows: any[]

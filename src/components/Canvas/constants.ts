@@ -494,6 +494,16 @@ const CAPABILITY_ICON_MAP: Record<string, string> = {
   edit: 'edit',
   preview: 'preview',
   more: 'more',
+  hd: 'video-hd',
+  'video-hd': 'video-hd',
+  wand: 'wand',
+  frames: 'frames',
+  replicate: 'replicate',
+  watermark: 'watermark',
+  subtitle: 'subtitle',
+  'minus-square': 'subtitle',
+  'video-edit': 'video-edit',
+  scissors2: 'video-edit',
 }
 
 export function resolveCapabilityToolbarIcon(icon?: string): string | undefined {
@@ -501,8 +511,41 @@ export function resolveCapabilityToolbarIcon(icon?: string): string | undefined 
   return CAPABILITY_ICON_MAP[icon] ?? icon
 }
 
+/** 视频能力 code → 工具栏 data-icon（接口 icon 缺失时兜底） */
+const VIDEO_CAPABILITY_ICON_BY_CODE: Record<string, string> = {
+  VIDEO_HD: 'video-hd',
+  VIDEO_ANALYZE: 'wand',
+  VIDEO_CLONE: 'replicate',
+  VIDEO_WATERMARK_RM: 'watermark',
+  VIDEO_SUBTITLE_RM: 'subtitle',
+  VIDEO_FRAMES: 'frames',
+  VIDEO_CLIP: 'video-edit',
+}
+
+/** 视频能力 code → 本地 UI key（用于面板开关等） */
+const VIDEO_CAPABILITY_UI_KEY: Record<string, string> = {
+  VIDEO_HD: 'hd',
+  VIDEO_ANALYZE: 'parse',
+  VIDEO_CLONE: 'replicate',
+  VIDEO_WATERMARK_RM: 'watermark',
+  VIDEO_SUBTITLE_RM: 'subtitle',
+  VIDEO_FRAMES: 'frames',
+  VIDEO_CLIP: 'clip',
+}
+
+export function resolveVideoToolbarUiKey(code: string): string {
+  return VIDEO_CAPABILITY_UI_KEY[code] ?? code
+}
+
+export function resolveVideoToolbarIcon(code: string, icon?: string): string | undefined {
+  return resolveCapabilityToolbarIcon(icon) ?? VIDEO_CAPABILITY_ICON_BY_CODE[code]
+}
+
 /** 不进图片节点工具栏的能力（纯文生图入口，无选中源图） */
 const IMAGE_TOOLBAR_EXCLUDED_CODES = new Set(['IMAGE_GENERAL_V1'])
+
+/** 不进视频节点工具栏的能力（通用视频生成入口） */
+const VIDEO_TOOLBAR_EXCLUDED_CODES = new Set(['VIDEO_GENERAL_V1'])
 
 /** 兼容接口直接返回数组，或包在 records/list/data 里 */
 export function normalizeImageCapabilities(
@@ -720,6 +763,50 @@ export function buildImageToolbarActionsFromCapabilities(
     })
     // 有 toolbar.order 的优先按 order；其余保持接口返回的原始顺序（数组下标），
     // 不再按 code 字母序，避免展示顺序与后端返回不一致。
+    .sort((a, b) => a.order - b.order || a._index - b._index)
+    .map(({ _index, ...action }) => action)
+
+  const seen = new Set<string>()
+  return mapped.filter((item) => {
+    if (seen.has(item.key)) return false
+    seen.add(item.key)
+    return true
+  })
+}
+
+/**
+ * 从 videoCapabilities 生成视频节点工具栏 actions。
+ * 仅展示 toolbar.visible === true 的已实现能力；排除 VIDEO_GENERAL_V1。
+ */
+export function buildVideoToolbarActionsFromCapabilities(
+  capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
+): ImageCapabilityToolbarAction[] {
+  const list = normalizeImageCapabilities(capabilities)
+  if (!list.length) return []
+
+  const mapped = list
+    .filter((item) => {
+      if (!item?.code || !item?.name) return false
+      if (item.implemented === false) return false
+      if (VIDEO_TOOLBAR_EXCLUDED_CODES.has(item.code)) return false
+      // 视频工具栏按接口显式 visible 控制展示
+      if (item.toolbar?.visible !== true) return false
+      return true
+    })
+    .map((item, index) => {
+      const toolbar = item.toolbar
+      const type = toolbar?.type === 'dropdown' ? 'dropdown' : 'button'
+      return {
+        key: item.code,
+        label: item.name,
+        icon: resolveVideoToolbarIcon(item.code, item.icon),
+        type,
+        modes: Array.isArray(toolbar?.modes) ? toolbar!.modes! : [],
+        order: typeof toolbar?.order === 'number' ? toolbar.order : 999,
+        capability: item,
+        _index: index,
+      } satisfies ImageCapabilityToolbarAction & { _index: number }
+    })
     .sort((a, b) => a.order - b.order || a._index - b._index)
     .map(({ _index, ...action }) => action)
 
