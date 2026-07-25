@@ -1184,6 +1184,11 @@
   position: relative;
 }
 
+.canvas__prompt-workflow-select {
+  min-width: 180px;
+  max-width: 280px;
+}
+
 .canvas__prompt-model-chip {
   display: inline-flex;
   align-items: center;

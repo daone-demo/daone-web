@@ -656,8 +656,30 @@ export type WorkflowRecord = {
   id: string | number
   name: string
   description?: string
+  type?: string
   workflowJson?: string
   [key: string]: unknown
+}
+
+/** 仅保留 type 为 IMAGE 的工作流（兼容大小写与 TYPE 字段） */
+export function isImageWorkflowRecord(workflow: WorkflowRecord | null | undefined): boolean {
+  if (!workflow) return false
+  const type = String(workflow.type ?? workflow.TYPE ?? '').trim().toUpperCase()
+  return type === 'IMAGE'
+}
+
+/** 图片对话/文生图对话框共用：从 workflows 列表解析 IMAGE 类型选项 */
+export function buildImageWorkflowOptions(
+  workflows: WorkflowRecord[] | null | undefined,
+): Array<WorkflowRecord & { id: string; name: string }> {
+  return (Array.isArray(workflows) ? workflows : [])
+    .filter((workflow) => workflow?.id !== undefined && workflow?.id !== null)
+    .filter(isImageWorkflowRecord)
+    .map((workflow) => ({
+      ...workflow,
+      id: String(workflow.id),
+      name: String(workflow.name || workflow.description || workflow.id),
+    }))
 }
 
 export type ChatTools = {

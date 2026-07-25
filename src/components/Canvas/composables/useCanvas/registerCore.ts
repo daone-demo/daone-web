@@ -1469,6 +1469,9 @@ export function registerCore(bind: CanvasBindings) {
         if (payload.resolution) {
           params.resolution = payload.resolution
         }
+        if (payload.workflowId) {
+          params.workflowId = payload.workflowId
+        }
         return params
       },
     })
@@ -2849,6 +2852,9 @@ export function registerCore(bind: CanvasBindings) {
         }
         if (imagePayload?.resolution) {
           imageParameters.resolution = imagePayload.resolution
+        }
+        if (imagePayload?.workflowId) {
+          imageParameters.workflowId = imagePayload.workflowId
         }
 
         try {

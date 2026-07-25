@@ -235,6 +235,7 @@ import {
   buildImageDialogueCountOptionsFromCapabilities,
   buildImageDialogueModelsFromCapabilities,
   buildImageDialogueResolutionsFromCapabilities,
+  buildImageWorkflowOptions,
   findImageDialogueSource,
   type ChatTools,
   type ImageDialogueModelItem,
@@ -297,15 +298,7 @@ const selectedModelKey = ref(IMAGE_DIALOGUE_MODEL_MENU[0].key)
 const selectedWorkFlow = ref('')
 const translating = ref(false)
 
-const workflowOptions = computed(() =>
-  (Array.isArray(props.workflows) ? props.workflows : [])
-    .filter((workflow) => workflow?.id !== undefined && workflow?.id !== null)
-    .map((workflow) => ({
-      ...workflow,
-      id: String(workflow.id),
-      name: String(workflow.name || workflow.description || workflow.id),
-    })),
-)
+const workflowOptions = computed(() => buildImageWorkflowOptions(props.workflows))
 
 const selectedWorkflowRecord = computed(() =>
   workflowOptions.value.find((workflow) => workflow.id === selectedWorkFlow.value),

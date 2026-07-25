@@ -24,7 +24,23 @@
       </div>
     </div>
     <div style="display: flex;justify-content: flex-end;padding-right: 20px;margin-bottom: 12px;">
-      <div class="canvas__prompt-model-wrap">
+      <a-select
+        v-if="isText2ImageTask"
+        v-model:value="selectedText2ImageWorkFlow"
+        class="canvas__prompt-workflow-select"
+        placeholder="选择工作流"
+        @mousedown.stop
+        @click.stop
+      >
+        <a-select-option
+          v-for="workflow in imageWorkflowOptions"
+          :key="workflow.id"
+          :value="workflow.id"
+        >
+          {{ workflow.name }}
+        </a-select-option>
+      </a-select>
+      <div v-else class="canvas__prompt-model-wrap">
         <button
           type="button"
           class="canvas__prompt-model-chip"
@@ -360,6 +376,7 @@ import {
   PROMPT_PLACEHOLDER,
   TEXT_PROMPT_MODEL_LABEL,
   TEXT_PROMPT_MODEL_MENU,
+  buildImageWorkflowOptions,
   type ImageSourceRef,
   type ChatTools,
   type ImageCapability,
@@ -369,6 +386,7 @@ import {
   type NodeKind,
   type TextPromptModelItem,
   type VideoHdMagnification,
+  type WorkflowRecord,
 } from '../constants'
 import type { CanvasBgTheme } from '../canvasTheme'
 import { createPromptMentionApi, isInputComposing } from '../promptMention'
@@ -509,6 +527,11 @@ const emit = defineEmits<{
 
 const showPromptWorkFlow = ref(false)
 const selectedPromptWorkFlowKey = ref(TEXT_PROMPT_MODEL_MENU[0]?.key ?? '')
+const selectedText2ImageWorkFlow = ref('')
+const imageWorkflowOptions = computed(() => buildImageWorkflowOptions(props.workflows))
+const selectedText2ImageWorkflowRecord = computed(() =>
+  imageWorkflowOptions.value.find((workflow) => workflow.id === selectedText2ImageWorkFlow.value),
+)
 const selectedPromptWorkFlowName = computed(
   () =>
     TEXT_PROMPT_MODEL_MENU.find((model) => model.key === selectedPromptWorkFlowKey.value)?.name ??
@@ -531,9 +554,12 @@ function onSubmitText2Video(params: VideoDialogueFooterParams) {
 function onSubmitText2Image(params: ImageDialogueFooterParams) {
   const prompt = props.promptText.trim()
   if (!prompt || !props.canSubmitTextPrompt || props.promptSubmitting) return
+  const workflow = selectedText2ImageWorkflowRecord.value
   emit('submit-text-prompt', {
     prompt,
     ...params,
+    workflowId: workflow?.id,
+    workflow: workflow as WorkflowRecord | undefined,
   })
 }
 
@@ -696,6 +722,21 @@ watch(
     if (!el || mentionApi.serializePromptEl(el) === value) return
     nextTick(() => syncPromptView(value))
   },
+)
+
+watch(
+  imageWorkflowOptions,
+  (options) => {
+    if (!props.isText2ImageTask) return
+    if (!options.length) {
+      selectedText2ImageWorkFlow.value = ''
+      return
+    }
+    if (!options.some((workflow) => workflow.id === selectedText2ImageWorkFlow.value)) {
+      selectedText2ImageWorkFlow.value = options[0].id
+    }
+  },
+  { immediate: true },
 )
 
 watch(
