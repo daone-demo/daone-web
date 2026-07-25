@@ -519,3 +519,8 @@
 .home__project-card:hover .home__project-actions {
   display: block;
 }
+.home__inspiration-modal {
+  :deep(.ant-modal .ant-modal-content) {
+    padding: 0;
+  } 
+}

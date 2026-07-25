@@ -80,33 +80,33 @@
 
         <div class="home__inspiration-grid">
           <article
-            v-for="item in filteredInspiration"
+            v-for="item in inspirations"
             :key="item.id"
             class="home__inspiration-card"
-            @click="openInspiration(item.id)"
+            @click="openInspiration(item)"
           >
             <div class="home__inspiration-media">
               <img
                 class="home__inspiration-image"
-                :src="item.image"
-                :alt="`${item.author} 的作品`"
+                :src="item.coverUrl"
+                :alt="`${item.authorName} 的作品`"
                 loading="lazy"
                 :style="{ height: `${item.imageHeight}px` }"
               />
             </div>
             <div class="home__inspiration-footer">
               <div class="home__inspiration-author">
-                <img class="home__inspiration-avatar" :src="item.avatar" :alt="item.author" loading="lazy" />
-                <span class="home__inspiration-name">{{ item.author }}</span>
+                <!-- <img class="home__inspiration-avatar" :src="item.authorName" :alt="item.author" loading="lazy" /> -->
+                <span class="home__inspiration-name">{{ item.authorName }}</span>
               </div>
               <div class="home__inspiration-stats">
                 <span class="home__inspiration-stat">
                   <span class="home__inspiration-stat-icon home__inspiration-stat-icon--view" aria-hidden="true" />
-                  {{ formatCount(item.views) }}
+                  {{ formatCount(item.viewCount) }}
                 </span>
                 <span class="home__inspiration-stat">
                   <span class="home__inspiration-stat-icon home__inspiration-stat-icon--like" aria-hidden="true" />
-                  {{ formatCount(item.likes) }}
+                  {{ formatCount(item.likeCount) }}
                 </span>
               </div>
             </div>
@@ -121,6 +121,15 @@
     v-model:project-name="projectName"
     @submit="onRefreshProjects"
   />
+  <a-modal v-model:open="open" class="home__inspiration-modal">
+    <img
+      :src="inspirationsInfo.coverUrl"
+      :alt="inspirationsInfo.title"
+      style="width: 100%; height: 100%;"
+    />
+    <template #title></template>
+    <template #footer></template>
+  </a-modal>
 </template>
 
 <script setup lang="ts">
@@ -149,6 +158,9 @@ const router = useRouter()
 const projectId = ref('');
 const projectName = ref('');
 const activeCategory = ref<HomeInspirationCategory>('all')
+const inspirations = ref<any[]>([]);
+const open = ref(false);
+const inspirationsInfo = ref<any>({});
 
 const filteredInspiration = computed(() => {
   if (activeCategory.value === 'all') {
@@ -190,8 +202,10 @@ function openProject(id: string) {
   router.push({ name: 'projectDetail', params: { id } })
 }
 
-const openInspiration = (id: string) => {
-  router.push({ name: 'projectDetail', params: { id } })
+const openInspiration = (item: any) => {
+  inspirationsInfo.value = item;
+  open.value = true;
+  // router.push({ name: 'projectDetail', params: { id } })
 }
 
 const onLoadProjects = () => {
@@ -236,6 +250,7 @@ const onLoadHomeData = () => {
     .then((res:any)=>{
       // console.log('onLoadHomeData', res)
       inspirationCategories.value = res.inspirationCategories;
+      inspirations.value = res.inspirations;
     })
 }
 
@@ -251,7 +266,9 @@ onMounted(()=>{
 });
 
 </script>
+<style>
 
+</style>
 <style scoped lang="scss">
 @import './index.scss';
 </style>
