@@ -250,6 +250,7 @@ export type CanvasGraph = Graph & {
   __onTextNodeEdgeLinked?: (textNodeId: string) => void
   __onNodeEdgeLinked?: (targetNodeId: string, sourceNodeId?: string) => void
   __notifyTextNodeUpdated?: () => void
+  __focusCanvasNode?: (nodeId: string) => void
   __notifyNodeDragMove?: () => void
   __notifyNodeDragEnd?: () => void
   __suppressBlankCloseForConnect?: boolean

@@ -6104,6 +6104,13 @@ export function registerCore(bind: CanvasBindings) {
     instance.__onTextNodeEdgeLinked = handleNodeEdgeLinked
     instance.__onNodeEdgeLinked = handleNodeEdgeLinked
     instance.__notifyTextNodeUpdated = bumpToolbarRevision
+    instance.__focusCanvasNode = (nodeId: string) => {
+      const g = graph.value
+      if (!g) return
+      const cell = g.getCellById(nodeId)
+      if (!cell?.isNode()) return
+      selectGraphNodes(cell as Node)
+    }
     instance.__notifyNodeDragMove = updateNodeToolbar
     instance.__notifyNodeDragEnd = () => {
       updateNodeToolbar()

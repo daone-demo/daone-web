@@ -25,6 +25,7 @@ export interface CanvasUploadResult {
   assetId?: string
   width?: number | null
   height?: number | null
+  durationSeconds?: number | null
 }
 
 export type CanvasUploader = (
@@ -153,6 +154,7 @@ async function uploadCanvasFile(
     assetId: result.assetId,
     width: result.width,
     height: result.height,
+    durationSeconds: result.durationSeconds,
   }
 }
 
@@ -210,6 +212,9 @@ async function finishUpload(
     data.mediaWidth = result.width
     data.mediaHeight = result.height
   }
+  if (result.durationSeconds && result.durationSeconds > 0) {
+    data.durationSeconds = result.durationSeconds
+  }
 
   applyNodeMedia(graphNode, data)
 
@@ -238,6 +243,9 @@ async function finishUpload(
       if (current.previewUrl !== previewUrl) return
       current.mediaWidth = video.videoWidth || 2560
       current.mediaHeight = video.videoHeight || 1440
+      if (Number.isFinite(video.duration) && video.duration > 0) {
+        current.durationSeconds = Math.round(video.duration * 10) / 10
+      }
       applyNodeMedia(graphNode, current)
     }
     video.onerror = () => {

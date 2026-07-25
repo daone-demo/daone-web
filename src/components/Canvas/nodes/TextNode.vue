@@ -8,6 +8,7 @@
       'text-node--editor': data.mode === 'editor',
       'text-node--loading': data.textGenState === 'loading',
     }"
+    @pointerdown.capture="onNodeShellPointerDown"
   >
     <button
       type="button"
@@ -96,6 +97,8 @@
         @compositionend="onEditorCompositionEnd"
         @blur="onEditorBlur"
         @focus="onEditorFocus"
+        @keyup="saveEditorSelection"
+        @mouseup="saveEditorSelection"
         @mousedown="onEditorMouseDown"
         @pointerdown.stop
       />
@@ -213,6 +216,26 @@ function canvasGraph(): CanvasGraph {
   return getNode().model?.graph as CanvasGraph
 }
 
+function focusNodeForToolbar() {
+  canvasGraph()?.__focusCanvasNode?.(getNode().id)
+}
+
+function shouldIgnoreNodeShellEvent(target: EventTarget | null) {
+  if (!(target instanceof Element)) return true
+  return Boolean(
+    target.closest(
+      'button, [contenteditable="true"], .text-node__resize, .node-port-plus, .canvas-node__delete, .canvas-node__delete-float',
+    ),
+  )
+}
+
+function onNodeShellPointerDown(event: PointerEvent) {
+  if (data.mode !== 'editor' || data.textGenState === 'loading') return
+  if (event.button !== 0) return
+  if (shouldIgnoreNodeShellEvent(event.target)) return
+  focusNodeForToolbar()
+}
+
 function syncData(patch: Partial<CanvasNodeData> = {}) {
   Object.assign(data, patch)
   getNode().setData({ ...data })
@@ -294,6 +317,7 @@ function placeCaretAtPoint(clientX: number, clientY: number) {
  * 已处于编辑（聚焦）状态时不拦截，保持正常的选词/定位光标行为。
  */
 function onEditorMouseDown(event: MouseEvent) {
+  focusNodeForToolbar()
   event.stopPropagation()
 
   const el = editorRef.value
@@ -339,19 +363,118 @@ function onEditorBlur() {
   onEditorInput()
 }
 
+let savedEditorRange: Range | null = null
+
+function saveEditorSelection() {
+  const el = editorRef.value
+  const sel = window.getSelection()
+  if (!el || !sel || sel.rangeCount === 0) return
+
+  const range = sel.getRangeAt(0)
+  if (!el.contains(range.commonAncestorContainer)) return
+  savedEditorRange = range.cloneRange()
+}
+
+function restoreEditorSelection() {
+  const el = editorRef.value
+  if (!el || !savedEditorRange) return false
+
+  try {
+    if (!el.contains(savedEditorRange.commonAncestorContainer)) return false
+    const sel = window.getSelection()
+    if (!sel) return false
+    sel.removeAllRanges()
+    sel.addRange(savedEditorRange)
+    return true
+  } catch {
+    savedEditorRange = null
+    return false
+  }
+}
+
+function getFormatRange(): Range | null {
+  const el = editorRef.value
+  if (!el) return null
+
+  restoreEditorSelection()
+  const sel = window.getSelection()
+  if (sel?.rangeCount) {
+    const active = sel.getRangeAt(0)
+    if (el.contains(active.commonAncestorContainer) && !active.collapsed) {
+      return active
+    }
+  }
+
+  const range = document.createRange()
+  range.selectNodeContents(el)
+  return range
+}
+
+function isMarkActive(range: Range, kind: 'bold' | 'italic') {
+  const el = editorRef.value
+  if (!el) return false
+
+  let current: globalThis.Node | null =
+    range.startContainer.nodeType === globalThis.Node.TEXT_NODE
+      ? range.startContainer.parentElement
+      : range.startContainer
+
+  while (current && current !== el) {
+    if (current.nodeType !== globalThis.Node.ELEMENT_NODE) {
+      current = (current as HTMLElement).parentElement
+      continue
+    }
+
+    const html = current as HTMLElement
+    const computed = window.getComputedStyle(html)
+
+    if (kind === 'italic') {
+      if (html.tagName === 'I' || html.tagName === 'EM') return true
+      if (html.style.fontStyle === 'normal') return false
+      if (computed.fontStyle === 'italic' || computed.fontStyle === 'oblique') return true
+    } else {
+      if (html.tagName === 'B' || html.tagName === 'STRONG') return true
+      if (html.style.fontWeight === 'normal' || html.style.fontWeight === '400') return false
+      const weight = Number.parseInt(computed.fontWeight, 10)
+      if (!Number.isNaN(weight) && weight >= 600) return true
+    }
+
+    current = html.parentElement
+  }
+
+  return false
+}
+
+function toggleMarkStyle(kind: 'bold' | 'italic') {
+  const range = getFormatRange()
+  if (!range) return
+
+  const sel = window.getSelection()
+  sel?.removeAllRanges()
+  sel?.addRange(range)
+
+  if (kind === 'italic') {
+    applyInlineStyle({ fontStyle: isMarkActive(range, 'italic') ? 'normal' : 'italic' })
+    return
+  }
+
+  applyInlineStyle({ fontWeight: isMarkActive(range, 'bold') ? '400' : '700' })
+}
+
 function applyInlineStyle(style: Record<string, string>) {
   const el = editorRef.value
   if (!el) return
   el.focus()
+  restoreEditorSelection()
   const sel = window.getSelection()
   if (!sel) return
 
   let range: Range
   const active = sel.rangeCount ? sel.getRangeAt(0) : null
   if (!active || active.collapsed || !el.contains(active.commonAncestorContainer)) {
-    // 无选区时作用于整个文本节点内容
-    range = document.createRange()
-    range.selectNodeContents(el)
+    const fallback = getFormatRange()
+    if (!fallback) return
+    range = fallback
   } else {
     range = active
   }
@@ -379,6 +502,7 @@ function execFormat(cmd: TextFormatCommand, value?: string) {
   const el = editorRef.value
   if (!el) return
   el.focus()
+  restoreEditorSelection()
 
   switch (cmd) {
     case 'clear':
@@ -430,11 +554,11 @@ function execFormat(cmd: TextFormatCommand, value?: string) {
       document.execCommand('formatBlock', false, 'p')
       break
     case 'bold':
-      document.execCommand('bold')
-      break
+      toggleMarkStyle('bold')
+      return
     case 'italic':
-      document.execCommand('italic')
-      break
+      toggleMarkStyle('italic')
+      return
     case 'bullet':
       document.execCommand('insertUnorderedList')
       break
@@ -537,6 +661,7 @@ let editorApi: TextEditorApi | undefined
 let editorRegistry: ReturnType<typeof canvasGraph>['__textEditorRegistry']
 let nodeIdForCleanup = ''
 let detachDataListener: (() => void) | undefined
+let detachSelectionListener: (() => void) | undefined
 
 onMounted(() => {
   const node = getNode()
@@ -562,6 +687,10 @@ onMounted(() => {
   }
   node.on('change:data', onDataChange)
   detachDataListener = () => node.off('change:data', onDataChange)
+
+  const onSelectionChange = () => saveEditorSelection()
+  document.addEventListener('selectionchange', onSelectionChange)
+  detachSelectionListener = () => document.removeEventListener('selectionchange', onSelectionChange)
 })
 
 watch(
@@ -574,6 +703,7 @@ watch(
 
 onBeforeUnmount(() => {
   detachDataListener?.()
+  detachSelectionListener?.()
   editorRegistry?.unregister(nodeIdForCleanup)
 })
 </script>
@@ -831,6 +961,40 @@ onBeforeUnmount(() => {
 
   :deep(p) {
     margin: 0 0 6px;
+  }
+
+  :deep(i),
+  :deep(em) {
+    font-style: italic;
+  }
+
+  :deep(b),
+  :deep(strong) {
+    font-weight: 700;
+  }
+
+  :deep([style*='font-style: italic']),
+  :deep([style*='font-style:italic']) {
+    font-style: italic;
+  }
+
+  :deep([style*='font-style: normal']),
+  :deep([style*='font-style:normal']) {
+    font-style: normal !important;
+  }
+
+  :deep([style*='font-weight: 700']),
+  :deep([style*='font-weight:700']),
+  :deep([style*='font-weight: bold']),
+  :deep([style*='font-weight:bold']) {
+    font-weight: 700;
+  }
+
+  :deep([style*='font-weight: 400']),
+  :deep([style*='font-weight:400']),
+  :deep([style*='font-weight: normal']),
+  :deep([style*='font-weight:normal']) {
+    font-weight: 400;
   }
 
   :deep(ul),

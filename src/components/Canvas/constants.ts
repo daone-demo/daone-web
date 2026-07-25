@@ -93,6 +93,8 @@ export interface CanvasNodeData {
   generationTaskId?: string
   /** 关联生成任务类型，刷新后用于恢复轮询 */
   generationTaskType?: 'IMAGE' | 'TEXT' | 'MODEL' | 'VIDEO'
+  /** 视频时长（秒） */
+  durationSeconds?: number
 }
 
 /** 图片反推提示词默认示例图文件名 */
