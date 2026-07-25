@@ -26,7 +26,8 @@ import {
   type CanvasNodeData,
   type NodeKind,
   type NodeMode,
-  isPortrait,
+  getImageAdaptiveNodeSize,
+  shouldAdaptImageNodeHeight,
 } from './constants'
 
 type ScrollerImplLike = {
@@ -302,9 +303,6 @@ export function getBaseNodeSize(
   mode: NodeMode = 'picker',
   data?: Partial<CanvasNodeData>,
 ) {
-  const w = data?.mediaWidth ?? 0
-  const h = data?.mediaHeight ?? 0
-
   if (kind === 'text' || kind === 'audio') {
     if (mode === 'editor') {
       const base = NODE_SIZE.text.editor
@@ -329,10 +327,12 @@ export function getBaseNodeSize(
         height: data.editorHeight,
       }
     }
+    if (data && shouldAdaptImageNodeHeight(data)) {
+      return getImageAdaptiveNodeSize(data)
+    }
     if (data?.imageGenTask === 'picker') return NODE_SIZE.image.genPicker
     if (data?.imageGenTask === 'img2img') return NODE_SIZE.image.img2img
     if (data?.imageGenTask === 'hd') return NODE_SIZE.image.hd
-    if (w && h && isPortrait(w, h)) return NODE_SIZE.image.portrait
     return NODE_SIZE.image.landscape
   }
   return NODE_SIZE.image.landscape

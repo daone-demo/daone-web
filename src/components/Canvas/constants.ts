@@ -255,6 +255,12 @@ export const EMPTY_HINT = '双击画布 自由生成节点'
 /** 图片节点标题栏高度 + 与预览区间距，用于工具栏锚定在图片区域正上方 */
 export const IMAGE_NODE_META_HEIGHT = 30
 
+/** 图片节点标题栏 + 间距（与 ImageNode 中 body 的 calc(100% - 24px) 一致） */
+export const IMAGE_NODE_LAYOUT_META_HEIGHT = 24
+
+/** 图片节点预览区容器上下边框 */
+export const IMAGE_NODE_LAYOUT_BODY_BORDER = 2
+
 /** 文本/图片/视频默认卡片宽与 2:3 比例（宽:高 = 2:3） */
 export const NODE_DEFAULT_WIDTH = 180
 export const NODE_DEFAULT_HEIGHT = 270
@@ -1720,6 +1726,38 @@ export function formatDimensions(width: number, height: number) {
 
 export function isPortrait(width: number, height: number) {
   return height > width
+}
+
+/** 上传完成 / AI 生成完成后，按固定宽度与图片比例自适应高度 */
+export function shouldAdaptImageNodeHeight(data?: Partial<CanvasNodeData>) {
+  if (!data) return false
+  if (data.kind !== 'image') return false
+  if (data.compactPreview) return false
+  if (!data.previewUrl?.trim()) return false
+  if (data.uploadState === 'uploading') return false
+  if (data.imageGenState === 'loading') return false
+  if (!(data.mediaWidth! > 0 && data.mediaHeight! > 0)) return false
+  if (data.editorWidth && data.editorHeight) return false
+  if (data.imageGenTask) return false
+  return true
+}
+
+export function getImageAdaptiveNodeSize(data: Partial<CanvasNodeData>) {
+  const mediaW = data.mediaWidth ?? 0
+  const mediaH = data.mediaHeight ?? 0
+  if (!mediaW || !mediaH) {
+    return nodeCardSize2x3()
+  }
+  const width = data.editorWidth ?? NODE_DEFAULT_WIDTH
+  const previewHeight = Math.round(width * mediaH / mediaW)
+  const chromeHeight = data.compactPreview
+    ? 0
+    : IMAGE_NODE_LAYOUT_META_HEIGHT + IMAGE_NODE_LAYOUT_BODY_BORDER
+
+  return {
+    width,
+    height: Math.max(120, chromeHeight + previewHeight),
+  }
 }
 
 

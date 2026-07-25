@@ -9,6 +9,7 @@
       'image-node--compact': data.compactPreview,
       'image-node--grid-split': !!data.gridSplitTile,
       'image-node--uploading': data.uploadState === 'uploading',
+      'image-node--adaptive': hasAdaptivePreview,
     }"
   >
     <button
@@ -144,7 +145,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Node } from '@antv/x6'
-import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isPortrait } from '../constants'
+import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
 import type { CanvasNodeData } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
@@ -167,6 +168,7 @@ const { isLightTheme } = useCanvasBgTheme()
 const data = reactive<CanvasNodeData>({ ...createEmptyNodeData(), kind: 'image', title: '图片节点', mode: 'editor' })
 const { displayUrl, isImageLoading, onImageLoad, onImageError } = useCanvasNodeImage(toRef(data, 'previewUrl'))
 const isGridSplitNode = computed(() => Boolean(data.gridSplitTile))
+const hasAdaptivePreview = computed(() => shouldAdaptImageNodeHeight(data))
 
 function applyImageNaturalSize(size: { width: number; height: number }, previewUrl: string) {
   const node = getNode()
@@ -335,6 +337,24 @@ onMounted(() => {
     flex: 1;
     min-height: 0;
     height: 100%;
+  }
+}
+
+.image-node--adaptive {
+  .image-node__body {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+
+  .image-node__preview {
+    height: auto;
+
+    img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
   }
 }
 
