@@ -72,6 +72,7 @@ export {
   graphLocalToContainerOffset,
   refreshCanvasNodeViews,
   syncAllNodeSizes,
+  syncNodeShapeFromData,
   hydrateImageNodeDimensions,
   hydrateMissingImageNodeDimensions,
   type CanvasGraph,

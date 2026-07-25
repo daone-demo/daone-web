@@ -411,7 +411,7 @@ export function updateGenerationNodeProgress(node: Node, progress: number) {
   setNodeData(node, data)
 }
 
-export function applyGenerationResultToNode(
+export async function applyGenerationResultToNode(
   node: Node,
   result: GenerationTaskResult,
   options: { title?: string; fileName?: string } = {},
@@ -434,30 +434,20 @@ export function applyGenerationResultToNode(
   if (result.width && result.height) {
     data.mediaWidth = result.width
     data.mediaHeight = result.height
+  } else {
+    try {
+      const size = await resolveImageNaturalSizeCached(previewUrl)
+      data.mediaWidth = size.width
+      data.mediaHeight = size.height
+    } catch {
+      // ignore
+    }
   }
 
   setNodeData(node, data)
   syncNodeShapeFromData(node)
   const size = getNodeSize(data.kind, data.mode, data)
   node.resize(size.width, size.height)
-
-  if (!result.width || !result.height) {
-    void resolveImageNaturalSizeCached(previewUrl)
-      .then((size) => {
-        if (!isNodeOnGraph(node)) return
-        const current = { ...(node.getData() as CanvasNodeData) }
-        if (current.previewUrl !== previewUrl) return
-        current.mediaWidth = size.width
-        current.mediaHeight = size.height
-        setNodeData(node, current)
-        syncNodeShapeFromData(node)
-        const nextSize = getNodeSize(current.kind, current.mode, current)
-        node.resize(nextSize.width, nextSize.height)
-      })
-      .catch(() => {
-        // ignore
-      })
-  }
 
   return true
 }
@@ -559,7 +549,7 @@ async function applyResolvedImageResultToNode(
   if (!raw || !isNodeOnGraph(node)) return false
   const resolved = await resolveGenerationResultPreview(raw)
   if (!resolved?.previewUrl?.trim()) return false
-  return applyGenerationResultToNode(node, resolved, options)
+  return await applyGenerationResultToNode(node, resolved, options)
 }
 
 function isImageResultApplied(node: Node) {

@@ -102,6 +102,75 @@ export function resolveImageNaturalSize(
   return resolveImageNaturalSizeCached(previewUrl)
 }
 
+function readImageSizeFromFile(file: File): Promise<{ width: number; height: number } | null> {
+  if (!file.type.startsWith('image/')) return Promise.resolve(null)
+
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const image = new Image()
+
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl)
+    }
+
+    image.onload = () => {
+      cleanup()
+      const width = image.naturalWidth
+      const height = image.naturalHeight
+      if (width > 0 && height > 0) {
+        resolve({ width, height })
+        return
+      }
+      resolve(null)
+    }
+
+    image.onerror = () => {
+      cleanup()
+      resolve(null)
+    }
+
+    image.src = objectUrl
+  })
+}
+
+async function ensureImageMediaDimensions(
+  data: CanvasNodeData,
+  file: File,
+  previewUrl: string,
+) {
+  if (data.mediaWidth! > 0 && data.mediaHeight! > 0) return
+
+  const fromFile = await readImageSizeFromFile(file)
+  if (fromFile) {
+    data.mediaWidth = fromFile.width
+    data.mediaHeight = fromFile.height
+    return
+  }
+
+  try {
+    const size = await resolveImageNaturalSizeCached(previewUrl)
+    data.mediaWidth = size.width
+    data.mediaHeight = size.height
+  } catch {
+    // 保留当前尺寸，避免阻塞上传完成
+  }
+}
+
+async function ensureRemoteImageMediaDimensions(
+  data: CanvasNodeData,
+  previewUrl: string,
+) {
+  if (data.mediaWidth! > 0 && data.mediaHeight! > 0) return
+
+  try {
+    const size = await resolveImageNaturalSizeCached(previewUrl)
+    data.mediaWidth = size.width
+    data.mediaHeight = size.height
+  } catch {
+    // ignore
+  }
+}
+
 /** 上传本地文件到 OSS，返回素材访问地址。 */
 export async function uploadAssetFile(
   file: File,
@@ -166,6 +235,17 @@ export function runUploadSimulation(graphNode: Node, file: File) {
   data.mode = 'editor'
   graphNode.setData(data)
 
+  if (file.type.startsWith('image/')) {
+    void readImageSizeFromFile(file).then((size) => {
+      if (!size) return
+      const current = { ...(graphNode.getData() as CanvasNodeData) }
+      if (current.uploadState !== 'uploading') return
+      current.mediaWidth = size.width
+      current.mediaHeight = size.height
+      graphNode.setData(current)
+    })
+  }
+
   void uploadCanvasFile(file, (progress) => {
     const current = { ...(graphNode.getData() as CanvasNodeData) }
     if (current.uploadState !== 'uploading') return
@@ -216,24 +296,15 @@ async function finishUpload(
     data.durationSeconds = result.durationSeconds
   }
 
+  if (file.type.startsWith('image/')) {
+    await ensureImageMediaDimensions(data, file, previewUrl)
+    applyNodeMedia(graphNode, data)
+    return
+  }
+
   applyNodeMedia(graphNode, data)
 
   if (result.width && result.height) return
-
-  if (file.type.startsWith('image/')) {
-    void resolveImageNaturalSizeCached(previewUrl)
-      .then((size) => {
-        const current = { ...(graphNode.getData() as CanvasNodeData) }
-        if (current.previewUrl !== previewUrl) return
-        current.mediaWidth = size.width
-        current.mediaHeight = size.height
-        applyNodeMedia(graphNode, current)
-      })
-      .catch(() => {
-        // 资源地址已展示，尺寸加载失败时保留当前节点尺寸
-      })
-    return
-  }
 
   if (file.type.startsWith('video/')) {
     const video = document.createElement('video')
@@ -266,7 +337,7 @@ async function finishUpload(
   applyNodeMedia(graphNode, current)
 }
 
-export function applyRemoteImageToNode(
+export async function applyRemoteImageToNode(
   graphNode: Node,
   payload: {
     assetId?: string
@@ -297,19 +368,8 @@ export function applyRemoteImageToNode(
     return
   }
 
+  await ensureRemoteImageMediaDimensions(data, previewUrl)
   applyNodeMedia(graphNode, data)
-
-  void resolveImageNaturalSizeCached(previewUrl)
-    .then((size) => {
-      const current = { ...(graphNode.getData() as CanvasNodeData) }
-      if (current.previewUrl !== previewUrl) return
-      current.mediaWidth = size.width
-      current.mediaHeight = size.height
-      applyNodeMedia(graphNode, current)
-    })
-    .catch(() => {
-      // ignore
-    })
 }
 
 function applyNodeMedia(graphNode: Node, data: CanvasNodeData) {
