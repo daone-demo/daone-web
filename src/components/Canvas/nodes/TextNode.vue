@@ -249,6 +249,7 @@ function syncEditorHtml() {
   const html = data.content || ''
   if (el.innerHTML !== html) {
     el.innerHTML = html
+    normalizeItalicMarkup(el)
   }
 }
 
@@ -429,6 +430,7 @@ function isMarkActive(range: Range, kind: 'bold' | 'italic') {
     const computed = window.getComputedStyle(html)
 
     if (kind === 'italic') {
+      if (html.dataset.canvasItalic === 'true') return true
       if (html.tagName === 'I' || html.tagName === 'EM') return true
       if (html.style.fontStyle === 'normal') return false
       if (computed.fontStyle === 'italic' || computed.fontStyle === 'oblique') return true
@@ -445,7 +447,94 @@ function isMarkActive(range: Range, kind: 'bold' | 'italic') {
   return false
 }
 
-function toggleMarkStyle(kind: 'bold' | 'italic') {
+function useSemanticInlineCommands() {
+  try {
+    document.execCommand('styleWithCSS', false, 'false')
+  } catch {
+    // ignore unsupported browsers
+  }
+}
+
+function wrapRangeWithElement(range: Range, tagName: string) {
+  const wrapper = document.createElement(tagName)
+  wrapper.dataset.canvasItalic = 'true'
+  try {
+    range.surroundContents(wrapper)
+  } catch {
+    const fragment = range.extractContents()
+    wrapper.appendChild(fragment)
+    range.insertNode(wrapper)
+  }
+
+  const sel = window.getSelection()
+  if (!sel) return
+  sel.removeAllRanges()
+  const next = document.createRange()
+  next.selectNodeContents(wrapper)
+  sel.addRange(next)
+}
+
+function unwrapItalicInRange(root: HTMLElement, range: Range) {
+  const toUnwrap: HTMLElement[] = []
+
+  root.querySelectorAll('em, i').forEach((node) => {
+    if (!(node instanceof HTMLElement)) return
+    if (!range.intersectsNode(node)) return
+    toUnwrap.push(node)
+  })
+
+  root.querySelectorAll<HTMLElement>('span[style*="font-style"]').forEach((span) => {
+    const style = span.style.fontStyle
+    if (style !== 'italic' && style !== 'oblique') return
+    if (!range.intersectsNode(span)) return
+    toUnwrap.push(span)
+  })
+
+  toUnwrap.forEach((node) => {
+    if (node.tagName === 'SPAN') {
+      node.style.removeProperty('font-style')
+      if (!node.style.cssText.trim() && node.attributes.length <= 1) {
+        const parent = node.parentNode
+        if (!parent) return
+        while (node.firstChild) parent.insertBefore(node.firstChild, node)
+        parent.removeChild(node)
+      }
+      return
+    }
+
+    const parent = node.parentNode
+    if (!parent) return
+    while (node.firstChild) parent.insertBefore(node.firstChild, node)
+    parent.removeChild(node)
+  })
+}
+
+function normalizeItalicMarkup(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>('span[style*="font-style"]').forEach((span) => {
+    const style = span.style.fontStyle
+    if (style !== 'italic' && style !== 'oblique') return
+
+    const em = document.createElement('em')
+    em.dataset.canvasItalic = 'true'
+    span.style.removeProperty('font-style')
+
+    if (!span.style.cssText.trim() && span.attributes.length <= 1) {
+      while (span.firstChild) em.appendChild(span.firstChild)
+      span.replaceWith(em)
+      return
+    }
+
+    while (span.firstChild) em.appendChild(span.firstChild)
+    span.appendChild(em)
+  })
+}
+
+function toggleItalicMark() {
+  const el = editorRef.value
+  if (!el) return
+  el.focus()
+  restoreEditorSelection()
+
   const range = getFormatRange()
   if (!range) return
 
@@ -453,10 +542,45 @@ function toggleMarkStyle(kind: 'bold' | 'italic') {
   sel?.removeAllRanges()
   sel?.addRange(range)
 
-  if (kind === 'italic') {
-    applyInlineStyle({ fontStyle: isMarkActive(range, 'italic') ? 'normal' : 'italic' })
+  if (isMarkActive(range, 'italic')) {
+    useSemanticInlineCommands()
+    const applied = document.execCommand('italic', false)
+    if (!applied) {
+      unwrapItalicInRange(el, range)
+    }
+    normalizeItalicMarkup(el)
+    onEditorInput()
     return
   }
+
+  useSemanticInlineCommands()
+  const applied = document.execCommand('italic', false)
+  if (!applied) {
+    wrapRangeWithElement(range, 'em')
+  } else {
+    el.querySelectorAll('em, i').forEach((node) => {
+      if (node instanceof HTMLElement) {
+        node.dataset.canvasItalic = 'true'
+      }
+    })
+  }
+
+  normalizeItalicMarkup(el)
+  onEditorInput()
+}
+
+function toggleMarkStyle(kind: 'bold' | 'italic') {
+  if (kind === 'italic') {
+    toggleItalicMark()
+    return
+  }
+
+  const range = getFormatRange()
+  if (!range) return
+
+  const sel = window.getSelection()
+  sel?.removeAllRanges()
+  sel?.addRange(range)
 
   applyInlineStyle({ fontWeight: isMarkActive(range, 'bold') ? '400' : '700' })
 }
@@ -934,6 +1058,7 @@ onBeforeUnmount(() => {
   font-size: 13px;
   line-height: 1.6;
   word-break: break-word;
+  font-synthesis: weight style;
 
   &:empty::before {
     content: attr(data-placeholder);
@@ -964,18 +1089,23 @@ onBeforeUnmount(() => {
   }
 
   :deep(i),
-  :deep(em) {
+  :deep(em),
+  :deep([data-canvas-italic='true']) {
     font-style: italic;
+    font-synthesis: style;
+  }
+
+  :deep([style*='font-style: italic']),
+  :deep([style*='font-style:italic']),
+  :deep([style*='font-style: oblique']),
+  :deep([style*='font-style:oblique']) {
+    font-style: italic;
+    font-synthesis: style;
   }
 
   :deep(b),
   :deep(strong) {
     font-weight: 700;
-  }
-
-  :deep([style*='font-style: italic']),
-  :deep([style*='font-style:italic']) {
-    font-style: italic;
   }
 
   :deep([style*='font-style: normal']),
