@@ -28,33 +28,33 @@
             <div class="points-modal__balance">
               <span class="points-modal__balance-star" aria-hidden="true" />
               <span class="points-modal__balance-value">{{ availablePoints }}</span>
-              <button
+              <!-- <button
                 type="button"
                 class="points-modal__balance-link"
                 @click="openPointsLog"
               >
                 明细&gt;&gt;
-              </button>
+              </button> -->
             </div>
           </div>
 
           <h3 class="points-modal__section-title">Daone积分额度</h3>
           <div class="points-modal__grid" role="listbox" aria-label="选择充值额度">
             <button
-              v-for="item in POINTS_PACKAGES"
-              :key="item.id"
+              v-for="item in pointRechargePackages"
+              :key="item.packageCode"
               type="button"
               role="option"
               class="points-modal__card"
-              :class="{ 'points-modal__card--active': selectedPackageId === item.id }"
-              :aria-selected="selectedPackageId === item.id"
-              @click="selectedPackageId = item.id"
+              :class="{ 'points-modal__card--active': selectedPackageId === item.packageCode }"
+              :aria-selected="selectedPackageId === item.packageCode"
+              @click="selectedPackageId = item.packageCode"
             >
               <span class="points-modal__card-points">
                 <span class="points-modal__card-star" aria-hidden="true" />
-                + {{ item.points }}
+                + {{ item.grantPoints }}
               </span>
-              <span class="points-modal__card-price">¥{{ item.priceYuan }}</span>
+              <span class="points-modal__card-price">¥{{ tools.div(item.priceFen, 100) }}</span>
             </button>
           </div>
 
@@ -101,7 +101,9 @@
         </div>
       </div>
     </Transition>
+    
   </Teleport>
+  
 </template>
 
 <script setup lang="ts">
@@ -110,6 +112,7 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { v4 as uuidv4 } from 'uuid'
 import api from '@/services/api'
+import tools from '@/utils/tools';
 import { useUserInfo } from '@/stores/useUserInfo'
 import { useModalStore } from '@stores/useModal'
 import { POINTS_PACKAGES } from './pointsData'
@@ -142,6 +145,7 @@ const agreedToTerms = ref(false)
 const submitting = ref(false)
 const userProfile = ref<UserProfile | null>(null)
 const currentIdempotencyKey = ref<string | null>(null)
+const pointRechargePackages = ref<any[]>([])
 
 const selectedPackage = computed(
   () => POINTS_PACKAGES.find((item) => item.id === selectedPackageId.value) ?? null,
@@ -154,7 +158,7 @@ const availablePoints = computed(
 )
 
 const hasActiveMembership = computed(
-  () => userProfile.value?.subscription?.status === 'ACTIVE',
+  () => userProfile.value?.subscription?.status === "ACTIVE",
 )
 
 const canSubmit = computed(
@@ -176,6 +180,14 @@ function close() {
 
 function lockBodyScroll(locked: boolean) {
   document.body.style.overflow = locked ? 'hidden' : ''
+}
+
+async function loadPointRechargePackages() {
+  const res:any = await api.queryPointRechargePackages()
+  // POINTS_PACKAGES.value = res
+  console.log(res)
+  pointRechargePackages.value = res.items;
+  console.log(pointRechargePackages.value)
 }
 
 async function loadUserProfile() {
@@ -257,7 +269,8 @@ async function handleSubmit() {
 watch(open, (visible) => {
   lockBodyScroll(visible)
   if (visible) {
-    loadUserProfile()
+    loadPointRechargePackages();
+    loadUserProfile();
   } else {
     resetForm()
   }

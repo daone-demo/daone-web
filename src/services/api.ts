@@ -643,5 +643,8 @@ const api = {
   queryChatTools<T = unknown>(params:any) {
     return http.get<T>('/canvas/chat-tools', { params })
   },
+  queryPointRechargePackages<T = unknown>() {
+    return http.get<T>('/points/recharge/packages')
+  },
 }
 export default api
