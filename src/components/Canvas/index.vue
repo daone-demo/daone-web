@@ -194,6 +194,7 @@
       :can-submit-text-prompt="canSubmitTextPrompt"
       :is-img2-prompt-task="isImg2PromptTask"
       :is-text2-video-task="isText2VideoTask"
+      :is-text2-image-task="isText2ImageTask"
       :prompt-submit-label="promptSubmitLabel"
       :image-gen-prompt-text="imageGenPromptText"
       :image-gen-seed="imageGenSeed"
@@ -503,6 +504,7 @@ const {
   isCanvasFileDragOver,
   isImg2PromptTask,
   isText2VideoTask,
+  isText2ImageTask,
   promptSubmitLabel,
   isLightNodeToolbar,
   isRecenteringToNodes,

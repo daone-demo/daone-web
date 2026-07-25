@@ -84,64 +84,48 @@
       />
     </div>
     <div class="canvas__prompt-footer">
-      <div class="canvas__prompt-model-wrap">
-        <!-- <button
-          type="button"
-          class="canvas__prompt-model-chip"
-          :class="{ 'canvas__prompt-model-chip--active': showPromptModelMenu }"
-          @mousedown.stop
-          @click.stop="togglePromptModelMenu"
-        >
-          <span class="canvas__prompt-model-mark" aria-hidden="true" />
-          {{ selectedPromptModelName }}
-          <span class="canvas__prompt-model-arrow">▾</span>
-        </button>
-        <div
-          v-if="showPromptModelMenu"
-          class="canvas__prompt-model-menu"
-          @mousedown.stop
-        >
+      <VideoDialogueFooter
+        v-if="isText2VideoTask"
+        :chat-tools="chatTools"
+        :disabled="!canSubmitTextPrompt || promptSubmitting"
+        default-mode="text-to-video"
+        @submit="onSubmitText2Video"
+      />
+      <ImageDialogueFooter
+        v-else-if="isText2ImageTask"
+        :chat-tools="chatTools"
+        :disabled="!canSubmitTextPrompt || promptSubmitting"
+        :translating="translating"
+        @translate="onTranslatePrompt"
+        @submit="onSubmitText2Image"
+      />
+      <template v-else>
+        <div class="canvas__prompt-model-wrap" />
+        <div class="canvas__prompt-actions">
           <button
-            v-for="model in IMAGE_DIALOGUE_MODEL_MENU"
-            :key="model.key"
             type="button"
-            class="canvas__prompt-model-item"
-            :class="{ 'canvas__prompt-model-item--active': model.key === selectedPromptWorkFlowKey }"
-            @click="selectPromptModel(model)"
+            class="canvas__prompt-icon"
+            :class="{ 'canvas__prompt-icon--loading': translating }"
+            title="翻译"
+            :disabled="translating"
+            @mousedown.stop
+            @click.stop="onTranslatePrompt"
           >
-            <span class="canvas__prompt-model-item-mark" aria-hidden="true" />
-            <span class="canvas__prompt-model-item-main">
-              <span class="canvas__prompt-model-item-name">{{ model.name }}</span>
-              <span v-if="model.desc" class="canvas__prompt-model-item-desc">{{ model.desc }}</span>
-            </span>
-            <span class="canvas__prompt-model-item-time">{{ model.duration }}</span>
+            文A
           </button>
-        </div> -->
-      </div>
-      <div class="canvas__prompt-actions">
-        <button
-          type="button"
-          class="canvas__prompt-icon"
-          :class="{ 'canvas__prompt-icon--loading': translating }"
-          title="翻译"
-          :disabled="translating"
-          @mousedown.stop
-          @click.stop="onTranslatePrompt"
-        >
-          文A
-        </button>
-        <span class="canvas__prompt-credits">⚡ 12</span>
-        <button
-          type="button"
-          class="canvas__prompt-send"
-          :class="{ 'canvas__prompt-send--disabled': !canSubmitTextPrompt }"
-          :disabled="!canSubmitTextPrompt || promptSubmitting"
-          title="发送"
-          @click="emit('submit-text-prompt')"
-        >
-          {{ promptSubmitting ? '…' : '↑' }}
-        </button>
-      </div>
+          <span class="canvas__prompt-credits">⚡ 12</span>
+          <button
+            type="button"
+            class="canvas__prompt-send"
+            :class="{ 'canvas__prompt-send--disabled': !canSubmitTextPrompt }"
+            :disabled="!canSubmitTextPrompt || promptSubmitting"
+            title="发送"
+            @click="emit('submit-text-prompt')"
+          >
+            {{ promptSubmitting ? '…' : '↑' }}
+          </button>
+        </div>
+      </template>
     </div>
   </div>
 
@@ -360,11 +344,15 @@
 import ImageGenPromptPanel from '../ImageGenPromptPanel.vue'
 import VideoGenPromptPanel from '../VideoGenPromptPanel.vue'
 import ImageDialoguePanel from '../ImageDialoguePanel.vue'
+import ImageDialogueFooter from '../ImageDialogueFooter.vue'
+import type { ImageDialogueFooterParams } from '../ImageDialogueFooter.vue'
 import ImageCropOverlay from '../ImageCropOverlay.vue'
 import ImageGridSplitOverlay from '../ImageGridSplitOverlay.vue'
 import ImageEraseOverlay from '../ImageEraseOverlay.vue'
 import ImageInpaintOverlay from '../ImageInpaintOverlay.vue'
 import VideoDialoguePanel from '../VideoDialoguePanel.vue'
+import VideoDialogueFooter from '../VideoDialogueFooter.vue'
+import type { VideoDialogueFooterParams } from '../VideoDialogueFooter.vue'
 import VideoHdPanel from '../VideoHdPanel.vue'
 import VideoFramesPanel from '../VideoFramesPanel.vue'
 import {
@@ -452,6 +440,7 @@ const props = defineProps<{
   canSubmitTextPrompt: boolean
   isImg2PromptTask: boolean
   isText2VideoTask: boolean
+  isText2ImageTask: boolean
   promptSubmitLabel: string
   imageGenPromptText: string
   imageGenSeed: number
@@ -490,7 +479,7 @@ const emit = defineEmits<{
   'update:videoDialogueText': [value: string]
   'update:videoHdMagnification': [value: VideoHdMagnification]
   'persist-prompt-bar-draft': []
-  'submit-text-prompt': []
+  'submit-text-prompt': [payload?: VideoDialogueSubmitPayload | ImageDialogueSubmitPayload]
   'generate-image': []
   'close-image-crop': []
   'image-crop-complete': [payload: { dataUrl: string; width: number; height: number }]
@@ -528,6 +517,24 @@ const selectedPromptWorkFlowName = computed(
 
 function togglePromptWorkFlow() {
   showPromptWorkFlow.value = !showPromptWorkFlow.value
+}
+
+function onSubmitText2Video(params: VideoDialogueFooterParams) {
+  const prompt = props.promptText.trim()
+  if (!prompt || !props.canSubmitTextPrompt || props.promptSubmitting) return
+  emit('submit-text-prompt', {
+    prompt,
+    ...params,
+  })
+}
+
+function onSubmitText2Image(params: ImageDialogueFooterParams) {
+  const prompt = props.promptText.trim()
+  if (!prompt || !props.canSubmitTextPrompt || props.promptSubmitting) return
+  emit('submit-text-prompt', {
+    prompt,
+    ...params,
+  })
 }
 
 function selectPromptWorkFlow(model: TextPromptModelItem) {

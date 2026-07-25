@@ -2650,7 +2650,9 @@ export function registerCore(bind: CanvasBindings) {
       .join('')
   }
 
-  async function submitTextPrompt() {
+  async function submitTextPrompt(
+    payload?: VideoDialogueSubmitPayload | ImageDialogueSubmitPayload,
+  ) {
     if (!canSubmitTextPrompt.value) return
 
     const g = graph.value
@@ -2749,7 +2751,8 @@ export function registerCore(bind: CanvasBindings) {
       }
 
       if (modelType.value === 'text2video' || isText2VideoTask.value) {
-        const trimmedPrompt = promptText.value.trim()
+        const videoPayload = payload as VideoDialogueSubmitPayload | undefined
+        const trimmedPrompt = (videoPayload?.prompt ?? promptText.value).trim()
         if (!trimmedPrompt) {
           message.warning('请输入视频描述')
           return
@@ -2766,6 +2769,16 @@ export function registerCore(bind: CanvasBindings) {
             ? crypto.randomUUID()
             : `text2video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
+        const videoParameters: Record<string, unknown> = {
+          mode: videoPayload?.mode ?? 'text-to-video',
+          model: videoPayload?.model,
+          ratio: videoPayload?.ratio ?? '16:9',
+          clarity: toVideoApiClarity(videoPayload?.clarity ?? '720P'),
+          duration: videoPayload?.duration ?? 5,
+          generateAudio: videoPayload?.generateAudio ?? true,
+          videoCount: videoPayload?.videoCount ?? 1,
+        }
+
         try {
           const created = normalizeGenerationTaskDetail(
             await api.createGenerationTask<GenerationTaskDetail>(
@@ -2773,10 +2786,7 @@ export function registerCore(bind: CanvasBindings) {
                 taskType: 'VIDEO',
                 capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
                 prompt: trimmedPrompt,
-                parameters: {
-                  duration: 5,
-                  aspectRatio: '16:9',
-                },
+                parameters: videoParameters,
                 projectId: activeProjectId.value,
                 nodeId: resultNode.id,
               },
@@ -2819,7 +2829,8 @@ export function registerCore(bind: CanvasBindings) {
       }
 
       if (modelType.value === 'text2image' || isText2ImageTask.value) {
-        const trimmedPrompt = promptText.value.trim()
+        const imagePayload = payload as ImageDialogueSubmitPayload | undefined
+        const trimmedPrompt = (imagePayload?.prompt ?? promptText.value).trim()
         if (!trimmedPrompt) {
           message.warning('请输入图片描述')
           return
@@ -2830,6 +2841,15 @@ export function registerCore(bind: CanvasBindings) {
           title: '文生图',
           fileName: '文生图.png',
         })
+
+        const imageParameters: Record<string, unknown> = {
+          model: imagePayload?.model,
+          aspectRatio: imagePayload?.aspectRatio,
+          count: imagePayload?.count ?? 1,
+        }
+        if (imagePayload?.resolution) {
+          imageParameters.resolution = imagePayload.resolution
+        }
 
         try {
           const started = await startImageGenerationOnNode(resultNode, {
@@ -2846,7 +2866,7 @@ export function registerCore(bind: CanvasBindings) {
                   taskType: 'IMAGE',
                   capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
                   prompt: trimmedPrompt,
-                  parameters: { count: 1 },
+                  parameters: imageParameters,
                   projectId: activeProjectId.value,
                   nodeId: resultNode.id,
                 },
@@ -4381,6 +4401,15 @@ export function registerCore(bind: CanvasBindings) {
     if (!cell?.isNode()) return
 
     promptPos.value = getNodePromptPosition(g, cell as Node, overlayRoot)
+    // 文生视频/文生图底栏控件与对话面板一致，需要更宽布局
+    if (isText2VideoTask.value || isText2ImageTask.value) {
+      const containerRect = overlayRoot.getBoundingClientRect()
+      const maxWidth = Math.min(720, containerRect.width - 48)
+      promptPos.value = {
+        ...promptPos.value,
+        width: Math.min(maxWidth, Math.max(promptPos.value.width, 680)),
+      }
+    }
   }
 
   function updateTextFormatToolbarPosition() {
