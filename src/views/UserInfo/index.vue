@@ -105,7 +105,7 @@
             </div>
 
             <div class="user-info__field">
-              <label class="user-info__label">邮箱</label>
+              <label class="user-info__label">微信</label>
               <div class="user-info__input user-info__input--with-link">
                 {{ profileState.email || '未绑定' }}
               </div>
@@ -138,28 +138,22 @@
             <table class="user-info__points-table">
               <thead>
                 <tr>
-                  <th scope="col" />
-                  <th scope="col" />
-                  <th scope="col">使用人</th>
-                  <!-- <th scope="col">任务</th> -->
+                  <th scope="col">描述</th>
+                  <th scope="col">类型</th>
                   <th scope="col">积分变化</th>
                   <th scope="col">日期</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in filteredPointsLog" :key="item.id">
-                  <td>{{ POINTS_LOG_REASON_LABEL[item.reason] }}</td>
-                  <td>{{ POINTS_LOG_ACTION_LABEL[item.action] }}</td>
-                  <td>{{ item.username }}</td>
-                  <!-- <td>
-                    <button type="button" class="user-info__points-detail-link" @click="openPointsLogDetail(item.id)">详情</button>
-                  </td> -->
+                <tr v-for="item in pointsList" :key="item.id">
+                  <td>{{ item.description }}</td>
+                  <td>{{ item.amount > 0 ? '增加' : '减少' }}</td>
                   <td>
                     <strong class="user-info__points-change">
-                      {{ item.action === 'increase' ? '+' : '-' }}{{ item.change }}
+                      {{ item.amount }}
                     </strong>
                   </td>
-                  <td>{{ item.date }}</td>
+                  <td>{{ dayjs(item.createdAt).format('YYYY-MM-DD HH:mm:ss') }}</td>
                 </tr>
               </tbody>
             </table>
@@ -172,7 +166,7 @@
               <a-pagination
                 size="small"
                 :total="pointsTotal"
-                :show-total="pointsTotal => `Total ${pointsTotal} items`"
+                :show-total="pointsTotal => `共 ${pointsTotal} 条记录`"
                 @change="onChangePointsPage"
               />
             </a-flex>
@@ -600,7 +594,8 @@ const payType = ref('');
 const selectedPayMethod = ref<PayMethod>('WECHAT')
 
 let orderPollingTimer: ReturnType<typeof setInterval> | null = null
-const ORDER_POLLING_INTERVAL = 3000
+const ORDER_POLLING_INTERVAL = 3000;
+const pointledgers = ref([]);
 
 const filteredPointsLog = computed(() => {
   if (pointsFilter.value === 'all') {
