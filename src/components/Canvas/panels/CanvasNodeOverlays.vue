@@ -305,6 +305,25 @@
   </div>
 
   <div
+    v-if="showImageEditText && selectedKind === 'image'"
+    class="canvas__node-side-panel canvas__image-edit-text"
+    :style="{
+      left: `${imageEditTextPos.left}px`,
+      top: `${imageEditTextPos.top}px`,
+      width: `${imageEditTextPos.width}px`,
+      height: `${imageEditTextPos.height}px`,
+    }"
+    @mousedown.stop
+  >
+    <ImageEditTextPanel
+      :entries="imageEditTextEntries"
+      :recognizing="imageEditTextRecognizing"
+      @cancel="emit('close-image-edit-text')"
+      @apply="emit('image-edit-text-apply', $event)"
+    />
+  </div>
+
+  <div
     v-if="showImageDialogue && selectedKind === 'image'"
     class="canvas__node-dialogue"
     :style="{
@@ -390,6 +409,7 @@ import ImageGridSplitOverlay from '../ImageGridSplitOverlay.vue'
 import ImageEraseOverlay from '../ImageEraseOverlay.vue'
 import ImageInpaintOverlay from '../ImageInpaintOverlay.vue'
 import ImageExpandOverlay from '../ImageExpandOverlay.vue'
+import ImageEditTextPanel from '../ImageEditTextPanel.vue'
 import VideoDialoguePanel from '../VideoDialoguePanel.vue'
 import VideoDialogueFooter from '../VideoDialogueFooter.vue'
 import type { VideoDialogueFooterParams } from '../VideoDialogueFooter.vue'
@@ -451,6 +471,10 @@ const props = defineProps<{
   showImageErase: boolean
   showImageInpaint: boolean
   showImageExpand: boolean
+  showImageEditText: boolean
+  imageEditTextPos: { left: number; top: number; width: number; height: number }
+  imageEditTextEntries: import('../editTextUtils').ImageEditTextEntry[]
+  imageEditTextRecognizing: boolean
   gridSplitRows: number
   gridSplitCols: number
   showImageDialogue: boolean
@@ -553,6 +577,8 @@ const emit = defineEmits<{
     expandRatio: number
   }]
   'image-expand-drag-start': [event: MouseEvent]
+  'close-image-edit-text': []
+  'image-edit-text-apply': [changes: import('../editTextUtils').ImageEditTextChange[]]
   'reset-video-hd-panel': []
   'video-hd-start': []
   'video-gen-drag-start': [event: MouseEvent]

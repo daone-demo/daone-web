@@ -652,5 +652,9 @@ const api = {
       headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
     })
   },
+  /** 生成图片。 */
+  ocrRecognize<T = unknown>(data: { assetId: string | number }) {
+    return http.post<T>('/ocr/recognize', data)
+  },
 }
 export default api

@@ -32,6 +32,10 @@ import {
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
+import {
+  normalizeOcrRecognizeResult,
+  type ImageEditTextChange,
+} from '../../editTextUtils'
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import {
   bindGenerationTaskId,
@@ -195,6 +199,11 @@ export function registerCore(bind: CanvasBindings) {
     showImageExpand,
     expandSourceNodeId,
     imageExpandPos,
+    showImageEditText,
+    editTextSourceNodeId,
+    imageEditTextPos,
+    imageEditTextEntries,
+    imageEditTextRecognizing,
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,
@@ -277,7 +286,7 @@ export function registerCore(bind: CanvasBindings) {
   const showPromptBar = computed(() => {
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
     const id = activePickerNodeId.value
-    if (!id || nodeCount.value === 0 || showImageCrop.value || showImageGridSplit.value || showImageErase.value || showImageInpaint.value || showImageExpand.value) return false
+    if (!id || nodeCount.value === 0 || showImageCrop.value || showImageGridSplit.value || showImageErase.value || showImageInpaint.value || showImageExpand.value || showImageEditText.value) return false
     return true
   })
   const showImageGenPromptBar = computed(
@@ -290,7 +299,8 @@ export function registerCore(bind: CanvasBindings) {
       !showImageGridSplit.value &&
       !showImageErase.value &&
       !showImageInpaint.value &&
-      !showImageExpand.value,
+      !showImageExpand.value &&
+      !showImageEditText.value,
   )
   const showVideoGenPromptBar = computed(
     () =>
@@ -302,7 +312,8 @@ export function registerCore(bind: CanvasBindings) {
       !showImageGridSplit.value &&
       !showImageErase.value &&
       !showImageInpaint.value &&
-      !showImageExpand.value,
+      !showImageExpand.value &&
+      !showImageEditText.value,
   )
 
   const videoGenSourceRefs = computed(() => {
@@ -322,7 +333,7 @@ export function registerCore(bind: CanvasBindings) {
   const showTextFormatToolbar = computed(() => {
     void toolbarRevision.value
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
-    if (!selectedNodeId.value || showImageCrop.value || showImageGridSplit.value || showImageErase.value || showImageInpaint.value || showImageExpand.value || textExpandOpen.value) return false
+    if (!selectedNodeId.value || showImageCrop.value || showImageGridSplit.value || showImageErase.value || showImageInpaint.value || showImageExpand.value || showImageEditText.value || textExpandOpen.value) return false
     const data = getSelectedNodeData()
     return (
       data?.kind === 'text' &&
@@ -643,6 +654,8 @@ export function registerCore(bind: CanvasBindings) {
       handleImageEraseAction(event)
     } else if (event.key === 'IMAGE_INPAINT') {
       handleImageInpaintAction(event)
+    } else if (event.key === 'IMAGE_EDIT_TEXT') {
+      handleImageEditTextAction(event)
     } else if (event.key === 'IMAGE_EXPAND') {
       handleImageExpandAction(event)
     } else {
@@ -694,6 +707,137 @@ export function registerCore(bind: CanvasBindings) {
     void openImageExpand()
   }
 
+  /**
+   * 图片编辑文字
+   */
+  const handleImageEditTextAction = (_event: ImageToolbarClickEvent) => {
+    void openImageEditText()
+  }
+
+  async function openImageEditText() {
+    const ready = await ensureImageEditorReady('进行文字编辑')
+    if (!ready) return
+
+    const data = getSelectedNodeData()
+    const assetId = resolveImageAssetId(data)
+    if (!assetId) {
+      message.warning('图片素材 ID 不存在，请等待上传完成')
+      return
+    }
+
+    showImageHdMenu.value = false
+    showImageDialogue.value = false
+    showImageToolbarMore.value = false
+    showImageToolbarMoreMenu.value = false
+    closeImageCrop()
+    closeImageGridSplit()
+    closeImageErase()
+    closeImageInpaint()
+    closeImageExpand()
+    closeImageEditText()
+
+    editTextSourceNodeId.value = selectedNodeId.value
+    imageEditTextEntries.value = []
+    imageEditTextRecognizing.value = true
+    showImageEditText.value = true
+    updateNodeToolbar()
+
+    try {
+      const result = await api.ocrRecognize({ assetId })
+      imageEditTextEntries.value = normalizeOcrRecognizeResult(result)
+      if (!imageEditTextEntries.value.length) {
+        message.info('未识别到文字，可手动添加后应用')
+      }
+    } catch (error) {
+      console.error('[image-edit-text] ocr failed', error)
+      message.error('文字识别失败，请稍后重试')
+      closeImageEditText()
+    } finally {
+      imageEditTextRecognizing.value = false
+    }
+  }
+
+  function closeImageEditText() {
+    showImageEditText.value = false
+    editTextSourceNodeId.value = ''
+    imageEditTextEntries.value = []
+    imageEditTextRecognizing.value = false
+    updateNodeToolbar()
+  }
+
+  function resetImageEditText() {
+    showImageEditText.value = false
+    editTextSourceNodeId.value = ''
+    imageEditTextEntries.value = []
+    imageEditTextRecognizing.value = false
+  }
+
+  function onImageEditTextApply(changes: ImageEditTextChange[]) {
+    const g = graph.value
+    const sourceNodeId = editTextSourceNodeId.value || selectedNodeId.value
+    if (!g || !sourceNodeId) {
+      closeImageEditText()
+      return
+    }
+
+    const cell = g.getCellById(sourceNodeId)
+    if (!cell?.isNode()) {
+      closeImageEditText()
+      return
+    }
+
+    const sourceData = cell.getData() as CanvasNodeData
+    const assetId = resolveImageAssetId(sourceData)
+    if (!assetId) {
+      message.warning('图片素材 ID 不存在，请等待上传完成')
+      return
+    }
+
+    if (!changes.length) {
+      message.warning('请修改文字后再应用')
+      return
+    }
+
+    closeImageEditText()
+    selectedNodeId.value = sourceNodeId
+    selectedKind.value = 'image'
+    syncNodeSelectionHighlight(sourceNodeId)
+
+    const title = buildImageActionResultTitle('编辑文字')
+    const sourceFileName = sourceData.fileName || sourceData.title || ''
+    void runImageGenerationTask(
+      {
+        key: 'IMAGE_EDIT_TEXT',
+        label: '编辑文字',
+        assetId,
+      },
+      {
+        capabilityCode: 'IMAGE_EDIT_TEXT',
+        title,
+        buildFileName: (name) => {
+          const base = name || sourceFileName
+          return base ? `编辑文字-${base}` : '编辑文字.png'
+        },
+        buildParameters: () => ({
+          assetId,
+          edits: changes.map((change) => ({
+            originalText: change.originalText,
+            text: change.text,
+            editAction: change.editAction,
+            ...(change.bbox
+              ? {
+                  x: change.bbox.x,
+                  y: change.bbox.y,
+                  width: change.bbox.width,
+                  height: change.bbox.height,
+                }
+              : {}),
+          })),
+        }),
+      },
+    )
+  }
+
   async function openImageExpand() {
     const ready = await ensureImageEditorReady('进行扩图')
     if (!ready) return
@@ -706,6 +850,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageGridSplit()
     closeImageErase()
     closeImageInpaint()
+    closeImageEditText()
 
     expandSourceNodeId.value = selectedNodeId.value
     imageExpandDragOffset.value = { x: 0, y: 0 }
@@ -979,6 +1124,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageErase()
     closeImageInpaint()
     closeImageExpand()
+    closeImageEditText()
 
     gridSplitSourceNodeId.value = selectedNodeId.value
     gridSplitRows.value = rows
@@ -1315,6 +1461,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageGridSplit()
     closeImageErase()
     closeImageExpand()
+    closeImageEditText()
 
     inpaintSourceNodeId.value = selectedNodeId.value
     imageInpaintDragOffset.value = { x: 0, y: 0 }
@@ -1432,6 +1579,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageGridSplit()
     closeImageInpaint()
     closeImageExpand()
+    closeImageEditText()
 
     eraseSourceNodeId.value = selectedNodeId.value
     showImageErase.value = true
@@ -2025,6 +2173,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageErase()
     closeImageInpaint()
     closeImageExpand()
+    closeImageEditText()
     cropSourceNodeId.value = selectedNodeId.value
     showImageCrop.value = true
     updateNodeToolbar()
@@ -4763,6 +4912,16 @@ export function registerCore(bind: CanvasBindings) {
         top: base.top + imageExpandDragOffset.value.y,
       }
     }
+    if (showImageEditText.value) {
+      const panelHeight = Math.max(320, node.getBBox().height)
+      const base = getNodeSidePanelPosition(g, node, overlayRoot, 380, panelHeight)
+      imageEditTextPos.value = {
+        left: base.left,
+        top: base.top,
+        width: base.width,
+        height: panelHeight,
+      }
+    }
     if (data.kind === 'video' && showVideoHdPanel.value) {
       videoHdPos.value = getNodeSidePanelPosition(g, node, overlayRoot)
     }
@@ -5362,6 +5521,7 @@ export function registerCore(bind: CanvasBindings) {
     resetImageDialogue()
     resetImageCrop()
     resetImageExpand()
+    resetImageEditText()
     resetImageGridSplit()
     resetVideoDialogue()
     resetVideoHdPanel()
@@ -5407,6 +5567,7 @@ export function registerCore(bind: CanvasBindings) {
     resetImageDialogue()
     resetImageCrop()
     resetImageExpand()
+    resetImageEditText()
     resetImageGridSplit()
     resetVideoDialogue()
     resetVideoHdPanel()
@@ -5466,6 +5627,7 @@ export function registerCore(bind: CanvasBindings) {
     resetImageDialogue()
     resetImageCrop()
     resetImageExpand()
+    resetImageEditText()
     resetImageGridSplit()
     resetVideoDialogue()
     resetVideoHdPanel()
@@ -5510,6 +5672,10 @@ export function registerCore(bind: CanvasBindings) {
     }
     if (showImageExpand.value) {
       closeImageExpand()
+      return true
+    }
+    if (showImageEditText.value) {
+      closeImageEditText()
       return true
     }
     if (nodeOverlaysRef.value?.dismissVideoGenPromptOverlay()) {
@@ -6568,10 +6734,12 @@ export function registerCore(bind: CanvasBindings) {
     closeImageErase,
     closeImageInpaint,
     closeImageExpand,
+    closeImageEditText,
     closeImageGridSplit,
     onImageEraseComplete,
     onImageInpaintComplete,
     onImageExpandComplete,
+    onImageEditTextApply,
     onImageInpaintDragStart,
     onImageExpandDragStart,
     onImageGridSplitComplete,
@@ -6728,6 +6896,7 @@ export function registerCore(bind: CanvasBindings) {
     resetCanvasInteractionState,
     resetImageCrop,
     resetImageExpand,
+    resetImageEditText,
     resetImageGridSplit,
     resetImageDialogue,
     resetImageToolbarMore,

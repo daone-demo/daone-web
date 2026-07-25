@@ -29,6 +29,7 @@ export const BIND_KEYS = [
   'gridSplitRows', 'gridSplitCols', 'showImageErase', 'eraseSourceNodeId', 'imageErasePos',
   'showImageInpaint', 'inpaintSourceNodeId', 'imageInpaintPos',
   'showImageExpand', 'expandSourceNodeId', 'imageExpandPos',
+  'showImageEditText', 'editTextSourceNodeId', 'imageEditTextPos', 'imageEditTextEntries', 'imageEditTextRecognizing',
   'showVideoDialogue', 'showVideoHdPanel',
   'showVideoFramesPanel', 'imageDialogueText', 'videoDialogueText', 'videoHdMagnification',
   'canvasCredits', 'textFormatToolbarPos', 'textDownloadPos', 'textExpandOpen',

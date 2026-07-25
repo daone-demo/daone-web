@@ -58,6 +58,7 @@ declare module 'vue' {
     ImageCropOverlay: typeof import('./components/Canvas/ImageCropOverlay.vue')['default']
     ImageDialogueFooter: typeof import('./components/Canvas/ImageDialogueFooter.vue')['default']
     ImageDialoguePanel: typeof import('./components/Canvas/ImageDialoguePanel.vue')['default']
+    ImageEditTextPanel: typeof import('./components/Canvas/ImageEditTextPanel.vue')['default']
     ImageEraseOverlay: typeof import('./components/Canvas/ImageEraseOverlay.vue')['default']
     ImageExpandOverlay: typeof import('./components/Canvas/ImageExpandOverlay.vue')['default']
     ImageGenNode: typeof import('./components/Canvas/nodes/ImageGenNode.vue')['default']

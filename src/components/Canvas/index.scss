@@ -965,6 +965,10 @@
   overflow: visible;
 }
 
+.canvas__image-edit-text {
+  z-index: 20;
+}
+
 .canvas__img2img-prompt,
 .canvas__video-gen-prompt {
   position: absolute;

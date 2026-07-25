@@ -6,6 +6,7 @@ import {
   type VideoHdMagnification,
 } from '../../constants'
 import { refreshCanvasNodeViews } from '../../graph'
+import type { ImageEditTextEntry } from '../../editTextUtils'
 import { setSharedCanvasBgTheme } from '../../useCanvasBgTheme'
 import type { CanvasBgTheme } from '../../canvasTheme'
 import type { Project } from '@/stores/useProject'
@@ -154,6 +155,11 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showImageExpand = ref(false)
   const expandSourceNodeId = ref('')
   const imageExpandPos = ref({ left: 0, top: 0, width: 360, height: 420 })
+  const showImageEditText = ref(false)
+  const editTextSourceNodeId = ref('')
+  const imageEditTextPos = ref({ left: 0, top: 0, width: 380, height: 420 })
+  const imageEditTextEntries = ref<ImageEditTextEntry[]>([])
+  const imageEditTextRecognizing = ref(false)
   const showVideoDialogue = ref(false)
   const showVideoHdPanel = ref(false)
   const showVideoFramesPanel = ref(false)
@@ -285,6 +291,11 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showImageExpand,
     expandSourceNodeId,
     imageExpandPos,
+    showImageEditText,
+    editTextSourceNodeId,
+    imageEditTextPos,
+    imageEditTextEntries,
+    imageEditTextRecognizing,
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,

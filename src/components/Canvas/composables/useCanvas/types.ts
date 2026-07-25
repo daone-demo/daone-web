@@ -105,6 +105,8 @@ export type CanvasBindings = CanvasState & {
     expandDirection: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL'
     expandRatio: number
   }) => void
+  onImageEditTextApply: (changes: import('../../editTextUtils').ImageEditTextChange[]) => void
+  closeImageEditText: () => void
   handleImageDialogueSubmit: (payload: import('../../constants').ImageDialogueSubmitPayload) => void
   handleVideoDialogueSubmit: (payload: import('../../constants').VideoDialogueSubmitPayload) => void
   handleVideoGenPromptSubmit: (payload: import('../../constants').VideoGenPromptSubmitPayload) => void

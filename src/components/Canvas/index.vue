@@ -106,7 +106,7 @@
     />
 
     <CanvasNodeToolbar
-      v-if="showNodeToolbar && !showMultiSelectToolbar && !showGroupToolbar && showToolbarFeatureButtons && !showImageCrop && !showImageGridSplit && !showImageErase && !showImageInpaint && !showImageExpand"
+      v-if="showNodeToolbar && !showMultiSelectToolbar && !showGroupToolbar && showToolbarFeatureButtons && !showImageCrop && !showImageGridSplit && !showImageErase && !showImageInpaint && !showImageExpand && !showImageEditText"
       :position="toolbarPos"
       :is-light="isLightNodeToolbar"
       :show-feature-buttons="showToolbarFeatureButtons"
@@ -179,6 +179,10 @@
       :show-image-erase="showImageErase"
       :show-image-inpaint="showImageInpaint"
       :show-image-expand="showImageExpand"
+      :show-image-edit-text="showImageEditText"
+      :image-edit-text-pos="imageEditTextPos"
+      :image-edit-text-entries="imageEditTextEntries"
+      :image-edit-text-recognizing="imageEditTextRecognizing"
       :grid-split-rows="gridSplitRows"
       :grid-split-cols="gridSplitCols"
       :show-image-dialogue="showImageDialogue"
@@ -248,6 +252,8 @@
       @close-image-expand="closeImageExpand"
       @image-expand-complete="onImageExpandComplete"
       @image-expand-drag-start="onImageExpandDragStart"
+      @close-image-edit-text="closeImageEditText"
+      @image-edit-text-apply="onImageEditTextApply"
       @image-inpaint-drag-start="onImageInpaintDragStart"
       @reset-video-hd-panel="resetVideoHdPanel"
       @video-hd-start="onVideoHdStart"
@@ -495,6 +501,10 @@ const {
   imageErasePos,
   imageInpaintPos,
   imageExpandPos,
+  showImageEditText,
+  imageEditTextPos,
+  imageEditTextEntries,
+  imageEditTextRecognizing,
   imageGridSplitSource,
   imageEraseSource,
   imageInpaintSource,
@@ -533,6 +543,8 @@ const {
   onImageInpaintComplete,
   onImageExpandComplete,
   onImageExpandDragStart,
+  closeImageEditText,
+  onImageEditTextApply,
   onImageInpaintDragStart,
   onImageDialogueAddCanvasNode,
   onImageDialogueUploadFiles,
