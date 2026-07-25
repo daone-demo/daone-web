@@ -150,6 +150,9 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showImageInpaint = ref(false)
   const inpaintSourceNodeId = ref('')
   const imageInpaintPos = ref({ left: 0, top: 0, width: 360, height: 520 })
+  const showImageExpand = ref(false)
+  const expandSourceNodeId = ref('')
+  const imageExpandPos = ref({ left: 0, top: 0, width: 360, height: 420 })
   const showVideoDialogue = ref(false)
   const showVideoHdPanel = ref(false)
   const showVideoFramesPanel = ref(false)
@@ -277,6 +280,9 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showImageInpaint,
     inpaintSourceNodeId,
     imageInpaintPos,
+    showImageExpand,
+    expandSourceNodeId,
+    imageExpandPos,
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,

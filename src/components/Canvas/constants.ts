@@ -1667,6 +1667,21 @@ export const IMAGE_CROP_ASPECT_RATIOS = [
 
 export type ImageCropAspectKey = (typeof IMAGE_CROP_ASPECT_RATIOS)[number]['key']
 
+export const IMAGE_EXPAND_ASPECT_RATIOS = [
+  { key: 'original', label: '原图比例', ratio: 'original' as const },
+  { key: '1:1', label: '1:1', ratio: 1 },
+  { key: '2:3', label: '2:3', ratio: 2 / 3 },
+  { key: '3:2', label: '3:2', ratio: 3 / 2 },
+  { key: '3:4', label: '3:4', ratio: 3 / 4 },
+  { key: '4:3', label: '4:3', ratio: 4 / 3 },
+  { key: '4:5', label: '4:5', ratio: 4 / 5 },
+  { key: '5:4', label: '5:4', ratio: 5 / 4 },
+  { key: '9:16', label: '9:16', ratio: 9 / 16 },
+  { key: '16:9', label: '16:9', ratio: 16 / 9 },
+] as const
+
+export type ImageExpandAspectKey = (typeof IMAGE_EXPAND_ASPECT_RATIOS)[number]['key']
+
 export type ImageToolbarHoverConfig = {
   tooltip?: string
   menu?: readonly string[]

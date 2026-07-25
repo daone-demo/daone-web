@@ -73,6 +73,11 @@ export type CanvasBindings = CanvasState & {
     mediaWidth: number
     mediaHeight: number
   } | null>
+  imageExpandSource: ComputedRef<{
+    previewUrl: string
+    mediaWidth: number
+    mediaHeight: number
+  } | null>
   imageDialoguePreviews: ComputedRef<import('../../constants').ImageSourceRef[]>
   imageDialoguePreviewUrl: ComputedRef<string>
   showNodeToolbar: ComputedRef<boolean>
@@ -82,6 +87,7 @@ export type CanvasBindings = CanvasState & {
   closeImageGridSplit: () => void
   closeImageErase: () => void
   closeImageInpaint: () => void
+  closeImageExpand: () => void
   onImageGridSplitComplete: (payload: {
     rows: number
     cols: number
@@ -94,6 +100,15 @@ export type CanvasBindings = CanvasState & {
     mask: { dataUrl: string; width: number; height: number }
   }) => Promise<void>
   onImageInpaintDragStart: (event: MouseEvent) => void
+  onImageExpandComplete: (payload: {
+    targetWidth: number
+    targetHeight: number
+    imageX: number
+    imageY: number
+    imageWidth: number
+    imageHeight: number
+    aspectRatio?: string
+  }) => void
   handleImageDialogueSubmit: (payload: import('../../constants').ImageDialogueSubmitPayload) => void
   handleVideoDialogueSubmit: (payload: import('../../constants').VideoDialogueSubmitPayload) => void
   handleVideoGenPromptSubmit: (payload: import('../../constants').VideoGenPromptSubmitPayload) => void

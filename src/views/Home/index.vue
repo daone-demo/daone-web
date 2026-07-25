@@ -134,12 +134,11 @@
 
 <script setup lang="ts">
 import { ExclamationCircleFilled, MoreOutlined } from '@ant-design/icons-vue'
-import { computed, createVNode, onMounted, ref, watch } from 'vue'
+import { createVNode, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import api from '@/services/api';
 import {
-  HOME_INSPIRATION_ITEMS,
   type HomeInspirationCategory,
 } from './homeData'
 import dayjs from 'dayjs';
@@ -161,13 +160,6 @@ const activeCategory = ref<HomeInspirationCategory>('all')
 const inspirations = ref<any[]>([]);
 const open = ref(false);
 const inspirationsInfo = ref<any>({});
-
-const filteredInspiration = computed(() => {
-  if (activeCategory.value === 'all') {
-    return HOME_INSPIRATION_ITEMS
-  }
-  return HOME_INSPIRATION_ITEMS.filter((item) => item.category === activeCategory.value)
-})
 
 function formatCount(value: number) {
   return value.toLocaleString('en-US')

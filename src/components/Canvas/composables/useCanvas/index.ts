@@ -10,7 +10,7 @@ export type { CanvasEmit, CanvasDomRefs } from './types'
 
 type GridSplitCanvasApi = Pick<
   CanvasState,
-  'showImageGridSplit' | 'imageGridSplitPos' | 'gridSplitRows' | 'gridSplitCols' | 'showImageErase' | 'eraseSourceNodeId' | 'imageErasePos' | 'showImageInpaint' | 'inpaintSourceNodeId' | 'imageInpaintPos'
+  'showImageGridSplit' | 'imageGridSplitPos' | 'gridSplitRows' | 'gridSplitCols' | 'showImageErase' | 'eraseSourceNodeId' | 'imageErasePos' | 'showImageInpaint' | 'inpaintSourceNodeId' | 'imageInpaintPos' | 'showImageExpand' | 'expandSourceNodeId' | 'imageExpandPos'
 > &
   Pick<
     CanvasBindings,
@@ -24,6 +24,9 @@ type GridSplitCanvasApi = Pick<
     | 'onImageInpaintComplete'
     | 'onImageInpaintDragStart'
     | 'imageInpaintSource'
+    | 'closeImageExpand'
+    | 'onImageExpandComplete'
+    | 'imageExpandSource'
     | 'handleImageDialogueSubmit'
     | 'handleVideoDialogueSubmit'
     | 'handleVideoGenPromptSubmit'

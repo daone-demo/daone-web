@@ -59,6 +59,7 @@ declare module 'vue' {
     ImageDialogueFooter: typeof import('./components/Canvas/ImageDialogueFooter.vue')['default']
     ImageDialoguePanel: typeof import('./components/Canvas/ImageDialoguePanel.vue')['default']
     ImageEraseOverlay: typeof import('./components/Canvas/ImageEraseOverlay.vue')['default']
+    ImageExpandOverlay: typeof import('./components/Canvas/ImageExpandOverlay.vue')['default']
     ImageGenNode: typeof import('./components/Canvas/nodes/ImageGenNode.vue')['default']
     ImageGenPromptPanel: typeof import('./components/Canvas/ImageGenPromptPanel.vue')['default']
     ImageGenSettingsPopover: typeof import('./components/Canvas/ImageGenSettingsPopover.vue')['default']

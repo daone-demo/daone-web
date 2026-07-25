@@ -191,6 +191,9 @@ export function registerCore(bind: CanvasBindings) {
     showImageInpaint,
     inpaintSourceNodeId,
     imageInpaintPos,
+    showImageExpand,
+    expandSourceNodeId,
+    imageExpandPos,
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,
@@ -273,7 +276,7 @@ export function registerCore(bind: CanvasBindings) {
   const showPromptBar = computed(() => {
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
     const id = activePickerNodeId.value
-    if (!id || nodeCount.value === 0 || showImageCrop.value || showImageGridSplit.value || showImageErase.value || showImageInpaint.value) return false
+    if (!id || nodeCount.value === 0 || showImageCrop.value || showImageGridSplit.value || showImageErase.value || showImageInpaint.value || showImageExpand.value) return false
     return true
   })
   const showImageGenPromptBar = computed(
@@ -285,7 +288,8 @@ export function registerCore(bind: CanvasBindings) {
       !showImageCrop.value &&
       !showImageGridSplit.value &&
       !showImageErase.value &&
-      !showImageInpaint.value,
+      !showImageInpaint.value &&
+      !showImageExpand.value,
   )
   const showVideoGenPromptBar = computed(
     () =>
@@ -296,7 +300,8 @@ export function registerCore(bind: CanvasBindings) {
       !showImageCrop.value &&
       !showImageGridSplit.value &&
       !showImageErase.value &&
-      !showImageInpaint.value,
+      !showImageInpaint.value &&
+      !showImageExpand.value,
   )
 
   const videoGenSourceRefs = computed(() => {
@@ -316,7 +321,7 @@ export function registerCore(bind: CanvasBindings) {
   const showTextFormatToolbar = computed(() => {
     void toolbarRevision.value
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
-    if (!selectedNodeId.value || showImageCrop.value || showImageGridSplit.value || showImageErase.value || showImageInpaint.value || textExpandOpen.value) return false
+    if (!selectedNodeId.value || showImageCrop.value || showImageGridSplit.value || showImageErase.value || showImageInpaint.value || showImageExpand.value || textExpandOpen.value) return false
     const data = getSelectedNodeData()
     return (
       data?.kind === 'text' &&
@@ -409,6 +414,21 @@ export function registerCore(bind: CanvasBindings) {
   const imageInpaintSource = computed(() => {
     const g = graph.value
     const id = inpaintSourceNodeId.value || selectedNodeId.value
+    if (!g || !id) return null
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return null
+    const data = cell.getData() as CanvasNodeData
+    if (!data?.previewUrl || !data.mediaWidth || !data.mediaHeight) return null
+    return {
+      previewUrl: data.previewUrl,
+      mediaWidth: data.mediaWidth,
+      mediaHeight: data.mediaHeight,
+    }
+  })
+
+  const imageExpandSource = computed(() => {
+    const g = graph.value
+    const id = expandSourceNodeId.value || selectedNodeId.value
     if (!g || !id) return null
     const cell = g.getCellById(id)
     if (!cell?.isNode()) return null
@@ -622,6 +642,8 @@ export function registerCore(bind: CanvasBindings) {
       handleImageEraseAction(event)
     } else if (event.key === 'IMAGE_INPAINT') {
       handleImageInpaintAction(event)
+    } else if (event.key === 'IMAGE_EXPAND') {
+      handleImageExpandAction(event)
     } else {
       handleImageCapabilityAction(event)
     }
@@ -662,6 +684,105 @@ export function registerCore(bind: CanvasBindings) {
     //   default:
     //     break
     // }
+  }
+
+  /**
+   * 扩图
+   */
+  const handleImageExpandAction = (_event: ImageToolbarClickEvent) => {
+    void openImageExpand()
+  }
+
+  async function openImageExpand() {
+    const ready = await ensureImageEditorReady('进行扩图')
+    if (!ready) return
+
+    showImageHdMenu.value = false
+    showImageDialogue.value = false
+    showImageToolbarMore.value = false
+    showImageToolbarMoreMenu.value = false
+    closeImageCrop()
+    closeImageGridSplit()
+    closeImageErase()
+    closeImageInpaint()
+
+    expandSourceNodeId.value = selectedNodeId.value
+    showImageExpand.value = true
+    updateNodeToolbar()
+  }
+
+  function closeImageExpand() {
+    showImageExpand.value = false
+    expandSourceNodeId.value = ''
+    updateNodeToolbar()
+  }
+
+  function resetImageExpand() {
+    showImageExpand.value = false
+    expandSourceNodeId.value = ''
+  }
+
+  function onImageExpandComplete(payload: {
+    targetWidth: number
+    targetHeight: number
+    imageX: number
+    imageY: number
+    imageWidth: number
+    imageHeight: number
+    aspectRatio?: string
+  }) {
+    const g = graph.value
+    const sourceNodeId = expandSourceNodeId.value || selectedNodeId.value
+    if (!g || !sourceNodeId) {
+      closeImageExpand()
+      return
+    }
+
+    const cell = g.getCellById(sourceNodeId)
+    if (!cell?.isNode()) {
+      closeImageExpand()
+      return
+    }
+
+    const sourceData = cell.getData() as CanvasNodeData
+    const assetId = resolveImageAssetId(sourceData)
+    if (!assetId) {
+      message.warning('图片素材 ID 不存在，请等待上传完成')
+      return
+    }
+
+    closeImageExpand()
+    selectedNodeId.value = sourceNodeId
+    selectedKind.value = 'image'
+    syncNodeSelectionHighlight(sourceNodeId)
+
+    const title = buildImageActionResultTitle('扩图')
+    const sourceFileName = sourceData.fileName || sourceData.title || ''
+    void runImageGenerationTask(
+      {
+        key: 'IMAGE_EXPAND',
+        label: '扩图',
+        assetId,
+      },
+      {
+        capabilityCode: 'IMAGE_EXPAND',
+        title,
+        buildFileName: (name) => {
+          const base = name || sourceFileName
+          return base ? `扩图-${base}` : '扩图.png'
+        },
+        buildParameters: () => ({
+          assetId,
+          targetWidth: payload.targetWidth,
+          targetHeight: payload.targetHeight,
+          imageX: payload.imageX,
+          imageY: payload.imageY,
+          imageWidth: payload.imageWidth,
+          imageHeight: payload.imageHeight,
+          ...(payload.aspectRatio ? { aspectRatio: payload.aspectRatio } : {}),
+        }),
+      },
+    )
   }
 
   /** 视频节点工具栏点击（与图片工具栏平行，逻辑独立） */
@@ -865,6 +986,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageCrop()
     closeImageErase()
     closeImageInpaint()
+    closeImageExpand()
 
     gridSplitSourceNodeId.value = selectedNodeId.value
     gridSplitRows.value = rows
@@ -1200,6 +1322,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageCrop()
     closeImageGridSplit()
     closeImageErase()
+    closeImageExpand()
 
     inpaintSourceNodeId.value = selectedNodeId.value
     imageInpaintDragOffset.value = { x: 0, y: 0 }
@@ -1257,12 +1380,14 @@ export function registerCore(bind: CanvasBindings) {
     const sourceNodeId = inpaintSourceNodeId.value || selectedNodeId.value
     if (!g || !sourceNodeId) {
       closeImageInpaint()
+    closeImageExpand()
       return
     }
 
     const cell = g.getCellById(sourceNodeId)
     if (!cell?.isNode()) {
       closeImageInpaint()
+    closeImageExpand()
       return
     }
 
@@ -1282,6 +1407,7 @@ export function registerCore(bind: CanvasBindings) {
       }
 
       closeImageInpaint()
+    closeImageExpand()
 
       selectedNodeId.value = sourceNodeId
       selectedKind.value = 'image'
@@ -1316,6 +1442,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageCrop()
     closeImageGridSplit()
     closeImageInpaint()
+    closeImageExpand()
 
     eraseSourceNodeId.value = selectedNodeId.value
     showImageErase.value = true
@@ -1908,6 +2035,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageGridSplit()
     closeImageErase()
     closeImageInpaint()
+    closeImageExpand()
     cropSourceNodeId.value = selectedNodeId.value
     showImageCrop.value = true
     updateNodeToolbar()
@@ -4616,6 +4744,9 @@ export function registerCore(bind: CanvasBindings) {
         top: base.top + imageInpaintDragOffset.value.y,
       }
     }
+    if (showImageExpand.value) {
+      imageExpandPos.value = getNodeCropOverlayPosition(g, node, overlayRoot)
+    }
     if (data.kind === 'video' && showVideoHdPanel.value) {
       videoHdPos.value = getNodeSidePanelPosition(g, node, overlayRoot)
     }
@@ -5214,6 +5345,7 @@ export function registerCore(bind: CanvasBindings) {
     resetImageToolbarMore()
     resetImageDialogue()
     resetImageCrop()
+    resetImageExpand()
     resetImageGridSplit()
     resetVideoDialogue()
     resetVideoHdPanel()
@@ -5258,6 +5390,7 @@ export function registerCore(bind: CanvasBindings) {
     resetImageToolbarMore()
     resetImageDialogue()
     resetImageCrop()
+    resetImageExpand()
     resetImageGridSplit()
     resetVideoDialogue()
     resetVideoHdPanel()
@@ -5316,6 +5449,7 @@ export function registerCore(bind: CanvasBindings) {
     resetImageToolbarMore()
     resetImageDialogue()
     resetImageCrop()
+    resetImageExpand()
     resetImageGridSplit()
     resetVideoDialogue()
     resetVideoHdPanel()
@@ -5356,6 +5490,10 @@ export function registerCore(bind: CanvasBindings) {
     }
     if (showImageInpaint.value) {
       closeImageInpaint()
+      return true
+    }
+    if (showImageExpand.value) {
+      closeImageExpand()
       return true
     }
     if (nodeOverlaysRef.value?.dismissVideoGenPromptOverlay()) {
@@ -6413,9 +6551,11 @@ export function registerCore(bind: CanvasBindings) {
     closeImageCrop,
     closeImageErase,
     closeImageInpaint,
+    closeImageExpand,
     closeImageGridSplit,
     onImageEraseComplete,
     onImageInpaintComplete,
+    onImageExpandComplete,
     onImageInpaintDragStart,
     onImageGridSplitComplete,
     closeImageGenPromptBar,
@@ -6491,6 +6631,7 @@ export function registerCore(bind: CanvasBindings) {
     imageCropSource,
     imageEraseSource,
     imageInpaintSource,
+    imageExpandSource,
     imageGridSplitSource,
     imageDialoguePreviewUrl,
     imageDialoguePreviews,
@@ -6544,6 +6685,7 @@ export function registerCore(bind: CanvasBindings) {
     openImageCrop,
     openImageErase,
     openImageInpaint,
+    openImageExpand,
     openImageDialogue,
     openImageGenPromptBar,
     openImagePreview,
@@ -6568,6 +6710,7 @@ export function registerCore(bind: CanvasBindings) {
     requestCanvasUpload,
     resetCanvasInteractionState,
     resetImageCrop,
+    resetImageExpand,
     resetImageGridSplit,
     resetImageDialogue,
     resetImageToolbarMore,

@@ -283,6 +283,27 @@
   </div>
 
   <div
+    v-if="showImageExpand && selectedKind === 'image'"
+    class="canvas__image-expand"
+    :style="{
+      left: `${imageExpandPos.left}px`,
+      top: `${imageExpandPos.top}px`,
+      width: `${imageExpandPos.width}px`,
+      height: `${imageExpandPos.height}px`,
+    }"
+    @mousedown.stop
+  >
+    <ImageExpandOverlay
+      v-if="imageExpandSource"
+      :image-url="imageExpandSource.previewUrl"
+      :natural-width="imageExpandSource.mediaWidth"
+      :natural-height="imageExpandSource.mediaHeight"
+      @cancel="emit('close-image-expand')"
+      @complete="emit('image-expand-complete', $event)"
+    />
+  </div>
+
+  <div
     v-if="showImageDialogue && selectedKind === 'image'"
     class="canvas__node-dialogue"
     :style="{
@@ -367,6 +388,7 @@ import ImageCropOverlay from '../ImageCropOverlay.vue'
 import ImageGridSplitOverlay from '../ImageGridSplitOverlay.vue'
 import ImageEraseOverlay from '../ImageEraseOverlay.vue'
 import ImageInpaintOverlay from '../ImageInpaintOverlay.vue'
+import ImageExpandOverlay from '../ImageExpandOverlay.vue'
 import VideoDialoguePanel from '../VideoDialoguePanel.vue'
 import VideoDialogueFooter from '../VideoDialogueFooter.vue'
 import type { VideoDialogueFooterParams } from '../VideoDialogueFooter.vue'
@@ -419,6 +441,7 @@ const props = defineProps<{
   imageGridSplitPos: { left: number; top: number; width: number; height: number }
   imageErasePos: { left: number; top: number; width: number; height: number }
   imageInpaintPos: { left: number; top: number; width: number; height: number }
+  imageExpandPos: { left: number; top: number; width: number; height: number }
   dialoguePos: { left: number; top: number; width: number }
   videoHdPos: { left: number; top: number; width: number }
   selectedKind: NodeKind | null
@@ -426,6 +449,7 @@ const props = defineProps<{
   showImageGridSplit: boolean
   showImageErase: boolean
   showImageInpaint: boolean
+  showImageExpand: boolean
   gridSplitRows: number
   gridSplitCols: number
   showImageDialogue: boolean
@@ -448,6 +472,11 @@ const props = defineProps<{
     mediaHeight: number
   } | null
   imageInpaintSource: {
+    previewUrl: string
+    mediaWidth: number
+    mediaHeight: number
+  } | null
+  imageExpandSource: {
     previewUrl: string
     mediaWidth: number
     mediaHeight: number
@@ -517,6 +546,16 @@ const emit = defineEmits<{
     mask: { dataUrl: string; width: number; height: number }
   }]
   'image-inpaint-drag-start': [event: MouseEvent]
+  'close-image-expand': []
+  'image-expand-complete': [payload: {
+    targetWidth: number
+    targetHeight: number
+    imageX: number
+    imageY: number
+    imageWidth: number
+    imageHeight: number
+    aspectRatio?: string
+  }]
   'reset-video-hd-panel': []
   'video-hd-start': []
   'video-gen-drag-start': [event: MouseEvent]
