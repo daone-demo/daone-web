@@ -2852,6 +2852,8 @@ export function registerCore(bind: CanvasBindings) {
         }
 
         try {
+          const sourceNode = cell as Node
+          const sourceFileName = '文生图.png'
           const started = await startImageGenerationOnNode(resultNode, {
             title: '文生图',
             fileName: '文生图.png',
@@ -2875,8 +2877,42 @@ export function registerCore(bind: CanvasBindings) {
             },
             onTaskBound: () => persistGenerationTaskBinding(),
             onError: (reason) => message.error(reason),
-            onComplete: (result) => {
+            onComplete: async (result) => {
               if (!result.success) return
+
+              const extraResults = result.extraResults ?? []
+              if (extraResults.length) {
+                const totalCount = 1 + extraResults.length
+                const extraNodes = await spawnNodesForExtraGenerationResults(
+                  g,
+                  sourceNode,
+                  extraResults,
+                  {
+                    title: '文生图',
+                    sourceFileName,
+                    buildFileName: () => sourceFileName,
+                    resultIndexOffset: 1,
+                    totalCount,
+                  },
+                )
+
+                if (extraNodes.length) {
+                  syncNodeCount()
+                  nextTick(() => {
+                    const scroller = getScroller(g)
+                    if (!scroller) return
+                    const boxes = [resultNode, ...extraNodes].map((node) => node.getBBox())
+                    const minX = Math.min(...boxes.map((box) => box.x))
+                    const maxX = Math.max(...boxes.map((box) => box.x + box.width))
+                    const minY = Math.min(...boxes.map((box) => box.y))
+                    const maxY = Math.max(...boxes.map((box) => box.y + box.height))
+                    scroller.transitionToPoint((minX + maxX) / 2, (minY + maxY) / 2, {
+                      duration: '280ms',
+                    })
+                  })
+                }
+              }
+
               bumpToolbarRevision()
               updateNodeToolbar()
               scheduleHistoryPush()
