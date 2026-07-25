@@ -85,11 +85,13 @@
     <Combo
       v-model:open="modalStore.comboVisible"
     />
+    <Points v-model:open="modalStore.pointsVisible" />
   </div>
 </template>
 
 <script setup lang="ts">
 import Combo from '@components/Combo/index.vue';
+import Points from '@components/Points/index.vue';
 import { useModalStore } from '@stores/useModal';
 import Login from '@components/Login/index.vue';
 

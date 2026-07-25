@@ -2,11 +2,13 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 /** 全局可管理的弹窗类型，新增弹窗时在此扩展 */
-export type ModalKey = 'login' | 'combo' | 'updateProjectName'
+export type ModalKey = 'login' | 'combo' | 'updateProjectName' | 'points' | 'pointsLog'
 
 type ModalPayloadMap = {
   login: undefined
   combo: undefined
+  points: undefined
+  pointsLog: undefined
   updateProjectName: undefined
 }
 
@@ -14,6 +16,8 @@ export const useModalStore = defineStore('modal', () => {
   const visible = ref<Record<ModalKey, boolean>>({
     login: false,
     combo: false,
+    points: false,
+    pointsLog: false,
     updateProjectName: false,
   })
 
@@ -43,6 +47,28 @@ export const useModalStore = defineStore('modal', () => {
         openModal('updateProjectName')
       } else {
         closeModal('updateProjectName')
+      }
+    },
+  })
+
+  const pointsVisible = computed({
+    get: () => visible.value.points,
+    set: (value: boolean) => {
+      if (value) {
+        openModal('points')
+      } else {
+        closeModal('points')
+      }
+    },
+  })
+
+  const pointsLogVisible = computed({
+    get: () => visible.value.pointsLog,
+    set: (value: boolean) => {
+      if (value) {
+        openModal('pointsLog')
+      } else {
+        closeModal('pointsLog')
       }
     },
   })
@@ -103,6 +129,8 @@ export const useModalStore = defineStore('modal', () => {
     hasOpenModal,
     loginVisible,
     comboVisible,
+    pointsVisible,
+    pointsLogVisible,
     updateProjectNameVisible,
     isModalOpen,
     openModal,

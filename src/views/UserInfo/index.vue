@@ -83,7 +83,7 @@
                 <span>{{ profileState?.points?.available || 0 }}</span>
                 <button 
                   type="button" class="user-info__recharge-btn"
-                  @click="openComboModal"
+                  @click="openPointsModal"
                 >
                   <span class="user-info__recharge-icon" aria-hidden="true" />
                   充值
@@ -527,7 +527,7 @@ import {
   type PointsLogFilterKey,
   type UserInfoTabKey,
 } from './userInfoData'
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import api from '@/services/api';
 import { useUserInfo } from '@/stores/useUserInfo';
 import tools from '@/utils/tools';
@@ -538,6 +538,7 @@ const modalStore = useModalStore();
 const userInfoStore = useUserInfo();
 type InvoiceHeaderType = 'personal' | 'enterprise'
 type PayMethod = 'ALIPAY' | 'WECHAT' | 'BANK_TRANSFER'
+const route = useRoute();
 const router = useRouter();
 
 const PAYMENT_METHODS: Array<{ key: PayMethod; label: string }> = [
@@ -609,6 +610,10 @@ async function copyOrderNo(orderNo: string) {
 
 function openComboModal() {
   modalStore.openModal('combo')
+}
+
+function openPointsModal() {
+  modalStore.openModal('points')
 }
 
 function resetInvoiceForm() {
@@ -893,7 +898,11 @@ watch([orderNo, selectedPayMethod], ([no, method]) => {
   }
 });
 
-onMounted(()=>{
+onMounted(() => {
+  const tab = route.query.tab
+  if (tab === 'points' || tab === 'bills' || tab === 'account') {
+    activeTab.value = tab
+  }
   onLoadUserInfo();
   onLoadPoints();
   onLoadOrderList();
