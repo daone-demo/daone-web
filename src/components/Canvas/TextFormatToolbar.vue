@@ -92,7 +92,7 @@
         title="斜体"
         @click="toggleMark('italic')"
       >
-        <i>I</i>
+        <em>I</em>
       </button>
     </div>
 
