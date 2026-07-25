@@ -300,6 +300,7 @@
       :natural-height="imageExpandSource.mediaHeight"
       @cancel="emit('close-image-expand')"
       @complete="emit('image-expand-complete', $event)"
+      @drag-start="emit('image-expand-drag-start', $event)"
     />
   </div>
 
@@ -548,14 +549,10 @@ const emit = defineEmits<{
   'image-inpaint-drag-start': [event: MouseEvent]
   'close-image-expand': []
   'image-expand-complete': [payload: {
-    targetWidth: number
-    targetHeight: number
-    imageX: number
-    imageY: number
-    imageWidth: number
-    imageHeight: number
-    aspectRatio?: string
+    expandDirection: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL'
+    expandRatio: number
   }]
+  'image-expand-drag-start': [event: MouseEvent]
   'reset-video-hd-panel': []
   'video-hd-start': []
   'video-gen-drag-start': [event: MouseEvent]

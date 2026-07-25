@@ -128,6 +128,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const videoGenPromptPos = ref({ left: 0, top: 0, width: 520 })
   const videoGenPromptDragOffset = ref({ x: 0, y: 0 })
   const imageInpaintDragOffset = ref({ x: 0, y: 0 })
+  const imageExpandDragOffset = ref({ x: 0, y: 0 })
   const showElementSelectMode = ref(false)
   const elementSelectReturnNodeId = ref('')
   const imageCropPos = ref({ left: 0, top: 0, width: 360, height: 420 })
@@ -258,6 +259,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     videoGenPromptPos,
     videoGenPromptDragOffset,
     imageInpaintDragOffset,
+    imageExpandDragOffset,
     showElementSelectMode,
     elementSelectReturnNodeId,
     imageCropPos,

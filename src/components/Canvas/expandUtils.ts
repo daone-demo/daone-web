@@ -5,6 +5,8 @@ export interface ExpandRect {
   height: number
 }
 
+export const EXPAND_FRAME_HEIGHT_SCALE = 1.4
+
 export interface ImageExpandNaturalMetrics {
   targetWidth: number
   targetHeight: number
@@ -12,6 +14,57 @@ export interface ImageExpandNaturalMetrics {
   imageY: number
   imageWidth: number
   imageHeight: number
+}
+
+export type ImageExpandDirection = 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL'
+
+export interface ImageExpandRequestMetrics {
+  expandDirection: ImageExpandDirection
+  expandRatio: number
+}
+
+const EXPAND_RATIO_EPS = 0.001
+
+function roundExpandRatio(value: number) {
+  return Math.max(0, Math.round(value * 1000) / 1000)
+}
+
+export function computeExpandRequestMetrics(
+  expandFrame: ExpandRect,
+  imageBounds: ExpandRect,
+): ImageExpandRequestMetrics {
+  const leftPad = imageBounds.x - expandFrame.x
+  const topPad = imageBounds.y - expandFrame.y
+  const rightPad = expandFrame.x + expandFrame.width - (imageBounds.x + imageBounds.width)
+  const bottomPad = expandFrame.y + expandFrame.height - (imageBounds.y + imageBounds.height)
+
+  const leftRatio = imageBounds.width > 0 ? leftPad / imageBounds.width : 0
+  const rightRatio = imageBounds.width > 0 ? rightPad / imageBounds.width : 0
+  const topRatio = imageBounds.height > 0 ? topPad / imageBounds.height : 0
+  const bottomRatio = imageBounds.height > 0 ? bottomPad / imageBounds.height : 0
+
+  const expandedSides = [
+    { direction: 'LEFT' as const, ratio: leftRatio },
+    { direction: 'RIGHT' as const, ratio: rightRatio },
+    { direction: 'TOP' as const, ratio: topRatio },
+    { direction: 'BOTTOM' as const, ratio: bottomRatio },
+  ].filter((side) => side.ratio > EXPAND_RATIO_EPS)
+
+  if (!expandedSides.length) {
+    return { expandDirection: 'ALL', expandRatio: 0 }
+  }
+
+  if (expandedSides.length === 1) {
+    return {
+      expandDirection: expandedSides[0].direction,
+      expandRatio: roundExpandRatio(expandedSides[0].ratio),
+    }
+  }
+
+  return {
+    expandDirection: 'ALL',
+    expandRatio: roundExpandRatio(Math.max(...expandedSides.map((side) => side.ratio))),
+  }
 }
 
 export function getImageFitBounds(
@@ -98,9 +151,6 @@ export function createExpandFrameFromImageCenter(
     }
   }
 
-  width = Math.max(width, image.width)
-  height = Math.max(height, image.height)
-
   if (aspectRatio && aspectRatio > 0) {
     const frameRatio = width / height
     if (frameRatio > aspectRatio) {
@@ -110,6 +160,14 @@ export function createExpandFrameFromImageCenter(
     }
   }
 
+  height *= EXPAND_FRAME_HEIGHT_SCALE
+  if (aspectRatio && aspectRatio > 0) {
+    width = height * aspectRatio
+  }
+
+  width = Math.max(width, image.width)
+  height = Math.max(height, image.height)
+
   let x = cx - width / 2
   let y = cy - height / 2
 
@@ -117,6 +175,17 @@ export function createExpandFrameFromImageCenter(
   y = Math.max(0, Math.min(y, workspace.height - height))
 
   return clampExpandFrame({ x, y, width, height }, image, workspace, aspectRatio)
+}
+
+export function clampFramePosition(
+  frame: ExpandRect,
+  workspace: { width: number; height: number },
+): ExpandRect {
+  return {
+    ...frame,
+    x: Math.max(0, Math.min(frame.x, workspace.width - frame.width)),
+    y: Math.max(0, Math.min(frame.y, workspace.height - frame.height)),
+  }
 }
 
 export function clampExpandFrame(

@@ -100,14 +100,10 @@ export type CanvasBindings = CanvasState & {
     mask: { dataUrl: string; width: number; height: number }
   }) => Promise<void>
   onImageInpaintDragStart: (event: MouseEvent) => void
+  onImageExpandDragStart: (event: MouseEvent) => void
   onImageExpandComplete: (payload: {
-    targetWidth: number
-    targetHeight: number
-    imageX: number
-    imageY: number
-    imageWidth: number
-    imageHeight: number
-    aspectRatio?: string
+    expandDirection: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL'
+    expandRatio: number
   }) => void
   handleImageDialogueSubmit: (payload: import('../../constants').ImageDialogueSubmitPayload) => void
   handleVideoDialogueSubmit: (payload: import('../../constants').VideoDialogueSubmitPayload) => void

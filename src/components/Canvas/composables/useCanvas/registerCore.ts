@@ -169,6 +169,7 @@ export function registerCore(bind: CanvasBindings) {
     videoGenPromptPos,
     videoGenPromptDragOffset,
     imageInpaintDragOffset,
+    imageExpandDragOffset,
     showElementSelectMode,
     elementSelectReturnNodeId,
     imageCropPos,
@@ -707,6 +708,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageInpaint()
 
     expandSourceNodeId.value = selectedNodeId.value
+    imageExpandDragOffset.value = { x: 0, y: 0 }
     showImageExpand.value = true
     updateNodeToolbar()
   }
@@ -723,13 +725,8 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function onImageExpandComplete(payload: {
-    targetWidth: number
-    targetHeight: number
-    imageX: number
-    imageY: number
-    imageWidth: number
-    imageHeight: number
-    aspectRatio?: string
+    expandDirection: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL'
+    expandRatio: number
   }) {
     const g = graph.value
     const sourceNodeId = expandSourceNodeId.value || selectedNodeId.value
@@ -773,13 +770,8 @@ export function registerCore(bind: CanvasBindings) {
         },
         buildParameters: () => ({
           assetId,
-          targetWidth: payload.targetWidth,
-          targetHeight: payload.targetHeight,
-          imageX: payload.imageX,
-          imageY: payload.imageY,
-          imageWidth: payload.imageWidth,
-          imageHeight: payload.imageHeight,
-          ...(payload.aspectRatio ? { aspectRatio: payload.aspectRatio } : {}),
+          expandDirection: payload.expandDirection,
+          expandRatio: payload.expandRatio,
         }),
       },
     )
@@ -1380,14 +1372,12 @@ export function registerCore(bind: CanvasBindings) {
     const sourceNodeId = inpaintSourceNodeId.value || selectedNodeId.value
     if (!g || !sourceNodeId) {
       closeImageInpaint()
-    closeImageExpand()
       return
     }
 
     const cell = g.getCellById(sourceNodeId)
     if (!cell?.isNode()) {
       closeImageInpaint()
-    closeImageExpand()
       return
     }
 
@@ -1407,7 +1397,6 @@ export function registerCore(bind: CanvasBindings) {
       }
 
       closeImageInpaint()
-    closeImageExpand()
 
       selectedNodeId.value = sourceNodeId
       selectedKind.value = 'image'
@@ -4675,6 +4664,28 @@ export function registerCore(bind: CanvasBindings) {
     window.addEventListener('mouseup', onUp)
   }
 
+  function onImageExpandDragStart(event: MouseEvent) {
+    const startX = event.clientX
+    const startY = event.clientY
+    const base = { ...imageExpandDragOffset.value }
+
+    const onMove = (moveEvent: MouseEvent) => {
+      imageExpandDragOffset.value = {
+        x: base.x + (moveEvent.clientX - startX),
+        y: base.y + (moveEvent.clientY - startY),
+      }
+      updateNodeToolbar()
+    }
+
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   function updateMultiSelectToolbarPosition() {
     const g = graph.value
     const overlayRoot = canvasRef.value
@@ -4745,7 +4756,12 @@ export function registerCore(bind: CanvasBindings) {
       }
     }
     if (showImageExpand.value) {
-      imageExpandPos.value = getNodeCropOverlayPosition(g, node, overlayRoot)
+      const base = getNodeCropOverlayPosition(g, node, overlayRoot)
+      imageExpandPos.value = {
+        ...base,
+        left: base.left + imageExpandDragOffset.value.x,
+        top: base.top + imageExpandDragOffset.value.y,
+      }
     }
     if (data.kind === 'video' && showVideoHdPanel.value) {
       videoHdPos.value = getNodeSidePanelPosition(g, node, overlayRoot)
@@ -6557,6 +6573,7 @@ export function registerCore(bind: CanvasBindings) {
     onImageInpaintComplete,
     onImageExpandComplete,
     onImageInpaintDragStart,
+    onImageExpandDragStart,
     onImageGridSplitComplete,
     closeImageGenPromptBar,
     closeImagePreview,

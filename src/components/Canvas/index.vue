@@ -247,6 +247,7 @@
       @image-inpaint-complete="onImageInpaintComplete"
       @close-image-expand="closeImageExpand"
       @image-expand-complete="onImageExpandComplete"
+      @image-expand-drag-start="onImageExpandDragStart"
       @image-inpaint-drag-start="onImageInpaintDragStart"
       @reset-video-hd-panel="resetVideoHdPanel"
       @video-hd-start="onVideoHdStart"
@@ -531,6 +532,7 @@ const {
   onImageEraseComplete,
   onImageInpaintComplete,
   onImageExpandComplete,
+  onImageExpandDragStart,
   onImageInpaintDragStart,
   onImageDialogueAddCanvasNode,
   onImageDialogueUploadFiles,

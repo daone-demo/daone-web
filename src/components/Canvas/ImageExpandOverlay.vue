@@ -1,5 +1,5 @@
 <template>
-  <div class="image-expand-overlay" @mousedown.stop>
+  <div class="image-expand-overlay" @mousedown="onPanelMouseDown">
     <div class="image-expand-overlay__toolbar">
       <button type="button" class="image-expand-overlay__btn" @click="emit('cancel')">
         <span class="image-expand-overlay__icon image-expand-overlay__icon--close" aria-hidden="true" />
@@ -77,10 +77,21 @@
     >
       <div class="image-expand-overlay__stage">
         <div
-          class="image-expand-overlay__frame"
+          class="image-expand-overlay__node"
           :style="frameStyle"
-          @mousedown.stop="startDrag('move-frame', $event)"
+          @mousedown.stop="startDrag('move-node', $event)"
         >
+          <div class="image-expand-overlay__image-box" :style="imageInnerStyle">
+            <img
+              :src="imageUrl"
+              class="image-expand-overlay__image"
+              draggable="false"
+              alt=""
+            />
+          </div>
+
+          <div class="image-expand-overlay__image-dash" :style="imageInnerStyle" />
+
           <span
             v-for="handle in handles"
             :key="handle"
@@ -89,21 +100,6 @@
             @mousedown.stop="startDrag(handle, $event)"
           />
         </div>
-
-        <div
-          class="image-expand-overlay__image-box"
-          :style="imageBoxStyle"
-          @mousedown.stop="startDrag('move-image', $event)"
-        >
-          <img
-            :src="imageUrl"
-            class="image-expand-overlay__image"
-            draggable="false"
-            alt=""
-          />
-        </div>
-
-        <div class="image-expand-overlay__image-dash" :style="imageDashStyle" />
 
         <div class="image-expand-overlay__sizes">
           <span>{{ imageSizeLabel }}</span>
@@ -116,6 +112,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
 import {
   IMAGE_EXPAND_ASPECT_RATIOS,
   formatDimensions,
@@ -123,8 +120,10 @@ import {
 } from './constants'
 import {
   clampExpandFrame,
+  clampFramePosition,
   clampImageOffset,
   computeExpandNaturalMetrics,
+  computeExpandRequestMetrics,
   createExpandFrameFromImageCenter,
   getImageFitBounds,
   scaleRectAroundCenter,
@@ -141,16 +140,22 @@ const emit = defineEmits<{
   cancel: []
   complete: [
     payload: {
-      targetWidth: number
-      targetHeight: number
-      imageX: number
-      imageY: number
-      imageWidth: number
-      imageHeight: number
-      aspectRatio?: string
+      expandDirection: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL'
+      expandRatio: number
     },
   ]
+  'drag-start': [event: MouseEvent]
 }>()
+
+const DRAG_IGNORE_SELECTOR =
+  'button, input, select, a, [contenteditable], .ant-dropdown, .ant-dropdown-menu, .image-expand-overlay__ratio-menu, .image-expand-overlay__ratio-menu *, .image-expand-overlay__node, .image-expand-overlay__node *'
+
+function onPanelMouseDown(event: MouseEvent) {
+  event.stopPropagation()
+  const target = event.target as HTMLElement | null
+  if (target?.closest(DRAG_IGNORE_SELECTOR)) return
+  emit('drag-start', event)
+}
 
 const workspaceRef = ref<HTMLElement | null>(null)
 const workspaceSize = ref({ width: 360, height: 420 })
@@ -163,7 +168,7 @@ const imageBounds = ref<ExpandRect>({ x: 0, y: 0, width: 100, height: 100 })
 const expandFrame = ref<ExpandRect>({ x: 0, y: 0, width: 100, height: 100 })
 
 const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const
-type Handle = (typeof handles)[number] | 'move-frame' | 'move-image'
+type Handle = (typeof handles)[number] | 'move-node'
 
 let dragState: {
   handle: Handle
@@ -189,14 +194,12 @@ const frameStyle = computed(() => ({
   height: `${expandFrame.value.height}px`,
 }))
 
-const imageBoxStyle = computed(() => ({
-  left: `${imageBounds.value.x}px`,
-  top: `${imageBounds.value.y}px`,
+const imageInnerStyle = computed(() => ({
+  left: `${imageBounds.value.x - expandFrame.value.x}px`,
+  top: `${imageBounds.value.y - expandFrame.value.y}px`,
   width: `${imageBounds.value.width}px`,
   height: `${imageBounds.value.height}px`,
 }))
-
-const imageDashStyle = computed(() => imageBoxStyle.value)
 
 const imageSizeLabel = computed(() => {
   const metrics = computeExpandNaturalMetrics(
@@ -227,7 +230,11 @@ function resetLayout() {
   )
   baseImageBounds.value = base
   imageBounds.value = { ...base }
-  expandFrame.value = { ...base }
+  expandFrame.value = createExpandFrameFromImageCenter(
+    imageBounds.value,
+    workspaceSize.value,
+    currentRatio.value,
+  )
   zoomPercent.value = 100
 }
 
@@ -303,29 +310,23 @@ function onDragMove(event: MouseEvent) {
   const dy = event.clientY - dragState.startY
   const ratio = currentRatio.value
 
-  if (dragState.handle === 'move-image') {
-    const nextImage = {
-      ...dragState.startImage,
-      x: dragState.startImage.x + dx,
-      y: dragState.startImage.y + dy,
-    }
-    imageBounds.value = clampImageOffset(nextImage, expandFrame.value, workspaceSize.value)
-    return
-  }
-
-  if (dragState.handle === 'move-frame') {
-    const nextFrame = {
-      ...dragState.startFrame,
-      x: dragState.startFrame.x + dx,
-      y: dragState.startFrame.y + dy,
-    }
-    expandFrame.value = clampExpandFrame(
-      nextFrame,
-      imageBounds.value,
+  if (dragState.handle === 'move-node') {
+    const nextFrame = clampFramePosition(
+      {
+        ...dragState.startFrame,
+        x: dragState.startFrame.x + dx,
+        y: dragState.startFrame.y + dy,
+      },
       workspaceSize.value,
-      ratio,
     )
-    imageBounds.value = clampImageOffset(imageBounds.value, expandFrame.value, workspaceSize.value)
+    const appliedDx = nextFrame.x - dragState.startFrame.x
+    const appliedDy = nextFrame.y - dragState.startFrame.y
+    expandFrame.value = nextFrame
+    imageBounds.value = {
+      ...dragState.startImage,
+      x: dragState.startImage.x + appliedDx,
+      y: dragState.startImage.y + appliedDy,
+    }
     return
   }
 
@@ -397,17 +398,12 @@ function handleComplete() {
   if (completing.value) return
   completing.value = true
   try {
-    const metrics = computeExpandNaturalMetrics(
-      expandFrame.value,
-      imageBounds.value,
-      props.naturalWidth,
-      props.naturalHeight,
-    )
-    const ratioItem = IMAGE_EXPAND_ASPECT_RATIOS.find((item) => item.key === aspectKey.value)
-    emit('complete', {
-      ...metrics,
-      aspectRatio: ratioItem && ratioItem.key !== 'original' ? ratioItem.label : undefined,
-    })
+    const metrics = computeExpandRequestMetrics(expandFrame.value, imageBounds.value)
+    if (metrics.expandRatio <= 0) {
+      message.warning('请调整扩图范围')
+      return
+    }
+    emit('complete', metrics)
   } finally {
     completing.value = false
   }
@@ -445,6 +441,7 @@ onBeforeUnmount(() => {
   background: #fff;
   box-shadow: 0 16px 48px rgba(15, 23, 42, 0.16);
   overflow: hidden;
+  cursor: move;
 }
 
 .image-expand-overlay__toolbar {
@@ -604,7 +601,7 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.image-expand-overlay__frame {
+.image-expand-overlay__node {
   position: absolute;
   border: 2px solid #3b82f6;
   border-radius: 2px;
@@ -617,7 +614,7 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: 1;
   overflow: hidden;
-  cursor: move;
+  pointer-events: none;
 }
 
 .image-expand-overlay__image {
