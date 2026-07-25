@@ -5,8 +5,8 @@
       'video-node--selected': data.isSelected,
       'video-node--light': isLightTheme,
       'video-node--picker-card': data.mode === 'picker',
-      'video-node--playing': isPlayerOpen,
-      'video-node--info-card': showInfoCard,
+      'video-node--generating': isVideoGenerating,
+      'video-node--preview': hasVideoPreview,
     }"
   >
     <button
@@ -19,7 +19,7 @@
     </button>
 
     <button
-      v-if="!showInfoCard && !isPlayerOpen"
+      v-if="!hasVideoPreview"
       type="button"
       class="canvas-node__delete-float"
       title="删除节点"
@@ -47,66 +47,24 @@
     </div>
 
     <div
-      v-else-if="showInfoCard"
-      class="video-node__body video-node__body--info"
+      v-else-if="isVideoGenerating"
+      class="video-node__body video-node__body--generating"
     >
-      <video
-        ref="videoRef"
-        :key="`meta-${data.previewUrl}`"
-        class="video-node__video-hidden"
-        :src="data.previewUrl"
-        playsinline
-        preload="metadata"
-        @loadedmetadata="onVideoLoadedMetadata"
-      />
-
-      <button
-        type="button"
-        class="video-node__info-close"
-        title="删除节点"
-        @mousedown.stop
-        @click.stop="removeSelf"
-      >
-        ×
-      </button>
-
-      <span class="video-node__info-handle" aria-hidden="true">
-        <i /><i /><i />
-      </span>
-
-      <div class="video-node__info-rows">
-        <div class="video-node__info-row">
-          <span class="video-node__info-icon video-node__info-icon--file" aria-hidden="true" />
-          <span class="video-node__info-text" :title="rawFileName">{{ displayFileName }}</span>
+      <div class="video-node__generating">
+        <div class="video-node__generating-preview">
+          <span class="video-node__spinner" aria-hidden="true" />
         </div>
-        <div class="video-node__info-row">
-          <span class="video-node__info-icon video-node__info-icon--resolution" aria-hidden="true" />
-          <span>{{ resolutionLabel }}</span>
-        </div>
-        <div class="video-node__info-row">
-          <span class="video-node__info-icon video-node__info-icon--duration" aria-hidden="true" />
-          <span>{{ durationLabel }}</span>
-        </div>
+        <p class="video-node__generating-text">{{ genProgressText }}</p>
       </div>
-
-      <button
-        type="button"
-        class="video-node__info-play"
-        title="播放"
-        @mousedown.stop
-        @click.stop="startPlayback"
-      >
-        <span class="video-node__info-play-icon" aria-hidden="true" />
-      </button>
     </div>
 
     <div
-      v-else-if="isPlayerOpen && data.previewUrl"
-      class="video-node__body video-node__body--playing"
+      v-else-if="hasVideoPreview"
+      class="video-node__body video-node__body--preview"
     >
       <video
         ref="videoRef"
-        :key="`play-${data.previewUrl}`"
+        :key="data.previewUrl"
         class="video-node__video"
         :src="data.previewUrl"
         playsinline
@@ -121,53 +79,115 @@
       <button
         type="button"
         class="video-node__close"
-        title="关闭播放"
+        title="删除节点"
         @mousedown.stop
-        @click.stop="stopPlayback"
+        @click.stop="removeSelf"
       >
         ×
       </button>
 
-      <div class="video-node__controls" @mousedown.stop @click.stop>
-        <div class="video-node__controls-top">
-          <button
-            type="button"
-            class="video-node__control-btn"
-            :title="isPlaying ? '暂停' : '播放'"
-            @click="togglePlay"
+      <div
+        class="video-controls-bar"
+        @mousedown.stop
+        @click.stop
+      >
+        <button
+          type="button"
+          class="video-ctrl-btn"
+          :title="isPlaying ? '暂停' : '播放'"
+          @click="togglePlay"
+        >
+          <svg
+            v-if="isPlaying"
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            aria-hidden="true"
           >
-            <span aria-hidden="true">{{ isPlaying ? '❚❚' : '▶' }}</span>
-          </button>
-          <button
-            type="button"
-            class="video-node__control-btn"
-            :title="isMuted ? '取消静音' : '静音'"
-            @click="toggleMute"
+            <rect x="1.5" y="1" width="3" height="10" rx="0.8" fill="currentColor" />
+            <rect x="7.5" y="1" width="3" height="10" rx="0.8" fill="currentColor" />
+          </svg>
+          <svg
+            v-else
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            aria-hidden="true"
           >
-            <span aria-hidden="true">{{ isMuted ? '🔇' : '🔊' }}</span>
-          </button>
-          <button
-            type="button"
-            class="video-node__control-btn video-node__control-btn--more"
-            title="更多"
-          >
-            <span aria-hidden="true">⋮</span>
-          </button>
+            <path d="M2.5 1.2 10.5 6 2.5 10.8Z" fill="currentColor" />
+          </svg>
+        </button>
+
+        <div class="video-ctrl-time">
+          {{ formatTime(currentTime) }} / {{ formatTime(duration) }}
         </div>
+
         <input
-          class="video-node__progress"
+          class="video-ctrl-range"
           type="range"
           min="0"
           :max="duration || 0"
-          step="0.1"
+          step="0.05"
           :value="currentTime"
           @input="onProgressInput"
-        />
+        >
+
+        <div class="video-ctrl-volume">
+          <button
+            type="button"
+            class="video-ctrl-btn"
+            :title="isMuted ? '取消静音' : '音量'"
+            @click="toggleMute"
+          >
+            <svg
+              v-if="isMuted"
+              viewBox="0 0 16 16"
+              width="12"
+              height="12"
+              aria-hidden="true"
+            >
+              <path
+                d="M8.5 3.2 5.8 5.8H3.2v4.4h2.6l2.7 2.6V3.2ZM11.8 5.2l-.9.9A2.4 2.4 0 0 1 12 8a2.4 2.4 0 0 1-1.1 1.9l.9.9A3.5 3.5 0 0 0 13 8a3.5 3.5 0 0 0-1.2-2.8Z"
+                fill="currentColor"
+              />
+            </svg>
+            <svg
+              v-else
+              viewBox="0 0 16 16"
+              width="12"
+              height="12"
+              aria-hidden="true"
+            >
+              <path
+                d="M8.5 2.8 5.2 5.8H2.5v4.4h2.7l3.3 3V2.8ZM11.4 4.6l-.8.8A2.8 2.8 0 0 1 12 8a2.8 2.8 0 0 1-1.4 2.6l.8.8A3.8 3.8 0 0 0 13 8a3.8 3.8 0 0 0-1.6-3.4ZM9.8 6.2l-.8.8a1 1 0 0 1 0 1.4l.8.8a2 2 0 0 0 0-3Z"
+                fill="currentColor"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          class="video-ctrl-btn"
+          title="全屏"
+          @click="toggleFullscreen"
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+            <path
+              d="M2.5 6.2V2.5h3.7M9.8 2.5h3.7v3.7M13.5 9.8v3.7H9.8M6.2 13.5H2.5V9.8"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
       </div>
     </div>
 
     <div v-else class="video-node__body video-node__body--media">
-      <div v-if="data.uploadState === 'uploading'" class="video-node__uploading">
+      <div v-if="data.uploadState === 'uploading' && !isVideoGenerating" class="video-node__uploading">
         <span class="video-node__spinner" aria-hidden="true" />
         <span class="video-node__uploading-text">
           上传中 ({{ data.uploadProgress }}%) ...
@@ -185,37 +205,18 @@
         <span>点击上传视频</span>
       </button>
     </div>
-
-    <Teleport to="body">
-      <CanvasVideoPlaybackBar
-        v-if="isPlayerOpen && data.previewUrl"
-        :is-playing="isPlaying"
-        :is-muted="isMuted"
-        :current-time="currentTime"
-        :duration="duration"
-        @toggle-play="togglePlay"
-        @toggle-mute="toggleMute"
-        @toggle-fullscreen="toggleFullscreen"
-        @seek="seek"
-      />
-    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import type { Node } from '@antv/x6'
 import type { CanvasNodeData } from '../constants'
-import CanvasVideoPlaybackBar from '../panels/CanvasVideoPlaybackBar.vue'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import { syncNodeViewData } from './syncNodeViewData'
-import {
-  formatVideoTime,
-  getVideoResolutionLabel,
-  useVideoPlayer,
-} from './useVideoPlayer'
+import { useVideoPlayer, formatVideoTime } from './useVideoPlayer'
 
 const getNode = inject<() => Node>('getNode')!
 const requestCanvasUpload = inject<(nodeId: string) => void>('requestCanvasUpload')
@@ -223,7 +224,6 @@ const { removeSelf } = useNodeDelete()
 const { onPlusPointerDown } = useNodeConnect()
 const { isLightTheme } = useCanvasBgTheme()
 const videoRef = ref<HTMLVideoElement | null>(null)
-const isPlayerOpen = ref(false)
 
 const {
   isPlaying,
@@ -235,14 +235,14 @@ const {
   onPlay,
   onPause,
   onEnded,
-  play,
   togglePlay,
   seek,
+  pause,
   toggleMute,
   toggleFullscreen,
-  stop,
-  formatTime,
 } = useVideoPlayer(videoRef)
+
+const formatTime = formatVideoTime
 
 const data = reactive<CanvasNodeData>({
   kind: 'video',
@@ -257,34 +257,21 @@ const data = reactive<CanvasNodeData>({
   fileName: '',
 })
 
-const showInfoCard = computed(
-  () => Boolean(data.previewUrl) && !isPlayerOpen.value,
+const isVideoGenerating = computed(
+  () =>
+    data.uploadState === 'uploading' &&
+    (data.generationTaskType === 'VIDEO' || Boolean(data.generationTaskId)),
 )
 
-const rawFileName = computed(() => data.fileName || data.title || '未命名视频')
+const hasVideoPreview = computed(
+  () => Boolean(data.previewUrl?.trim()) && !isVideoGenerating.value,
+)
 
-const displayFileName = computed(() => {
-  const name = rawFileName.value
-  if (name.length <= 12) return name
-  const dot = name.lastIndexOf('.')
-  if (dot > 0) {
-    const base = name.slice(0, dot)
-    const ext = name.slice(dot)
-    if (base.length > 6) return `${base.slice(0, 6)}....${ext}`
-  }
-  return `${name.slice(0, 6)}....${name.slice(-4)}`
-})
-
-const resolutionLabel = computed(() => getVideoResolutionLabel(data.mediaHeight))
-
-const durationLabel = computed(() => {
-  if (data.durationSeconds && data.durationSeconds > 0) {
-    return formatVideoTime(data.durationSeconds)
-  }
-  if (duration.value > 0) {
-    return formatTime(duration.value)
-  }
-  return '--'
+const genProgressText = computed(() => {
+  const progress = data.uploadProgress ?? 0
+  if (progress <= 0) return '准备中...'
+  if (progress >= 100) return '即将完成...'
+  return `${progress}%`
 })
 
 function syncData() {
@@ -314,17 +301,6 @@ function onVideoLoadedMetadata(event: Event) {
   if (changed) syncData()
 }
 
-async function startPlayback() {
-  isPlayerOpen.value = true
-  await nextTick()
-  void play()
-}
-
-function stopPlayback() {
-  stop()
-  isPlayerOpen.value = false
-}
-
 function onProgressInput(event: Event) {
   const value = Number((event.target as HTMLInputElement).value)
   if (!Number.isFinite(value)) return
@@ -340,7 +316,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  stopPlayback()
+  pause()
 })
 </script>
 
@@ -362,7 +338,7 @@ onBeforeUnmount(() => {
   overflow: visible;
 }
 
-.video-node--info-card {
+.video-node--preview {
   .node-port-plus {
     right: -5px;
     width: 24px;
@@ -414,13 +390,12 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.video-node__body--info {
+.video-node__body--preview {
   position: relative;
   border: none;
   border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 2px 16px rgba(15, 23, 42, 0.1);
-  overflow: visible;
+  background: #111;
+  box-shadow: 0 2px 16px rgba(15, 23, 42, 0.12);
 }
 
 .video-node__body--picker {
@@ -428,19 +403,12 @@ onBeforeUnmount(() => {
 }
 
 .video-node__body--media,
-.video-node__body--playing {
+.video-node__body--generating {
   align-items: stretch;
   justify-content: center;
   padding: 0;
   color: #9ca3af;
   font-size: 14px;
-}
-
-.video-node__body--playing {
-  position: relative;
-  border-color: #4b4b55;
-  background: #111;
-  overflow: hidden;
 }
 
 .video-node__uploading {
@@ -461,157 +429,37 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.video-node__video-hidden {
-  position: absolute;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  pointer-events: none;
+.video-node__generating {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+
+.video-node__generating-preview {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  border-radius: 10px;
+  background: #141416;
+}
+
+.video-node__generating-text {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
 }
 
 .video-node__video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   background: #111;
-}
-
-.video-node__info-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: #52525b;
-  color: #fff;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-
-  &:hover {
-    background: #3f3f46;
-  }
-}
-
-.video-node__info-handle {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  margin: 14px auto 18px;
-  color: #9ca3af;
-
-  i {
-    display: block;
-    width: 18px;
-    height: 2px;
-    border-radius: 999px;
-    background: #c4c8d0;
-  }
-}
-
-.video-node__info-rows {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 12px;
-  padding: 0 16px 52px;
-}
-
-.video-node__info-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: 12px;
-  line-height: 1.3;
-  color: #4b5563;
-}
-
-.video-node__info-icon {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  background: #eceef2;
-
-  &--file::before {
-    content: '▣';
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    font-size: 10px;
-    color: #8b93a1;
-  }
-
-  &--resolution::before {
-    content: 'HD';
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    font-size: 7px;
-    font-weight: 700;
-    color: #8b93a1;
-  }
-
-  &--duration::before {
-    content: '⏱';
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    font-size: 10px;
-    color: #8b93a1;
-  }
-}
-
-.video-node__info-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.video-node__info-play {
-  position: absolute;
-  right: 14px;
-  bottom: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: #3b82f6;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
-
-  &:hover {
-    background: #2563eb;
-  }
-}
-
-.video-node__info-play-icon {
-  width: 0;
-  height: 0;
-  margin-left: 2px;
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
-  border-left: 9px solid #fff;
 }
 
 .video-node__close {
@@ -638,26 +486,24 @@ onBeforeUnmount(() => {
   }
 }
 
-.video-node__controls {
+.video-controls-bar {
   position: absolute;
   right: 0;
   bottom: 0;
   left: 0;
   z-index: 3;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 28px 10px 10px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.78) 100%);
-}
-
-.video-node__controls-top {
-  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  height: 34px;
+  padding: 0 10px;
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
+  background: #000000b8;
+  backdrop-filter: blur(6px);
 }
 
-.video-node__control-btn {
+.video-ctrl-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -665,49 +511,42 @@ onBeforeUnmount(() => {
   height: 28px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
-  color: #fff;
-  font-size: 12px;
+  color: #fffffff2;
   cursor: pointer;
+  transition: background-color 0.15s, opacity 0.15s;
 
-  &:hover {
-    background: rgba(255, 255, 255, 0.12);
+  svg {
+    display: block;
+    line-height: 1;
   }
 
-  &--more {
-    margin-left: auto;
-    font-size: 14px;
+  &:hover {
+    background: #ffffff1f;
   }
 }
 
-.video-node__progress {
-  width: 100%;
+.video-ctrl-time {
+  min-width: 72px;
+  color: #fffffff2;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.video-ctrl-range {
+  flex: 1;
   height: 3px;
   margin: 0;
-  appearance: none;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.28);
+  accent-color: #fff;
   cursor: pointer;
+}
 
-  &::-webkit-slider-thumb {
-    appearance: none;
-    width: 10px;
-    height: 10px;
-    border: none;
-    border-radius: 50%;
-    background: #fff;
-    cursor: pointer;
-  }
-
-  &::-moz-range-thumb {
-    width: 10px;
-    height: 10px;
-    border: none;
-    border-radius: 50%;
-    background: #fff;
-    cursor: pointer;
-  }
+.video-ctrl-volume {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .video-node__empty {

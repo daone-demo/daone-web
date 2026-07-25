@@ -354,6 +354,7 @@ export function applyVideoGenerationResultToNode(
   data.previewUrl = previewUrl
   data.title = options.title || data.title || '文生视频'
   data.fileName = options.fileName || result.fileName || data.fileName || '文生视频.mp4'
+  delete data.generationTaskType
   if (result.assetId) data.assetId = String(result.assetId)
   setNodeData(node, data)
   syncNodeShapeFromData(node)
@@ -366,6 +367,7 @@ export function markVideoGenerationNodeFailed(node: Node, errorMessage?: string)
   const data = { ...(node.getData() as CanvasNodeData) }
   data.uploadState = 'idle'
   data.uploadProgress = 0
+  delete data.generationTaskType
   if (errorMessage) data.title = '生成失败'
   setNodeData(node, data)
 }

@@ -1849,6 +1849,7 @@ export function registerCore(bind: CanvasBindings) {
         mode: 'editor',
         uploadState: 'uploading',
         uploadProgress: 0,
+        generationTaskType: 'VIDEO',
         genPrompt: prompt,
         title,
         fileName,

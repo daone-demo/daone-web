@@ -233,6 +233,10 @@ export function runUploadSimulation(graphNode: Node, file: File) {
   data.uploadProgress = 0
   data.fileName = file.name
   data.mode = 'editor'
+  if (data.kind === 'video') {
+    delete data.generationTaskType
+    delete data.generationTaskId
+  }
   graphNode.setData(data)
 
   if (file.type.startsWith('image/')) {

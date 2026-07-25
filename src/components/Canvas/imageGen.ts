@@ -395,6 +395,7 @@ export function spawnVideoGenerationResultNode(
     mode: 'editor',
     uploadState: 'uploading',
     uploadProgress: 0,
+    generationTaskType: 'VIDEO',
     title: options.title,
     fileName: options.fileName || `${options.title}.mp4`,
     previewUrl: '',

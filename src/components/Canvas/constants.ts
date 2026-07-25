@@ -1716,11 +1716,10 @@ export const NODE_SIZE = {
     hd: { width: 300, height: 360 },
   },
   video: {
-    picker: { ...NODE_CARD },
-    /** 未上传视频时与文本/图片卡片同尺寸 */
-    landscape: { ...NODE_CARD },
-    /** 已上传视频按 2:3 展示，宽 180 */
-    media: { ...NODE_CARD },
+    picker: { width: 350, height: 200 },
+    landscape: { width: 350, height: 200 },
+    /** 已上传 / 生成完成的视频预览卡片 */
+    media: { width: 350, height: 200 },
   },
   audio: { picker: { ...NODE_CARD }, editor: { width: 320, height: 220 } },
   model3d: { editor: { width: 320, height: 360 } },

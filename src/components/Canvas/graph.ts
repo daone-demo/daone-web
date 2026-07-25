@@ -275,7 +275,7 @@ export function registerShapes() {
   register({ shape: 'text-node', width: 180, height: 270, component: TextNode })
   register({ shape: 'image-node', width: 180, height: 270, component: ImageNode })
   register({ shape: 'image-gen-node', width: 180, height: 270, component: ImageGenNode })
-  register({ shape: 'video-node', width: 180, height: 270, component: VideoNode })
+  register({ shape: 'video-node', width: 350, height: 200, component: VideoNode })
   register({ shape: 'model3d-node', width: 320, height: 360, component: Model3DNode })
 }
 
