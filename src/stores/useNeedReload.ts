@@ -15,3 +15,18 @@ export const useNeedReloadStore = defineStore('needReload', () => {
         getNeedReload,
     };
 });
+
+export const useNeedReloadPointsStore = defineStore('needReloadPoints', () => {
+    const needReloadPoints = ref(false);
+    function setNeedReloadPoints(value: boolean) {
+        needReloadPoints.value = value;
+    }
+    function getNeedReloadPoints() {
+        return needReloadPoints.value;
+    }
+    return {
+        needReloadPoints,
+        setNeedReloadPoints,
+        getNeedReloadPoints,
+    };
+});

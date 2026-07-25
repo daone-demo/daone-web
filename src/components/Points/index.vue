@@ -101,9 +101,94 @@
         </div>
       </div>
     </Transition>
-    
+
+    <Transition name="combo-confirm-fade">
+      <div
+        v-if="confirmVisible"
+        class="combo-confirm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="points-confirm-title"
+        @mousedown.self="closeConfirm"
+      >
+        <div
+          class="combo-confirm__dialog"
+          @mousedown.stop
+        >
+          <button
+            type="button"
+            class="combo-confirm__close"
+            aria-label="关闭"
+            @click="closeConfirm"
+          >
+            ×
+          </button>
+
+          <header class="combo-confirm__header">
+            <h3 id="points-confirm-title" class="combo-confirm__title">
+              {{ confirmPreview.title }}
+            </h3>
+          </header>
+
+          <section v-if="orderNo" class="combo-confirm__pay">
+            <p class="combo-confirm__pay-title">支付方式</p>
+            <div
+              class="combo-confirm__pay-options"
+              role="radiogroup"
+              aria-label="支付方式"
+            >
+              <button
+                v-for="method in PAYMENT_METHODS"
+                :key="method.key"
+                type="button"
+                role="radio"
+                class="combo-confirm__pay-option"
+                :class="{ 'combo-confirm__pay-option--active': selectedPayMethod === method.key }"
+                :aria-checked="selectedPayMethod === method.key"
+                @click="selectedPayMethod = method.key"
+              >
+                <span
+                  class="combo-confirm__pay-icon"
+                  :class="`combo-confirm__pay-icon--${method.key.toLowerCase()}`"
+                  aria-hidden="true"
+                />
+                <span class="combo-confirm__pay-label">{{ method.label }}</span>
+              </button>
+            </div>
+            <a-flex align="center" justify="center">
+              <img
+                v-if="payUrl"
+                :src="payUrl"
+                alt="支付二维码"
+                class="combo-confirm__pay-qrcode"
+              />
+            </a-flex>
+          </section>
+
+          <section v-else class="combo-confirm__card">
+            <div class="combo-confirm__row">
+              <span>充值积分</span>
+              <span>+{{ confirmPreview.grantPoints }}</span>
+            </div>
+            <div class="combo-confirm__row combo-confirm__row--highlight">
+              <span>应付金额</span>
+              <strong>¥{{ confirmPreview.priceYuan }}</strong>
+            </div>
+          </section>
+
+          <button
+            v-if="!orderNo"
+            type="button"
+            class="combo-confirm__submit"
+            :disabled="confirmLoading"
+            @click="confirmPay"
+          >
+            {{ confirmPayLabel }}
+          </button>
+        </div>
+      </div>
+    </Transition>
   </Teleport>
-  
 </template>
 
 <script setup lang="ts">
@@ -111,11 +196,19 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { v4 as uuidv4 } from 'uuid'
+import QRCode from 'qrcode'
 import api from '@/services/api'
-import tools from '@/utils/tools';
+import tools from '@/utils/tools'
 import { useUserInfo } from '@/stores/useUserInfo'
 import { useModalStore } from '@stores/useModal'
-import { POINTS_PACKAGES } from './pointsData'
+import { useNeedReloadPointsStore } from '@stores/useNeedReload';
+const needReloadPointsStore = useNeedReloadPointsStore();
+
+interface PointRechargePackage {
+  packageCode: string
+  grantPoints: number
+  priceFen: number
+}
 
 interface UserSubscription {
   status?: string
@@ -129,26 +222,51 @@ interface UserProfile {
   }
 }
 
+type PayMethod = 'ALIPAY' | 'WECHAT' | 'BANK_TRANSFER'
+
+interface PaymentResponse {
+  payType?: string
+  qrCodeContent?: string
+  redirectUrl?: string
+  expireAt?: string
+}
+
+const PAYMENT_METHODS: Array<{ key: PayMethod; label: string }> = [
+  { key: 'ALIPAY', label: '支付宝' },
+  { key: 'WECHAT', label: '微信' },
+]
+
+const ORDER_POLLING_INTERVAL = 3000
+
 const open = defineModel<boolean>('open', { default: false })
 
 const emit = defineEmits<{
   close: []
-  recharge: [packageId: string]
+  recharge: [packageCode: string]
 }>()
 
 const router = useRouter()
 const userInfoStore = useUserInfo()
 const modalStore = useModalStore()
 
-const selectedPackageId = ref(POINTS_PACKAGES[0]?.id ?? '')
+const selectedPackageId = ref('')
 const agreedToTerms = ref(false)
 const submitting = ref(false)
 const userProfile = ref<UserProfile | null>(null)
 const currentIdempotencyKey = ref<string | null>(null)
-const pointRechargePackages = ref<any[]>([])
+const pointRechargePackages = ref<PointRechargePackage[]>([])
+
+const confirmVisible = ref(false)
+const confirmLoading = ref(false)
+const selectedPayMethod = ref<PayMethod>('WECHAT')
+const orderNo = ref('')
+const payUrl = ref('')
+const payExpireAt = ref('')
+
+let orderPollingTimer: ReturnType<typeof setInterval> | null = null
 
 const selectedPackage = computed(
-  () => POINTS_PACKAGES.find((item) => item.id === selectedPackageId.value) ?? null,
+  () => pointRechargePackages.value.find((item) => item.packageCode === selectedPackageId.value) ?? null,
 )
 
 const availablePoints = computed(
@@ -158,7 +276,7 @@ const availablePoints = computed(
 )
 
 const hasActiveMembership = computed(
-  () => userProfile.value?.subscription?.status === "ACTIVE",
+  () => userProfile.value?.subscription?.status === 'ACTIVE',
 )
 
 const canSubmit = computed(
@@ -170,12 +288,41 @@ const submitLabel = computed(() => {
   if (!hasActiveMembership.value) return '请先升级会员'
   if (!agreedToTerms.value) return '请先同意协议'
   if (!selectedPackage.value) return '请选择充值额度'
-  return `立即充值 ¥${selectedPackage.value.priceYuan}`
+  return `立即充值 ¥${tools.div(selectedPackage.value.priceFen, 100)}`
 })
+
+const confirmPreview = computed(() => {
+  const pkg = selectedPackage.value
+  return {
+    title: pkg ? `充值 ${pkg.grantPoints} 积分` : '',
+    grantPoints: pkg?.grantPoints ?? 0,
+    priceYuan: pkg ? formatYuan(pkg.priceFen) : '0.00',
+    productCode: pkg?.packageCode ?? '',
+  }
+})
+
+const confirmPayLabel = computed(() => {
+  if (confirmLoading.value) return '处理中...'
+  return `确认支付 ¥${confirmPreview.value.priceYuan}`
+})
+
+function formatYuan(fen: number): string {
+  return Number(tools.div(fen, 100)).toFixed(2)
+}
 
 function close() {
   open.value = false
   emit('close')
+}
+
+function closeConfirm() {
+  if (confirmLoading.value) return
+  stopOrderPolling()
+  confirmVisible.value = false
+  selectedPayMethod.value = 'WECHAT'
+  orderNo.value = ''
+  payUrl.value = ''
+  payExpireAt.value = ''
 }
 
 function lockBodyScroll(locked: boolean) {
@@ -183,11 +330,20 @@ function lockBodyScroll(locked: boolean) {
 }
 
 async function loadPointRechargePackages() {
-  const res:any = await api.queryPointRechargePackages()
-  // POINTS_PACKAGES.value = res
-  console.log(res)
-  pointRechargePackages.value = res.items;
-  console.log(pointRechargePackages.value)
+  try {
+    const res: { items?: PointRechargePackage[] } = await api.queryPointRechargePackages()
+    pointRechargePackages.value = res.items ?? []
+    if (!pointRechargePackages.value.length) return
+    const hasSelection = pointRechargePackages.value.some(
+      (item) => item.packageCode === selectedPackageId.value,
+    )
+    if (!hasSelection) {
+      selectedPackageId.value = pointRechargePackages.value[0].packageCode
+    }
+  } catch (error) {
+    console.error('loadPointRechargePackages', error)
+    pointRechargePackages.value = []
+  }
 }
 
 async function loadUserProfile() {
@@ -212,15 +368,11 @@ async function loadUserProfile() {
 }
 
 function resetForm() {
-  selectedPackageId.value = POINTS_PACKAGES[0]?.id ?? ''
+  selectedPackageId.value = pointRechargePackages.value[0]?.packageCode ?? ''
   agreedToTerms.value = false
   submitting.value = false
   currentIdempotencyKey.value = null
-}
-
-function openPointsLog() {
-  close()
-  router.push({ name: 'userInfo', query: { tab: 'points' } })
+  closeConfirm()
 }
 
 function openCombo() {
@@ -241,43 +393,123 @@ async function handleSubmit() {
     modalStore.openModal('login')
     return
   }
+  const res:any = await api.createPointRechargeOrder({
+    packageCode: selectedPackage.value.packageCode,
+  }, uuidv4())
+  orderNo.value = res.orderNo;
+  startOrderPolling();
+  confirmVisible.value = true;
+}
+
+async function confirmPay() {
+  if (!selectedPackage.value || confirmLoading.value) return
+
+  const productCode = confirmPreview.value.productCode
+  if (!productCode) return
 
   if (!currentIdempotencyKey.value) {
     currentIdempotencyKey.value = uuidv4()
   }
 
-  submitting.value = true
+  confirmLoading.value = true
   try {
-    await api.createOrder(
+    const order = await api.createOrder<{
+      orderNo: string
+      amountFen: number
+    }>(
       {
         orderType: 'POINTS',
-        productCode: selectedPackage.value.productCode,
+        productCode,
       },
       currentIdempotencyKey.value,
     )
-    message.success('订单已创建，请完成支付')
-    emit('recharge', selectedPackage.value.id)
-    await loadUserProfile()
+    orderNo.value = order.orderNo
+    startOrderPolling()
   } catch (error) {
-    console.error('points recharge', error)
-    message.error('充值失败，请稍后重试')
+    console.error('confirmPay', error)
+    message.error('支付失败，请稍后重试')
   } finally {
-    submitting.value = false
+    confirmLoading.value = false
   }
 }
+
+function queryOrder() {
+  if (!orderNo.value) return
+  api.getOrder(orderNo.value).then((res: any) => {
+    const status = res?.status
+    if (status === 'PAID') {
+      stopOrderPolling()
+      message.success('支付成功')
+      emit('recharge', selectedPackageId.value)
+      loadUserProfile()
+      closeConfirm()
+      close()
+      needReloadPointsStore.setNeedReloadPoints(true);
+    } else if (status === 'REFUNDED') {
+      stopOrderPolling()
+    }
+  }).catch((error) => {
+    console.error('queryOrder', error)
+  })
+}
+
+function startOrderPolling() {
+  stopOrderPolling()
+  if (!orderNo.value) return
+  orderPollingTimer = setInterval(queryOrder, ORDER_POLLING_INTERVAL)
+}
+
+function stopOrderPolling() {
+  if (orderPollingTimer) {
+    clearInterval(orderPollingTimer)
+    orderPollingTimer = null
+  }
+}
+
+async function onLoadPayUrl() {
+  try {
+    const res = await api.createPayment<PaymentResponse>(orderNo.value, {
+      payType: selectedPayMethod.value,
+    })
+    if (!res) return
+
+    if (selectedPayMethod.value === 'WECHAT') {
+      payUrl.value = await QRCode.toDataURL(res.redirectUrl ?? '', {
+        width: 260,
+        margin: 2,
+      })
+    } else {
+      payUrl.value = res.qrCodeContent ?? ''
+    }
+    payExpireAt.value = res.expireAt ?? ''
+  } catch (error) {
+    console.error('onLoadPayUrl', error)
+    payUrl.value = ''
+  }
+}
+
+watch([orderNo, selectedPayMethod], ([no, method]) => {
+  if (no && method !== 'BANK_TRANSFER') {
+    onLoadPayUrl()
+  } else {
+    payUrl.value = ''
+  }
+})
 
 watch(open, (visible) => {
   lockBodyScroll(visible)
   if (visible) {
-    loadPointRechargePackages();
-    loadUserProfile();
+    loadPointRechargePackages()
+    loadUserProfile()
   } else {
+    stopOrderPolling()
     resetForm()
   }
 })
 
 onBeforeUnmount(() => {
   lockBodyScroll(false)
+  stopOrderPolling()
 })
 </script>
 

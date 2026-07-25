@@ -135,11 +135,11 @@ import {
 } from './homeData'
 import dayjs from 'dayjs';
 import UpdateProjectName from '@components/UpdateProjectName/index.vue';
-import { useNeedReloadStore } from '@stores/useNeedReload';
 import { Modal } from 'ant-design-vue';
 
 import { useModalStore } from '@stores/useModal';
 import { useProject } from '@stores/useProject';
+import { useNeedReloadStore } from '@stores/useNeedReload';
 const needReloadStore = useNeedReloadStore();
 const modalStore = useModalStore();
 const projectStore = useProject();

@@ -646,5 +646,11 @@ const api = {
   queryPointRechargePackages<T = unknown>() {
     return http.get<T>('/points/recharge/packages')
   },
+  /** 生成图片。 */
+  createPointRechargeOrder<T = unknown>(data: any, idempotencyKey?: string) {
+    return http.post<T>('/points/recharge/orders', data, {
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+    })
+  },
 }
 export default api

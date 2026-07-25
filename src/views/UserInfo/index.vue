@@ -533,6 +533,15 @@ import { useUserInfo } from '@/stores/useUserInfo';
 import tools from '@/utils/tools';
 import dayjs from 'dayjs';
 import { message } from 'ant-design-vue';
+import { useNeedReloadPointsStore } from '@stores/useNeedReload';
+const needReloadPointsStore = useNeedReloadPointsStore();
+
+watch(needReloadPointsStore.getNeedReloadPoints, (newVal) => {
+  if (newVal) {
+    onLoadPoints();
+    needReloadPointsStore.setNeedReloadPoints(false);
+  }
+})
 
 const modalStore = useModalStore();
 const userInfoStore = useUserInfo();
