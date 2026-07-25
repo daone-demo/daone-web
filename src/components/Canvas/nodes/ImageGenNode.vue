@@ -55,7 +55,7 @@
         <div class="image-gen-node__preview image-gen-node__preview--empty">
           <span class="image-gen-node__spinner" aria-hidden="true" />
         </div>
-        <!-- <p class="image-gen-node__hd-hint">{{ genHintText }}</p> -->
+        <p class="image-gen-node__hd-hint">{{ genProgressText }}</p>
       </div>
 
       <div
@@ -177,6 +177,13 @@ const isEmptyUpload = computed(
     !data.previewUrl &&
     !data.imageGenState,
 )
+
+const genProgressText = computed(() => {
+  const progress = data.imageGenProgress ?? 0
+  if (progress <= 0) return '准备中...'
+  if (progress >= 100) return '即将完成...'
+  return `${progress}%`
+})
 
 function triggerUpload() {
   requestCanvasUpload?.(getNode().id)

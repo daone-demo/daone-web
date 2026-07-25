@@ -9,6 +9,7 @@
       'image-node--compact': data.compactPreview,
       'image-node--grid-split': !!data.gridSplitTile,
       'image-node--uploading': data.uploadState === 'uploading',
+      'image-node--generating': data.imageGenState === 'loading',
       'image-node--adaptive': hasAdaptivePreview,
     }"
   >
@@ -118,6 +119,12 @@
             </span>
           </div>
         </template>
+        <template v-else-if="data.imageGenState === 'loading'">
+          <div class="image-node__generating">
+            <span class="image-node__spinner" aria-hidden="true" />
+            <span class="image-node__generating-text">{{ genProgressText }}</span>
+          </div>
+        </template>
         <template v-else-if="data.previewUrl">
           <div v-if="isImageLoading" class="image-node__image-loading" aria-hidden="true">
             <span class="image-node__spinner" />
@@ -169,6 +176,13 @@ const data = reactive<CanvasNodeData>({ ...createEmptyNodeData(), kind: 'image',
 const { displayUrl, isImageLoading, onImageLoad, onImageError } = useCanvasNodeImage(toRef(data, 'previewUrl'))
 const isGridSplitNode = computed(() => Boolean(data.gridSplitTile))
 const hasAdaptivePreview = computed(() => shouldAdaptImageNodeHeight(data))
+
+const genProgressText = computed(() => {
+  const progress = data.imageGenProgress ?? 0
+  if (progress <= 0) return '准备中...'
+  if (progress >= 100) return '即将完成...'
+  return `${progress}%`
+})
 
 function applyImageNaturalSize(size: { width: number; height: number }, previewUrl: string) {
   const node = getNode()
@@ -524,6 +538,24 @@ onMounted(() => {
 }
 
 .image-node__uploading-text {
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.image-node__generating {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+}
+
+.image-node__generating-text {
+  font-size: 12px;
+  color: #6b7280;
   line-height: 1.4;
   white-space: nowrap;
 }
