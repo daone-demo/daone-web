@@ -273,8 +273,15 @@ function pickLineHeight(lh: string) {
 }
 
 function toggleMark(cmd: 'bold' | 'italic') {
-  if (cmd === 'bold') boldActive.value = !boldActive.value
-  else italicActive.value = !italicActive.value
+  console.log('toggleMark', cmd)
+  if (cmd === 'bold') {
+    boldActive.value = !boldActive.value
+    console.log('boldActive', boldActive.value)
+  }
+  else {
+    italicActive.value = !italicActive.value
+    console.log('italicActive', italicActive.value)
+  }
   emitCmd(cmd)
 }
 
