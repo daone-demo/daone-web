@@ -1455,6 +1455,7 @@ export function registerCore(bind: CanvasBindings) {
       capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
       title: buildImageActionResultTitle('文生图'),
       prompt,
+      workflowId: payload.workflowId,
       requireAssetId: false,
       requireSourcePreview: false,
       resolveReferenceAssetIds: () => referenceAssetIds,
@@ -1468,9 +1469,6 @@ export function registerCore(bind: CanvasBindings) {
         }
         if (payload.resolution) {
           params.resolution = payload.resolution
-        }
-        if (payload.workflowId) {
-          params.workflowId = payload.workflowId
         }
         return params
       },
@@ -1668,6 +1666,13 @@ export function registerCore(bind: CanvasBindings) {
     return option
   }
 
+  function resolveGenerationTaskWorkflowId(
+    workflowId?: string | number | null,
+  ): string | null {
+    if (workflowId === undefined || workflowId === null || workflowId === '') return null
+    return String(workflowId)
+  }
+
   function resolveGenerationResultFileName(
     buildFileName: (sourceFileName: string) => string,
     sourceFileName: string,
@@ -1726,6 +1731,7 @@ export function registerCore(bind: CanvasBindings) {
       capabilityCode: string
       title: string
       prompt?: string
+      workflowId?: string | number | null
       requireAssetId?: boolean
       requireSourcePreview?: boolean
       buildFileName: (sourceFileName: string) => string
@@ -1819,6 +1825,7 @@ export function registerCore(bind: CanvasBindings) {
               projectId: activeProjectId.value,
               nodeId: resultNode.id,
               referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
+              workflowId: resolveGenerationTaskWorkflowId(config.workflowId),
             },
             idempotencyKey,
           )
@@ -2853,9 +2860,6 @@ export function registerCore(bind: CanvasBindings) {
         if (imagePayload?.resolution) {
           imageParameters.resolution = imagePayload.resolution
         }
-        if (imagePayload?.workflowId) {
-          imageParameters.workflowId = imagePayload.workflowId
-        }
 
         try {
           const sourceNode = cell as Node
@@ -2877,6 +2881,7 @@ export function registerCore(bind: CanvasBindings) {
                   parameters: imageParameters,
                   projectId: activeProjectId.value,
                   nodeId: resultNode.id,
+                  workflowId: resolveGenerationTaskWorkflowId(imagePayload?.workflowId),
                 },
                 idempotencyKey,
               )

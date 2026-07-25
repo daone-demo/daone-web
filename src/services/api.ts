@@ -171,6 +171,7 @@ export interface GenerationTaskCreateRequest {
   parameters?: JsonObject
   referenceAssetIds?: Id[]
   assetIds?: Id[]
+  workflowId?: Id | null
 }
 
 export interface ChatSessionCreateRequest {

@@ -601,7 +601,7 @@ export type ImageDialogueSubmitPayload = {
   aspectRatio: string
   count: number
   resolution?: string
-  workflowId?: string
+  workflowId?: string | number
   workflow?: WorkflowRecord
 }
 
