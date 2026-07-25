@@ -1187,6 +1187,17 @@
 .canvas__prompt-workflow-select {
   min-width: 180px;
   max-width: 280px;
+
+  :deep(.ant-select-selection-placeholder) {
+    color: #9ca3af;
+  }
+}
+
+.canvas__prompt--light .canvas__prompt-workflow-select {
+  :deep(.ant-select-selector) {
+    border-color: #e5e7eb !important;
+    background: #fff !important;
+  }
 }
 
 .canvas__prompt-model-chip {

@@ -28,7 +28,8 @@
         v-if="isText2ImageTask"
         v-model:value="selectedText2ImageWorkFlow"
         class="canvas__prompt-workflow-select"
-        placeholder="选择工作流"
+        placeholder="请选择工作流"
+        allow-clear
         @mousedown.stop
         @click.stop
       >
@@ -527,7 +528,7 @@ const emit = defineEmits<{
 
 const showPromptWorkFlow = ref(false)
 const selectedPromptWorkFlowKey = ref(TEXT_PROMPT_MODEL_MENU[0]?.key ?? '')
-const selectedText2ImageWorkFlow = ref('')
+const selectedText2ImageWorkFlow = ref<string | undefined>(undefined)
 const imageWorkflowOptions = computed(() => buildImageWorkflowOptions(props.workflows))
 const selectedText2ImageWorkflowRecord = computed(() =>
   imageWorkflowOptions.value.find((workflow) => workflow.id === selectedText2ImageWorkFlow.value),
@@ -729,11 +730,14 @@ watch(
   (options) => {
     if (!props.isText2ImageTask) return
     if (!options.length) {
-      selectedText2ImageWorkFlow.value = ''
+      selectedText2ImageWorkFlow.value = undefined
       return
     }
-    if (!options.some((workflow) => workflow.id === selectedText2ImageWorkFlow.value)) {
-      selectedText2ImageWorkFlow.value = options[0].id
+    if (
+      selectedText2ImageWorkFlow.value &&
+      !options.some((workflow) => workflow.id === selectedText2ImageWorkFlow.value)
+    ) {
+      selectedText2ImageWorkFlow.value = undefined
     }
   },
   { immediate: true },

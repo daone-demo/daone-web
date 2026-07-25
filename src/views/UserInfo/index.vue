@@ -521,11 +521,8 @@ import { computed, ref, onMounted, watch } from 'vue'
 import QRCode from 'qrcode';
 import {
   BILL_STATUS_LABEL,
-  POINTS_LOG_ACTION_LABEL,
-  POINTS_LOG_REASON_LABEL,
   USER_INFO_TABS,
   USER_MEMBERSHIP_NOTES,
-  USER_POINTS_LOG,
   // USER_PROFILE,
   type PointsLogFilterKey,
   type UserInfoTabKey,
@@ -595,15 +592,6 @@ const selectedPayMethod = ref<PayMethod>('WECHAT')
 
 let orderPollingTimer: ReturnType<typeof setInterval> | null = null
 const ORDER_POLLING_INTERVAL = 3000;
-const pointledgers = ref([]);
-
-const filteredPointsLog = computed(() => {
-  if (pointsFilter.value === 'all') {
-    return USER_POINTS_LOG
-  }
-  const action = pointsFilter.value === 'INCOME' ? 'increase' : 'decrease'
-  return USER_POINTS_LOG.filter((item) => item.action === action)
-})
 
 const placeholderText = computed(() => {
   const tab = USER_INFO_TABS.find((item) => item.key === activeTab.value)
