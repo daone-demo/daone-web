@@ -53,6 +53,7 @@ declare module 'vue' {
     CanvasToolbarActionItem: typeof import('./components/Canvas/panels/CanvasToolbarActionItem.vue')['default']
     CanvasVideoPlaybackBar: typeof import('./components/Canvas/panels/CanvasVideoPlaybackBar.vue')['default']
     Combo: typeof import('./components/Combo/index.vue')['default']
+    EmbeddedVideoPlayer: typeof import('./components/EmbeddedVideoPlayer/index.vue')['default']
     HelloWorld: typeof import('./components/HelloWorld.vue')['default']
     ImageColorPickerPanel: typeof import('./components/Canvas/ImageColorPickerPanel.vue')['default']
     ImageCropOverlay: typeof import('./components/Canvas/ImageCropOverlay.vue')['default']

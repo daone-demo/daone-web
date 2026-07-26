@@ -52,10 +52,10 @@
         v-if="data.imageGenState === 'loading'"
         class="image-gen-node__picker"
       >
-        <div class="image-gen-node__preview image-gen-node__preview--empty">
+        <div class="image-gen-node__preview image-gen-node__preview--empty image-gen-node__preview--generating">
           <span class="image-gen-node__spinner" aria-hidden="true" />
+          <span class="image-gen-node__generating-text">{{ genProgressText }}</span>
         </div>
-        <p class="image-gen-node__hd-hint">{{ genProgressText }}</p>
       </div>
 
       <div
@@ -326,6 +326,11 @@ onMounted(() => {
     cursor: pointer;
   }
 
+  &--generating {
+    gap: 10px;
+    text-align: center;
+  }
+
   &--output {
     flex: 1;
     min-height: 140px;
@@ -398,6 +403,13 @@ onMounted(() => {
     width: 64px;
     height: 52px;
   }
+}
+
+.image-gen-node__generating-text {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .image-gen-node__hd-hint {

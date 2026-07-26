@@ -90,7 +90,10 @@
               class="home__inspiration-card"
               @click="openInspiration(item)"
             >
-              <div class="home__inspiration-media">
+              <div
+                class="home__inspiration-media"
+                :class="{ 'home__inspiration-media--video': item.mediaType === 'video' }"
+              >
                 <img
                   v-if="item.mediaType === 'image'"
                   class="home__inspiration-image"
@@ -98,12 +101,9 @@
                   :alt="`${item.authorName} 的作品`"
                   loading="lazy"
                 />
-                <video
+                <EmbeddedVideoPlayer
                   v-else-if="item.mediaType === 'video'"
-                  class="home__inspiration-image home__inspiration-image--video"
                   :src="item.coverUrl"
-                  :alt="`${item.authorName} 的作品`"
-                  controls
                 />
               </div>
               <div class="home__inspiration-footer">
@@ -134,11 +134,24 @@
     v-model:project-name="projectName"
     @submit="onRefreshProjects"
   />
-  <a-modal v-model:open="open" class="home__inspiration-modal">
+  <a-modal 
+    v-model:open="open"
+    width="800px"
+    class="home__inspiration-modal"
+  >
     <img
+      v-if="inspirationsInfo.mediaType === 'image'"
       :src="inspirationsInfo.coverUrl"
       :alt="inspirationsInfo.title"
       style="width: 100%; height: 100%;"
+    />
+    <EmbeddedVideoPlayer
+      v-if="inspirationsInfo.mediaType === 'video'"
+      :src="inspirationsInfo.coverUrl"
+      object-fit="contain"
+      aspect-ratio="auto"
+      min-height="360px"
+      class="home__inspiration-modal-player"
     />
     <template #title></template>
     <template #footer></template>
@@ -148,10 +161,12 @@
     width="800px"
     class="home__inspiration-modal"
   >
-    <video
+    <EmbeddedVideoPlayer
       src="https://daone-oss.oss-accelerate.aliyuncs.com/video/100001/5baead5f-9cea-469a-a075-f45b38bf00c9.mp4"
-      controls
-      style="width: 100%; height: 100%;"
+      object-fit="contain"
+      aspect-ratio="auto"
+      min-height="360px"
+      class="home__inspiration-modal-player"
     />
     <template #title></template>
     <template #footer></template>
@@ -169,6 +184,7 @@ import {
 } from './homeData'
 import dayjs from 'dayjs';
 import UpdateProjectName from '@components/UpdateProjectName/index.vue';
+import EmbeddedVideoPlayer from '@components/EmbeddedVideoPlayer/index.vue';
 import { Modal } from 'ant-design-vue';
 
 import { useModalStore } from '@stores/useModal';
@@ -270,6 +286,7 @@ function openProject(id: string) {
 }
 
 const openInspiration = (item: any) => {
+  console.log(item)
   inspirationsInfo.value = item;
   open.value = true;
   // router.push({ name: 'projectDetail', params: { id } })

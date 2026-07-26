@@ -53,8 +53,8 @@
       <div class="video-node__generating">
         <div class="video-node__generating-preview">
           <span class="video-node__spinner" aria-hidden="true" />
+          <p class="video-node__generating-text">{{ genProgressText }}</p>
         </div>
-        <p class="video-node__generating-text">{{ genProgressText }}</p>
       </div>
     </div>
 
@@ -440,18 +440,22 @@ onBeforeUnmount(() => {
 .video-node__generating-preview {
   display: flex;
   flex: 1;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   min-height: 140px;
   border-radius: 10px;
   background: #141416;
+  text-align: center;
 }
 
 .video-node__generating-text {
-  margin: 12px 0 0;
+  margin: 0;
   font-size: 12px;
   color: #6b7280;
-  text-align: center;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .video-node__video {

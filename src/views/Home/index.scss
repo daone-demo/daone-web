@@ -403,6 +403,11 @@
   overflow: hidden;
   border-radius: 12px;
   background: #e5e7eb;
+
+  &--video {
+    border-radius: 12px;
+    background: #111;
+  }
 }
 
 .home__inspiration-image {
@@ -519,5 +524,10 @@
 .home__inspiration-modal {
   :deep(.ant-modal .ant-modal-content) {
     padding: 0;
-  } 
+  }
+}
+
+.home__inspiration-modal-player {
+  border-radius: 12px;
+  overflow: hidden;
 }
