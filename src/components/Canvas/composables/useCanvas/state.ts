@@ -3,6 +3,7 @@ import type { Graph } from '@antv/x6'
 import {
   type ImageSourceRef,
   type NodeKind,
+  type VideoGenAspectRatio,
   type VideoHdMagnification,
 } from '../../constants'
 import { refreshCanvasNodeViews } from '../../graph'
@@ -99,6 +100,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const videoGenPromptText = ref('')
   const videoNum = ref(1)
   const videoGenActiveTab = ref('text2video')
+  const videoGenAspectRatio = ref<VideoGenAspectRatio>('16:9')
   const selectedNodeId = ref('')
   const selectedNodeIds = ref<string[]>([])
   const selectedEdgeId = ref('')
@@ -249,6 +251,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     videoGenPromptText,
     videoNum,
     videoGenActiveTab,
+    videoGenAspectRatio,
     selectedNodeId,
     selectedNodeIds,
     selectedEdgeId,

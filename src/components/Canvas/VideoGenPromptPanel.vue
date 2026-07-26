@@ -313,6 +313,7 @@ const props = defineProps<{
   videoNum: number
   prompt: string
   activeTab: string
+  aspectRatio?: VideoGenAspectRatio
   sourceRefs?: VideoSourceRef[]
   elementSelectMode?: boolean
   chatTools?: ChatTools | null
@@ -322,6 +323,7 @@ const emit = defineEmits<{
   'update:videoNum': [value: number]
   'update:prompt': [value: string]
   'update:activeTab': [value: string]
+  'update:aspectRatio': [value: VideoGenAspectRatio]
   'drag-start': [event: MouseEvent]
   'quick-action': [key: string]
   'remove-source-ref': [nodeId: string]
@@ -351,7 +353,10 @@ const showVideoModelPicker = ref(false)
 const showVideoSettings = ref(false)
 const selectedModelKey = ref(VIDEO_DIALOGUE_MODEL_MENU[0].key)
 const videoDuration = ref<VideoGenDuration>(5)
-const videoAspectRatio = ref<VideoGenAspectRatio>('16:9')
+const videoAspectRatio = computed({
+  get: () => props.aspectRatio ?? '16:9',
+  set: (value: VideoGenAspectRatio) => emit('update:aspectRatio', value),
+})
 const videoResolution = ref<VideoGenResolution>('720P')
 const generateAudio = ref(true)
 

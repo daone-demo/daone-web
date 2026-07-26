@@ -179,6 +179,7 @@
       ref="videoGenPromptPanelRef"
       :prompt="videoGenPromptText"
       :active-tab="videoGenActiveTab"
+      :aspect-ratio="videoGenAspectRatio"
       :source-refs="videoGenSourceRefs"
       :element-select-mode="elementSelectMode"
       :video-num="videoNum"
@@ -186,6 +187,7 @@
       @update:prompt="emit('update:videoGenPromptText', $event)"
       @update:video-num="emit('update:videoNum', $event)"
       @update:active-tab="emit('update:videoGenActiveTab', $event)"
+      @update:aspect-ratio="emit('update:videoGenAspectRatio', $event)"
       @drag-start="emit('video-gen-drag-start', $event)"
       @quick-action="emit('video-gen-quick-action', $event)"
       @remove-source-ref="emit('remove-video-source-ref', $event)"
@@ -434,6 +436,7 @@ import {
   type ImageDialogueSubmitPayload,
   type VideoDialogueSubmitPayload,
   type VideoGenPromptSubmitPayload,
+  type VideoGenAspectRatio,
   type NodeKind,
   type TextPromptModelItem,
   type VideoHdMagnification,
@@ -538,6 +541,7 @@ const props = defineProps<{
   videoGenPromptText: string
   videoNum: number
   videoGenActiveTab: string
+  videoGenAspectRatio: VideoGenAspectRatio
   videoGenSourceRefs: VideoSourceRef[]
   elementSelectMode: boolean
   imageDialogueText: string
@@ -555,6 +559,7 @@ const emit = defineEmits<{
   'update:imageGenSeed': [value: number]
   'update:videoGenPromptText': [value: string]
   'update:videoGenActiveTab': [value: string]
+  'update:videoGenAspectRatio': [value: VideoGenAspectRatio]
   'remove-prompt-source': [sourceNodeId?: string]
   'upload-prompt-images': [files: File[]]
   'add-prompt-canvas-node': [nodeId: string]

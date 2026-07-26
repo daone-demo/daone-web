@@ -68,6 +68,8 @@ export interface CanvasNodeData {
   genPrompt?: string
   genSeed?: number
   videoGenTab?: string
+  /** 视频生成面板所选比例，用于空节点/生成中节点的预览尺寸 */
+  videoGenAspectRatio?: string
   viewScale?: number
   editorWidth?: number
   editorHeight?: number
@@ -1725,6 +1727,29 @@ export const NODE_SIZE = {
   },
   audio: { picker: { ...NODE_CARD }, editor: { width: 320, height: 220 } },
   model3d: { editor: { width: 320, height: 360 } },
+}
+
+export function parseVideoAspectRatioValue(ratio?: string | null) {
+  if (!ratio || ratio === 'auto') return null
+  const parts = ratio.split(':').map((part) => Number(part.trim()))
+  if (parts.length !== 2 || !(parts[0] > 0) || !(parts[1] > 0)) return null
+  return parts[0] / parts[1]
+}
+
+/** 按视频比例计算节点尺寸（宽固定为默认视频卡片宽） */
+export function computeVideoNodeSizeByAspectRatio(
+  ratio: string,
+  baseWidth = NODE_SIZE.video.media.width,
+  minHeight = 120,
+) {
+  const aspect = parseVideoAspectRatioValue(ratio)
+  if (!aspect) {
+    return { ...NODE_SIZE.video.picker }
+  }
+  return {
+    width: baseWidth,
+    height: Math.max(minHeight, Math.round(baseWidth / aspect)),
+  }
 }
 
 export const KIND_LABEL: Record<NodeKind, string> = {

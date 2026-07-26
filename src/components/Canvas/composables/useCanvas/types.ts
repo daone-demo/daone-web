@@ -111,6 +111,7 @@ export type CanvasBindings = CanvasState & {
   handleImageDialogueSubmit: (payload: import('../../constants').ImageDialogueSubmitPayload) => void
   handleVideoDialogueSubmit: (payload: import('../../constants').VideoDialogueSubmitPayload) => void
   handleVideoGenPromptSubmit: (payload: import('../../constants').VideoGenPromptSubmitPayload) => void
+  onVideoGenAspectRatioChange: (ratio: import('../../constants').VideoGenAspectRatio) => void
   onVideoToolbarAction: (payload: import('../../constants').VideoToolbarClickPayload) => void
   graph: ShallowRef<Graph | null>
   [key: string]: unknown

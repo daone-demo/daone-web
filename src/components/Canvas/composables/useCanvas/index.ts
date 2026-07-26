@@ -30,6 +30,7 @@ type GridSplitCanvasApi = Pick<
   | 'imageEditTextRecognizing'
   | 'showImageResizeOverlay'
   | 'imageResizeOverlay'
+  | 'videoGenAspectRatio'
 > &
   Pick<
     CanvasBindings,
@@ -52,6 +53,7 @@ type GridSplitCanvasApi = Pick<
     | 'handleImageDialogueSubmit'
     | 'handleVideoDialogueSubmit'
     | 'handleVideoGenPromptSubmit'
+    | 'onVideoGenAspectRatioChange'
     | 'onVideoToolbarAction'
     | 'isText2VideoTask'
     | 'isText2ImageTask'

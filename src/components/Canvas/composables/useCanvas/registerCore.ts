@@ -64,6 +64,7 @@ import {
   VIDEO_GENERAL_CAPABILITY_CODE,
   resolveVideoToolbarUiKey,
   toVideoApiClarity,
+  type VideoGenAspectRatio,
   type ImageToolbarClickPayload,
   type ImageToolbarClickEvent,
   type VideoToolbarClickPayload,
@@ -148,6 +149,7 @@ export function registerCore(bind: CanvasBindings) {
     activeVideoGenPromptNodeId,
     videoGenPromptText,
     videoGenActiveTab,
+    videoGenAspectRatio,
     selectedNodeId,
     selectedNodeIds,
     selectedEdgeId,
@@ -574,8 +576,17 @@ export function registerCore(bind: CanvasBindings) {
     }
   }
 
+  function isNodeGenerating(data: CanvasNodeData | undefined) {
+    if (!data) return false
+    if (data.uploadState === 'uploading') return true
+    if (data.imageGenState === 'loading') return true
+    if (data.textGenState === 'loading') return true
+    return false
+  }
+
   function canShowImageToolbar(data: CanvasNodeData | undefined) {
     if (!data || data.kind !== 'image') return false
+    if (isNodeGenerating(data)) return false
     if (data.imageGenTask === 'picker') return false
     if (data.imageGenTask === 'img2img' || data.imageGenTask === 'hd') return true
     return data.mode === 'editor'
@@ -583,7 +594,7 @@ export function registerCore(bind: CanvasBindings) {
 
   function canShowVideoToolbar(data: CanvasNodeData | undefined) {
     if (!data || data.kind !== 'video') return false
-    if (data.uploadState === 'uploading') return true
+    if (isNodeGenerating(data)) return false
     if (data.previewUrl) return true
     return data.mode === 'editor'
   }
@@ -595,11 +606,14 @@ export function registerCore(bind: CanvasBindings) {
   const showToolbarFeatureButtons = computed(() => {
     void toolbarRevision.value
 
+    const data = getSelectedNodeData()
+    if (isNodeGenerating(data)) return false
+
     if (selectedKind.value === 'image' && selectedNodeId.value) {
-      return canShowImageToolbar(getSelectedNodeData())
+      return canShowImageToolbar(data)
     }
     if (selectedKind.value === 'video' && selectedNodeId.value) {
-      return canShowVideoToolbar(getSelectedNodeData())
+      return canShowVideoToolbar(data)
     }
     return false
   })
@@ -1872,6 +1886,9 @@ export function registerCore(bind: CanvasBindings) {
 
     persistVideoGenPrompt()
 
+    videoGenAspectRatio.value = payload.ratio as VideoGenAspectRatio
+    syncVideoNodeAspectRatio(sourceNodeId, payload.ratio as VideoGenAspectRatio)
+
     const title = buildVideoActionResultTitle('视频生成')
     const sourceFileName = sourceData.fileName || sourceData.title || ''
     const fileName = sourceFileName ? `视频生成-${sourceFileName}` : '视频生成.mp4'
@@ -1887,6 +1904,7 @@ export function registerCore(bind: CanvasBindings) {
         genPrompt: prompt,
         title,
         fileName,
+        videoGenAspectRatio: payload.ratio,
       },
       { overwrite: true },
     )
@@ -2685,6 +2703,41 @@ export function registerCore(bind: CanvasBindings) {
     cell.setData(data)
   }
 
+  function syncVideoNodeAspectRatio(nodeId: string, ratio: VideoGenAspectRatio) {
+    const g = graph.value
+    if (!g) return
+    const cell = g.getCellById(nodeId)
+    if (!cell?.isNode()) return
+
+    const data = { ...(cell.getData() as CanvasNodeData) }
+    if (data.kind !== 'video') return
+
+    data.videoGenAspectRatio = ratio
+    cell.setData(data)
+    syncNodeShapeFromData(cell as Node)
+
+    const size = getNodeSize(data.kind, data.mode, data)
+    const node = cell as Node
+    const center = {
+      x: node.position().x + node.getSize().width / 2,
+      y: node.position().y + node.getSize().height / 2,
+    }
+    node.resize(size.width, size.height)
+    node.position(center.x - size.width / 2, center.y - size.height / 2)
+
+    updateVideoGenPromptBarPosition()
+    bumpToolbarRevision()
+    updateNodeToolbar()
+  }
+
+  function onVideoGenAspectRatioChange(ratio: VideoGenAspectRatio) {
+    videoGenAspectRatio.value = ratio
+    const nodeId = activeVideoGenPromptNodeId.value
+    if (!nodeId) return
+    syncVideoNodeAspectRatio(nodeId, ratio)
+    persistVideoGenPrompt()
+  }
+
   function loadVideoGenPromptFields(nodeId: string) {
     const g = graph.value
     if (!g) return
@@ -2697,9 +2750,11 @@ export function registerCore(bind: CanvasBindings) {
     }
     videoGenPromptText.value = prompt
     videoGenActiveTab.value = data.videoGenTab ?? 'text2video'
+    videoGenAspectRatio.value = (data.videoGenAspectRatio as VideoGenAspectRatio) || '16:9'
     if (prompt && prompt !== data.genPrompt) {
       cell.setData({ ...data, genPrompt: prompt })
     }
+    syncVideoNodeAspectRatio(nodeId, videoGenAspectRatio.value as VideoGenAspectRatio)
   }
 
   function getTextNodePlainContent(node: Node): string {
@@ -2731,6 +2786,7 @@ export function registerCore(bind: CanvasBindings) {
     const data = { ...(cell.getData() as CanvasNodeData) }
     data.genPrompt = videoGenPromptText.value
     data.videoGenTab = videoGenActiveTab.value
+    data.videoGenAspectRatio = videoGenAspectRatio.value
     cell.setData(data)
   }
 
@@ -7101,6 +7157,8 @@ export function registerCore(bind: CanvasBindings) {
     removeHoveredEdge,
     uploadFileToCanvasNode,
     videoGenSourceRefs,
+    videoGenAspectRatio,
+    onVideoGenAspectRatioChange,
     waitForNodeUploadDone,
     zoomFitToScreen,
     zoomIn,

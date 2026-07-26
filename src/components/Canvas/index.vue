@@ -211,6 +211,7 @@
       :image-gen-submitting="imageGenSubmitting"
       :video-gen-prompt-text="videoGenPromptText"
       :video-gen-active-tab="videoGenActiveTab"
+      :video-gen-aspect-ratio="videoGenAspectRatio"
       :video-gen-source-refs="videoGenSourceRefs"
       :element-select-mode="showElementSelectMode"
       :image-dialogue-text="imageDialogueText"
@@ -235,6 +236,7 @@
       @submit-video-gen-prompt="handleVideoGenPromptSubmit"
       @update:video-gen-prompt-text="videoGenPromptText = $event; persistVideoGenPrompt()"
       @update:video-gen-active-tab="videoGenActiveTab = $event; persistVideoGenPrompt()"
+      @update:video-gen-aspect-ratio="onVideoGenAspectRatioChange"
       @update:image-dialogue-text="imageDialogueText = $event"
       @remove-image-dialogue-preview="clearImageDialoguePreview"
       @upload-image-dialogue-images="onImageDialogueUploadFiles"
@@ -471,6 +473,7 @@ const {
   handleImageDialogueSubmit,
   handleVideoDialogueSubmit,
   handleVideoGenPromptSubmit,
+  onVideoGenAspectRatioChange,
   goUserCenter,
   gridVisible,
   groupOverlayBox,
@@ -650,6 +653,7 @@ const {
   userMenuRole,
   videoDialogueText,
   videoGenActiveTab,
+  videoGenAspectRatio,
   videoGenPromptPos,
   videoGenPromptText,
   videoGenSourceRefs,

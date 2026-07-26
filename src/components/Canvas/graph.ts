@@ -30,6 +30,7 @@ import {
   type NodeMode,
   getImageAdaptiveNodeSize,
   shouldAdaptImageNodeHeight,
+  computeVideoNodeSizeByAspectRatio,
 } from './constants'
 
 export const IMAGE_NODE_MIN_VIEW_SCALE = 0.35
@@ -517,7 +518,16 @@ export function getBaseNodeSize(
     return NODE_SIZE.text.picker
   }
   if (kind === 'video') {
-    if (mode === 'picker' || !data?.previewUrl) return NODE_SIZE.video.picker
+    const hasPreview = Boolean(data?.previewUrl?.trim())
+    const isGenerating =
+      data?.uploadState === 'uploading' &&
+      (data?.generationTaskType === 'VIDEO' || Boolean(data?.generationTaskId))
+    const ratio = data?.videoGenAspectRatio
+
+    if ((!hasPreview || isGenerating) && ratio && ratio !== 'auto') {
+      return computeVideoNodeSizeByAspectRatio(ratio)
+    }
+    if (mode === 'picker' || !hasPreview) return NODE_SIZE.video.picker
     return NODE_SIZE.video.media
   }
   if (kind === 'model3d') {
