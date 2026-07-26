@@ -348,11 +348,12 @@ onMounted(() => {
   }
 
   .image-node__preview {
-    height: auto;
+    height: 100%;
 
     img {
       width: 100%;
-      height: auto;
+      height: 100%;
+      object-fit: cover;
       display: block;
     }
   }

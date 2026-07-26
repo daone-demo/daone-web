@@ -45,7 +45,12 @@
           <span class="image-expand-overlay__icon image-expand-overlay__icon--ratio" aria-hidden="true" />
           比例
         </button>
-        <div v-if="showRatioMenu" class="image-expand-overlay__ratio-menu">
+        <div
+          v-if="showRatioMenu"
+          class="image-expand-overlay__ratio-menu"
+          @wheel.stop
+          @mousedown.stop
+        >
           <button
             v-for="item in IMAGE_EXPAND_ASPECT_RATIOS"
             :key="item.key"
@@ -440,7 +445,7 @@ onBeforeUnmount(() => {
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 16px 48px rgba(15, 23, 42, 0.16);
-  overflow: hidden;
+  overflow: visible;
   cursor: move;
 }
 
@@ -551,11 +556,16 @@ onBeforeUnmount(() => {
   right: 0;
   z-index: 30;
   min-width: 120px;
+  max-height: min(280px, calc(100vh - 160px));
   padding: 6px;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .image-expand-overlay__ratio-item {
@@ -585,6 +595,9 @@ onBeforeUnmount(() => {
   z-index: 1;
   flex: 1;
   min-height: 280px;
+  overflow: hidden;
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
   background-color: #eceff3;
   background-image:
     linear-gradient(45deg, rgba(255, 255, 255, 0.55) 25%, transparent 25%),

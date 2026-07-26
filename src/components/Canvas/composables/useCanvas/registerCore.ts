@@ -23,7 +23,7 @@ import {
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
   getNodeVideoGenPromptPosition, getNodePromptPosition, getNodeSidePanelPosition, getNodeTextDownloadPosition,
   getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition, getNodeToolbarPosition,
-  getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getNodeOverlayScreenBox, startImageNodeCornerResize, canResizeImageNode, getImageNodeDisplayDimensions,
+  getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getImageNodeMediaScreenBox, syncImageNodeSizeToMediaAspect, startImageNodeCornerResize, canResizeImageNode, getImageNodeDisplayDimensions,
   hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
@@ -4968,7 +4968,8 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
-    const box = getNodeOverlayScreenBox(g, node, overlayRoot)
+    syncImageNodeSizeToMediaAspect(node)
+    const box = getImageNodeMediaScreenBox(g, node, overlayRoot)
     imageResizeOverlay.value = {
       left: box.left,
       top: box.top,

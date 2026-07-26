@@ -20,6 +20,7 @@ import {
   createEmptyNodeData,
   formatDimensions,
   IMAGE_NODE_LAYOUT_META_HEIGHT,
+  IMAGE_NODE_LAYOUT_BODY_BORDER,
   PROMPT_BAR_TOP_GAP,
   VIDEO_GEN_PROMPT_TOP_GAP,
   KIND_LABEL,
@@ -66,14 +67,89 @@ export function getImageNodeDisplayDimensions(node: Node) {
   )
 }
 
+export function computeImageNodeHeight(
+  width: number,
+  mediaWidth: number,
+  mediaHeight: number,
+) {
+  const contentW = Math.max(1, width - IMAGE_NODE_LAYOUT_BODY_BORDER)
+  return Math.max(120, IMAGE_NODE_LAYOUT_BODY_BORDER + Math.round(contentW * mediaHeight / mediaWidth))
+}
+
+/** 图片在图坐标系下的实际显示区域（按媒体宽高比，与 ImageNode 内 img 一致） */
+export function getImageNodeMediaGraphBBox(node: Node) {
+  const bbox = node.getBBox()
+  const data = node.getData() as CanvasNodeData
+  if (!data.mediaWidth || !data.mediaHeight || data.compactPreview || data.gridSplitTile) {
+    return bbox
+  }
+
+  const mediaHeight = computeImageNodeHeight(bbox.width, data.mediaWidth, data.mediaHeight)
+  if (mediaHeight <= bbox.height) {
+    return {
+      x: bbox.x,
+      y: bbox.y + (bbox.height - mediaHeight) / 2,
+      width: bbox.width,
+      height: mediaHeight,
+    }
+  }
+
+  return {
+    x: bbox.x,
+    y: bbox.y,
+    width: bbox.width,
+    height: mediaHeight,
+  }
+}
+
+export function getImageNodeMediaScreenBox(graph: Graph, node: Node, container: HTMLElement) {
+  const bbox = getImageNodeMediaGraphBBox(node)
+  const topLeft = graphLocalToContainerOffset(graph, bbox.x, bbox.y, container)
+  const bottomRight = graphLocalToContainerOffset(
+    graph,
+    bbox.x + bbox.width,
+    bbox.y + bbox.height,
+    container,
+  )
+
+  const left = Math.min(topLeft.left, bottomRight.left)
+  const top = Math.min(topLeft.top, bottomRight.top)
+  const right = Math.max(topLeft.left, bottomRight.left)
+  const bottom = Math.max(topLeft.top, bottomRight.top)
+
+  return {
+    left,
+    top,
+    width: right - left,
+    height: bottom - top,
+    centerX: (left + right) / 2,
+    bottom,
+  }
+}
+
+export function syncImageNodeSizeToMediaAspect(node: Node) {
+  const data = node.getData() as CanvasNodeData
+  if (!data.mediaWidth || !data.mediaHeight) return
+  if (data.compactPreview || data.gridSplitTile) return
+  if (data.editorWidth && data.editorHeight && (data.viewScale ?? 1) === 1) return
+
+  const width = node.getSize().width
+  const expectedHeight = computeImageNodeHeight(width, data.mediaWidth, data.mediaHeight)
+  if (Math.abs(node.getSize().height - expectedHeight) <= 1) return
+  node.resize(width, expectedHeight)
+}
+
 export function syncImageNodeViewScaleFromSize(node: Node) {
   const data = node.getData() as CanvasNodeData
   if (!canResizeImageNode(data)) return
 
-  const nextScale = getImageNodeViewScale(node)
-  if (Math.abs((data.viewScale ?? 1) - nextScale) < 0.001) return
+  syncImageNodeSizeToMediaAspect(node)
 
-  node.setData({ ...data, viewScale: nextScale })
+  const nextScale = getImageNodeViewScale(node)
+  const current = node.getData() as CanvasNodeData
+  if (Math.abs((current.viewScale ?? 1) - nextScale) < 0.001) return
+
+  node.setData({ ...current, viewScale: nextScale })
 }
 
 export type ImageResizeCorner = 'nw' | 'ne' | 'sw' | 'se'
@@ -112,8 +188,8 @@ export function startImageNodeCornerResize(
       Math.min(IMAGE_NODE_MAX_VIEW_SCALE, startScale + delta / baseSize.width),
     )
 
-    const newWidth = Math.round(baseSize.width * nextScale)
-    const newHeight = Math.round(baseSize.height * nextScale)
+    const newWidth = Math.max(120, Math.round(baseSize.width * nextScale))
+    const newHeight = computeImageNodeHeight(newWidth, data.mediaWidth!, data.mediaHeight!)
     let nextX = startPos.x
     let nextY = startPos.y
 
@@ -455,8 +531,23 @@ export function getNodeSize(
 ) {
   const base = getBaseNodeSize(kind, mode, data)
   const scale = data?.viewScale ?? 1
-  if (scale === 1) return base
 
+  if (
+    kind === 'image' &&
+    scale !== 1 &&
+    data?.mediaWidth &&
+    data?.mediaHeight &&
+    !data.compactPreview &&
+    !data.gridSplitTile
+  ) {
+    const width = Math.max(120, Math.round(base.width * scale))
+    return {
+      width,
+      height: computeImageNodeHeight(width, data.mediaWidth, data.mediaHeight),
+    }
+  }
+
+  if (scale === 1) return base
   return {
     width: Math.max(120, Math.round(base.width * scale)),
     height: Math.max(120, Math.round(base.height * scale)),

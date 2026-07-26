@@ -55,6 +55,16 @@
         </button>
       </div>
 
+      <button
+        type="button"
+        class="image-inpaint-overlay__icon-btn"
+        title="回到视图"
+        :disabled="isDefaultView"
+        @click="resetView"
+      >
+        <span class="image-inpaint-overlay__icon image-inpaint-overlay__icon--fit" aria-hidden="true" />
+      </button>
+
       <div class="image-inpaint-overlay__zoom">
         <button
           type="button"
@@ -228,6 +238,18 @@ const imageWrapStyle = computed(() => ({
 
 const canUndo = computed(() => strokes.value.length > 0)
 const canRedo = computed(() => redoStack.value.length > 0)
+const isDefaultView = computed(
+  () =>
+    Math.abs(viewScale.value - 1) < 0.001 &&
+    Math.abs(viewPan.value.x) < 0.5 &&
+    Math.abs(viewPan.value.y) < 0.5,
+)
+
+function resetView() {
+  viewScale.value = 1
+  viewPan.value = { x: 0, y: 0 }
+  refreshDisplayCanvas()
+}
 
 function clampViewScale(scale: number) {
   return Math.min(MAX_VIEW_SCALE, Math.max(MIN_VIEW_SCALE, scale))
@@ -881,6 +903,10 @@ onBeforeUnmount(() => {
 
   &--zoom-out {
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1.5H7V9z'/%3E%3C/svg%3E");
+  }
+
+  &--fit {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z'/%3E%3C/svg%3E");
   }
 }
 </style>
