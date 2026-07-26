@@ -52,8 +52,8 @@
       </button>
     </div>
 
-    <!-- <div class="image-node__body">
-      <button
+    <div class="image-node__body">
+      <!-- <button
         v-if="data.previewUrl && (!data.compactPreview || isGridSplitNode)"
         type="button"
         class="image-node__scale-btn"
