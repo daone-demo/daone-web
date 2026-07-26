@@ -324,6 +324,7 @@ onBeforeUnmount(() => {
 @import './node-delete.scss';
 @import './node-port-plus.scss';
 @import './node-light-theme.scss';
+@import './node-generating-bg.scss';
 
 .video-node {
   position: relative;
@@ -438,6 +439,7 @@ onBeforeUnmount(() => {
 }
 
 .video-node__generating-preview {
+  @include node-generating-background();
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -446,14 +448,14 @@ onBeforeUnmount(() => {
   gap: 10px;
   min-height: 140px;
   border-radius: 10px;
-  background: #141416;
   text-align: center;
+  color: #8a8a8a;
 }
 
 .video-node__generating-text {
   margin: 0;
   font-size: 12px;
-  color: #6b7280;
+  color: #8a8a8a;
   line-height: 1.4;
   white-space: nowrap;
 }

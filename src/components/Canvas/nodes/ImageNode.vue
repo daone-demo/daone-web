@@ -52,7 +52,7 @@
       </button>
     </div>
 
-    <div class="image-node__body">
+    <!-- <div class="image-node__body">
       <button
         v-if="data.previewUrl && (!data.compactPreview || isGridSplitNode)"
         type="button"
@@ -61,8 +61,13 @@
         title="缩放视图"
         @mousedown.stop="startResize"
       >
-        ↗
-      </button>
+        <img
+          src="@assets/images/scale.png"
+          alt="缩放视图"
+          width="28"
+          height="28"
+        />
+      </button> -->
 
       <input
         v-if="!isGridSplitNode"
@@ -73,7 +78,7 @@
         @change="onUploadInputChange"
       />
 
-      <button
+      <!-- <button
         v-if="!isGridSplitNode"
         type="button"
         class="image-node__upload-btn"
@@ -95,7 +100,7 @@
         >
           <path d="M1.80078 16.9003C1.80087 17.1919 1.91684 17.4714 2.12305 17.6776C2.32932 17.8838 2.60874 17.9999 2.90039 17.9999H16.9004C17.192 17.9999 17.4715 17.8838 17.6777 17.6776C17.8839 17.4714 17.9999 17.1919 18 16.9003V11.9999H19.8008V16.9003C19.8007 17.6693 19.4949 18.4073 18.9512 18.951C18.4073 19.4948 17.6694 19.8006 16.9004 19.8006H2.90039C2.13135 19.8006 1.39345 19.4948 0.849609 18.951C0.305837 18.4073 9.33702e-05 17.6693 0 16.9003V11.9999H1.80078V16.9003ZM9.33203 0.202009C9.68553 -0.086443 10.2076 -0.0660213 10.5371 0.263533L16.1729 5.90025L14.9004 7.17271L10.8008 3.07408V13.8006H9V3.07408L4.90039 7.17271L3.62793 5.90025L9.26367 0.263533L9.33203 0.202009Z" fill="currentColor"></path>
         </svg>
-      </button>
+      </button> -->
 
       <div
         class="image-node__preview"
@@ -332,6 +337,7 @@ onMounted(() => {
 @import './node-delete.scss';
 @import './node-port-plus.scss';
 @import './node-light-theme.scss';
+@import './node-generating-bg.scss';
 .image-node {
   position: relative;
   display: flex;
@@ -543,6 +549,7 @@ onMounted(() => {
 }
 
 .image-node__generating {
+  @include node-generating-background();
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -555,7 +562,7 @@ onMounted(() => {
 
 .image-node__generating-text {
   font-size: 12px;
-  color: #6b7280;
+  color: #8a8a8a;
   line-height: 1.4;
   white-space: nowrap;
 }

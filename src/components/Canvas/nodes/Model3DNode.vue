@@ -43,7 +43,7 @@
         @pointerdown.stop
         @wheel.stop.prevent
       />
-      <div v-if="data.imageGenState === 'loading'" class="model3d-node__overlay">
+      <div v-if="data.imageGenState === 'loading'" class="model3d-node__overlay model3d-node__overlay--generating">
         <span class="model3d-node__spinner" aria-hidden="true" />
         <span>{{ genHintText }}</span>
       </div>
@@ -286,6 +286,7 @@ onBeforeUnmount(() => {
 <style scoped lang="scss">
 @import './node-delete.scss';
 @import './node-port-plus.scss';
+@import './node-generating-bg.scss';
 
 .model3d-node {
   position: relative;
@@ -375,6 +376,11 @@ onBeforeUnmount(() => {
   color: #d1d5db;
   font-size: 12px;
   pointer-events: none;
+}
+
+.model3d-node__overlay--generating {
+  @include node-generating-background();
+  color: #8a8a8a;
 }
 
 .model3d-node__overlay--error {

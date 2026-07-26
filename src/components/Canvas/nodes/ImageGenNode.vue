@@ -225,6 +225,7 @@ onMounted(() => {
 @import './node-delete.scss';
 @import './node-port-plus.scss';
 @import './node-light-theme.scss';
+@import './node-generating-bg.scss';
 
 .image-gen-node {
   position: relative;
@@ -327,8 +328,11 @@ onMounted(() => {
   }
 
   &--generating {
+    @include node-generating-background();
     gap: 10px;
     text-align: center;
+    color: #8a8a8a;
+    cursor: default;
   }
 
   &--output {
@@ -407,7 +411,7 @@ onMounted(() => {
 
 .image-gen-node__generating-text {
   font-size: 12px;
-  color: #6b7280;
+  color: #8a8a8a;
   line-height: 1.4;
   white-space: nowrap;
 }
