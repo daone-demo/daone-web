@@ -39,11 +39,27 @@ export function canResizeImageNode(data?: Partial<CanvasNodeData>) {
   if (!data || data.kind !== 'image') return false
   if (data.mode !== 'editor') return false
   if (!data.previewUrl?.trim()) return false
-  if (data.compactPreview || data.gridSplitTile) return false
+  if (data.compactPreview && !data.gridSplitTile) return false
   if (data.uploadState === 'uploading') return false
   if (data.imageGenState === 'loading') return false
   if (!data.mediaWidth || !data.mediaHeight) return false
   return true
+}
+
+function getImageNodeResizeMinWidth(data?: Partial<CanvasNodeData>) {
+  return data?.gridSplitTile ? 24 : 120
+}
+
+export function computeImageNodeResizeHeight(
+  width: number,
+  mediaWidth: number,
+  mediaHeight: number,
+  data?: Partial<CanvasNodeData>,
+) {
+  if (data?.gridSplitTile) {
+    return Math.max(1, Math.round((width * mediaHeight) / mediaWidth))
+  }
+  return computeImageNodeHeight(width, mediaWidth, mediaHeight)
 }
 
 export function getImageNodeViewScale(node: Node) {
@@ -130,11 +146,11 @@ export function getImageNodeMediaScreenBox(graph: Graph, node: Node, container: 
 export function syncImageNodeSizeToMediaAspect(node: Node) {
   const data = node.getData() as CanvasNodeData
   if (!data.mediaWidth || !data.mediaHeight) return
-  if (data.compactPreview || data.gridSplitTile) return
-  if (data.editorWidth && data.editorHeight && (data.viewScale ?? 1) === 1) return
+  if (data.compactPreview && !data.gridSplitTile) return
+  if (data.editorWidth && data.editorHeight && (data.viewScale ?? 1) === 1 && !data.gridSplitTile) return
 
   const width = node.getSize().width
-  const expectedHeight = computeImageNodeHeight(width, data.mediaWidth, data.mediaHeight)
+  const expectedHeight = computeImageNodeResizeHeight(width, data.mediaWidth, data.mediaHeight, data)
   if (Math.abs(node.getSize().height - expectedHeight) <= 1) return
   node.resize(width, expectedHeight)
 }
@@ -188,8 +204,9 @@ export function startImageNodeCornerResize(
       Math.min(IMAGE_NODE_MAX_VIEW_SCALE, startScale + delta / baseSize.width),
     )
 
-    const newWidth = Math.max(120, Math.round(baseSize.width * nextScale))
-    const newHeight = computeImageNodeHeight(newWidth, data.mediaWidth!, data.mediaHeight!)
+    const minWidth = getImageNodeResizeMinWidth(data)
+    const newWidth = Math.max(minWidth, Math.round(baseSize.width * nextScale))
+    const newHeight = computeImageNodeResizeHeight(newWidth, data.mediaWidth!, data.mediaHeight!, data)
     let nextX = startPos.x
     let nextY = startPos.y
 
@@ -537,13 +554,12 @@ export function getNodeSize(
     scale !== 1 &&
     data?.mediaWidth &&
     data?.mediaHeight &&
-    !data.compactPreview &&
-    !data.gridSplitTile
+    (!data.compactPreview || data.gridSplitTile)
   ) {
-    const width = Math.max(120, Math.round(base.width * scale))
+    const width = Math.max(getImageNodeResizeMinWidth(data), Math.round(base.width * scale))
     return {
       width,
-      height: computeImageNodeHeight(width, data.mediaWidth, data.mediaHeight),
+      height: computeImageNodeResizeHeight(width, data.mediaWidth, data.mediaHeight, data),
     }
   }
 

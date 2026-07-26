@@ -505,7 +505,11 @@ export function registerCore(bind: CanvasBindings) {
   })
 
   const showNodeToolbar = computed(
-    () => Boolean(selectedNodeId.value) && !showGroupToolbar.value && !imagePreviewUrl.value,
+    () =>
+      Boolean(selectedNodeId.value) &&
+      selectedNodeIds.value.length <= 1 &&
+      !showGroupToolbar.value &&
+      !imagePreviewUrl.value,
   )
 
   function onGoHome() {
@@ -572,7 +576,6 @@ export function registerCore(bind: CanvasBindings) {
 
   function canShowImageToolbar(data: CanvasNodeData | undefined) {
     if (!data || data.kind !== 'image') return false
-    if (data.gridSplitTile) return false
     if (data.imageGenTask === 'picker') return false
     if (data.imageGenTask === 'img2img' || data.imageGenTask === 'hd') return true
     return data.mode === 'editor'
@@ -1208,17 +1211,11 @@ export function registerCore(bind: CanvasBindings) {
 
       closeImageGridSplit()
 
-      const resultNodeIds = nodes.map((node) => node.id)
-      selectedNodeId.value = resultNodeIds[0] ?? sourceNodeId
-      selectedNodeIds.value = resultNodeIds.length ? resultNodeIds : [sourceNodeId]
-      selectedKind.value = 'image'
-      syncNodeSelectionHighlight(selectedNodeIds.value)
+      selectedNodeId.value = ''
+      selectedNodeIds.value = []
+      selectedKind.value = null
+      syncNodeSelectionHighlight([])
       g.cleanSelection()
-      if (resultNodeIds.length) {
-        g.select(resultNodeIds)
-      } else {
-        g.select(sourceNodeId)
-      }
       syncNodeCount()
       bumpToolbarRevision()
       updateNodeToolbar()
@@ -4559,11 +4556,18 @@ export function registerCore(bind: CanvasBindings) {
           : getGraphSelectedNodeIds(),
     )
 
+    const soleSelection = idSet.size === 1
     g.getNodes().forEach((node) => {
       const data = node.getData() as CanvasNodeData
       const isSelected = idSet.has(node.id)
-      if (Boolean(data.isSelected) === isSelected) return
-      node.setData({ ...data, isSelected })
+      const showConnectPlus = soleSelection && isSelected && Boolean(data.gridSplitTile)
+      if (
+        Boolean(data.isSelected) === isSelected &&
+        Boolean(data.showConnectPlus) === showConnectPlus
+      ) {
+        return
+      }
+      node.setData({ ...data, isSelected, showConnectPlus })
     })
   }
 

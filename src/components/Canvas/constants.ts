@@ -52,6 +52,8 @@ export interface CanvasNodeData {
   /** 本节点对应素材库资源 ID（上传接口返回的 id） */
   assetId?: string
   isSelected?: boolean
+  /** 宫格碎片：仅单独选中时展示连线加号 */
+  showConnectPlus?: boolean
   /** 节点所属分组 ID，同组节点可整组移动与解组 */
   groupId?: string
   imageGenTask?: ImageGenTask
