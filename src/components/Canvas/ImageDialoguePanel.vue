@@ -232,6 +232,7 @@ import {
   buildImageDialogueResolutionsFromCapabilities,
   buildImageWorkflowOptions,
   findImageDialogueSource,
+  resolveImageDialogueModelKey,
   type ChatTools,
   type ImageDialogueModelItem,
   type ImageDialogueSettings,
@@ -292,7 +293,9 @@ const showCountMenu = ref(false)
 const genAspectRatio = ref('auto')
 const genResolution = ref('2K')
 const genImageCount = ref(1)
-const selectedModelKey = ref(IMAGE_DIALOGUE_MODEL_MENU[0].key)
+const selectedModelKey = ref(
+  resolveImageDialogueModelKey(IMAGE_DIALOGUE_MODEL_MENU[0].key, null),
+)
 const selectedWorkFlow = ref('')
 const translating = ref(false)
 let skipSettingsWatch = false
@@ -312,7 +315,7 @@ function applySettingsToRefs(settings: ImageDialogueSettings) {
   genAspectRatio.value = settings.aspectRatio
   genResolution.value = settings.resolution
   genImageCount.value = settings.imageCount
-  selectedModelKey.value = settings.modelKey
+  selectedModelKey.value = resolveImageDialogueModelKey(settings.modelKey, props.chatTools)
   selectedWorkFlow.value = settings.workflowId
   nextTick(() => {
     skipSettingsWatch = false
@@ -373,8 +376,12 @@ const qualityLabel = computed(() => {
 
 function syncDialogueDefaultsFromChatTools() {
   const models = modelMenu.value
-  if (models.length && !models.some((model) => model.key === selectedModelKey.value)) {
-    selectedModelKey.value = models[0].key
+  // 默认 / 无效 modelKey 一律回退到 modelOptions 第一项
+  if (models.length) {
+    const nextKey = resolveImageDialogueModelKey(selectedModelKey.value, props.chatTools)
+    if (nextKey !== selectedModelKey.value) {
+      selectedModelKey.value = nextKey
+    }
   }
 
   const ratios = aspectRatioOptions.value

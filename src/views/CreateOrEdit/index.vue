@@ -46,13 +46,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import type { Node } from '@antv/x6';
-import Canvas from '@/components/Canvas/index.vue';
-import ChatSidePanel from './ChatSidePanel.vue';
-import type { ChatSendPayload } from './chatTypes';
-import { useRoute } from 'vue-router';
-import api, { type ProjectCanvasResponse } from '@/services/api';
+import { computed, createVNode, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import type { Node } from '@antv/x6'
+import { Modal } from 'ant-design-vue'
+import { ExclamationCircleFilled } from '@ant-design/icons-vue'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
+import Canvas from '@/components/Canvas/index.vue'
+import ChatSidePanel from './ChatSidePanel.vue'
+import type { ChatSendPayload } from './chatTypes'
+import api, { type ProjectCanvasResponse } from '@/services/api'
 import { useModalStore } from '@stores/useModal'
 import {
   normalizeImageCapabilities,
@@ -75,6 +77,8 @@ const workflows = ref<any[]>([]);
 type CanvasExpose = {
   addImagesFromFiles: (files: File[]) => Promise<Node[]>
   getNodeCount: () => number
+  hasUnsavedChanges: () => boolean
+  saveCanvas: (saveType?: 'MANUAL' | 'AUTO') => void
   loadProjectCanvas: (payload: ProjectCanvasResponse) => boolean
 }
 
@@ -99,6 +103,8 @@ const canvasRef = ref<InstanceType<typeof Canvas> & CanvasExpose | null>(null)
 const chatPanelRef = ref<InstanceType<typeof ChatSidePanel> | null>(null)
 const pageLoading = ref(true)
 const pendingCanvasPayload = ref<ProjectCanvasResponse | null>(null)
+/** 用户已确认离开时跳过二次弹窗 */
+let leaveConfirmed = false
 
 function focusChatPanel() {
   chatPanelCollapsed.value = false
@@ -313,6 +319,62 @@ async function initializePage() {
   })
 }
 
+function needsLeaveConfirm() {
+  if (pageLoading.value) return false
+  if (leaveConfirmed) return false
+  // 离开创作页 / 切换项目前均提示保存
+  return true
+}
+
+function confirmLeaveBeforeRouteChange(): Promise<boolean> {
+  if (!needsLeaveConfirm()) return Promise.resolve(true)
+
+  const hasUnsaved = canvasRef.value?.hasUnsavedChanges?.() ?? false
+  const content = hasUnsaved
+    ? '当前项目有未保存的更改，离开后可能会丢失。请先点击保存，确认后再离开。'
+    : '离开页面前请确认已保存当前项目，未保存的更改可能会丢失。'
+
+  return new Promise((resolve) => {
+    Modal.confirm({
+      title: '离开前请先保存',
+      icon: createVNode(ExclamationCircleFilled),
+      content,
+      okText: '仍要离开',
+      cancelText: '取消',
+      centered: true,
+      onOk: () => {
+        leaveConfirmed = true
+        resolve(true)
+      },
+      onCancel: () => {
+        resolve(false)
+      },
+    })
+  })
+}
+
+onBeforeRouteLeave(async () => {
+  const ok = await confirmLeaveBeforeRouteChange()
+  if (!ok) return false
+  leaveConfirmed = false
+  return true
+})
+
+onBeforeRouteUpdate(async () => {
+  const ok = await confirmLeaveBeforeRouteChange()
+  if (!ok) return false
+  leaveConfirmed = false
+  return true
+})
+
+function onBrowserBeforeUnload(event: BeforeUnloadEvent) {
+  // 浏览器关闭/刷新：仅在确实有未保存更改时拦截
+  if (pageLoading.value) return
+  if (!(canvasRef.value?.hasUnsavedChanges?.() ?? false)) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
 watch(
   () => route.params.id,
   (newId, oldId) => {
@@ -326,7 +388,12 @@ watch(
 )
 
 onMounted(() => {
+  window.addEventListener('beforeunload', onBrowserBeforeUnload)
   void initializePage()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', onBrowserBeforeUnload)
 })
 
 </script>

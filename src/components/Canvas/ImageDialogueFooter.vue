@@ -116,6 +116,7 @@ import {
   buildImageDialogueModelsFromCapabilities,
   buildImageDialogueResolutionsFromCapabilities,
   findImageDialogueSource,
+  resolveImageDialogueModelKey,
   type ChatTools,
   type ImageDialogueModelItem,
   type ImageDialogueSubmitPayload,
@@ -142,7 +143,9 @@ const showModelMenu = ref(false)
 const genAspectRatio = ref('auto')
 const genResolution = ref('2K')
 const genImageCount = ref(1)
-const selectedModelKey = ref(IMAGE_DIALOGUE_MODEL_MENU[0].key)
+const selectedModelKey = ref(
+  resolveImageDialogueModelKey(IMAGE_DIALOGUE_MODEL_MENU[0].key, null),
+)
 
 const modelMenu = computed(() =>
   buildImageDialogueModelsFromCapabilities(props.chatTools),
@@ -171,8 +174,11 @@ const qualityLabel = computed(() => {
 
 function syncDialogueDefaultsFromChatTools() {
   const models = modelMenu.value
-  if (models.length && !models.some((model) => model.key === selectedModelKey.value)) {
-    selectedModelKey.value = models[0].key
+  if (models.length) {
+    const nextKey = resolveImageDialogueModelKey(selectedModelKey.value, props.chatTools)
+    if (nextKey !== selectedModelKey.value) {
+      selectedModelKey.value = nextKey
+    }
   }
 
   const ratios = aspectRatioOptions.value

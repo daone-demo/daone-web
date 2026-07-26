@@ -777,6 +777,67 @@ function parseCapabilityStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string' && item.length > 0)
 }
 
+/** chat-tools parameters.modelOptions: [{ value, label, ... }] */
+function parseCapabilityModelOptions(value: unknown): Array<{
+  value: string
+  label: string
+  duration?: string
+  desc?: string
+  badge?: string
+}> {
+  if (!Array.isArray(value)) return []
+  const result: Array<{
+    value: string
+    label: string
+    duration?: string
+    desc?: string
+    badge?: string
+  }> = []
+
+  for (const item of value) {
+    if (typeof item === 'string' && item.trim()) {
+      result.push({ value: item.trim(), label: item.trim() })
+      continue
+    }
+    if (!item || typeof item !== 'object') continue
+    const row = item as Record<string, unknown>
+    const rawValue = row.value ?? row.key ?? row.id ?? row.model
+    const valueText = typeof rawValue === 'string' ? rawValue.trim() : ''
+    if (!valueText) continue
+    const rawLabel = row.label ?? row.name ?? row.title
+    const labelText =
+      typeof rawLabel === 'string' && rawLabel.trim() ? rawLabel.trim() : valueText
+    result.push({
+      value: valueText,
+      label: labelText,
+      duration: typeof row.duration === 'string' ? row.duration : undefined,
+      desc:
+        typeof row.desc === 'string'
+          ? row.desc
+          : typeof row.description === 'string'
+            ? row.description
+            : undefined,
+      badge:
+        typeof row.badge === 'string'
+          ? row.badge
+          : typeof row.tag === 'string'
+            ? row.tag
+            : undefined,
+    })
+  }
+
+  return result
+}
+
+function resolveImageDialogueModelIcon(key: string, index: number): ImageDialogueModelIcon {
+  const lower = key.toLowerCase()
+  if (lower.includes('midjourney') || lower.includes('mj')) return 'mj'
+  if (lower.includes('seedream') || lower.includes('seed')) return 'seedream'
+  if (lower.includes('navo')) return 'navo'
+  if (lower.includes('gpt') || lower.includes('gemini') || lower.includes('image')) return 'lib'
+  return index === 0 ? 'lib' : 'seedream'
+}
+
 function parseCapabilityCountRange(parameters?: Record<string, unknown>): number[] {
   const count = parameters?.count
   if (Array.isArray(count)) {
@@ -851,15 +912,32 @@ export function buildImageDialogueModelsFromCapabilities(
   source: ImageDialogueSource,
 ): ImageDialogueModelItem[] {
   const capability = findImageDialogueSource(source)
-  const models = parseCapabilityStringArray(capability?.parameters?.model)
-  if (!models.length) return IMAGE_DIALOGUE_MODEL_MENU
 
-  return models.map((key, index) => ({
-    key,
-    name: key,
-    duration: '',
-    icon: index === 0 ? 'lib' : 'seedream',
-  }))
+  // 优先 chatTools.image.parameters.modelOptions（图生图模型正式数据源）
+  const modelOptions = parseCapabilityModelOptions(capability?.parameters?.modelOptions)
+  if (modelOptions.length) {
+    return modelOptions.map((item, index) => ({
+      key: item.value,
+      name: item.label,
+      duration: item.duration ?? '',
+      icon: resolveImageDialogueModelIcon(item.value || item.label, index),
+      desc: item.desc,
+      badge: item.badge,
+    }))
+  }
+
+  // 兼容旧字段 parameters.model: string[]
+  const models = parseCapabilityStringArray(capability?.parameters?.model)
+  if (models.length) {
+    return models.map((key, index) => ({
+      key,
+      name: key,
+      duration: '',
+      icon: resolveImageDialogueModelIcon(key, index),
+    }))
+  }
+
+  return IMAGE_DIALOGUE_MODEL_MENU
 }
 
 export function buildImageDialogueCountOptionsFromCapabilities(
@@ -1190,14 +1268,32 @@ export const IMAGE_DIALOGUE_MODEL_MENU: ImageDialogueModelItem[] = [
   { key: 'midjourney-v7', name: 'Midjourney V7', duration: '50s', icon: 'mj' },
 ]
 
-export function createDefaultImageDialogueSettings(): ImageDialogueSettings {
+export function createDefaultImageDialogueSettings(
+  source?: ImageDialogueSource,
+): ImageDialogueSettings {
+  const models = buildImageDialogueModelsFromCapabilities(source)
   return {
     aspectRatio: 'auto',
     resolution: '2K',
     imageCount: 1,
-    modelKey: IMAGE_DIALOGUE_MODEL_MENU[0].key,
+    // 默认模型 = chatTools.image.parameters.modelOptions 第一项
+    modelKey: models[0]?.key ?? IMAGE_DIALOGUE_MODEL_MENU[0].key,
     workflowId: '',
   }
+}
+
+/** 将 modelKey 规范为可用值；无效时回退 modelOptions 第一项 */
+export function resolveImageDialogueModelKey(
+  preferred: string | undefined | null,
+  source?: ImageDialogueSource,
+): string {
+  const models = buildImageDialogueModelsFromCapabilities(source)
+  if (!models.length) {
+    return preferred?.trim() || IMAGE_DIALOGUE_MODEL_MENU[0].key
+  }
+  const key = preferred?.trim() ?? ''
+  if (key && models.some((model) => model.key === key)) return key
+  return models[0].key
 }
 
 export const IMAGE_COLOR_DEFAULT = '#0E316A'

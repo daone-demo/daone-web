@@ -687,6 +687,16 @@ defineExpose({
   addImageFromFile,
   addImagesFromFiles,
   getNodeCount,
+  hasUnsavedChanges(): boolean {
+    const fn = (canvasRuntime as { hasUnsavedChanges?: () => boolean }).hasUnsavedChanges
+    return fn?.() ?? false
+  },
+  saveCanvas(saveType: 'MANUAL' | 'AUTO' = 'MANUAL') {
+    const fn = (canvasRuntime as {
+      handleSaveCanvas?: (saveType?: 'MANUAL' | 'AUTO') => void
+    }).handleSaveCanvas
+    fn?.(saveType)
+  },
   loadProjectCanvas(payload: ProjectCanvasResponse) {
     const load = (canvasRuntime as {
       loadProjectCanvas?: (payload: ProjectCanvasResponse) => boolean

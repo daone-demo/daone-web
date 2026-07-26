@@ -37,6 +37,7 @@ import {
   type ImageEditTextChange,
 } from '../../editTextUtils'
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
+import { downloadCanvasMedia } from '../../mediaDownload'
 import {
   bindGenerationTaskId,
   followModelGenerationTaskOnNode,
@@ -1268,16 +1269,20 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function handleVideoDownloadAction(event: VideoToolbarClickEvent) {
+    void event.assetId
     const data = getSelectedNodeData()
     const url = data?.previewUrl
-    if (!url) return
-    const link = document.createElement('a')
-    link.href = url
-    link.download = data?.fileName || 'video'
-    link.target = '_blank'
-    link.rel = 'noopener'
-    link.click()
-    void event.assetId
+    if (!url) {
+      message.warning('视频尚未生成完成，无法下载')
+      return
+    }
+    void downloadCanvasMedia({
+      url,
+      fileName: data?.fileName,
+      fallbackName: 'video.mp4',
+    }).catch((error) => {
+      message.error(isRequestError(error) ? error.message : '视频下载失败，请稍后重试')
+    })
   }
 
   function handleImageGridSplitAction(_event: ImageToolbarClickEvent) {
@@ -2500,16 +2505,20 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function handleImageDownloadAction(event: ImageToolbarClickEvent) {
+    void event.assetId
     const data = getSelectedNodeData()
     const url = data?.previewUrl
-    if (!url) return
-    const link = document.createElement('a')
-    link.href = url
-    link.download = data?.fileName || 'image'
-    link.target = '_blank'
-    link.rel = 'noopener'
-    link.click()
-    void event.assetId
+    if (!url) {
+      message.warning('图片尚未准备好，无法下载')
+      return
+    }
+    void downloadCanvasMedia({
+      url,
+      fileName: data?.fileName,
+      fallbackName: 'image.png',
+    }).catch((error) => {
+      message.error(isRequestError(error) ? error.message : '图片下载失败，请稍后重试')
+    })
   }
 
   async function openImageCrop() {
@@ -3016,7 +3025,8 @@ export function registerCore(bind: CanvasBindings) {
       aspectRatio: saved.aspectRatio ?? defaults.aspectRatio,
       resolution: saved.resolution ?? defaults.resolution,
       imageCount: saved.imageCount ?? defaults.imageCount,
-      modelKey: saved.modelKey ?? defaults.modelKey,
+      // 空值交给面板按 chatTools.modelOptions 第一项回填
+      modelKey: saved.modelKey?.trim() ? saved.modelKey : defaults.modelKey,
       workflowId: saved.workflowId ?? defaults.workflowId,
     }
   }
@@ -4401,6 +4411,15 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     void flushRemoteCanvasSave(saveType)
+  }
+
+  /** 当前项目是否有未落库的更改（含保存进行中） */
+  function hasUnsavedChanges() {
+    const projectId = activeProjectId.value
+    if (!projectId) return false
+    if (saveInFlight || pendingRemoteSaveType) return true
+    const project = canvasProjects.value.find((item) => item.id === projectId)
+    return project?.saved === false
   }
 
   function persistGenerationTaskBinding() {
@@ -6702,17 +6721,49 @@ export function registerCore(bind: CanvasBindings) {
     const group = activeGroupSelection.value
     if (!g || !group) return
 
-    group.nodeIds.forEach((id, index) => {
-      const node = g.getCellById(id)
-      if (!node?.isNode()) return
-      const data = node.getData() as CanvasNodeData
-      if (!data.previewUrl) return
-      const link = document.createElement('a')
-      link.href = data.previewUrl
-      link.download = data.fileName || `group-image-${index + 1}.png`
-      link.rel = 'noopener'
-      link.click()
-    })
+    const targets = group.nodeIds
+      .map((id) => {
+        const node = g.getCellById(id)
+        if (!node?.isNode()) return null
+        const data = node.getData() as CanvasNodeData
+        if (!data.previewUrl) return null
+        return data
+      })
+      .filter((item): item is CanvasNodeData => Boolean(item))
+
+    if (!targets.length) {
+      message.warning('当前分组没有可下载的图片或视频')
+      return
+    }
+
+    void (async () => {
+      let success = 0
+      for (let index = 0; index < targets.length; index += 1) {
+        const data = targets[index]
+        const isVideo = data.kind === 'video'
+        try {
+          await downloadCanvasMedia({
+            url: data.previewUrl,
+            fileName: data.fileName,
+            fallbackName: isVideo
+              ? `group-video-${index + 1}.mp4`
+              : `group-image-${index + 1}.png`,
+          })
+          success += 1
+          // 避免浏览器连续触发下载被拦截
+          if (index < targets.length - 1) {
+            await new Promise((resolve) => window.setTimeout(resolve, 280))
+          }
+        } catch {
+          // 单个失败不中断批次
+        }
+      }
+      if (!success) {
+        message.error('批量下载失败，请稍后重试')
+      } else if (success < targets.length) {
+        message.warning(`已下载 ${success}/${targets.length} 个文件`)
+      }
+    })()
   }
 
   function handleGroupSaveToSkill() {
@@ -7485,6 +7536,7 @@ export function registerCore(bind: CanvasBindings) {
     handleOpenVideoGenPromptBar,
     handleRedo,
     handleSaveCanvas,
+    hasUnsavedChanges,
     loadProjectCanvas,
     handleTextPickerAction,
     handleTidyCanvas,
