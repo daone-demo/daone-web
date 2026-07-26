@@ -29,7 +29,7 @@ import {
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
-  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES,
+  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
 import {
@@ -72,6 +72,9 @@ import {
   type ImageDialogueSubmitPayload,
   type VideoDialogueSubmitPayload,
   type VideoGenPromptSubmitPayload,
+  type VideoDialogueSettings,
+  type VideoGenResolution,
+  type VideoGenDuration,
   createDefaultImageDialogueSettings,
   createDefaultVideoDialogueSettings,
 } from '../../constants'
@@ -349,7 +352,8 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     const id = activeVideoGenPromptNodeId.value
     if (!g || !id) return []
-    return getVideoSourceRefs(g, id)
+    const data = g.getCellById(id)?.getData() as CanvasNodeData | undefined
+    return resolveVideoSourceRefsForNode(g, id, data?.videoSourceRefs, false)
   })
 
   const videoDialogueSourceRefs = computed(() => {
@@ -358,8 +362,91 @@ export function registerCore(bind: CanvasBindings) {
     const id =
       showVideoDialogue.value && selectedKind.value === 'video' ? selectedNodeId.value : ''
     if (!g || !id) return []
-    return getVideoSourceRefs(g, id)
+    const data = g.getCellById(id)?.getData() as CanvasNodeData | undefined
+    // 对话框优先展示生成溯源快照
+    return resolveVideoSourceRefsForNode(g, id, data?.videoSourceRefs, true)
   })
+
+  /** 将当前连入图片快照写入视频节点，供对话框溯源与画布落库 */
+  function syncVideoSourceRefsSnapshot(
+    nodeId: string,
+    options?: { force?: boolean },
+  ) {
+    const g = graph.value
+    if (!g || !nodeId) return
+    const cell = g.getCellById(nodeId)
+    if (!cell?.isNode()) return
+    const data = { ...(cell.getData() as CanvasNodeData) }
+    if (data.kind !== 'video') return
+
+    const livePersisted = toPersistedVideoSourceRefs(getVideoSourceRefs(g, nodeId))
+    const stored = Array.isArray(data.videoSourceRefs) ? data.videoSourceRefs : []
+
+    if (options?.force) {
+      data.videoSourceRefs = livePersisted
+    } else if (!data.previewUrl || !stored.length) {
+      // 未成片或尚无快照：以当前连线为准
+      data.videoSourceRefs = livePersisted
+    } else {
+      // 已成片：合并追加新连线，不因画布删线收缩溯源
+      const map = new Map(stored.map((item) => [item.nodeId, { ...item }]))
+      for (const ref of livePersisted) {
+        map.set(ref.nodeId, ref)
+      }
+      data.videoSourceRefs = Array.from(map.values())
+    }
+
+    cell.setData(data, { overwrite: true })
+  }
+
+  function buildVideoDialogueSettingsFromPayload(payload: {
+    model: string
+    ratio: string
+    clarity: string
+    duration: number
+    generateAudio: boolean
+    videoCount: number
+    mode: VideoDialogueSettings['mode']
+  }): VideoDialogueSettings {
+    return {
+      modelKey: payload.model,
+      aspectRatio: payload.ratio as VideoGenAspectRatio,
+      resolution: payload.clarity as VideoGenResolution,
+      duration: payload.duration as VideoGenDuration,
+      generateAudio: payload.generateAudio,
+      videoCount: payload.videoCount,
+      mode: payload.mode,
+    }
+  }
+
+  /** 把本次生成的文案 / 参数 / 参考图写入节点，打开「对话」可溯源 */
+  function applyVideoGenerationProvenance(
+    node: Node,
+    payload: {
+      prompt: string
+      model: string
+      ratio: string
+      clarity: string
+      duration: number
+      generateAudio: boolean
+      videoCount: number
+      mode: VideoDialogueSettings['mode']
+    },
+    sourceRefs?: ReturnType<typeof getVideoSourceRefs>,
+  ) {
+    const g = graph.value
+    const data = { ...(node.getData() as CanvasNodeData) }
+    const refs =
+      sourceRefs ??
+      (g ? getVideoSourceRefs(g, node.id) : [])
+    const settings = buildVideoDialogueSettingsFromPayload(payload)
+    data.genPrompt = payload.prompt
+    data.videoDialogueText = payload.prompt
+    data.videoDialogueSettings = { ...settings }
+    data.videoSourceRefs = toPersistedVideoSourceRefs(refs)
+    data.videoGenAspectRatio = payload.ratio
+    node.setData(data, { overwrite: true })
+  }
 
   function getActiveVideoTargetNodeId() {
     if (activeVideoGenPromptNodeId.value) return activeVideoGenPromptNodeId.value
@@ -1093,10 +1180,38 @@ export function registerCore(bind: CanvasBindings) {
       config.resolveReferenceAssetIds?.(event) ??
       (event.assetId ? [event.assetId] : [])
 
+    const prompt = config.prompt?.trim() ?? ''
+    const liveSourceRefs = getVideoSourceRefs(g, sourceNodeId)
+    syncVideoSourceRefsSnapshot(sourceNodeId)
+
+    // 调用方（对话框/能力条）应已写入溯源；此处补齐文案与参考图快照后复制到结果节点
+    const midData = { ...(sourceNode.getData() as CanvasNodeData) }
+    if (prompt && !midData.videoDialogueText?.trim()) {
+      midData.videoDialogueText = prompt
+      midData.genPrompt = prompt
+    }
+    if (prompt && !midData.genPrompt?.trim()) {
+      midData.genPrompt = prompt
+    }
+    midData.videoSourceRefs = toPersistedVideoSourceRefs(liveSourceRefs)
+    sourceNode.setData(midData, { overwrite: true })
+
+    const refreshedSource = sourceNode.getData() as CanvasNodeData
     const resultNode = spawnVideoGenerationResultNode(g, sourceNode, {
       title: config.title,
       fileName,
+      videoDialogueText: refreshedSource.videoDialogueText || prompt,
+      videoDialogueSettings: refreshedSource.videoDialogueSettings,
+      videoSourceRefs: refreshedSource.videoSourceRefs,
+      genPrompt: refreshedSource.genPrompt || prompt,
     })
+
+    // 结果节点也挂上参考图连线，对话框可直接读到 live refs
+    for (const ref of liveSourceRefs) {
+      if (!findImageToVideoEdge(g, ref.nodeId, resultNode.id)) {
+        connectGenEdge(g, ref.nodeId, resultNode.id)
+      }
+    }
 
     selectedNodeId.value = resultNode.id
     selectedKind.value = 'video'
@@ -1949,16 +2064,22 @@ export function registerCore(bind: CanvasBindings) {
     const data = getSelectedNodeData()
     const g = graph.value
     const sourceNodeId = selectedNodeId.value
-    const imageAssetIds =
-      g && sourceNodeId
-        ? getVideoSourceRefs(g, sourceNodeId)
-            .map((item) => item.assetId)
-            .filter((id): id is string => Boolean(id))
-        : []
+    if (!g || !sourceNodeId) return
+
+    const sourceCell = g.getCellById(sourceNodeId)
+    if (!sourceCell?.isNode()) return
+    const sourceNode = sourceCell as Node
+
+    const imageAssetIds = getVideoSourceRefs(g, sourceNodeId)
+      .map((item) => item.assetId)
+      .filter((id): id is string => Boolean(id))
     const imageAssetId = imageAssetIds[0] || ''
     const videoAssetId = resolveVideoAssetId(data) || ''
     // 有参考图片走对话面板指定 mode；无图片时降级文生视频
     const mode = imageAssetId ? payload.mode : 'text-to-video'
+
+    persistVideoDialogueFields(sourceNodeId)
+    applyVideoGenerationProvenance(sourceNode, { ...payload, prompt, mode })
 
     const event: VideoToolbarClickEvent = {
       key: VIDEO_GENERAL_CAPABILITY_CODE,
@@ -2033,6 +2154,20 @@ export function registerCore(bind: CanvasBindings) {
     const resolvedMode = assetId ? payload.mode : 'text-to-video'
 
     persistVideoGenPrompt()
+    applyVideoGenerationProvenance(
+      sourceNode,
+      {
+        prompt,
+        model: payload.model,
+        ratio: payload.ratio,
+        clarity: payload.clarity,
+        duration: payload.duration,
+        generateAudio: payload.generateAudio,
+        videoCount: payload.videoCount,
+        mode: resolvedMode,
+      },
+      videoGenSourceRefs.value,
+    )
 
     videoGenAspectRatio.value = payload.ratio as VideoGenAspectRatio
     syncVideoNodeAspectRatio(sourceNodeId, payload.ratio as VideoGenAspectRatio)
@@ -2041,18 +2176,21 @@ export function registerCore(bind: CanvasBindings) {
     const sourceFileName = sourceData.fileName || sourceData.title || ''
     const fileName = sourceFileName ? `视频生成-${sourceFileName}` : '视频生成.mp4'
 
+    const provenanceData = sourceNode.getData() as CanvasNodeData
     sourceNode.setData(
       {
-        ...sourceData,
+        ...provenanceData,
         kind: 'video',
         mode: 'editor',
         uploadState: 'uploading',
         uploadProgress: 0,
         generationTaskType: 'VIDEO',
         genPrompt: prompt,
+        videoDialogueText: prompt,
         title,
         fileName,
         videoGenAspectRatio: payload.ratio,
+        videoGenTab: payload.tab,
       },
       { overwrite: true },
     )
@@ -2938,8 +3076,17 @@ export function registerCore(bind: CanvasBindings) {
     if (data.kind !== 'video') return
 
     activeVideoDialogueNodeId = nodeId
-    videoDialogueText.value = data.videoDialogueText ?? ''
+    // 优先对话框字段；旧节点/底部面板生成的结果回退到 genPrompt
+    videoDialogueText.value = data.videoDialogueText?.trim()
+      ? data.videoDialogueText
+      : data.genPrompt ?? ''
     videoDialogueSettings.value = normalizeVideoDialogueSettings(data.videoDialogueSettings)
+
+    // 打开对话框时若尚无快照，把当前连线参考图落盘，保证刷新后可溯源
+    const liveRefs = getVideoSourceRefs(g, nodeId)
+    if (liveRefs.length && !(data.videoSourceRefs?.length)) {
+      syncVideoSourceRefsSnapshot(nodeId)
+    }
   }
 
   function persistVideoDialogueFields(nodeId?: string) {
@@ -2956,7 +3103,12 @@ export function registerCore(bind: CanvasBindings) {
 
     data.videoDialogueText = videoDialogueText.value
     data.videoDialogueSettings = { ...videoDialogueSettings.value }
+    // 同步 genPrompt，便于与底部生成面板共用溯源
+    if (videoDialogueText.value.trim()) {
+      data.genPrompt = videoDialogueText.value
+    }
     cell.setData(data, { overwrite: true })
+    syncVideoSourceRefsSnapshot(id)
   }
 
   function persistImageGenPrompt() {
@@ -3014,6 +3166,9 @@ export function registerCore(bind: CanvasBindings) {
     const data = cell.getData() as CanvasNodeData
     let prompt = data.genPrompt?.trim() ?? ''
     if (!prompt) {
+      prompt = data.videoDialogueText?.trim() ?? ''
+    }
+    if (!prompt) {
       prompt = resolveVideoUpstreamPrompt(nodeId)
     }
     videoGenPromptText.value = prompt
@@ -3055,7 +3210,15 @@ export function registerCore(bind: CanvasBindings) {
     data.genPrompt = videoGenPromptText.value
     data.videoGenTab = videoGenActiveTab.value
     data.videoGenAspectRatio = videoGenAspectRatio.value
-    cell.setData(data)
+    // 底部面板输入同步到对话框溯源字段，生成后点「对话」可回显
+    if (videoGenPromptText.value.trim()) {
+      data.videoDialogueText = videoGenPromptText.value
+    }
+    const liveRefs = getVideoSourceRefs(g, nodeId)
+    if (liveRefs.length) {
+      data.videoSourceRefs = toPersistedVideoSourceRefs(liveRefs)
+    }
+    cell.setData(data, { overwrite: true })
   }
 
   function seedPromptImageRefs(data: CanvasNodeData): ImageSourceRef[] {
@@ -3397,10 +3560,37 @@ export function registerCore(bind: CanvasBindings) {
         }
 
         persistPromptBarDraft()
+        const text2videoSettings = videoPayload
+          ? buildVideoDialogueSettingsFromPayload({
+              model: videoPayload.model,
+              ratio: videoPayload.ratio,
+              clarity: videoPayload.clarity,
+              duration: videoPayload.duration,
+              generateAudio: videoPayload.generateAudio,
+              videoCount: videoPayload.videoCount,
+              mode: videoPayload.mode ?? 'text-to-video',
+            })
+          : {
+              ...createDefaultVideoDialogueSettings(),
+              mode: 'text-to-video' as const,
+            }
         const resultNode = spawnVideoGenerationResultNode(g, cell as Node, {
           title: '文生视频',
           fileName: '文生视频.mp4',
+          videoDialogueText: trimmedPrompt,
+          videoDialogueSettings: text2videoSettings,
+          genPrompt: trimmedPrompt,
         })
+        applyVideoGenerationProvenance(resultNode, {
+          prompt: trimmedPrompt,
+          model: text2videoSettings.modelKey,
+          ratio: text2videoSettings.aspectRatio,
+          clarity: text2videoSettings.resolution,
+          duration: text2videoSettings.duration,
+          generateAudio: text2videoSettings.generateAudio,
+          videoCount: text2videoSettings.videoCount,
+          mode: text2videoSettings.mode,
+        }, [])
 
         const idempotencyKey =
           typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -4505,7 +4695,18 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     const videoNodeId = getActiveVideoTargetNodeId()
     if (!g || !videoNodeId || !imageNodeId) return
-    if (!disconnectImageFromVideo(g, imageNodeId, videoNodeId)) return
+
+    const cell = g.getCellById(videoNodeId)
+    if (!cell?.isNode()) return
+    const data = { ...(cell.getData() as CanvasNodeData) }
+
+    disconnectImageFromVideo(g, imageNodeId, videoNodeId)
+
+    const fromStored = Array.isArray(data.videoSourceRefs) ? data.videoSourceRefs : []
+    const live = getVideoSourceRefs(g, videoNodeId)
+    const base = fromStored.length ? fromStored : toPersistedVideoSourceRefs(live)
+    data.videoSourceRefs = base.filter((item) => item.nodeId !== imageNodeId)
+    cell.setData(data, { overwrite: true })
     bumpToolbarRevision()
     updateNodeToolbar()
     scheduleHistoryPush()
@@ -4541,6 +4742,7 @@ export function registerCore(bind: CanvasBindings) {
     if (currentCount >= getVideoGenSourceLimit()) return false
 
     connectGenEdge(g, imageNodeId, videoNodeId)
+    syncVideoSourceRefsSnapshot(videoNodeId)
     bumpToolbarRevision()
     scheduleHistoryPush()
     return true
@@ -4792,6 +4994,7 @@ export function registerCore(bind: CanvasBindings) {
         loadPromptBarContext(targetNodeId)
       }
     } else if (data.kind === 'video') {
+      syncVideoSourceRefsSnapshot(targetNodeId)
       if (activeVideoGenPromptNodeId.value === targetNodeId) {
         loadVideoGenPromptFields(targetNodeId)
       }
@@ -5089,6 +5292,13 @@ export function registerCore(bind: CanvasBindings) {
     }
     if (relation?.targetId === activeImageGenPromptNodeId.value) {
       loadImageGenPromptFields(relation.targetId)
+    }
+    if (relation?.targetId) {
+      const targetCell = g.getCellById(relation.targetId)
+      const targetData = targetCell?.getData() as CanvasNodeData | undefined
+      if (targetData?.kind === 'video') {
+        syncVideoSourceRefsSnapshot(relation.targetId)
+      }
     }
     if (relation?.targetId === selectedNodeId.value) {
       bumpToolbarRevision()

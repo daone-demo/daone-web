@@ -68,10 +68,15 @@ export interface CanvasNodeData {
   imageDialogueText?: string
   /** 图片对话面板生成设置（比例、画质、模型、工作流等，按节点独立保存） */
   imageDialogueSettings?: Partial<ImageDialogueSettings>
-  /** 视频对话面板输入的提示词（按节点独立保存） */
+  /** 视频对话面板输入的提示词（按节点独立保存，生成结果溯源） */
   videoDialogueText?: string
-  /** 视频对话面板生成设置（模型、比例、清晰度等，按节点独立保存） */
+  /** 视频对话面板生成设置（模型、比例、清晰度等，按节点独立保存，生成结果溯源） */
   videoDialogueSettings?: Partial<VideoDialogueSettings>
+  /**
+   * 视频多图参考来源快照（全能参考/图生视频等）。
+   * 与连线并行持久化，打开对话框时可溯源，并随画布写入数据库。
+   */
+  videoSourceRefs?: ImageSourceRef[]
   inputUpdated?: boolean
   genPrompt?: string
   genSeed?: number

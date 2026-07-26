@@ -414,10 +414,28 @@ export function spawnVideoGenerationResultNode(
     fileName?: string
     layoutSlot?: number
     layoutTotal?: number
+    /** 生成文案溯源（写入结果节点，打开对话框可回显） */
+    videoDialogueText?: string
+    /** 生成参数溯源 */
+    videoDialogueSettings?: CanvasNodeData['videoDialogueSettings']
+    /** 多图参考来源快照 */
+    videoSourceRefs?: CanvasNodeData['videoSourceRefs']
+    genPrompt?: string
   },
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
   const slot = options.layoutSlot ?? countOutgoingSlots(graph, sourceNode.id)
+  const dialogueText =
+    options.videoDialogueText ??
+    sourceData.videoDialogueText ??
+    options.genPrompt ??
+    sourceData.genPrompt ??
+    ''
+  const dialogueSettings =
+    options.videoDialogueSettings ?? sourceData.videoDialogueSettings
+  const sourceRefs =
+    options.videoSourceRefs ??
+    (Array.isArray(sourceData.videoSourceRefs) ? sourceData.videoSourceRefs : undefined)
   const overrides: Partial<CanvasNodeData> = {
     kind: 'video',
     mode: 'editor',
@@ -431,6 +449,10 @@ export function spawnVideoGenerationResultNode(
     sourcePreviewUrl: sourceData.previewUrl ?? '',
     sourceFileName: sourceData.fileName ?? '',
     sourceAssetId: sourceData.assetId,
+    genPrompt: (options.genPrompt ?? dialogueText) || sourceData.genPrompt || '',
+    videoDialogueText: dialogueText,
+    videoDialogueSettings: dialogueSettings ? { ...dialogueSettings } : undefined,
+    videoSourceRefs: sourceRefs?.length ? sourceRefs.map((item) => ({ ...item })) : undefined,
   }
   const size = getNodeSize('video', 'editor', overrides)
   const point = computeOutgoingResultNodePoint(sourceNode, size, {

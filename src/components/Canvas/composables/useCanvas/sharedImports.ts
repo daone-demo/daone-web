@@ -122,6 +122,8 @@ export {
   findImageToVideoEdge,
   findIncomingTextNodes,
   getVideoSourceRefs,
+  resolveVideoSourceRefsForNode,
+  toPersistedVideoSourceRefs,
   plainTextFromNodeContent,
   VIDEO_GEN_TAB_IMAGE_RULES,
 } from '../../videoGen'
