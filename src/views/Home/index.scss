@@ -381,13 +381,22 @@
 }
 
 .home__inspiration-grid {
-  column-count: 4;
-  column-gap: 16px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.home__inspiration-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .home__inspiration-card {
-  break-inside: avoid;
-  margin-bottom: 16px;
+  width: 100%;
 }
 
 .home__inspiration-media {
@@ -399,6 +408,8 @@
 .home__inspiration-image {
   display: block;
   width: 100%;
+  height: auto;
+  max-width: 100%;
   object-fit: cover;
 }
 
@@ -465,12 +476,6 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z'/%3E%3C/svg%3E");
 }
 
-@media (max-width: 1280px) {
-  .home__inspiration-grid {
-    column-count: 3;
-  }
-}
-
 @media (max-width: 960px) {
   .home__content {
     padding: 24px 24px 64px 72px;
@@ -478,10 +483,6 @@
 
   .home__hero-title {
     font-size: 32px;
-  }
-
-  .home__inspiration-grid {
-    column-count: 2;
   }
 }
 
@@ -504,10 +505,6 @@
 
   .home__project-card {
     flex-basis: 180px;
-  }
-
-  .home__inspiration-grid {
-    column-count: 1;
   }
 }
 

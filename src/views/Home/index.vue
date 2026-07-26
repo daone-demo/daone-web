@@ -9,7 +9,7 @@
           <p class="home__hero-subtitle">生产真正懂审美、能卖货的视觉内容</p>
           <a-flex justify="center" align="center" gap="10px">
             <a-button type="primary" class="home__hero-create" @click="openNewProject">开始创作</a-button>
-            <a-button type="default" class="home__hero-voideo" @click="openNewProject">查看演示</a-button>
+            <a-button type="default" class="home__hero-voideo" @click="onShowDemo">查看演示</a-button>
           </a-flex>
         </div>
       </section>
@@ -79,38 +79,51 @@
         </div>
 
         <div class="home__inspiration-grid">
-          <article
-            v-for="item in inspirations"
-            :key="item.id"
-            class="home__inspiration-card"
-            @click="openInspiration(item)"
+          <div
+            v-for="(column, columnIndex) in inspirationColumns"
+            :key="columnIndex"
+            class="home__inspiration-column"
           >
-            <div class="home__inspiration-media">
-              <img
-                class="home__inspiration-image"
-                :src="item.coverUrl"
-                :alt="`${item.authorName} 的作品`"
-                loading="lazy"
-                :style="{ height: `${item.imageHeight}px` }"
-              />
-            </div>
-            <div class="home__inspiration-footer">
-              <div class="home__inspiration-author">
-                <!-- <img class="home__inspiration-avatar" :src="item.authorName" :alt="item.author" loading="lazy" /> -->
-                <span class="home__inspiration-name">{{ item.authorName }}</span>
+            <article
+              v-for="item in column"
+              :key="item.id"
+              class="home__inspiration-card"
+              @click="openInspiration(item)"
+            >
+              <div class="home__inspiration-media">
+                <img
+                  v-if="item.mediaType === 'image'"
+                  class="home__inspiration-image"
+                  :src="item.coverUrl"
+                  :alt="`${item.authorName} 的作品`"
+                  loading="lazy"
+                />
+                <video
+                  v-else-if="item.mediaType === 'video'"
+                  class="home__inspiration-image home__inspiration-image--video"
+                  :src="item.coverUrl"
+                  :alt="`${item.authorName} 的作品`"
+                  controls
+                />
               </div>
-              <div class="home__inspiration-stats">
-                <span class="home__inspiration-stat">
-                  <span class="home__inspiration-stat-icon home__inspiration-stat-icon--view" aria-hidden="true" />
-                  {{ formatCount(item.viewCount) }}
-                </span>
-                <span class="home__inspiration-stat">
-                  <span class="home__inspiration-stat-icon home__inspiration-stat-icon--like" aria-hidden="true" />
-                  {{ formatCount(item.likeCount) }}
-                </span>
+              <div class="home__inspiration-footer">
+                <div class="home__inspiration-author">
+                  <!-- <img class="home__inspiration-avatar" :src="item.authorName" :alt="item.author" loading="lazy" /> -->
+                  <span class="home__inspiration-name">{{ item.authorName }}</span>
+                </div>
+                <div class="home__inspiration-stats">
+                  <span class="home__inspiration-stat">
+                    <span class="home__inspiration-stat-icon home__inspiration-stat-icon--view" aria-hidden="true" />
+                    {{ formatCount(item.viewCount) }}
+                  </span>
+                  <span class="home__inspiration-stat">
+                    <span class="home__inspiration-stat-icon home__inspiration-stat-icon--like" aria-hidden="true" />
+                    {{ formatCount(item.likeCount) }}
+                  </span>
+                </div>
               </div>
-            </div>
-          </article>
+            </article>
+          </div>
         </div>
       </section>
     </div>
@@ -130,11 +143,24 @@
     <template #title></template>
     <template #footer></template>
   </a-modal>
+  <a-modal 
+    v-model:open="visable" 
+    width="800px"
+    class="home__inspiration-modal"
+  >
+    <video
+      src="https://daone-oss.oss-accelerate.aliyuncs.com/video/100001/5baead5f-9cea-469a-a075-f45b38bf00c9.mp4"
+      controls
+      style="width: 100%; height: 100%;"
+    />
+    <template #title></template>
+    <template #footer></template>
+  </a-modal>
 </template>
 
 <script setup lang="ts">
 import { ExclamationCircleFilled, MoreOutlined } from '@ant-design/icons-vue'
-import { createVNode, onMounted, ref, watch } from 'vue'
+import { computed, createVNode, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import api from '@/services/api';
@@ -157,9 +183,54 @@ const router = useRouter()
 const projectId = ref('');
 const projectName = ref('');
 const activeCategory = ref<HomeInspirationCategory>('all')
-const inspirations = ref<any[]>([]);
+type InspirationMediaType = 'image' | 'video' | 'unknown'
+type HomeInspiration = {
+  id: string
+  coverUrl: string
+  authorName: string
+  viewCount: number
+  likeCount: number
+  imageHeight?: number
+  title?: string
+  mediaType?: InspirationMediaType
+}
+const inspirations = ref<HomeInspiration[]>([]);
 const open = ref(false);
+const visable = ref(false);
 const inspirationsInfo = ref<any>({});
+const inspirationColumnCount = ref(4);
+
+const inspirationColumns = computed(() => {
+  const count = Math.max(1, inspirationColumnCount.value);
+  const columns: HomeInspiration[][] = Array.from({ length: count }, () => []);
+
+  inspirations.value.forEach((item, index) => {
+    columns[index % count]?.push(item);
+  });
+
+  return columns;
+});
+
+function updateInspirationColumnCount() {
+  const width = window.innerWidth;
+
+  if (width <= 640) {
+    inspirationColumnCount.value = 1;
+    return;
+  }
+
+  if (width <= 960) {
+    inspirationColumnCount.value = 2;
+    return;
+  }
+
+  if (width <= 1280) {
+    inspirationColumnCount.value = 3;
+    return;
+  }
+
+  inspirationColumnCount.value = 4;
+}
 
 function formatCount(value: number) {
   return value.toLocaleString('en-US')
@@ -188,6 +259,10 @@ function openNewProject() {
   api.createProject({ title: getNextUntitledProjectTitle() }).then((res: any) => {
     router.push({ name: 'createProject', params: { id: res.id } })
   })
+}
+
+function onShowDemo() {
+  visable.value = true;
 }
 
 function openProject(id: string) {
@@ -237,13 +312,45 @@ const openDeleteProject = (id: string) => {
 
 const inspirationCategories = ref<any[]>([]);
 
-const onLoadHomeData = () => {
-  api.getHome()
-    .then((res:any)=>{
-      // console.log('onLoadHomeData', res)
-      inspirationCategories.value = res.inspirationCategories;
-      inspirations.value = res.inspirations;
-    })
+function guessMediaTypeFromUrl(url: string): InspirationMediaType {
+  const lower = url.toLowerCase()
+  const path = lower.split('?')[0] ?? ''
+
+  if (/\.(mp4|webm|mov|m4v|ogg)(\?|$)/i.test(path)) return 'video'
+  if (/\.(png|jpe?g|gif|webp|bmp|svg|avif)(\?|$)/i.test(path)) return 'image'
+
+  // 常见无扩展名图片 CDN / 占位图服务
+  if (
+    lower.includes('picsum.photos')
+    || lower.includes('placehold.co')
+    || lower.includes('placeholder.com')
+    || lower.includes('images.unsplash.com')
+    || /\/image\//.test(lower)
+  ) {
+    return 'image'
+  }
+
+  // 封面地址默认按图片展示，避免对不支持 HEAD 的 CDN 发探测请求
+  return 'image'
+}
+
+function getMediaType(url: string): InspirationMediaType {
+  if (!url.trim()) return 'unknown'
+  return guessMediaTypeFromUrl(url)
+}
+
+function attachInspirationMediaTypes(items: HomeInspiration[]) {
+  items.forEach((item) => {
+    item.mediaType = getMediaType(item.coverUrl)
+  })
+}
+
+const onLoadHomeData = async () => {
+  const res = await api.getHome<any>()
+  inspirationCategories.value = res.inspirationCategories
+  const list = (res.inspirations ?? []) as HomeInspiration[]
+  attachInspirationMediaTypes(list)
+  inspirations.value = list
 }
 
 watch(needReloadStore.getNeedReload, (newVal) => {
@@ -252,9 +359,15 @@ watch(needReloadStore.getNeedReload, (newVal) => {
   }
 })
 
-onMounted(()=>{
+onMounted(() => {
+  updateInspirationColumnCount();
+  window.addEventListener('resize', updateInspirationColumnCount);
   onLoadProjects();
-  onLoadHomeData();
+  void onLoadHomeData();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateInspirationColumnCount);
 });
 
 </script>
