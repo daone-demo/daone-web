@@ -961,7 +961,7 @@
 .canvas__image-expand {
   position: absolute;
   z-index: 20;
-  pointer-events: auto;
+  pointer-events: none;
   overflow: visible;
 }
 

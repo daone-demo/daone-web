@@ -1,85 +1,88 @@
 <template>
-  <div class="image-expand-overlay" @mousedown="onPanelMouseDown">
-    <div class="image-expand-overlay__toolbar">
-      <button type="button" class="image-expand-overlay__btn" @click="emit('cancel')">
-        <span class="image-expand-overlay__icon image-expand-overlay__icon--close" aria-hidden="true" />
-        取消
-      </button>
-
-      <div class="image-expand-overlay__zoom">
-        <button
-          type="button"
-          class="image-expand-overlay__icon-btn"
-          title="缩小"
-          @click="adjustZoom(-0.05)"
-        >
-          −
-        </button>
-        <input
-          v-model.number="zoomPercent"
-          class="image-expand-overlay__zoom-slider"
-          type="range"
-          min="50"
-          max="200"
-          step="1"
-          @input="onZoomInput"
-        />
-        <button
-          type="button"
-          class="image-expand-overlay__icon-btn"
-          title="放大"
-          @click="adjustZoom(0.05)"
-        >
-          +
-        </button>
-        <span class="image-expand-overlay__zoom-label">{{ zoomPercent }}%</span>
-      </div>
-
-      <div class="image-expand-overlay__ratio">
-        <button
-          type="button"
-          class="image-expand-overlay__btn image-expand-overlay__btn--ratio"
-          :class="{ 'image-expand-overlay__btn--active': showRatioMenu }"
-          @click="showRatioMenu = !showRatioMenu"
-        >
-          <span class="image-expand-overlay__icon image-expand-overlay__icon--ratio" aria-hidden="true" />
-          比例
-        </button>
-        <div
-          v-if="showRatioMenu"
-          class="image-expand-overlay__ratio-menu"
-          @wheel.stop
-          @mousedown.stop
-        >
-          <button
-            v-for="item in IMAGE_EXPAND_ASPECT_RATIOS"
-            :key="item.key"
-            type="button"
-            class="image-expand-overlay__ratio-item"
-            :class="{ 'image-expand-overlay__ratio-item--active': aspectKey === item.key }"
-            @click="selectAspect(item.key)"
-          >
-            {{ item.label }}
-          </button>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        class="image-expand-overlay__btn image-expand-overlay__btn--done"
-        :disabled="completing"
-        @click.stop="handleComplete"
-      >
-        <span class="image-expand-overlay__icon image-expand-overlay__icon--check" aria-hidden="true" />
-        {{ completing ? '提交中...' : '完成' }}
-      </button>
-    </div>
-
+  <div class="image-expand-overlay" @mousedown.stop>
     <div
-      ref="workspaceRef"
       class="image-expand-overlay__workspace"
-      @mousedown="onWorkspaceMouseDown"
+      :style="workspaceOffsetStyle"
     >
+      <div
+        class="image-expand-overlay__toolbar"
+        :style="toolbarStyle"
+        @mousedown.stop
+      >
+        <button type="button" class="image-expand-overlay__btn" @click="emit('cancel')">
+          <span class="image-expand-overlay__icon image-expand-overlay__icon--close" aria-hidden="true" />
+          取消
+        </button>
+
+        <div class="image-expand-overlay__zoom">
+          <button
+            type="button"
+            class="image-expand-overlay__icon-btn"
+            title="缩小"
+            @click="adjustZoom(-0.05)"
+          >
+            −
+          </button>
+          <input
+            v-model.number="zoomPercent"
+            class="image-expand-overlay__zoom-slider"
+            type="range"
+            min="50"
+            max="200"
+            step="1"
+            @input="onZoomInput"
+          />
+          <button
+            type="button"
+            class="image-expand-overlay__icon-btn"
+            title="放大"
+            @click="adjustZoom(0.05)"
+          >
+            +
+          </button>
+          <span class="image-expand-overlay__zoom-label">{{ zoomPercent }}%</span>
+        </div>
+
+        <div class="image-expand-overlay__ratio">
+          <button
+            type="button"
+            class="image-expand-overlay__btn image-expand-overlay__btn--ratio"
+            :class="{ 'image-expand-overlay__btn--active': showRatioMenu }"
+            @click="showRatioMenu = !showRatioMenu"
+          >
+            <span class="image-expand-overlay__icon image-expand-overlay__icon--ratio" aria-hidden="true" />
+            比例
+          </button>
+          <div
+            v-if="showRatioMenu"
+            class="image-expand-overlay__ratio-menu"
+            @wheel.stop
+            @mousedown.stop
+          >
+            <button
+              v-for="item in IMAGE_EXPAND_ASPECT_RATIOS"
+              :key="item.key"
+              type="button"
+              class="image-expand-overlay__ratio-item"
+              :class="{ 'image-expand-overlay__ratio-item--active': aspectKey === item.key }"
+              @click="selectAspect(item.key)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="image-expand-overlay__btn image-expand-overlay__btn--done"
+          :disabled="completing"
+          @click.stop="handleComplete"
+        >
+          <span class="image-expand-overlay__icon image-expand-overlay__icon--check" aria-hidden="true" />
+          {{ completing ? '提交中...' : '完成' }}
+        </button>
+      </div>
+
       <div class="image-expand-overlay__stage">
         <div
           class="image-expand-overlay__node"
@@ -106,7 +109,7 @@
           />
         </div>
 
-        <div class="image-expand-overlay__sizes">
+        <div class="image-expand-overlay__sizes" :style="sizesStyle">
           <span>{{ imageSizeLabel }}</span>
           <span>{{ frameSizeLabel }}</span>
         </div>
@@ -124,14 +127,17 @@ import {
   type ImageExpandAspectKey,
 } from './constants'
 import {
+  IMAGE_EXPAND_TOOLBAR_GAP,
+  IMAGE_EXPAND_TOOLBAR_HEIGHT,
+} from './graph'
+import {
   clampExpandFrame,
   clampFramePosition,
   clampImageOffset,
   computeExpandNaturalMetrics,
   computeExpandRequestMetrics,
   createExpandFrameFromImageCenter,
-  getImageFitBounds,
-  scaleRectAroundCenter,
+  createInitialExpandFrame,
   type ExpandRect,
 } from './expandUtils'
 
@@ -139,6 +145,10 @@ const props = defineProps<{
   imageUrl: string
   naturalWidth: number
   naturalHeight: number
+  padX: number
+  padY: number
+  displayWidth: number
+  displayHeight: number
 }>()
 
 const emit = defineEmits<{
@@ -149,21 +159,9 @@ const emit = defineEmits<{
       expandRatio: number
     },
   ]
-  'drag-start': [event: MouseEvent]
 }>()
 
-const DRAG_IGNORE_SELECTOR =
-  'button, input, select, a, [contenteditable], .ant-dropdown, .ant-dropdown-menu, .image-expand-overlay__ratio-menu, .image-expand-overlay__ratio-menu *, .image-expand-overlay__node, .image-expand-overlay__node *'
-
-function onPanelMouseDown(event: MouseEvent) {
-  event.stopPropagation()
-  const target = event.target as HTMLElement | null
-  if (target?.closest(DRAG_IGNORE_SELECTOR)) return
-  emit('drag-start', event)
-}
-
-const workspaceRef = ref<HTMLElement | null>(null)
-const workspaceSize = ref({ width: 360, height: 420 })
+const workspaceSize = ref({ width: 100, height: 100 })
 const aspectKey = ref<ImageExpandAspectKey>('original')
 const showRatioMenu = ref(false)
 const completing = ref(false)
@@ -182,6 +180,10 @@ let dragState: {
   startFrame: ExpandRect
   startImage: ExpandRect
 } | null = null
+
+const workspaceOffsetStyle = computed(() => ({
+  paddingTop: `${IMAGE_EXPAND_TOOLBAR_HEIGHT + IMAGE_EXPAND_TOOLBAR_GAP}px`,
+}))
 
 const currentRatio = computed(() => {
   const item = IMAGE_EXPAND_ASPECT_RATIOS.find((entry) => entry.key === aspectKey.value)
@@ -206,6 +208,22 @@ const imageInnerStyle = computed(() => ({
   height: `${imageBounds.value.height}px`,
 }))
 
+const toolbarStyle = computed(() => {
+  const centerX = expandFrame.value.x + expandFrame.value.width / 2
+  const top = Math.max(0, expandFrame.value.y - IMAGE_EXPAND_TOOLBAR_GAP)
+  return {
+    left: `${centerX}px`,
+    top: `${top}px`,
+    transform: 'translate(-50%, -100%)',
+  }
+})
+
+const sizesStyle = computed(() => ({
+  left: `${expandFrame.value.x + expandFrame.value.width}px`,
+  top: `${expandFrame.value.y + expandFrame.value.height + 6}px`,
+  transform: 'translate(-100%, 0)',
+}))
+
 const imageSizeLabel = computed(() => {
   const metrics = computeExpandNaturalMetrics(
     expandFrame.value,
@@ -227,19 +245,24 @@ const frameSizeLabel = computed(() => {
 })
 
 function resetLayout() {
-  const base = getImageFitBounds(
-    workspaceSize.value.width,
-    workspaceSize.value.height,
-    props.naturalWidth,
-    props.naturalHeight,
-  )
+  const width = Math.max(props.displayWidth, 40)
+  const height = Math.max(props.displayHeight, 40)
+  workspaceSize.value = {
+    width: width + props.padX * 2,
+    height: height + props.padY * 2,
+  }
+  const base = {
+    x: props.padX,
+    y: props.padY,
+    width,
+    height,
+  }
   baseImageBounds.value = base
   imageBounds.value = { ...base }
-  expandFrame.value = createExpandFrameFromImageCenter(
-    imageBounds.value,
-    workspaceSize.value,
-    currentRatio.value,
-  )
+  expandFrame.value =
+    aspectKey.value === 'original'
+      ? createInitialExpandFrame(base)
+      : createExpandFrameFromImageCenter(base, workspaceSize.value, currentRatio.value)
   zoomPercent.value = 100
 }
 
@@ -263,6 +286,19 @@ function applyZoom() {
   )
 }
 
+function scaleRectAroundCenter(rect: ExpandRect, scale: number): ExpandRect {
+  const cx = rect.x + rect.width / 2
+  const cy = rect.y + rect.height / 2
+  const width = rect.width * scale
+  const height = rect.height * scale
+  return {
+    x: cx - width / 2,
+    y: cy - height / 2,
+    width,
+    height,
+  }
+}
+
 function adjustZoom(delta: number) {
   zoomPercent.value = Math.max(50, Math.min(200, Math.round(zoomPercent.value + delta * 100)))
   applyZoom()
@@ -276,20 +312,14 @@ function onZoomInput() {
 function selectAspect(key: ImageExpandAspectKey) {
   aspectKey.value = key
   showRatioMenu.value = false
-  expandFrame.value = createExpandFrameFromImageCenter(
-    imageBounds.value,
-    workspaceSize.value,
-    currentRatio.value,
-  )
-}
-
-function updateWorkspaceSize() {
-  if (!workspaceRef.value) return
-  workspaceSize.value = {
-    width: workspaceRef.value.clientWidth,
-    height: workspaceRef.value.clientHeight,
-  }
-  resetLayout()
+  expandFrame.value =
+    key === 'original'
+      ? createInitialExpandFrame(imageBounds.value)
+      : createExpandFrameFromImageCenter(
+          imageBounds.value,
+          workspaceSize.value,
+          currentRatio.value,
+        )
 }
 
 function startDrag(handle: Handle, event: MouseEvent) {
@@ -302,10 +332,6 @@ function startDrag(handle: Handle, event: MouseEvent) {
   }
   window.addEventListener('mousemove', onDragMove)
   window.addEventListener('mouseup', onDragEnd)
-}
-
-function onWorkspaceMouseDown(event: MouseEvent) {
-  if (event.target !== workspaceRef.value) return
 }
 
 function onDragMove(event: MouseEvent) {
@@ -415,23 +441,16 @@ function handleComplete() {
 }
 
 watch(
-  () => [props.naturalWidth, props.naturalHeight],
+  () => [props.naturalWidth, props.naturalHeight, props.displayWidth, props.displayHeight, props.padX, props.padY],
   () => resetLayout(),
 )
 
-let resizeObserver: ResizeObserver | undefined
-
 onMounted(() => {
-  updateWorkspaceSize()
-  if (workspaceRef.value) {
-    resizeObserver = new ResizeObserver(updateWorkspaceSize)
-    resizeObserver.observe(workspaceRef.value)
-  }
+  resetLayout()
 })
 
 onBeforeUnmount(() => {
   onDragEnd()
-  resizeObserver?.disconnect()
 })
 </script>
 
@@ -439,28 +458,31 @@ onBeforeUnmount(() => {
 .image-expand-overlay {
   width: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.16);
-  overflow: visible;
-  cursor: move;
+  pointer-events: none;
+}
+
+.image-expand-overlay__workspace {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  pointer-events: none;
 }
 
 .image-expand-overlay__toolbar {
+  position: absolute;
+  z-index: 30;
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 48px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #eef0f3;
-  background: #fff;
-  flex-shrink: 0;
-  position: relative;
-  z-index: 20;
-  overflow: visible;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14);
+  pointer-events: auto;
+  white-space: nowrap;
 }
 
 .image-expand-overlay__btn {
@@ -517,7 +539,7 @@ onBeforeUnmount(() => {
 }
 
 .image-expand-overlay__zoom-slider {
-  width: min(180px, 28vw);
+  width: min(160px, 24vw);
 }
 
 .image-expand-overlay__zoom-label {
@@ -564,8 +586,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
 }
 
 .image-expand-overlay__ratio-item {
@@ -590,28 +610,11 @@ onBeforeUnmount(() => {
   }
 }
 
-.image-expand-overlay__workspace {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  min-height: 280px;
-  overflow: hidden;
-  border-bottom-left-radius: 16px;
-  border-bottom-right-radius: 16px;
-  background-color: #eceff3;
-  background-image:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.55) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255, 255, 255, 0.55) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.55) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.55) 75%);
-  background-size: 16px 16px;
-  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
-}
-
 .image-expand-overlay__stage {
   position: relative;
   width: 100%;
   height: 100%;
+  pointer-events: none;
 }
 
 .image-expand-overlay__node {
@@ -621,6 +624,15 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   cursor: move;
   z-index: 2;
+  pointer-events: auto;
+  background-color: #eceff3;
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.55) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.55) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.55) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.55) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 
 .image-expand-overlay__image-box {
@@ -669,8 +681,6 @@ onBeforeUnmount(() => {
 
 .image-expand-overlay__sizes {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;

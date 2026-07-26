@@ -75,6 +75,8 @@ export {
   syncNodeShapeFromData,
   getNodeOverlayScreenBox,
   getImageNodeMediaScreenBox,
+  getImageExpandOverlayLayout,
+  type ImageExpandOverlayLayout,
   syncImageNodeSizeToMediaAspect,
   startImageNodeCornerResize,
   canResizeImageNode,

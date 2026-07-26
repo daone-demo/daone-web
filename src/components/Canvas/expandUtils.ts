@@ -67,6 +67,10 @@ export function computeExpandRequestMetrics(
   }
 }
 
+export function createInitialExpandFrame(image: ExpandRect): ExpandRect {
+  return { ...image }
+}
+
 export function getImageFitBounds(
   workspaceWidth: number,
   workspaceHeight: number,
@@ -160,7 +164,6 @@ export function createExpandFrameFromImageCenter(
     }
   }
 
-  height *= EXPAND_FRAME_HEIGHT_SCALE
   if (aspectRatio && aspectRatio > 0) {
     width = height * aspectRatio
   }

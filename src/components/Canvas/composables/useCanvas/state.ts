@@ -1,12 +1,15 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import type { Graph } from '@antv/x6'
 import {
+  type ImageDialogueSettings,
   type ImageSourceRef,
   type NodeKind,
   type VideoGenAspectRatio,
   type VideoHdMagnification,
+  createDefaultImageDialogueSettings,
 } from '../../constants'
 import { refreshCanvasNodeViews } from '../../graph'
+import type { ImageExpandOverlayLayout } from '../../graph'
 import type { ImageEditTextEntry } from '../../editTextUtils'
 import { setSharedCanvasBgTheme } from '../../useCanvasBgTheme'
 import type { CanvasBgTheme } from '../../canvasTheme'
@@ -165,7 +168,16 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const imageInpaintPos = ref({ left: 0, top: 0, width: 360, height: 520 })
   const showImageExpand = ref(false)
   const expandSourceNodeId = ref('')
-  const imageExpandPos = ref({ left: 0, top: 0, width: 360, height: 420 })
+  const imageExpandPos = ref<ImageExpandOverlayLayout>({
+    left: 0,
+    top: 0,
+    width: 360,
+    height: 420,
+    padX: 120,
+    padY: 120,
+    mediaWidth: 120,
+    mediaHeight: 120,
+  })
   const showImageEditText = ref(false)
   const editTextSourceNodeId = ref('')
   const imageEditTextPos = ref({ left: 0, top: 0, width: 380, height: 420 })
@@ -175,6 +187,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showVideoHdPanel = ref(false)
   const showVideoFramesPanel = ref(false)
   const imageDialogueText = ref('')
+  const imageDialogueSettings = ref<ImageDialogueSettings>(createDefaultImageDialogueSettings())
   const videoDialogueText = ref('')
   const videoHdMagnification = ref<VideoHdMagnification>('2')
   const canvasCredits = ref(12003)
@@ -314,6 +327,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showVideoHdPanel,
     showVideoFramesPanel,
     imageDialogueText,
+    imageDialogueSettings,
     videoDialogueText,
     videoHdMagnification,
     canvasCredits,

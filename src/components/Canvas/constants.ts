@@ -64,6 +64,10 @@ export interface CanvasNodeData {
   sourceAssetId?: string
   /** 多个上游节点连线带过来的图片输入源（图生图多图参考），按连入顺序排列 */
   imageSourceRefs?: ImageSourceRef[]
+  /** 图片对话面板输入的提示词（按节点独立保存） */
+  imageDialogueText?: string
+  /** 图片对话面板生成设置（比例、画质、模型、工作流等，按节点独立保存） */
+  imageDialogueSettings?: Partial<ImageDialogueSettings>
   inputUpdated?: boolean
   genPrompt?: string
   genSeed?: number
@@ -605,6 +609,15 @@ export function normalizeImageCapabilities(
 }
 
 export const IMAGE_GENERAL_CAPABILITY_CODE = 'IMAGE_GENERAL_V1'
+
+/** 图片对话面板生成设置（持久化到节点 data） */
+export interface ImageDialogueSettings {
+  aspectRatio: string
+  resolution: string
+  imageCount: number
+  modelKey: string
+  workflowId: string
+}
 
 /** 图片对话面板点击发送时上报的生成参数 */
 export type ImageDialogueSubmitPayload = {
@@ -1156,6 +1169,16 @@ export const IMAGE_DIALOGUE_MODEL_MENU: ImageDialogueModelItem[] = [
   { key: 'seedream-4-5', name: 'Seedream 4.5', duration: '15s', icon: 'seedream', badge: '限时5折' },
   { key: 'midjourney-v7', name: 'Midjourney V7', duration: '50s', icon: 'mj' },
 ]
+
+export function createDefaultImageDialogueSettings(): ImageDialogueSettings {
+  return {
+    aspectRatio: 'auto',
+    resolution: '2K',
+    imageCount: 1,
+    modelKey: IMAGE_DIALOGUE_MODEL_MENU[0].key,
+    workflowId: '',
+  }
+}
 
 export const IMAGE_COLOR_DEFAULT = '#0E316A'
 export const IMAGE_COLOR_SWATCHES = [

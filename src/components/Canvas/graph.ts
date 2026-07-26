@@ -1115,6 +1115,43 @@ export function getNodeSidePanelPosition(
   }
 }
 
+export const IMAGE_EXPAND_TOOLBAR_HEIGHT = 44
+export const IMAGE_EXPAND_TOOLBAR_GAP = 10
+
+export interface ImageExpandOverlayLayout {
+  left: number
+  top: number
+  width: number
+  height: number
+  padX: number
+  padY: number
+  mediaWidth: number
+  mediaHeight: number
+}
+
+/** 扩图浮层：锚定在图片媒体区域上，四周留出可扩展空间 */
+export function getImageExpandOverlayLayout(
+  graph: Graph,
+  node: Node,
+  container: HTMLElement,
+): ImageExpandOverlayLayout {
+  const box = getImageNodeMediaScreenBox(graph, node, container)
+  const padX = Math.max(Math.round(box.width), 120)
+  const padY = Math.max(Math.round(box.height), 120)
+  const toolbarOffset = IMAGE_EXPAND_TOOLBAR_HEIGHT + IMAGE_EXPAND_TOOLBAR_GAP
+
+  return {
+    left: box.left - padX,
+    top: box.top - padY - toolbarOffset,
+    width: box.width + padX * 2,
+    height: box.height + padY * 2 + toolbarOffset,
+    padX,
+    padY,
+    mediaWidth: box.width,
+    mediaHeight: box.height,
+  }
+}
+
 export function getNodeCropOverlayPosition(
   graph: Graph,
   node: Node,

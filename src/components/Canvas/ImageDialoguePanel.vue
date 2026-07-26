@@ -239,6 +239,7 @@ import {
   findImageDialogueSource,
   type ChatTools,
   type ImageDialogueModelItem,
+  type ImageDialogueSettings,
   type ImageDialogueSubmitPayload,
   type ImageSourceRef,
   type ImageStyleCard,
@@ -247,6 +248,7 @@ import {
 
 const props = defineProps<{
   modelValue: string
+  settings: ImageDialogueSettings
   previewUrl?: string
   previews?: ImageSourceRef[]
   chatTools?: ChatTools | null
@@ -255,6 +257,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  'update:settings': [value: ImageDialogueSettings]
   remove: [sourceNodeId?: string]
   'upload-images': [files: File[]]
   'add-canvas-node': [nodeId: string]
@@ -297,6 +300,46 @@ const genImageCount = ref(1)
 const selectedModelKey = ref(IMAGE_DIALOGUE_MODEL_MENU[0].key)
 const selectedWorkFlow = ref('')
 const translating = ref(false)
+let skipSettingsWatch = false
+
+function buildSettingsFromRefs(): ImageDialogueSettings {
+  return {
+    aspectRatio: genAspectRatio.value,
+    resolution: genResolution.value,
+    imageCount: genImageCount.value,
+    modelKey: selectedModelKey.value,
+    workflowId: selectedWorkFlow.value,
+  }
+}
+
+function applySettingsToRefs(settings: ImageDialogueSettings) {
+  skipSettingsWatch = true
+  genAspectRatio.value = settings.aspectRatio
+  genResolution.value = settings.resolution
+  genImageCount.value = settings.imageCount
+  selectedModelKey.value = settings.modelKey
+  selectedWorkFlow.value = settings.workflowId
+  nextTick(() => {
+    skipSettingsWatch = false
+  })
+}
+
+function emitSettings() {
+  if (skipSettingsWatch) return
+  emit('update:settings', buildSettingsFromRefs())
+}
+
+watch(
+  () => props.settings,
+  (settings) => {
+    applySettingsToRefs(settings)
+  },
+  { deep: true, immediate: true },
+)
+
+watch([genAspectRatio, genResolution, genImageCount, selectedModelKey, selectedWorkFlow], () => {
+  emitSettings()
+})
 
 const workflowOptions = computed(() => buildImageWorkflowOptions(props.workflows))
 
@@ -372,11 +415,15 @@ watch(
   workflowOptions,
   (options) => {
     if (!options.length) {
-      selectedWorkFlow.value = ''
+      if (selectedWorkFlow.value) {
+        selectedWorkFlow.value = ''
+        emitSettings()
+      }
       return
     }
     if (!options.some((workflow) => workflow.id === selectedWorkFlow.value)) {
       selectedWorkFlow.value = options[0].id
+      emitSettings()
     }
   },
   { immediate: true },

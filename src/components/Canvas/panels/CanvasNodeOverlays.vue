@@ -306,9 +306,12 @@
       :image-url="imageExpandSource.previewUrl"
       :natural-width="imageExpandSource.mediaWidth"
       :natural-height="imageExpandSource.mediaHeight"
+      :pad-x="imageExpandPos.padX"
+      :pad-y="imageExpandPos.padY"
+      :display-width="imageExpandPos.mediaWidth"
+      :display-height="imageExpandPos.mediaHeight"
       @cancel="emit('close-image-expand')"
       @complete="emit('image-expand-complete', $event)"
-      @drag-start="emit('image-expand-drag-start', $event)"
     />
   </div>
 
@@ -343,11 +346,13 @@
   >
     <ImageDialoguePanel
       :model-value="imageDialogueText"
+      :settings="imageDialogueSettings"
       :preview-url="imageDialoguePreviewUrl"
       :previews="imageDialoguePreviews"
       :chat-tools="chatTools"
       :workflows="workflows"
       @update:model-value="emit('update:imageDialogueText', $event)"
+      @update:settings="emit('update:imageDialogueSettings', $event)"
       @remove="emit('remove-image-dialogue-preview', $event)"
       @upload-images="emit('upload-image-dialogue-images', $event)"
       @add-canvas-node="emit('add-image-dialogue-canvas-node', $event)"
@@ -418,6 +423,7 @@ import ImageGridSplitOverlay from '../ImageGridSplitOverlay.vue'
 import ImageEraseOverlay from '../ImageEraseOverlay.vue'
 import ImageInpaintOverlay from '../ImageInpaintOverlay.vue'
 import ImageExpandOverlay from '../ImageExpandOverlay.vue'
+import type { ImageExpandOverlayLayout } from '../graph'
 import ImageEditTextPanel from '../ImageEditTextPanel.vue'
 import VideoDialoguePanel from '../VideoDialoguePanel.vue'
 import VideoDialogueFooter from '../VideoDialogueFooter.vue'
@@ -434,6 +440,7 @@ import {
   type ChatTools,
   type ImageCapability,
   type ImageDialogueSubmitPayload,
+  type ImageDialogueSettings,
   type VideoDialogueSubmitPayload,
   type VideoGenPromptSubmitPayload,
   type VideoGenAspectRatio,
@@ -481,7 +488,7 @@ const props = defineProps<{
   imageGridSplitPos: { left: number; top: number; width: number; height: number }
   imageErasePos: { left: number; top: number; width: number; height: number }
   imageInpaintPos: { left: number; top: number; width: number; height: number }
-  imageExpandPos: { left: number; top: number; width: number; height: number }
+  imageExpandPos: ImageExpandOverlayLayout
   dialoguePos: { left: number; top: number; width: number }
   videoHdPos: { left: number; top: number; width: number }
   selectedKind: NodeKind | null
@@ -545,6 +552,7 @@ const props = defineProps<{
   videoGenSourceRefs: VideoSourceRef[]
   elementSelectMode: boolean
   imageDialogueText: string
+  imageDialogueSettings: ImageDialogueSettings
   imageDialoguePreviewUrl: string
   imageDialoguePreviews: ImageSourceRef[]
   videoDialogueText: string
@@ -564,6 +572,7 @@ const emit = defineEmits<{
   'upload-prompt-images': [files: File[]]
   'add-prompt-canvas-node': [nodeId: string]
   'update:imageDialogueText': [value: string]
+  'update:imageDialogueSettings': [value: ImageDialogueSettings]
   'remove-image-dialogue-preview': [sourceNodeId?: string]
   'upload-image-dialogue-images': [files: File[]]
   'add-image-dialogue-canvas-node': [nodeId: string]

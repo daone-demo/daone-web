@@ -215,6 +215,7 @@
       :video-gen-source-refs="videoGenSourceRefs"
       :element-select-mode="showElementSelectMode"
       :image-dialogue-text="imageDialogueText"
+      :image-dialogue-settings="imageDialogueSettings"
       :image-dialogue-preview-url="imageDialoguePreviewUrl"
       :image-dialogue-previews="imageDialoguePreviews"
       :video-dialogue-text="videoDialogueText"
@@ -237,7 +238,8 @@
       @update:video-gen-prompt-text="videoGenPromptText = $event; persistVideoGenPrompt()"
       @update:video-gen-active-tab="videoGenActiveTab = $event; persistVideoGenPrompt()"
       @update:video-gen-aspect-ratio="onVideoGenAspectRatioChange"
-      @update:image-dialogue-text="imageDialogueText = $event"
+      @update:image-dialogue-text="imageDialogueText = $event; persistImageDialogueFields()"
+      @update:image-dialogue-settings="imageDialogueSettings = $event; persistImageDialogueFields()"
       @remove-image-dialogue-preview="clearImageDialoguePreview"
       @upload-image-dialogue-images="onImageDialogueUploadFiles"
       @add-image-dialogue-canvas-node="onImageDialogueAddCanvasNode"
@@ -522,6 +524,7 @@ const {
   imageDialoguePreviewUrl,
   imageDialoguePreviews,
   imageDialogueText,
+  imageDialogueSettings,
   imageGenPromptPos,
   imageGenPromptText,
   imageGenSeed,
@@ -574,6 +577,7 @@ const {
   openComboModal,
   panMode,
   persistImageGenPrompt,
+  persistImageDialogueFields,
   persistPromptBarDraft,
   persistVideoGenPrompt,
   promptPos,

@@ -23,7 +23,7 @@ import {
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
   getNodeVideoGenPromptPosition, getNodePromptPosition, getNodeSidePanelPosition, getNodeTextDownloadPosition,
   getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition, getNodeToolbarPosition,
-  getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getImageNodeMediaScreenBox, syncImageNodeSizeToMediaAspect, startImageNodeCornerResize, canResizeImageNode, getImageNodeDisplayDimensions,
+  getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getImageNodeMediaScreenBox, getImageExpandOverlayLayout, syncImageNodeSizeToMediaAspect, startImageNodeCornerResize, canResizeImageNode, getImageNodeDisplayDimensions,
   hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
@@ -72,6 +72,7 @@ import {
   type ImageDialogueSubmitPayload,
   type VideoDialogueSubmitPayload,
   type VideoGenPromptSubmitPayload,
+  createDefaultImageDialogueSettings,
 } from '../../constants'
 import { splitImageIntoGrid, snapGridSplitNodePosition, areAllGridSplitResultNodes } from '../../gridSplitUtils'
 import {
@@ -211,6 +212,8 @@ export function registerCore(bind: CanvasBindings) {
     showVideoDialogue,
     showVideoHdPanel,
     showVideoFramesPanel,
+    imageDialogueText,
+    imageDialogueSettings,
     videoHdMagnification,
     textFormatToolbarPos,
     textDownloadPos,
@@ -227,6 +230,7 @@ export function registerCore(bind: CanvasBindings) {
 
   let canvasHistory: ReturnType<typeof createCanvasHistory> | null = null
   let historyPushTimer: ReturnType<typeof setTimeout> | null = null
+  let activeImageDialogueNodeId = ''
   let autoSaveTimer: number | null = null
   let autoSaveEnabled = true
   let canvasContentReady = false
@@ -886,7 +890,6 @@ export function registerCore(bind: CanvasBindings) {
     closeImageEditText()
 
     expandSourceNodeId.value = selectedNodeId.value
-    imageExpandDragOffset.value = { x: 0, y: 0 }
     showImageExpand.value = true
     updateNodeToolbar()
   }
@@ -2300,8 +2303,13 @@ export function registerCore(bind: CanvasBindings) {
     const data = cell.getData() as CanvasNodeData
     if (data.kind !== 'image') return
 
+    if (activeImageDialogueNodeId && activeImageDialogueNodeId !== id) {
+      persistImageDialogueFields(activeImageDialogueNodeId)
+    }
+
     selectedNodeId.value = id
     selectedKind.value = 'image'
+    loadImageDialogueFields(id)
     showImageDialogue.value = true
     showImageHdMenu.value = false
     closeImageGenPromptBar()
@@ -2401,7 +2409,9 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function resetImageDialogue() {
+    persistImageDialogueFields()
     showImageDialogue.value = false
+    activeImageDialogueNodeId = ''
   }
 
   function seedImageDialogueRefs(data: CanvasNodeData, targetNodeId: string): ImageSourceRef[] {
@@ -2689,6 +2699,50 @@ export function registerCore(bind: CanvasBindings) {
     imageGenPromptText.value = data.genPrompt ?? ''
     imageGenSeed.value = data.genSeed ?? 58
     imageGenSourcePreviewUrl.value = data.sourcePreviewUrl ?? ''
+  }
+
+  function normalizeImageDialogueSettings(
+    saved?: CanvasNodeData['imageDialogueSettings'],
+  ) {
+    const defaults = createDefaultImageDialogueSettings()
+    if (!saved) return defaults
+    return {
+      aspectRatio: saved.aspectRatio ?? defaults.aspectRatio,
+      resolution: saved.resolution ?? defaults.resolution,
+      imageCount: saved.imageCount ?? defaults.imageCount,
+      modelKey: saved.modelKey ?? defaults.modelKey,
+      workflowId: saved.workflowId ?? defaults.workflowId,
+    }
+  }
+
+  function loadImageDialogueFields(nodeId: string) {
+    const g = graph.value
+    if (!g) return
+    const cell = g.getCellById(nodeId)
+    if (!cell?.isNode()) return
+    const data = cell.getData() as CanvasNodeData
+    if (data.kind !== 'image') return
+
+    activeImageDialogueNodeId = nodeId
+    imageDialogueText.value = data.imageDialogueText ?? ''
+    imageDialogueSettings.value = normalizeImageDialogueSettings(data.imageDialogueSettings)
+  }
+
+  function persistImageDialogueFields(nodeId?: string) {
+    const g = graph.value
+    const id =
+      nodeId ||
+      activeImageDialogueNodeId ||
+      (showImageDialogue.value ? selectedNodeId.value : '')
+    if (!g || !id) return
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return
+    const data = { ...(cell.getData() as CanvasNodeData) }
+    if (data.kind !== 'image') return
+
+    data.imageDialogueText = imageDialogueText.value
+    data.imageDialogueSettings = { ...imageDialogueSettings.value }
+    cell.setData(data, { overwrite: true })
   }
 
   function persistImageGenPrompt() {
@@ -3816,6 +3870,8 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     if (!g) return null
 
+    persistImageDialogueFields()
+
     return getCanvasSnapshot(g, {
       projectId: activeProjectId.value,
       projectName: currentProjectName.value,
@@ -3950,6 +4006,8 @@ export function registerCore(bind: CanvasBindings) {
   function handleExportCanvas() {
     const g = graph.value
     if (!g) return
+
+    persistImageDialogueFields()
 
     const snapshot = getCanvasSnapshot(g, {
       projectId: activeProjectId.value,
@@ -4631,6 +4689,7 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     if (!g) return
 
+    const prevDialogueNodeId = activeImageDialogueNodeId
     const ids = getGraphSelectedNodeIds()
     selectedNodeIds.value = ids
 
@@ -4646,6 +4705,15 @@ export function registerCore(bind: CanvasBindings) {
     } else {
       selectedNodeId.value = ''
       selectedKind.value = null
+    }
+
+    if (prevDialogueNodeId && prevDialogueNodeId !== selectedNodeId.value) {
+      persistImageDialogueFields(prevDialogueNodeId)
+    }
+    if (showImageDialogue.value && selectedNodeId.value && selectedKind.value === 'image') {
+      loadImageDialogueFields(selectedNodeId.value)
+    } else if (!selectedNodeId.value) {
+      activeImageDialogueNodeId = ''
     }
 
     syncNodeSelectionHighlight(ids)
@@ -5013,12 +5081,8 @@ export function registerCore(bind: CanvasBindings) {
       }
     }
     if (showImageExpand.value) {
-      const base = getNodeCropOverlayPosition(g, node, overlayRoot)
-      imageExpandPos.value = {
-        ...base,
-        left: base.left + imageExpandDragOffset.value.x,
-        top: base.top + imageExpandDragOffset.value.y,
-      }
+      syncImageNodeSizeToMediaAspect(node)
+      imageExpandPos.value = getImageExpandOverlayLayout(g, node, overlayRoot)
     }
     if (showImageEditText.value) {
       const panelHeight = Math.max(320, node.getBBox().height)
@@ -7010,6 +7074,7 @@ export function registerCore(bind: CanvasBindings) {
     linkImageNodeToVideoGen,
     linkImageSourceFromEdge,
     loadImageGenPromptFields,
+    loadImageDialogueFields,
     loadPromptBarContext,
     loadVideoGenPromptFields,
     moveNodeLayer,
@@ -7061,6 +7126,7 @@ export function registerCore(bind: CanvasBindings) {
     pasteNode,
     pasteNodePayload,
     persistImageGenPrompt,
+    persistImageDialogueFields,
     persistPromptBarDraft,
     persistTextExpandContent,
     persistVideoGenPrompt,
