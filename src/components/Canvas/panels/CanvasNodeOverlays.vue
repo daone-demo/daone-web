@@ -365,9 +365,13 @@
     <VideoDialoguePanel
       :model-value="videoDialogueText"
       :settings="videoDialogueSettings"
+      :source-refs="videoDialogueSourceRefs"
       :chat-tools="chatTools"
       @update:model-value="emit('update:videoDialogueText', $event)"
       @update:settings="emit('update:videoDialogueSettings', $event)"
+      @remove-source-ref="emit('remove-video-dialogue-source-ref', $event)"
+      @upload-images="emit('upload-video-dialogue-images', $event)"
+      @add-canvas-node="emit('add-video-dialogue-canvas-node', $event)"
       @submit="emit('submit-video-dialogue', $event)"
     />
   </div>
@@ -546,6 +550,7 @@ const props = defineProps<{
   videoGenActiveTab: string
   videoGenAspectRatio: VideoGenAspectRatio
   videoGenSourceRefs: VideoSourceRef[]
+  videoDialogueSourceRefs: VideoSourceRef[]
   elementSelectMode: boolean
   imageDialogueText: string
   imageDialogueSettings: ImageDialogueSettings
@@ -575,6 +580,9 @@ const emit = defineEmits<{
   'add-image-dialogue-canvas-node': [nodeId: string]
   'submit-image-dialogue': [payload: ImageDialogueSubmitPayload]
   'submit-video-dialogue': [payload: VideoDialogueSubmitPayload]
+  'remove-video-dialogue-source-ref': [nodeId: string]
+  'upload-video-dialogue-images': [files: File[]]
+  'add-video-dialogue-canvas-node': [nodeId: string]
   'submit-video-gen-prompt': [payload: VideoGenPromptSubmitPayload]
   'update:videoDialogueText': [value: string]
   'update:videoDialogueSettings': [value: VideoDialogueSettings]

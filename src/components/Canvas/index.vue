@@ -213,6 +213,7 @@
       :video-gen-active-tab="videoGenActiveTab"
       :video-gen-aspect-ratio="videoGenAspectRatio"
       :video-gen-source-refs="videoGenSourceRefs"
+      :video-dialogue-source-refs="videoDialogueSourceRefs"
       :element-select-mode="showElementSelectMode"
       :image-dialogue-text="imageDialogueText"
       :image-dialogue-settings="imageDialogueSettings"
@@ -246,6 +247,9 @@
       @add-image-dialogue-canvas-node="onImageDialogueAddCanvasNode"
       @submit-image-dialogue="handleImageDialogueSubmit"
       @submit-video-dialogue="handleVideoDialogueSubmit"
+      @remove-video-dialogue-source-ref="onRemoveVideoSourceRef"
+      @upload-video-dialogue-images="onVideoGenUploadFiles"
+      @add-video-dialogue-canvas-node="onVideoGenAddCanvasNode"
       @update:video-dialogue-text="videoDialogueText = $event; persistVideoDialogueFields()"
       @update:video-dialogue-settings="videoDialogueSettings = $event; persistVideoDialogueFields()"
       @update:video-hd-magnification="videoHdMagnification = $event"
@@ -665,6 +669,7 @@ const {
   videoGenPromptPos,
   videoGenPromptText,
   videoGenSourceRefs,
+  videoDialogueSourceRefs,
   videoHdMagnification,
   videoHdPos,
   videoNum,

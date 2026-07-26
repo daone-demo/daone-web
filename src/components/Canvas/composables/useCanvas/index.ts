@@ -63,6 +63,7 @@ type GridSplitCanvasApi = Pick<
     | 'onImageResizePointerDown'
     | 'persistImageDialogueFields'
     | 'persistVideoDialogueFields'
+    | 'videoDialogueSourceRefs'
   >
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {

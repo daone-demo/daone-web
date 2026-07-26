@@ -1,192 +1,244 @@
 <template>
-  <div class="video-dialogue">
-    <div class="video-dialogue__head">
-      <div class="video-dialogue__greeting">
-        <span class="video-dialogue__avatar" aria-hidden="true" />
-        <span class="video-dialogue__greeting-text">{{ VIDEO_DIALOGUE_GREETING }}</span>
+  <div
+    class="video-dialogue"
+    :class="{ 'video-dialogue--dragover': isDragOver }"
+    @dragenter.prevent="onPanelDragEnter"
+    @dragover.prevent="onPanelDragOver"
+    @dragleave="onPanelDragLeave"
+    @drop.prevent.stop="onPanelDrop"
+  >
+    <div v-if="isDragOver" class="video-dialogue__drop-overlay" @mousedown.stop>
+      <div class="video-dialogue__drop-zone">
+        <img src="@assets/images/add.png" alt="" class="video-dialogue__drop-icon" />
+        <p class="video-dialogue__drop-text">点击或拖拽图片到此处上传</p>
       </div>
-      <div class="video-dialogue__head-actions">
-        <button type="button" class="video-dialogue__select">AI脚本</button>
-        <div class="video-dialogue__advisor-wrap">
-          <button
-            type="button"
-            class="video-dialogue__select"
-            :class="{ 'video-dialogue__select--active': showAdvisorMenu }"
-            @click="toggleAdvisorMenu"
-          >
-            视频参谋
-            <span class="video-dialogue__select-arrow" aria-hidden="true" />
-          </button>
-          <div
-            v-if="showAdvisorMenu"
-            class="video-dialogue__advisor-menu"
-            @mousedown.stop
-          >
-            <div
-              v-for="item in VIDEO_ADVISOR_MENU"
-              :key="item.key"
-              class="video-dialogue__advisor-item"
-              :class="{ 'video-dialogue__advisor-item--active': activeAdvisorKey === item.key }"
-              @mouseenter="activeAdvisorKey = item.key"
-            >
-              <span>{{ item.label }}</span>
-              <span class="video-dialogue__advisor-arrow" aria-hidden="true" />
-              <div
-                v-if="activeAdvisorKey === item.key"
-                class="video-dialogue__advisor-submenu"
-              >
-                <button
-                  v-for="child in item.children"
-                  :key="child.key"
-                  type="button"
-                  class="video-dialogue__advisor-subitem"
-                  @click="selectAdvisorItem"
-                >
-                  {{ child.label }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+    </div>
+
+    <div class="video-dialogue__head">
+      <div class="video-dialogue__advisor-wrap">
         <button
           type="button"
           class="video-dialogue__select"
-          :class="{ 'video-dialogue__select--active': showStoryboardPanel }"
-          @click="toggleStoryboardPanel"
+          :class="{ 'video-dialogue__select--active': showAdvisorMenu }"
+          @click="toggleAdvisorMenu"
         >
-          分镜板图
+          视频参谋
+          <span class="video-dialogue__select-arrow" aria-hidden="true" />
         </button>
-        <button type="button" class="video-dialogue__history" title="历史">
-          <span class="video-dialogue__history-icon" aria-hidden="true" />
-        </button>
+        <div
+          v-if="showAdvisorMenu"
+          class="video-dialogue__advisor-menu"
+          @mousedown.stop
+        >
+          <div
+            v-for="item in VIDEO_ADVISOR_MENU"
+            :key="item.key"
+            class="video-dialogue__advisor-item"
+            :class="{ 'video-dialogue__advisor-item--active': activeAdvisorKey === item.key }"
+            @mouseenter="activeAdvisorKey = item.key"
+          >
+            <span>{{ item.label }}</span>
+            <span class="video-dialogue__advisor-arrow" aria-hidden="true" />
+            <div
+              v-if="activeAdvisorKey === item.key"
+              class="video-dialogue__advisor-submenu"
+            >
+              <button
+                v-for="child in item.children"
+                :key="child.key"
+                type="button"
+                class="video-dialogue__advisor-subitem"
+                @click="selectAdvisorItem"
+              >
+                {{ child.label }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <textarea
-      :value="modelValue"
-      class="video-dialogue__input"
-      :placeholder="VIDEO_DIALOGUE_PLACEHOLDER"
-      rows="3"
-      @input="onInput"
-    />
-
-    <div class="video-dialogue__footer">
-      <div class="video-dialogue__footer-left">
-        <div class="video-dialogue__model-wrap">
-          <button
-            type="button"
-            class="video-dialogue__model"
-            :class="{ 'video-dialogue__model--active': showModelMenu }"
-            @click="toggleModelMenu"
-          >
-            <span class="video-dialogue__model-icon" aria-hidden="true" />
-            {{ selectedModelName }}
-            <span class="video-dialogue__model-caret" aria-hidden="true" />
-          </button>
-          <div
-            v-if="showModelMenu"
-            class="video-dialogue__model-menu"
-            @mousedown.stop
-          >
-            <button
-              v-for="model in modelMenu"
-              :key="model.key"
-              type="button"
-              class="video-dialogue__model-item"
-              :class="{ 'video-dialogue__model-item--active': model.key === selectedModelKey }"
-              @click="selectModel(model)"
-            >
-              <span
-                class="video-dialogue__model-item-icon"
-                :data-icon="model.icon"
-                aria-hidden="true"
-              />
-              <span class="video-dialogue__model-item-name">{{ model.name }}</span>
-            </button>
-          </div>
-        </div>
-        <div class="video-dialogue__tools">
-        <button type="button" class="video-dialogue__tool" title="图片">
-          <span class="video-dialogue__tool-icon" data-icon="image" aria-hidden="true" />
+    <div class="video-dialogue__refs">
+      <div
+        v-for="ref in displayRefs"
+        :key="ref.nodeId"
+        class="video-dialogue__ref"
+        :title="`点击插入 @${getRefDisplayName(ref)}`"
+        @mousedown.stop
+        @click.stop="insertRefMention(ref)"
+      >
+        <img :src="ref.previewUrl" alt="" />
+        <button
+          type="button"
+          class="video-dialogue__ref-remove"
+          title="删除"
+          @click.stop="emit('remove-source-ref', ref.nodeId)"
+        >
+          ×
         </button>
-        <button type="button" class="video-dialogue__tool" title="选择">
-          <span class="video-dialogue__tool-icon" data-icon="cursor" aria-hidden="true" />
-        </button>
-        </div>
+        <span v-if="ref.badge" class="video-dialogue__ref-badge">{{ ref.badge }}</span>
+        <span v-else class="video-dialogue__ref-index">{{ ref.index }}</span>
       </div>
-      <div class="video-dialogue__actions">
-        <button type="button" class="video-dialogue__auto">
-          全能参考
-          <span class="video-dialogue__select-arrow" aria-hidden="true" />
-        </button>
-        <div class="video-dialogue__gen-settings-wrap">
-          <button
-            type="button"
-            class="video-dialogue__auto"
-            :class="{ 'video-dialogue__auto--active': showVideoSettings }"
-            @click="toggleVideoSettings"
-          >
-            {{ videoSettingsLabel }}
-            <span class="video-dialogue__select-arrow" aria-hidden="true" />
-          </button>
-          <div
-            v-if="showVideoSettings"
-            class="video-dialogue__gen-settings-menu"
-            @mousedown.stop
-          >
-            <VideoGenSettingsPopover
-              v-model:duration="videoDuration"
-              v-model:aspect-ratio="videoAspectRatio"
-              v-model:resolution="videoResolution"
-              v-model:generate-audio="generateAudio"
-              :chat-tools="chatTools"
-              @close="showVideoSettings = false"
-            />
-          </div>
-        </div>
-        <span class="video-dialogue__credits">
-          <span class="video-dialogue__credits-icon" aria-hidden="true" />
-          {{ VIDEO_DIALOGUE_CREDITS }}
-        </span>
-        <button type="button" class="video-dialogue__send" title="发送" @click="onSend">
-          <span class="video-dialogue__send-icon" aria-hidden="true" />
-        </button>
-      </div>
+      <button
+        type="button"
+        class="video-dialogue__upload"
+        title="添加图片"
+        @mousedown.stop
+        @click.stop="openFilePicker"
+      >
+        <img src="@assets/images/add.png" alt="" class="video-dialogue__upload-icon" />
+      </button>
+      <input
+        ref="fileInputRef"
+        type="file"
+        class="video-dialogue__file-input"
+        accept="image/*"
+        multiple
+        @change="onFileInputChange"
+      />
     </div>
 
     <div
-      v-if="showStoryboardPanel"
-      class="video-dialogue__storyboard-wrap"
-      @mousedown.stop
-    >
-      <VideoStoryboardPanel
-        v-model:duration="storyboardDuration"
-        v-model:description="storyboardDescription"
-        v-model:ratio="storyboardRatio"
-        @close="resetStoryboardPanel"
-        @cancel="resetStoryboardPanel"
-        @confirm="onStoryboardConfirm"
-      />
+      ref="promptInputRef"
+      class="video-dialogue__input video-dialogue__input--rich"
+      :class="{ 'video-dialogue__input--empty': !modelValue.length }"
+      contenteditable="true"
+      role="textbox"
+      aria-multiline="true"
+      :data-placeholder="VIDEO_GEN_PROMPT_PLACEHOLDER"
+      @input="onPromptInput"
+      @compositionstart="onPromptCompositionStart"
+      @compositionend="onPromptCompositionEnd"
+      @keydown="onPromptKeydown"
+      @paste="onPromptPaste"
+    />
+
+    <div class="video-dialogue__footer">
+      <div class="video-dialogue__model-wrap">
+        <button
+          type="button"
+          class="video-dialogue__chip video-dialogue__chip--vip"
+          :class="{ 'video-dialogue__chip--active': showModelMenu }"
+          @click.stop="toggleModelMenu"
+        >
+          {{ selectedModelName }} ▾
+        </button>
+        <div
+          v-if="showModelMenu"
+          class="video-dialogue__model-menu"
+          @mousedown.stop
+        >
+          <button
+            v-for="model in modelMenu"
+            :key="model.key"
+            type="button"
+            class="video-dialogue__model-item"
+            :class="{ 'video-dialogue__model-item--active': model.key === selectedModelKey }"
+            @click="selectModel(model)"
+          >
+            <span
+              class="video-dialogue__model-item-icon"
+              :data-icon="model.icon"
+              aria-hidden="true"
+            />
+            <span class="video-dialogue__model-item-name">{{ model.name }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="video-dialogue__settings-wrap">
+        <button
+          type="button"
+          class="video-dialogue__chip"
+          :class="{ 'video-dialogue__chip--active': showVideoSettings }"
+          @click.stop="toggleVideoSettings"
+        >
+          {{ videoSettingsLabel }}{{ generateAudio ? ' 🔊' : '' }} ▾
+        </button>
+        <div
+          v-if="showVideoSettings"
+          class="video-dialogue__settings-menu"
+          @mousedown.stop
+        >
+          <VideoGenSettingsPopover
+            v-model:duration="videoDuration"
+            v-model:aspect-ratio="videoAspectRatio"
+            v-model:resolution="videoResolution"
+            v-model:generate-audio="generateAudio"
+            :chat-tools="chatTools"
+            @close="showVideoSettings = false"
+          />
+        </div>
+      </div>
+
+      <button
+        type="button"
+        class="video-dialogue__tool"
+        :class="{ 'video-dialogue__tool--loading': translating }"
+        title="翻译"
+        :disabled="translating"
+        @mousedown.stop
+        @click.stop="onTranslatePrompt"
+      >
+        文
+      </button>
+
+      <a-select
+        :value="videoCount"
+        class="video-dialogue__count-select"
+        @update:value="onVideoCountChange"
+      >
+        <a-select-option
+          v-for="count in countOptions"
+          :key="count"
+          :value="count"
+        >
+          {{ count }}个
+        </a-select-option>
+      </a-select>
+
+      <span class="video-dialogue__credits">
+        <span class="video-dialogue__credits-icon" aria-hidden="true" />
+        {{ VIDEO_DIALOGUE_CREDITS }}
+      </span>
+
+      <button type="button" class="video-dialogue__send" title="发送" @click="onSend">
+        <span class="video-dialogue__send-icon" aria-hidden="true" />
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
+import api, { type PromptTranslationData } from '@/services/api'
+import { isRequestError } from '@/utils/request'
 import VideoGenSettingsPopover from './VideoGenSettingsPopover.vue'
-import VideoStoryboardPanel from './VideoStoryboardPanel.vue'
+import { createPromptMentionApi, isInputComposing, needsSpaceBeforeMention } from './promptMention'
 import {
+  createMentionSpan,
+  findMentionAfterCursor,
+  findMentionBeforeCursor,
+  getPlainTextOffset,
+  renderPromptToEl,
+  serializePromptEl,
+  setPlainTextOffset,
+  VIDEO_GEN_MENTION_CLASS,
+} from './videoGenPromptMention'
+import {
+  CANVAS_IMAGE_NODE_DRAG_TYPE,
   VIDEO_ADVISOR_MENU,
   VIDEO_DIALOGUE_CREDITS,
-  VIDEO_DIALOGUE_GREETING,
-  VIDEO_DIALOGUE_PLACEHOLDER,
+  VIDEO_GEN_PROMPT_PLACEHOLDER,
+  VIDEO_DIALOGUE_MODEL_MENU,
   buildVideoDialogueAspectRatiosFromCapabilities,
   buildVideoDialogueClaritiesFromCapabilities,
+  buildVideoDialogueCountOptionsFromCapabilities,
   buildVideoDialogueDurationRangeFromCapabilities,
   buildVideoDialogueGenerateAudioOptions,
   buildVideoDialogueModelsFromCapabilities,
   formatVideoGenSettings,
-  VIDEO_DIALOGUE_MODEL_MENU,
   type ChatTools,
   type VideoDialogueModelItem,
   type VideoDialogueSettings,
@@ -194,36 +246,44 @@ import {
   type VideoGenAspectRatio,
   type VideoGenDuration,
   type VideoGenResolution,
-  type VideoStoryboardDuration,
-  type VideoStoryboardRatio,
 } from './constants'
+import type { VideoSourceRef } from './videoGen'
 
 const props = defineProps<{
   modelValue: string
   settings: VideoDialogueSettings
+  sourceRefs?: VideoSourceRef[]
   chatTools?: ChatTools | null
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   'update:settings': [value: VideoDialogueSettings]
+  'remove-source-ref': [nodeId: string]
+  'upload-images': [files: File[]]
+  'add-canvas-node': [nodeId: string]
   submit: [payload: VideoDialogueSubmitPayload]
 }>()
 
 const showAdvisorMenu = ref(false)
-const showStoryboardPanel = ref(false)
 const showVideoSettings = ref(false)
 const showModelMenu = ref(false)
 const activeAdvisorKey = ref<(typeof VIDEO_ADVISOR_MENU)[number]['key']>('dynamic')
-const storyboardDuration = ref<VideoStoryboardDuration>(5)
-const storyboardDescription = ref('')
-const storyboardRatio = ref<VideoStoryboardRatio>('16:9')
 const videoDuration = ref<VideoGenDuration>(5)
 const videoAspectRatio = ref<VideoGenAspectRatio>('16:9')
 const videoResolution = ref<VideoGenResolution>('720P')
 const generateAudio = ref(true)
+const videoCount = ref(1)
 const selectedModelKey = ref(VIDEO_DIALOGUE_MODEL_MENU[0].key)
 let skipSettingsWatch = false
+
+const isDragOver = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const promptInputRef = ref<HTMLElement | null>(null)
+let skipPromptWatch = false
+const isPromptComposing = ref(false)
+const translating = ref(false)
+const mentionApi = createPromptMentionApi(VIDEO_GEN_MENTION_CLASS)
 
 function buildSettingsFromRefs(): VideoDialogueSettings {
   return {
@@ -232,7 +292,8 @@ function buildSettingsFromRefs(): VideoDialogueSettings {
     resolution: videoResolution.value,
     duration: videoDuration.value,
     generateAudio: generateAudio.value,
-    mode: 'reference',
+    videoCount: videoCount.value,
+    mode: props.settings.mode,
   }
 }
 
@@ -243,6 +304,7 @@ function applySettingsToRefs(settings: VideoDialogueSettings) {
   videoResolution.value = settings.resolution
   videoDuration.value = settings.duration
   generateAudio.value = settings.generateAudio
+  videoCount.value = settings.videoCount
   nextTick(() => {
     skipSettingsWatch = false
   })
@@ -262,7 +324,7 @@ watch(
 )
 
 watch(
-  [selectedModelKey, videoAspectRatio, videoResolution, videoDuration, generateAudio],
+  [selectedModelKey, videoAspectRatio, videoResolution, videoDuration, generateAudio, videoCount],
   () => {
     emitSettings()
   },
@@ -277,7 +339,9 @@ const selectedModelName = computed(
     modelMenu.value[0]?.name ??
     VIDEO_DIALOGUE_MODEL_MENU[0].name,
 )
-
+const countOptions = computed(() =>
+  buildVideoDialogueCountOptionsFromCapabilities(props.chatTools),
+)
 const aspectRatioOptions = computed(() =>
   buildVideoDialogueAspectRatiosFromCapabilities(props.chatTools),
 )
@@ -317,6 +381,11 @@ function syncDialogueDefaultsFromChatTools() {
   if (audioOptions.length && !audioOptions.includes(generateAudio.value)) {
     generateAudio.value = audioOptions[0]
   }
+
+  const counts = countOptions.value
+  if (counts.length && !counts.includes(videoCount.value)) {
+    videoCount.value = counts[0]
+  }
 }
 
 watch(
@@ -331,14 +400,186 @@ const videoSettingsLabel = computed(() =>
   formatVideoGenSettings(videoDuration.value, videoAspectRatio.value, videoResolution.value),
 )
 
-function onInput(event: Event) {
-  emit('update:modelValue', (event.target as HTMLTextAreaElement).value)
+const displayRefs = computed(() => {
+  const refs = props.sourceRefs ?? []
+  if (props.settings.mode === 'first-last-frame') {
+    return refs.slice(0, 2).map((ref, index) => ({
+      ...ref,
+      badge: index === 0 ? '首帧' : '尾帧',
+    }))
+  }
+  return refs.map((ref) => ({ ...ref, badge: '' }))
+})
+
+function getRefDisplayName(ref: VideoSourceRef) {
+  return `图片${ref.index}`
+}
+
+function emitPrompt(text: string) {
+  skipPromptWatch = true
+  emit('update:modelValue', text)
+  nextTick(() => {
+    skipPromptWatch = false
+  })
+}
+
+function syncPromptView(text = props.modelValue) {
+  if (isPromptComposing.value) return
+  const el = promptInputRef.value
+  if (!el) return
+
+  const sel = window.getSelection()
+  const range = sel?.rangeCount ? sel.getRangeAt(0) : null
+  const offset = range && el.contains(range.startContainer)
+    ? getPlainTextOffset(el, range.startContainer, range.startOffset)
+    : text.length
+
+  renderPromptToEl(el, text)
+  setPlainTextOffset(el, offset)
+}
+
+function insertRefMention(ref: VideoSourceRef) {
+  const token = `@${getRefDisplayName(ref)}`
+  const el = promptInputRef.value
+  if (!el) {
+    const current = props.modelValue
+    const needsSpace = current.length > 0 && !/[\s]$/.test(current)
+    emitPrompt(`${current}${needsSpace ? ' ' : ''}${token} `)
+    return
+  }
+
+  el.focus()
+  const sel = window.getSelection()
+  if (!sel?.rangeCount) {
+    emitPrompt(`${props.modelValue}${props.modelValue && !/[\s]$/.test(props.modelValue) ? ' ' : ''}${token} `)
+    nextTick(() => syncPromptView())
+    return
+  }
+
+  const range = sel.getRangeAt(0)
+  if (!el.contains(range.commonAncestorContainer)) {
+    range.selectNodeContents(el)
+    range.collapse(false)
+  }
+
+  range.deleteContents()
+
+  if (needsSpaceBeforeMention(range, el, mentionApi.isMentionEl)) {
+    range.insertNode(document.createTextNode(' '))
+    range.collapse(false)
+  }
+
+  const mention = createMentionSpan(token)
+  range.insertNode(mention)
+  const space = document.createTextNode(' ')
+  mention.after(space)
+
+  const nextRange = document.createRange()
+  nextRange.setStartAfter(space)
+  nextRange.collapse(true)
+  sel.removeAllRanges()
+  sel.addRange(nextRange)
+
+  emitPrompt(serializePromptEl(el))
+  nextTick(() => syncPromptView())
+}
+
+function onPromptCompositionStart() {
+  isPromptComposing.value = true
+}
+
+function onPromptCompositionEnd() {
+  isPromptComposing.value = false
+  onPromptInput()
+}
+
+function onPromptInput(event?: Event) {
+  const el = promptInputRef.value
+  if (!el) return
+
+  const text = serializePromptEl(el)
+  emitPrompt(text)
+  if (isPromptComposing.value || isInputComposing(event)) return
+  nextTick(() => syncPromptView(text))
+}
+
+function onPromptKeydown(event: KeyboardEvent) {
+  if (isPromptComposing.value || isInputComposing(event)) return
+
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    onSend()
+    return
+  }
+
+  if (event.key !== 'Backspace' && event.key !== 'Delete') return
+
+  const el = promptInputRef.value
+  if (!el) return
+
+  const mention = event.key === 'Backspace'
+    ? findMentionBeforeCursor()
+    : findMentionAfterCursor()
+
+  if (!mention) return
+
+  event.preventDefault()
+  mention.remove()
+  emitPrompt(serializePromptEl(el))
+  nextTick(() => syncPromptView())
+}
+
+function onPromptPaste(event: ClipboardEvent) {
+  event.preventDefault()
+  const text = event.clipboardData?.getData('text/plain') ?? ''
+  if (!text) return
+  document.execCommand('insertText', false, text)
+  onPromptInput()
+}
+
+watch(
+  () => props.modelValue,
+  (value) => {
+    if (skipPromptWatch || isPromptComposing.value) return
+    const el = promptInputRef.value
+    if (!el || serializePromptEl(el) === value) return
+    nextTick(() => syncPromptView(value))
+  },
+)
+
+async function onTranslatePrompt() {
+  const text = props.modelValue.trim()
+  if (!text) {
+    message.warning('请输入需要翻译的提示词')
+    return
+  }
+  if (translating.value) return
+
+  translating.value = true
+  try {
+    const result = await api.translatePrompt<PromptTranslationData>({
+      text,
+      targetLanguage: 'EN',
+    })
+    const translated = result?.translatedText?.trim()
+    if (!translated) {
+      message.warning('翻译结果为空')
+      return
+    }
+    emitPrompt(translated)
+    nextTick(() => syncPromptView(translated))
+  } catch (error) {
+    message.error(isRequestError(error) ? error.message : '提示词翻译失败，请稍后重试')
+  } finally {
+    translating.value = false
+  }
 }
 
 function toggleVideoSettings() {
   showVideoSettings.value = !showVideoSettings.value
   if (showVideoSettings.value) {
     showModelMenu.value = false
+    showAdvisorMenu.value = false
   }
 }
 
@@ -347,7 +588,6 @@ function toggleModelMenu() {
   if (showModelMenu.value) {
     showVideoSettings.value = false
     showAdvisorMenu.value = false
-    showStoryboardPanel.value = false
   }
 }
 
@@ -360,36 +600,88 @@ function toggleAdvisorMenu() {
   showAdvisorMenu.value = !showAdvisorMenu.value
   if (showAdvisorMenu.value) {
     activeAdvisorKey.value = 'dynamic'
-    showStoryboardPanel.value = false
     showVideoSettings.value = false
     showModelMenu.value = false
   }
-}
-
-function toggleStoryboardPanel() {
-  showStoryboardPanel.value = !showStoryboardPanel.value
-  if (showStoryboardPanel.value) {
-    showAdvisorMenu.value = false
-    showVideoSettings.value = false
-    showModelMenu.value = false
-  }
-}
-
-function resetStoryboardPanel() {
-  showStoryboardPanel.value = false
-}
-
-function onStoryboardConfirm() {
-  resetStoryboardPanel()
 }
 
 function selectAdvisorItem() {
   showAdvisorMenu.value = false
 }
 
+function onVideoCountChange(value: unknown) {
+  if (value === undefined || value === null) return
+  videoCount.value = Number(value)
+}
+
+function hasPanelDropContent(event: DragEvent) {
+  const types = Array.from(event.dataTransfer?.types ?? [])
+  return types.includes('Files') || types.includes(CANVAS_IMAGE_NODE_DRAG_TYPE)
+}
+
+function onPanelDragEnter(event: DragEvent) {
+  if (!hasPanelDropContent(event)) return
+  isDragOver.value = true
+}
+
+function onPanelDragOver(event: DragEvent) {
+  if (!hasPanelDropContent(event)) return
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+  isDragOver.value = true
+}
+
+function onPanelDragLeave(event: DragEvent) {
+  const related = event.relatedTarget as Node | null
+  const current = event.currentTarget as HTMLElement | null
+  if (related && current?.contains(related)) return
+  isDragOver.value = false
+}
+
+function onPanelDrop(event: DragEvent) {
+  isDragOver.value = false
+  const nodeId = event.dataTransfer?.getData(CANVAS_IMAGE_NODE_DRAG_TYPE)
+  if (nodeId) {
+    emit('add-canvas-node', nodeId)
+    return
+  }
+
+  const files = Array.from(event.dataTransfer?.files ?? []).filter((file) =>
+    file.type.startsWith('image/'),
+  )
+  if (files.length) emit('upload-images', files)
+}
+
+function openFilePicker() {
+  fileInputRef.value?.click()
+}
+
+function onFileInputChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? []).filter((file) => file.type.startsWith('image/'))
+  if (files.length) emit('upload-images', files)
+  input.value = ''
+}
+
+function onDocumentMouseDown(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  if (showAdvisorMenu.value && !target.closest('.video-dialogue__advisor-wrap')) {
+    showAdvisorMenu.value = false
+  }
+  if (showModelMenu.value && !target.closest('.video-dialogue__model-wrap')) {
+    showModelMenu.value = false
+  }
+  if (showVideoSettings.value && !target.closest('.video-dialogue__settings-wrap')) {
+    showVideoSettings.value = false
+  }
+}
+
 function onSend() {
   const prompt = props.modelValue.trim()
-  if (!prompt) return
+  if (!prompt) {
+    message.warning('请输入提示词')
+    return
+  }
 
   const payload: VideoDialogueSubmitPayload = {
     prompt,
@@ -398,90 +690,54 @@ function onSend() {
     clarity: videoResolution.value,
     duration: videoDuration.value,
     generateAudio: generateAudio.value,
-    videoCount: 1,
+    videoCount: videoCount.value,
     mode: props.settings.mode,
   }
   emit('submit', payload)
 }
+
+onMounted(() => {
+  document.addEventListener('mousedown', onDocumentMouseDown, true)
+  nextTick(() => syncPromptView())
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocumentMouseDown, true)
+})
 </script>
 
 <style scoped lang="scss">
 .video-dialogue {
   position: relative;
   width: 100%;
-  padding: 14px 16px 12px;
+  padding: 12px 14px;
   border: 1px solid #e5e7eb;
-  border-radius: 18px;
+  border-radius: 14px;
   background: #fff;
   box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
   overflow: visible;
 }
 
-.video-dialogue__storyboard-wrap {
-  position: absolute;
-  top: 0;
-  left: calc(100% + 12px);
-  z-index: 4;
-}
-
 .video-dialogue__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.video-dialogue__greeting {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.video-dialogue__avatar {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #f3f4f6 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='none' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11' fill='%23eef2ff'/%3E%3Ccircle cx='12' cy='10' r='4' fill='%23c7d2fe'/%3E%3Cpath fill='%23c7d2fe' d='M6 18c1.2-2.4 3.4-3.8 6-3.8s4.8 1.4 6 3.8'/%3E%3C/svg%3E") center / 24px 24px no-repeat;
-}
-
-.video-dialogue__greeting-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: #374151;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.video-dialogue__head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  justify-content: flex-end;
+  margin-bottom: 10px;
 }
 
 .video-dialogue__advisor-wrap,
-.video-dialogue__gen-settings-wrap {
+.video-dialogue__settings-wrap {
   position: relative;
 }
 
-.video-dialogue__gen-settings-menu {
+.video-dialogue__settings-menu {
   position: absolute;
-  right: 0;
+  left: 0;
   bottom: calc(100% + 8px);
-  z-index: 5;
+  z-index: 10;
 }
 
-.video-dialogue__auto--active {
-  background: #f3f4f6;
-  border-color: #d1d5db;
-}
-
-.video-dialogue__select,
-.video-dialogue__auto {
+.video-dialogue__select {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -514,7 +770,7 @@ function onSend() {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 3;
+  z-index: 6;
   min-width: 140px;
   padding: 6px;
   border: 1px solid #e5e7eb;
@@ -579,107 +835,199 @@ function onSend() {
   }
 }
 
-.video-dialogue__history {
-  display: inline-flex;
+.video-dialogue__refs {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.video-dialogue__ref {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: #f3f4f6;
   cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
 
   &:hover {
-    background: #f3f4f6;
+    border-color: rgba(79, 70, 229, 0.45);
+    transform: translateY(-1px);
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
 }
 
-.video-dialogue__history-icon {
+.video-dialogue__ref-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 16px;
   height: 16px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 16 16'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.2' d='M8 3.5v4.5l2.5 1.5'/%3E%3Ccircle cx='8' cy='8' r='5' stroke='%236b7280' stroke-width='1.2'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.55);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  .video-dialogue__ref:hover & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.9);
+  }
+}
+
+.video-dialogue__ref-badge,
+.video-dialogue__ref-index {
+  position: absolute;
+  left: auto;
+  right: 4px;
+  bottom: 4px;
+  min-width: 16px;
+  padding: 1px 5px;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.55);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.video-dialogue__ref-badge {
+  border-radius: 4px;
+  left: 4px;
+  right: auto;
+}
+
+.video-dialogue__upload {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px dashed #d1d5db;
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: border-color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    border-color: rgba(79, 70, 229, 0.45);
+    background: rgba(79, 70, 229, 0.06);
+  }
+}
+
+.video-dialogue__upload-icon {
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+}
+
+.video-dialogue__file-input {
+  display: none;
+}
+
+.video-dialogue__drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(4px);
+}
+
+.video-dialogue__drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 120px;
+  padding: 20px 12px;
+  border: 1px dashed #d1d5db;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.video-dialogue__drop-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.video-dialogue__drop-text {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.video-dialogue--dragover {
+  border-color: rgba(79, 70, 229, 0.45);
 }
 
 .video-dialogue__input {
   width: 100%;
-  min-height: 88px;
-  padding: 12px 14px;
-  border: 1px solid #eef0f3;
-  border-radius: 12px;
-  background: #fafafa;
+  min-height: 52px;
+  margin-bottom: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
   color: #111827;
-  font-size: 14px;
-  line-height: 1.55;
-  resize: none;
+  font-size: 13px;
+  line-height: 1.5;
   outline: none;
   box-sizing: border-box;
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
 
-  &::placeholder {
+  &--rich.video-dialogue__input--empty::before {
+    content: attr(data-placeholder);
     color: #9ca3af;
+    pointer-events: none;
   }
 
-  &:focus {
-    border-color: #d1d5db;
-    background: #fff;
+  :deep(.video-gen-prompt-panel__mention) {
+    color: #4f46e5;
+    font-weight: 500;
+    user-select: all;
+    cursor: default;
   }
 }
 
 .video-dialogue__footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-.video-dialogue__footer-left {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .video-dialogue__model-wrap {
   position: relative;
-  flex-shrink: 0;
-}
-
-.video-dialogue__model {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
-  border: 1px solid #ebedf0;
-  border-radius: 999px;
-  background: #fff;
-  color: #374151;
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-
-  &:hover {
-    background: #f9fafb;
-  }
-}
-
-.video-dialogue__model--active {
-  background: #f3f4f6;
-  border-color: #d1d5db;
-}
-
-.video-dialogue__model-icon {
-  width: 14px;
-  height: 14px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' viewBox='0 0 14 14'%3E%3Cpath fill='%237c8cff' d='M7 1.5 8.3 5 11.8 6.3 8.3 7.6 7 11.1 5.7 7.6 2.2 6.3 5.7 5z'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
-}
-
-.video-dialogue__model-caret {
-  width: 10px;
-  height: 10px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' viewBox='0 0 10 10'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.2' d='M2.5 6.25 5 3.75 7.5 6.25'/%3E%3C/svg%3E") center / 10px 10px no-repeat;
 }
 
 .video-dialogue__model-menu {
@@ -687,8 +1035,8 @@ function onSend() {
   left: 0;
   bottom: calc(100% + 8px);
   z-index: 6;
-  min-width: 240px;
-  max-width: 320px;
+  min-width: 220px;
+  max-width: 300px;
   max-height: 280px;
   overflow-y: auto;
   padding: 6px;
@@ -703,45 +1051,36 @@ function onSend() {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 10px;
+  padding: 8px 10px;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   text-align: left;
   cursor: pointer;
 
-  &:hover {
-    background: #f6f7f9;
+  &:hover,
+  &--active {
+    background: #f3f4f6;
   }
-}
-
-.video-dialogue__model-item--active {
-  background: #f3f4f6;
 }
 
 .video-dialogue__model-item-icon {
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   background-color: #f3f4f6;
   background-repeat: no-repeat;
   background-position: center;
-  background-size: 18px 18px;
+  background-size: 16px 16px;
 
-  &[data-icon='lib'] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' viewBox='0 0 18 18'%3E%3Ccircle cx='9' cy='9' r='6' stroke='%236b7280' stroke-width='1.3'/%3E%3Ccircle cx='9' cy='9' r='2.2' stroke='%236b7280' stroke-width='1.3'/%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-width='1.3' d='M9 3v1.6M9 13.4V15M3 9h1.6M13.4 9H15'/%3E%3C/svg%3E");
-  }
-
-  &[data-icon='seedream'] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' viewBox='0 0 18 18'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.3' d='M4 13V8M9 13V5M14 13v-3'/%3E%3C/svg%3E");
-  }
-
+  &[data-icon='lib'],
+  &[data-icon='seedream'],
   &[data-icon='seedance'],
   &[data-icon='kling'],
   &[data-icon='happy-horse'],
   &[data-icon='wan'] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' viewBox='0 0 18 18'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.3' d='M4 13V8M9 13V5M14 13v-3'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 18 18'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.3' d='M4 13V8M9 13V5M14 13v-3'/%3E%3C/svg%3E");
   }
 }
 
@@ -749,61 +1088,78 @@ function onSend() {
   flex: 1;
   min-width: 0;
   color: #374151;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.3;
   word-break: break-all;
 }
 
-.video-dialogue__tools,
-.video-dialogue__actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.video-dialogue__chip {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    background: #e5e7eb;
+    color: #374151;
+  }
+
+  &--vip {
+    color: #7c3aed;
+  }
+
+  &--active {
+    background: #e5e7eb;
+    color: #111827;
+  }
 }
 
 .video-dialogue__tool {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
+  padding: 4px 6px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
+  color: #6b7280;
+  font-size: 12px;
   cursor: pointer;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: #f3f4f6;
+    color: #374151;
+  }
+
+  &:disabled,
+  &--loading {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 }
 
-.video-dialogue__tool-icon {
-  width: 16px;
-  height: 16px;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 16px 16px;
+.video-dialogue__count-select {
+  width: 72px;
 
-  &[data-icon='image'] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 16 16'%3E%3Crect x='2.5' y='3.5' width='11' height='9' rx='1' stroke='%236b7280' stroke-width='1.2'/%3E%3Ccircle cx='6' cy='7' r='1.2' fill='%236b7280'/%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-width='1.2' d='m4 11 2.5-2.5 2 2 2.5-3 2 3.5'/%3E%3C/svg%3E");
+  :deep(.ant-select-selector) {
+    height: 28px !important;
+    padding: 0 8px !important;
+    border-radius: 6px !important;
+    border-color: #e5e7eb !important;
+    font-size: 12px !important;
   }
 
-  &[data-icon='cursor'] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 16 16'%3E%3Cpath fill='%236b7280' d='M4 2.5 12.5 8 8.5 8.8 10.5 13.5 8.8 14.2 6.8 9.5 4 11.5z'/%3E%3C/svg%3E");
+  :deep(.ant-select-selection-item) {
+    line-height: 26px !important;
   }
-}
-
-.video-dialogue__actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .video-dialogue__credits {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  margin-left: auto;
   padding: 0 4px;
   color: #6b7280;
   font-size: 12px;
@@ -820,8 +1176,8 @@ function onSend() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: none;
   border-radius: 50%;

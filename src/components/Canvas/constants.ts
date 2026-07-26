@@ -659,6 +659,7 @@ export interface VideoDialogueSettings {
   resolution: VideoGenResolution
   duration: VideoGenDuration
   generateAudio: boolean
+  videoCount: number
   mode: VideoDialogueMode
 }
 
@@ -1543,6 +1544,7 @@ export function createDefaultVideoDialogueSettings(): VideoDialogueSettings {
     resolution: '720P',
     duration: 5,
     generateAudio: true,
+    videoCount: 1,
     mode: 'reference',
   }
 }

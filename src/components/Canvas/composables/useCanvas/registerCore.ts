@@ -352,6 +352,23 @@ export function registerCore(bind: CanvasBindings) {
     return getVideoSourceRefs(g, id)
   })
 
+  const videoDialogueSourceRefs = computed(() => {
+    void toolbarRevision.value
+    const g = graph.value
+    const id =
+      showVideoDialogue.value && selectedKind.value === 'video' ? selectedNodeId.value : ''
+    if (!g || !id) return []
+    return getVideoSourceRefs(g, id)
+  })
+
+  function getActiveVideoTargetNodeId() {
+    if (activeVideoGenPromptNodeId.value) return activeVideoGenPromptNodeId.value
+    if (showVideoDialogue.value && selectedKind.value === 'video' && selectedNodeId.value) {
+      return selectedNodeId.value
+    }
+    return ''
+  }
+
   const showImageCreativeToolbar = computed(() => {
     void toolbarRevision.value
     if (!showElementSelectMode.value) return false
@@ -2908,6 +2925,7 @@ export function registerCore(bind: CanvasBindings) {
       duration: saved.duration ?? defaults.duration,
       generateAudio: saved.generateAudio ?? defaults.generateAudio,
       mode: saved.mode ?? defaults.mode,
+      videoCount: saved.videoCount ?? defaults.videoCount,
     }
   }
 
@@ -4485,7 +4503,7 @@ export function registerCore(bind: CanvasBindings) {
 
   function onRemoveVideoSourceRef(imageNodeId: string) {
     const g = graph.value
-    const videoNodeId = activeVideoGenPromptNodeId.value
+    const videoNodeId = getActiveVideoTargetNodeId()
     if (!g || !videoNodeId || !imageNodeId) return
     if (!disconnectImageFromVideo(g, imageNodeId, videoNodeId)) return
     bumpToolbarRevision()
@@ -4494,13 +4512,14 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function getVideoGenSourceLimit() {
-    const rule = VIDEO_GEN_TAB_IMAGE_RULES[videoGenActiveTab.value]
+    const tab = activeVideoGenPromptNodeId.value ? videoGenActiveTab.value : 'reference'
+    const rule = VIDEO_GEN_TAB_IMAGE_RULES[tab]
     return rule?.max ?? 9
   }
 
   async function linkImageNodeToVideoGen(imageNodeId: string) {
     const g = graph.value
-    const videoNodeId = activeVideoGenPromptNodeId.value
+    const videoNodeId = getActiveVideoTargetNodeId()
     if (!g || !videoNodeId || !imageNodeId || imageNodeId === videoNodeId) return false
 
     const source = g.getCellById(imageNodeId)
@@ -4529,7 +4548,7 @@ export function registerCore(bind: CanvasBindings) {
 
   async function onVideoGenUploadFiles(files: File[]) {
     const g = graph.value
-    const videoNodeId = activeVideoGenPromptNodeId.value
+    const videoNodeId = getActiveVideoTargetNodeId()
     if (!g || !videoNodeId) return
 
     const videoCell = g.getCellById(videoNodeId)
@@ -7432,6 +7451,7 @@ export function registerCore(bind: CanvasBindings) {
     removeHoveredEdge,
     uploadFileToCanvasNode,
     videoGenSourceRefs,
+    videoDialogueSourceRefs,
     videoGenAspectRatio,
     onVideoGenAspectRatioChange,
     waitForNodeUploadDone,
