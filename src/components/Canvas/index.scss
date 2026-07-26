@@ -940,7 +940,7 @@
 .canvas__image-grid-split {
   position: absolute;
   z-index: 20;
-  pointer-events: auto;
+  pointer-events: none;
   overflow: visible;
 }
 

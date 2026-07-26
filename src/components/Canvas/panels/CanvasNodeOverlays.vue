@@ -232,7 +232,6 @@
       width: `${imageGridSplitPos.width}px`,
       height: `${imageGridSplitPos.height}px`,
     }"
-    @mousedown.stop
   >
     <ImageGridSplitOverlay
       v-if="imageGridSplitSource"

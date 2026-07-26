@@ -1,3 +1,4 @@
+import type { Graph, Node } from '@antv/x6'
 import { canvasToObjectUrl, loadDrawableImage } from './drawableImage'
 
 export type GridSplitTile = {
@@ -19,8 +20,76 @@ export type GridSplitStops = {
 /** 宫格碎片节点之间的布局间隙 */
 export const GRID_SPLIT_GAP = 2
 
+/** 拖拽宫格碎片时边缘吸附阈值（图坐标 px） */
+export const GRID_SPLIT_SNAP_THRESHOLD = 10
+
 export function computeGridSplitGap(_width?: number, _height?: number) {
   return GRID_SPLIT_GAP
+}
+
+function isGridSplitSibling(node: Node, sourceNodeId: string) {
+  const data = node.getData() as { gridSplitTile?: unknown; sourceNodeId?: string }
+  return Boolean(data.gridSplitTile && data.sourceNodeId === sourceNodeId)
+}
+
+/** 拖拽宫格碎片时，与同源碎片边缘吸附对齐（保留 GRID_SPLIT_GAP 缝宽） */
+export function snapGridSplitNodePosition(
+  graph: Graph,
+  node: Node,
+  threshold = GRID_SPLIT_SNAP_THRESHOLD,
+) {
+  const data = node.getData() as { gridSplitTile?: unknown; sourceNodeId?: string }
+  if (!data.gridSplitTile || !data.sourceNodeId) return
+
+  const siblings = graph.getNodes().filter((candidate) => {
+    if (candidate.id === node.id) return false
+    return isGridSplitSibling(candidate, data.sourceNodeId!)
+  })
+  if (!siblings.length) return
+
+  let { x, y } = node.getPosition()
+  const width = node.getSize().width
+  const height = node.getSize().height
+  const gap = GRID_SPLIT_GAP
+
+  let snapX = x
+  let snapY = y
+  let bestDx = threshold
+  let bestDy = threshold
+
+  const trySnapX = (nextX: number) => {
+    const delta = Math.abs(nextX - x)
+    if (delta <= threshold && delta < bestDx) {
+      bestDx = delta
+      snapX = nextX
+    }
+  }
+
+  const trySnapY = (nextY: number) => {
+    const delta = Math.abs(nextY - y)
+    if (delta <= threshold && delta < bestDy) {
+      bestDy = delta
+      snapY = nextY
+    }
+  }
+
+  siblings.forEach((sibling) => {
+    const sp = sibling.getPosition()
+    const sw = sibling.getSize().width
+    const sh = sibling.getSize().height
+
+    trySnapX(sp.x + sw + gap)
+    trySnapX(sp.x - gap - width)
+    trySnapX(sp.x)
+
+    trySnapY(sp.y + sh + gap)
+    trySnapY(sp.y - gap - height)
+    trySnapY(sp.y)
+  })
+
+  if (snapX !== x || snapY !== y) {
+    node.position(snapX, snapY)
+  }
 }
 
 export function buildSplitAxisLayout(edges: number[], total: number, gap: number) {

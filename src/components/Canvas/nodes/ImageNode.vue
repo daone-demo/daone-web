@@ -114,7 +114,7 @@
           </div>
         </template>
         <template v-else-if="data.previewUrl">
-          <div v-if="isImageLoading" class="image-node__image-loading" aria-hidden="true">
+          <div v-if="isImageLoading && !isGridSplitNode" class="image-node__image-loading" aria-hidden="true">
             <span class="image-node__spinner" />
           </div>
           <img

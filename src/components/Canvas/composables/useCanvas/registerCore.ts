@@ -72,7 +72,7 @@ import {
   type VideoDialogueSubmitPayload,
   type VideoGenPromptSubmitPayload,
 } from '../../constants'
-import { splitImageIntoGrid } from '../../gridSplitUtils'
+import { splitImageIntoGrid, snapGridSplitNodePosition } from '../../gridSplitUtils'
 import {
   createSkillId,
   listSavedCanvasSkills,
@@ -1194,13 +1194,17 @@ export function registerCore(bind: CanvasBindings) {
 
       closeImageGridSplit()
 
-      // 宫格碎片默认不解组展示：仅保持源图选中，避免组工具栏/多选工具栏
-      selectedNodeId.value = sourceNodeId
-      selectedNodeIds.value = [sourceNodeId]
+      const resultNodeIds = nodes.map((node) => node.id)
+      selectedNodeId.value = resultNodeIds[0] ?? sourceNodeId
+      selectedNodeIds.value = resultNodeIds.length ? resultNodeIds : [sourceNodeId]
       selectedKind.value = 'image'
-      syncNodeSelectionHighlight([sourceNodeId])
+      syncNodeSelectionHighlight(selectedNodeIds.value)
       g.cleanSelection()
-      g.select(sourceNodeId)
+      if (resultNodeIds.length) {
+        g.select(resultNodeIds)
+      } else {
+        g.select(sourceNodeId)
+      }
       syncNodeCount()
       bumpToolbarRevision()
       updateNodeToolbar()
@@ -1237,6 +1241,7 @@ export function registerCore(bind: CanvasBindings) {
         width: data.mediaWidth,
         height: data.mediaHeight,
         preserveTitle: true,
+        silent: true,
       })
     })
 
@@ -1615,7 +1620,7 @@ export function registerCore(bind: CanvasBindings) {
     node: Node,
     localPreviewUrl: string,
     fileName: string,
-    payload: { width: number; height: number; preserveTitle?: boolean },
+    payload: { width: number; height: number; preserveTitle?: boolean; silent?: boolean },
   ) {
     try {
       const file = await dataUrlToFile(localPreviewUrl, fileName)
@@ -1628,21 +1633,37 @@ export function registerCore(bind: CanvasBindings) {
       const current = { ...(node.getData() as CanvasNodeData) }
       if (current.previewUrl !== localPreviewUrl) return
 
-      const prevTitle = current.title
-      current.assetId = upload.assetId
-      current.previewUrl = upload.url
-      current.uploadState = 'done'
-      current.uploadProgress = 100
-      current.fileName = fileName || current.fileName
-      current.mediaWidth = upload.width ?? payload.width
-      current.mediaHeight = upload.height ?? payload.height
-      if (payload.preserveTitle && prevTitle) {
-        current.title = prevTitle
+      const remoteUrl = upload.url
+      if (payload.silent) {
+        await new Promise<void>((resolve, reject) => {
+          const img = new Image()
+          img.onload = () => resolve()
+          img.onerror = () => reject(new Error('remote image preload failed'))
+          img.src = remoteUrl
+        })
       }
-      node.setData(current)
-      syncNodeShapeFromData(node)
-      const size = getNodeSize(current.kind, current.mode, current)
-      node.resize(size.width, size.height)
+
+      const refreshed = { ...(node.getData() as CanvasNodeData) }
+      if (refreshed.previewUrl !== localPreviewUrl) return
+
+      const prevTitle = refreshed.title
+      refreshed.assetId = upload.assetId
+      refreshed.previewUrl = remoteUrl
+      refreshed.uploadState = 'done'
+      refreshed.uploadProgress = 100
+      refreshed.fileName = fileName || refreshed.fileName
+      refreshed.mediaWidth = upload.width ?? payload.width
+      refreshed.mediaHeight = upload.height ?? payload.height
+      if (payload.preserveTitle && prevTitle) {
+        refreshed.title = prevTitle
+      }
+      node.setData(refreshed)
+
+      if (!payload.silent) {
+        syncNodeShapeFromData(node)
+        const size = getNodeSize(refreshed.kind, refreshed.mode, refreshed)
+        node.resize(size.width, size.height)
+      }
 
       if (localPreviewUrl.startsWith('blob:')) {
         URL.revokeObjectURL(localPreviewUrl)
@@ -4897,7 +4918,14 @@ export function registerCore(bind: CanvasBindings) {
       imageCropPos.value = getNodeCropOverlayPosition(g, node, overlayRoot)
     }
     if (showImageGridSplit.value) {
-      imageGridSplitPos.value = getNodeCropOverlayPosition(g, node, overlayRoot, 360, 480)
+      syncImageNodeSizeToMediaAspect(node)
+      const box = getImageNodeMediaScreenBox(g, node, overlayRoot)
+      imageGridSplitPos.value = {
+        left: box.left,
+        top: box.top,
+        width: box.width,
+        height: box.height,
+      }
     }
     if (showImageErase.value) {
       imageErasePos.value = getNodeCropOverlayPosition(g, node, overlayRoot)
@@ -6540,13 +6568,15 @@ export function registerCore(bind: CanvasBindings) {
     })
     instance.on('node:moving', ({ node }) => {
       syncGroupedNodeMove(node)
+      snapGridSplitNodePosition(instance, node)
       if (activeGroupSelection.value) {
         updateGroupToolbarPosition()
       }
       updateNodeToolbar()
       updateEdgeDeleteButtonPosition()
     })
-    instance.on('node:moved', () => {
+    instance.on('node:moved', ({ node }) => {
+      snapGridSplitNodePosition(instance, node)
       groupMoveState.anchorId = ''
       updateNodeToolbar()
       syncViewportNodeVisibility()

@@ -32,6 +32,7 @@
           role="listbox"
           @mousedown.stop
           @click.stop
+          @wheel.stop
         >
           <button
             v-for="item in GRID_PRESET_OPTIONS"
@@ -58,40 +59,33 @@
       </button>
     </div>
 
-    <div class="image-grid-split-overlay__stage">
-      <div ref="wrapRef" class="image-grid-split-overlay__image-wrap">
-        <img :src="imageUrl" class="image-grid-split-overlay__image" draggable="false" alt="" />
-
-        <!-- 单元格描边（按拖拽比例） -->
-        <div class="image-grid-split-overlay__cells" aria-hidden="true">
-          <div
-            v-for="cell in cells"
-            :key="cell.key"
-            class="image-grid-split-overlay__cell"
-            :style="cell.style"
-          />
-        </div>
-
-        <!-- 可拖拽竖线 -->
+    <div ref="wrapRef" class="image-grid-split-overlay__image-wrap">
+      <div class="image-grid-split-overlay__cells" aria-hidden="true">
         <div
-          v-for="(stop, index) in colStops"
-          :key="`col-${index}`"
-          class="image-grid-split-overlay__line image-grid-split-overlay__line--col"
-          :class="{ 'image-grid-split-overlay__line--active': dragState?.axis === 'col' && dragState.index === index }"
-          :style="{ left: `${stop * 100}%` }"
-          @mousedown.stop.prevent="startDrag('col', index, $event)"
-        />
-
-        <!-- 可拖拽横线 -->
-        <div
-          v-for="(stop, index) in rowStops"
-          :key="`row-${index}`"
-          class="image-grid-split-overlay__line image-grid-split-overlay__line--row"
-          :class="{ 'image-grid-split-overlay__line--active': dragState?.axis === 'row' && dragState.index === index }"
-          :style="{ top: `${stop * 100}%` }"
-          @mousedown.stop.prevent="startDrag('row', index, $event)"
+          v-for="cell in cells"
+          :key="cell.key"
+          class="image-grid-split-overlay__cell"
+          :style="cell.style"
         />
       </div>
+
+      <div
+        v-for="(stop, index) in colStops"
+        :key="`col-${index}`"
+        class="image-grid-split-overlay__line image-grid-split-overlay__line--col"
+        :class="{ 'image-grid-split-overlay__line--active': dragState?.axis === 'col' && dragState.index === index }"
+        :style="{ left: `${stop * 100}%` }"
+        @mousedown.stop.prevent="startDrag('col', index, $event)"
+      />
+
+      <div
+        v-for="(stop, index) in rowStops"
+        :key="`row-${index}`"
+        class="image-grid-split-overlay__line image-grid-split-overlay__line--row"
+        :class="{ 'image-grid-split-overlay__line--active': dragState?.axis === 'row' && dragState.index === index }"
+        :style="{ top: `${stop * 100}%` }"
+        @mousedown.stop.prevent="startDrag('row', index, $event)"
+      />
     </div>
   </div>
 </template>
@@ -297,27 +291,29 @@ onBeforeUnmount(() => {
 
 <style scoped lang="scss">
 .image-grid-split-overlay {
+  position: relative;
   width: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .image-grid-split-overlay__toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 12px);
+  z-index: 3;
   display: flex;
   align-items: center;
   gap: 8px;
-  align-self: center;
   min-height: 44px;
   padding: 6px 10px;
   border: 1px solid #e5e7eb;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-  flex-shrink: 0;
   white-space: nowrap;
+  pointer-events: auto;
+  transform: translateX(-50%);
 }
 
 .image-grid-split-overlay__btn {
@@ -488,35 +484,15 @@ onBeforeUnmount(() => {
   }
 }
 
-.image-grid-split-overlay__stage {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .image-grid-split-overlay__image-wrap {
-  position: relative;
-  max-width: 100%;
-  max-height: 100%;
-  border-radius: 4px;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   overflow: hidden;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14);
-  background: #fff;
   touch-action: none;
   user-select: none;
-}
-
-.image-grid-split-overlay__image {
-  display: block;
-  max-width: min(100%, 420px);
-  max-height: min(68vh, 640px);
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  user-select: none;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: crosshair;
 }
 
 .image-grid-split-overlay__cells {
@@ -528,19 +504,20 @@ onBeforeUnmount(() => {
 .image-grid-split-overlay__cell {
   position: absolute;
   box-sizing: border-box;
+  border: 1px solid rgba(37, 99, 235, 0.55);
   pointer-events: none;
 }
 
 .image-grid-split-overlay__line {
   position: absolute;
   z-index: 2;
-  background: #2563eb;
+  background: rgbg(37 99 235, 0.9);
 
   &--col {
     top: 0;
     bottom: 0;
     width: 1px;
-    margin-left: -0.5px;
+    margin-left: -1px;
     cursor: col-resize;
     pointer-events: auto;
 
@@ -558,7 +535,7 @@ onBeforeUnmount(() => {
     left: 0;
     right: 0;
     height: 1px;
-    margin-top: -0.5px;
+    margin-top: -1px;
     cursor: row-resize;
     pointer-events: auto;
 
@@ -574,7 +551,7 @@ onBeforeUnmount(() => {
 
   &--active {
     background: #1d4ed8;
-    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35);
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.45);
   }
 }
 </style>

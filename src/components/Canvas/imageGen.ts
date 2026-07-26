@@ -465,7 +465,7 @@ export function findOutgoingLoadingGenerationNode(graph: Graph, sourceId: string
 }
 
 /**
- * 宫格拆分：在源图右侧生成碎片节点（节点间距固定 2px），不修改/删除原图，默认不解组。
+ * 宫格拆分：在源图原位生成碎片节点（节点间距固定 2px），不修改/删除原图，默认不解组。
  * 按碎片原始像素等比缩放后紧密排布，避免 cell 比例与图片不一致导致的上下/左右视觉缝宽不同。
  */
 export function spawnGridSplitResultNodes(
@@ -543,7 +543,7 @@ export function spawnGridSplitResultNodes(
 
   const gridHeight = cursorY
   const contentX = bbox.x + bbox.width + GEN_GAP
-  const contentY = bbox.y + previewOffsetY + Math.max(0, (contentH - gridHeight) / 2)
+  const contentY = bbox.y + previewOffsetY + Math.max(0, (bbox.height - gridHeight) / 2)
 
   const nodes: Node[] = []
   for (let row = 0; row < rows; row += 1) {
