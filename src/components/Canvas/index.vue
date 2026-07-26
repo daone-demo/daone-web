@@ -167,6 +167,8 @@
       :image-gen-prompt-pos="imageGenPromptPos"
       :video-gen-prompt-pos="videoGenPromptPos"
       :image-crop-pos="imageCropPos"
+      :show-image-resize-overlay="showImageResizeOverlay"
+      :image-resize-overlay="imageResizeOverlay"
       :image-grid-split-pos="imageGridSplitPos"
       :image-erase-pos="imageErasePos"
       :image-inpaint-pos="imageInpaintPos"
@@ -242,6 +244,7 @@
       @update:video-dialogue-text="videoDialogueText = $event"
       @update:video-hd-magnification="videoHdMagnification = $event"
       @close-image-crop="closeImageCrop"
+      @image-resize-start="onImageResizePointerDown"
       @image-crop-complete="onImageCropComplete"
       @close-image-grid-split="closeImageGridSplit"
       @image-grid-split-complete="onImageGridSplitComplete"
@@ -496,6 +499,8 @@ const {
   handleUngroup,
   handleUserMenuAction,
   imageCropPos,
+  imageResizeOverlay,
+  showImageResizeOverlay,
   imageCropSource,
   imageGridSplitPos,
   imageErasePos,
@@ -538,6 +543,7 @@ const {
   onGoHome,
   onGroupOverlayDragStart,
   onImageCropComplete,
+  onImageResizePointerDown,
   onImageGridSplitComplete,
   onImageEraseComplete,
   onImageInpaintComplete,

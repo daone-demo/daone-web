@@ -10,7 +10,26 @@ export type { CanvasEmit, CanvasDomRefs } from './types'
 
 type GridSplitCanvasApi = Pick<
   CanvasState,
-  'showImageGridSplit' | 'imageGridSplitPos' | 'gridSplitRows' | 'gridSplitCols' | 'showImageErase' | 'eraseSourceNodeId' | 'imageErasePos' | 'showImageInpaint' | 'inpaintSourceNodeId' | 'imageInpaintPos' | 'showImageExpand' | 'expandSourceNodeId' | 'imageExpandPos' | 'showImageEditText' | 'editTextSourceNodeId' | 'imageEditTextPos' | 'imageEditTextEntries' | 'imageEditTextRecognizing'
+  | 'showImageGridSplit'
+  | 'imageGridSplitPos'
+  | 'gridSplitRows'
+  | 'gridSplitCols'
+  | 'showImageErase'
+  | 'eraseSourceNodeId'
+  | 'imageErasePos'
+  | 'showImageInpaint'
+  | 'inpaintSourceNodeId'
+  | 'imageInpaintPos'
+  | 'showImageExpand'
+  | 'expandSourceNodeId'
+  | 'imageExpandPos'
+  | 'showImageEditText'
+  | 'editTextSourceNodeId'
+  | 'imageEditTextPos'
+  | 'imageEditTextEntries'
+  | 'imageEditTextRecognizing'
+  | 'showImageResizeOverlay'
+  | 'imageResizeOverlay'
 > &
   Pick<
     CanvasBindings,
@@ -37,6 +56,7 @@ type GridSplitCanvasApi = Pick<
     | 'isText2VideoTask'
     | 'isText2ImageTask'
     | 'promptSubmitLabel'
+    | 'onImageResizePointerDown'
   >
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {

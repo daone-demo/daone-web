@@ -1,6 +1,5 @@
 import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData, ImageGenTask } from './constants'
-import { IMAGE_NODE_META_HEIGHT } from './constants'
 import { addCanvasNode, getNodeSize } from './graph'
 import { GRID_SPLIT_GAP } from './gridSplitUtils'
 
@@ -495,7 +494,7 @@ export function spawnGridSplitResultNodes(
   const cols = Math.max(1, options.cols)
   const gap = GRID_SPLIT_GAP
 
-  const previewOffsetY = sourceData.compactPreview ? 0 : IMAGE_NODE_META_HEIGHT
+  const previewOffsetY = 0
   const contentW = bbox.width
   const contentH = Math.max(1, bbox.height - previewOffsetY)
 

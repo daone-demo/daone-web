@@ -23,7 +23,7 @@ import {
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
   getNodeVideoGenPromptPosition, getNodePromptPosition, getNodeSidePanelPosition, getNodeTextDownloadPosition,
   getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition, getNodeToolbarPosition,
-  getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData,
+  getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getNodeOverlayScreenBox, startImageNodeCornerResize, canResizeImageNode, getImageNodeDisplayDimensions,
   hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
@@ -81,7 +81,7 @@ import {
   type SavedCanvasSkill,
 } from '../../skillStorage'
 import type { AssetCenterItem } from '../../assetCenterData'
-import type { GroupLayoutDirection } from './sharedImports'
+import type { GroupLayoutDirection, ImageResizeCorner } from './sharedImports'
 import type { ProjectCanvasResponse } from '@/services/api'
 import { isRequestError } from '@/utils/request'
 import type { Project } from '@/stores/useProject'
@@ -177,6 +177,8 @@ export function registerCore(bind: CanvasBindings) {
     showElementSelectMode,
     elementSelectReturnNodeId,
     imageCropPos,
+    imageResizeOverlay,
+    showImageResizeOverlay,
     imageGridSplitPos,
     videoHdPos,
     selectedKind,
@@ -4929,6 +4931,68 @@ export function registerCore(bind: CanvasBindings) {
     if (data.kind === 'video' && showVideoHdPanel.value) {
       videoHdPos.value = getNodeSidePanelPosition(g, node, overlayRoot)
     }
+    updateImageResizeOverlay()
+  }
+
+  function shouldBlockImageResizeOverlay() {
+    return (
+      showImageCrop.value ||
+      showImageGridSplit.value ||
+      showImageErase.value ||
+      showImageInpaint.value ||
+      showImageExpand.value ||
+      showImageEditText.value
+    )
+  }
+
+  function updateImageResizeOverlay() {
+    const g = graph.value
+    const overlayRoot = canvasRef.value
+    const id = selectedNodeId.value
+
+    if (!g || !overlayRoot || !id || shouldBlockImageResizeOverlay()) {
+      showImageResizeOverlay.value = false
+      return
+    }
+
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) {
+      showImageResizeOverlay.value = false
+      return
+    }
+
+    const node = cell as Node
+    const data = node.getData() as CanvasNodeData
+    if (!canResizeImageNode(data) || getGraphSelectedNodeIds().length !== 1) {
+      showImageResizeOverlay.value = false
+      return
+    }
+
+    const box = getNodeOverlayScreenBox(g, node, overlayRoot)
+    imageResizeOverlay.value = {
+      left: box.left,
+      top: box.top,
+      width: box.width,
+      height: box.height,
+      dimensionLabel: getImageNodeDisplayDimensions(node),
+      nodeId: id,
+    }
+    showImageResizeOverlay.value = true
+  }
+
+  function onImageResizePointerDown(event: MouseEvent, corner: ImageResizeCorner) {
+    const g = graph.value
+    const id = imageResizeOverlay.value.nodeId
+    if (!g || !id) return
+
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return
+
+    startImageNodeCornerResize(g, cell as Node, event, corner, () => {
+      updateImageResizeOverlay()
+      updateNodeToolbar()
+      bumpToolbarRevision()
+    })
   }
 
   function addNode(kind: NodeKind, point?: { x: number; y: number }) {
@@ -6517,7 +6581,13 @@ export function registerCore(bind: CanvasBindings) {
         } else if (showMultiSelectToolbar.value) {
           updateMultiSelectToolbarPosition()
         }
+        updateImageResizeOverlay()
       })
+    })
+    instance.on('node:resized', () => {
+      scheduleHistoryPush()
+      bumpToolbarRevision()
+      updateImageResizeOverlay()
     })
     instance.on('node:dblclick', ({ node }) => {
       const data = node.getData() as CanvasNodeData
@@ -6847,6 +6917,7 @@ export function registerCore(bind: CanvasBindings) {
     onGoHome,
     onGroupOverlayDragStart,
     onImageCropComplete,
+    onImageResizePointerDown,
     onImageDialogueAddCanvasNode,
     onImageDialogueUploadFiles,
     onImageToolbarAction,

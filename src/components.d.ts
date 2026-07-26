@@ -41,6 +41,7 @@ declare module 'vue' {
     CanvasHistoryAnchor: typeof import('./components/Canvas/panels/CanvasHistoryAnchor.vue')['default']
     CanvasHistoryPanel: typeof import('./components/Canvas/CanvasHistoryPanel.vue')['default']
     CanvasImagePreview: typeof import('./components/Canvas/panels/CanvasImagePreview.vue')['default']
+    CanvasImageResizeOverlay: typeof import('./components/Canvas/panels/CanvasImageResizeOverlay.vue')['default']
     CanvasLeftToolbar: typeof import('./components/Canvas/panels/CanvasLeftToolbar.vue')['default']
     CanvasMultiSelectToolbar: typeof import('./components/Canvas/panels/CanvasMultiSelectToolbar.vue')['default']
     CanvasNodeOverlays: typeof import('./components/Canvas/panels/CanvasNodeOverlays.vue')['default']

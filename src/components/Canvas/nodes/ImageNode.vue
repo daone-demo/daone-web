@@ -53,25 +53,8 @@
     </div>
 
     <div class="image-node__body">
-      <!-- <button
-        v-if="data.previewUrl && (!data.compactPreview || isGridSplitNode)"
-        type="button"
-        class="image-node__scale-btn"
-        :class="{ 'image-node__scale-btn--active': isResizing }"
-        title="缩放视图"
-        @mousedown.stop="startResize"
-      >
-        <img
-          src="@assets/images/scale.png"
-          alt="缩放视图"
-          width="28"
-          height="28"
-        />
-      </button> -->
-
       <input
         v-if="!isGridSplitNode"
-        ref="uploadInputRef"
         type="file"
         class="image-node__file-input"
         accept="image/*"
@@ -162,20 +145,19 @@ import type { CanvasNodeData } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
-import { useNodeViewScale } from './useNodeViewScale'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import { syncNodeViewData } from './syncNodeViewData'
 import { useCanvasNodeImage } from './useCanvasNodeImage'
 import { resolveImageNaturalSizeCached } from '../imageDisplayUrl'
-import { getNodeSize, syncNodeShapeFromData, type CanvasGraph } from '../graph'
+import { getBaseNodeSize, getNodeSize, syncNodeShapeFromData, type CanvasGraph } from '../graph'
 
 const getNode = inject<() => Node>('getNode')!
 const requestCanvasUpload = inject<(nodeId: string) => void>('requestCanvasUpload')
 const uploadFileToCanvasNode = inject<(nodeId: string, file: File) => void>('uploadFileToCanvasNode')
 const { removeSelf } = useNodeDelete()
 const { onPlusPointerDown } = useNodeConnect()
-const { startResize, previewScale, isResizing } = useNodeViewScale()
 const { isLightTheme } = useCanvasBgTheme()
+const sizeRevision = ref(0)
 
 const data = reactive<CanvasNodeData>({ ...createEmptyNodeData(), kind: 'image', title: '图片节点', mode: 'editor' })
 const { displayUrl, isImageLoading, onImageLoad, onImageError } = useCanvasNodeImage(toRef(data, 'previewUrl'))
@@ -215,7 +197,12 @@ function onPreviewImageLoad() {
 }
 
 const dimensionLabel = computed(() => {
-  const scale = previewScale.value ?? data.viewScale ?? 1
+  void sizeRevision.value
+  if (!data.mediaWidth || !data.mediaHeight) return ''
+  const node = getNode()
+  const baseSize = getBaseNodeSize(data.kind, data.mode, { ...data, viewScale: 1 })
+  if (!baseSize.width) return ''
+  const scale = node.getSize().width / baseSize.width
   const width = Math.round(data.mediaWidth * scale)
   const height = Math.round(data.mediaHeight * scale)
   return formatDimensions(width, height)
@@ -230,7 +217,6 @@ let uploadClickTimer: ReturnType<typeof setTimeout> | null = null
 const UPLOAD_CLICK_DELAY = 280
 
 const isDragOver = ref(false)
-const uploadInputRef = ref<HTMLInputElement | null>(null)
 
 function hasDraggedFiles(event: DragEvent) {
   return Array.from(event.dataTransfer?.types ?? []).includes('Files')
@@ -298,15 +284,6 @@ function onPreviewDblClick() {
   g?.__openImageDialogue?.(node.id)
 }
 
-function onUploadClick() {
-  if (data.uploadState === 'uploading') return
-  cancelPendingUpload()
-  const input = uploadInputRef.value
-  if (!input) return
-  input.value = ''
-  input.click()
-}
-
 function onUploadInputChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -320,6 +297,9 @@ onMounted(() => {
   syncNodeViewData(data, node.getData() as CanvasNodeData)
   node.on('change:data', ({ current }) => {
     syncNodeViewData(data, current as CanvasNodeData)
+  })
+  node.on('change:size', () => {
+    sizeRevision.value += 1
   })
 
   const previewUrl = data.previewUrl?.trim()
@@ -364,7 +344,7 @@ onMounted(() => {
   .image-node__body {
     flex: 1;
     min-height: 0;
-    height: auto;
+    height: 100%;
   }
 
   .image-node__preview {
@@ -379,6 +359,10 @@ onMounted(() => {
 }
 
 .image-node__meta {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
   margin-bottom: 6px;
   font-size: 12px;
 }
@@ -403,6 +387,10 @@ onMounted(() => {
   font-size: 11px;
 }
 
+.image-node--selected .image-node__size {
+  display: inline;
+}
+
 .image-node__title-icon {
   display: inline-flex;
   align-items: center;
@@ -416,7 +404,7 @@ onMounted(() => {
 
 .image-node__body {
   position: relative;
-  height: calc(100% - 24px);
+  height: 100%;
   // padding: 10px;
   border: 1px solid #4b4b55;
   border-radius: 14px;

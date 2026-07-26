@@ -18,7 +18,8 @@ import {
   CANVAS_MAX_ZOOM,
   CANVAS_MIN_ZOOM,
   createEmptyNodeData,
-  IMAGE_NODE_META_HEIGHT,
+  formatDimensions,
+  IMAGE_NODE_LAYOUT_META_HEIGHT,
   PROMPT_BAR_TOP_GAP,
   VIDEO_GEN_PROMPT_TOP_GAP,
   KIND_LABEL,
@@ -29,6 +30,115 @@ import {
   getImageAdaptiveNodeSize,
   shouldAdaptImageNodeHeight,
 } from './constants'
+
+export const IMAGE_NODE_MIN_VIEW_SCALE = 0.35
+export const IMAGE_NODE_MAX_VIEW_SCALE = 3
+
+export function canResizeImageNode(data?: Partial<CanvasNodeData>) {
+  if (!data || data.kind !== 'image') return false
+  if (data.mode !== 'editor') return false
+  if (!data.previewUrl?.trim()) return false
+  if (data.compactPreview || data.gridSplitTile) return false
+  if (data.uploadState === 'uploading') return false
+  if (data.imageGenState === 'loading') return false
+  if (!data.mediaWidth || !data.mediaHeight) return false
+  return true
+}
+
+export function getImageNodeViewScale(node: Node) {
+  const data = node.getData() as CanvasNodeData
+  const baseSize = getBaseNodeSize(data.kind, data.mode, { ...data, viewScale: 1 })
+  if (!baseSize.width) return data.viewScale ?? 1
+  const scale = node.getSize().width / baseSize.width
+  return Math.max(
+    IMAGE_NODE_MIN_VIEW_SCALE,
+    Math.min(IMAGE_NODE_MAX_VIEW_SCALE, scale),
+  )
+}
+
+export function getImageNodeDisplayDimensions(node: Node) {
+  const data = node.getData() as CanvasNodeData
+  if (!canResizeImageNode(data)) return ''
+  const scale = getImageNodeViewScale(node)
+  return formatDimensions(
+    Math.round(data.mediaWidth! * scale),
+    Math.round(data.mediaHeight! * scale),
+  )
+}
+
+export function syncImageNodeViewScaleFromSize(node: Node) {
+  const data = node.getData() as CanvasNodeData
+  if (!canResizeImageNode(data)) return
+
+  const nextScale = getImageNodeViewScale(node)
+  if (Math.abs((data.viewScale ?? 1) - nextScale) < 0.001) return
+
+  node.setData({ ...data, viewScale: nextScale })
+}
+
+export type ImageResizeCorner = 'nw' | 'ne' | 'sw' | 'se'
+
+export function startImageNodeCornerResize(
+  graph: Graph,
+  node: Node,
+  event: MouseEvent,
+  corner: ImageResizeCorner = 'se',
+  onResize?: () => void,
+) {
+  event.preventDefault()
+  event.stopPropagation()
+
+  const data = node.getData() as CanvasNodeData
+  if (!canResizeImageNode(data)) return
+
+  const startScale = data.viewScale ?? 1
+  const baseSize = getBaseNodeSize(data.kind, data.mode, { ...data, viewScale: 1 })
+  const startPos = node.position()
+  const startSize = node.getSize()
+  const startX = event.clientX
+  const startY = event.clientY
+  const zoom = graph.zoom() || 1
+
+  function onMove(e: MouseEvent) {
+    const dx = (e.clientX - startX) / zoom
+    const dy = (e.clientY - startY) / zoom
+    let delta = (dx + dy) / 2
+    if (corner === 'sw') delta = (-dx + dy) / 2
+    else if (corner === 'ne') delta = (dx - dy) / 2
+    else if (corner === 'nw') delta = (-dx - dy) / 2
+
+    const nextScale = Math.max(
+      IMAGE_NODE_MIN_VIEW_SCALE,
+      Math.min(IMAGE_NODE_MAX_VIEW_SCALE, startScale + delta / baseSize.width),
+    )
+
+    const newWidth = Math.round(baseSize.width * nextScale)
+    const newHeight = Math.round(baseSize.height * nextScale)
+    let nextX = startPos.x
+    let nextY = startPos.y
+
+    if (corner === 'sw' || corner === 'nw') {
+      nextX = startPos.x + (startSize.width - newWidth)
+    }
+    if (corner === 'nw' || corner === 'ne') {
+      nextY = startPos.y + (startSize.height - newHeight)
+    }
+
+    node.position(nextX, nextY)
+    node.resize(newWidth, newHeight)
+    onResize?.()
+  }
+
+  function onUp() {
+    syncImageNodeViewScaleFromSize(node)
+    onResize?.()
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+}
 
 type ScrollerImplLike = {
   localToBackgroundPoint(x: number, y: number): { x: number; y: number }
@@ -136,7 +246,7 @@ export function getEdgeDeleteButtonPosition(
 }
 
 /** 节点在容器坐标系下的屏幕包围盒（缩放后真实像素） */
-function getNodeScreenBox(graph: Graph, node: Node, container: HTMLElement) {
+export function getNodeOverlayScreenBox(graph: Graph, node: Node, container: HTMLElement) {
   const bbox = node.getBBox()
   const topLeft = graphLocalToContainerOffset(graph, bbox.x, bbox.y, container)
   const bottomRight = graphLocalToContainerOffset(
@@ -660,7 +770,18 @@ export function bindGraphInteraction(graph: Graph) {
     const data = node.getData() as CanvasNodeData
     syncNodeShapeFromData(node)
     const size = getNodeSize(data.kind, data.mode, data)
+    const current = node.getSize()
+    if (
+      Math.abs(current.width - size.width) <= 1 &&
+      Math.abs(current.height - size.height) <= 1
+    ) {
+      return
+    }
     node.resize(size.width, size.height)
+  })
+
+  graph.on('node:resized', ({ node }: { node: Node }) => {
+    syncImageNodeViewScaleFromSize(node)
   })
 
   graph.on('node:added', scheduleInfiniteResize)
@@ -678,7 +799,7 @@ function getNodeToolbarAnchorY(node: Node) {
     !data.compactPreview &&
     data.previewUrl
   ) {
-    return bbox.y + IMAGE_NODE_META_HEIGHT
+    return bbox.y - IMAGE_NODE_LAYOUT_META_HEIGHT - 6
   }
   return bbox.y
 }
@@ -758,7 +879,7 @@ export function getMultiSelectionToolbarPosition(
 
 export function getNodeToolbarPosition(graph: Graph, node: Node, container: HTMLElement) {
   const bbox = node.getBBox()
-  const box = getNodeScreenBox(graph, node, container)
+  const box = getNodeOverlayScreenBox(graph, node, container)
   const anchorY = getNodeToolbarAnchorY(node)
   const anchorOffset = graphLocalToContainerOffset(
     graph,
@@ -779,7 +900,7 @@ export function getNodeTextFormatToolbarPosition(
   container: HTMLElement,
 ) {
   const bbox = node.getBBox()
-  const box = getNodeScreenBox(graph, node, container)
+  const box = getNodeOverlayScreenBox(graph, node, container)
   const anchorOffset = graphLocalToContainerOffset(
     graph,
     bbox.x + bbox.width / 2,
@@ -803,7 +924,7 @@ export function getNodeTextDownloadPosition(graph: Graph, node: Node, container:
 }
 
 export function getNodeDialoguePosition(graph: Graph, node: Node, container: HTMLElement) {
-  const box = getNodeScreenBox(graph, node, container)
+  const box = getNodeOverlayScreenBox(graph, node, container)
 
   return {
     left: box.centerX,
@@ -814,7 +935,7 @@ export function getNodeDialoguePosition(graph: Graph, node: Node, container: HTM
 
 /** 文本/音频 picker 底部输入框：锚定在节点正下方水平居中 */
 export function getNodePromptPosition(graph: Graph, node: Node, container: HTMLElement) {
-  const box = getNodeScreenBox(graph, node, container)
+  const box = getNodeOverlayScreenBox(graph, node, container)
   const containerRect = container.getBoundingClientRect()
   const maxWidth = Math.min(560, containerRect.width - 48)
 
@@ -831,7 +952,7 @@ export function getNodeImageGenPromptPosition(
   node: Node,
   container: HTMLElement,
 ) {
-  const box = getNodeScreenBox(graph, node, container)
+  const box = getNodeOverlayScreenBox(graph, node, container)
   const containerRect = container.getBoundingClientRect()
   const maxWidth = Math.min(720, containerRect.width - 48)
 
@@ -848,7 +969,7 @@ export function getNodeVideoGenPromptPosition(
   node: Node,
   container: HTMLElement,
 ) {
-  const box = getNodeScreenBox(graph, node, container)
+  const box = getNodeOverlayScreenBox(graph, node, container)
   const containerRect = container.getBoundingClientRect()
   const maxWidth = Math.min(720, containerRect.width - 48)
 
@@ -884,7 +1005,7 @@ export function getNodeCropOverlayPosition(
   minWidth = 520,
   minHeight = 420,
 ) {
-  const box = getNodeScreenBox(graph, node, container)
+  const box = getNodeOverlayScreenBox(graph, node, container)
   const rect = container.getBoundingClientRect()
   const width = Math.max(box.width, minWidth)
   const height = Math.max(box.height + 48, minHeight)

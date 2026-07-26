@@ -1766,7 +1766,7 @@ export function getImageAdaptiveNodeSize(data: Partial<CanvasNodeData>) {
   const previewHeight = Math.round(width * mediaH / mediaW)
   const chromeHeight = data.compactPreview
     ? 0
-    : IMAGE_NODE_LAYOUT_META_HEIGHT + IMAGE_NODE_LAYOUT_BODY_BORDER
+    : IMAGE_NODE_LAYOUT_BODY_BORDER
 
   return {
     width,

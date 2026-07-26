@@ -3087,6 +3087,73 @@
     display: none !important;
   }
 
+  .x6-widget-transform {
+    display: none !important;
+  }
+
+  .canvas__image-resize-overlay {
+    position: absolute;
+    z-index: 5;
+    box-sizing: border-box;
+    border: 1.5px solid #6b7cff;
+    border-radius: 2px;
+    pointer-events: none;
+  }
+
+  .canvas__image-resize-size {
+    position: absolute;
+    left: 50%;
+    bottom: -18px;
+    transform: translateX(-50%);
+    font-size: 11px;
+    line-height: 1;
+    color: #9ca3af;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .canvas__image-resize-handle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: 1.5px solid #6b7cff;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85);
+    pointer-events: auto;
+    cursor: nwse-resize;
+    touch-action: none;
+
+    &--nw {
+      top: -5px;
+      left: -5px;
+      cursor: nwse-resize;
+    }
+
+    &--ne {
+      top: -5px;
+      right: -5px;
+      cursor: nesw-resize;
+    }
+
+    &--sw {
+      bottom: -5px;
+      left: -5px;
+      cursor: nesw-resize;
+    }
+
+    &--se {
+      bottom: -5px;
+      right: -5px;
+      cursor: nwse-resize;
+    }
+
+    &:hover {
+      background: #fff;
+    }
+  }
+
   .canvas--bg-light & {
     .x6-widget-selection-rubberband {
       background-color: rgba(107, 124, 255, 0.05) !important;

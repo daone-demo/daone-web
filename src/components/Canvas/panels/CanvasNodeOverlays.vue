@@ -195,6 +195,13 @@
     />
   </div>
 
+  <CanvasImageResizeOverlay
+    :visible="showImageResizeOverlay"
+    :box="imageResizeOverlay"
+    :dimension-label="imageResizeOverlay.dimensionLabel"
+    @resize-start="(event, corner) => emit('image-resize-start', event, corner)"
+  />
+
   <div
     v-if="showImageCrop && selectedKind === 'image'"
     class="canvas__image-crop"
@@ -404,6 +411,7 @@ import VideoGenPromptPanel from '../VideoGenPromptPanel.vue'
 import ImageDialoguePanel from '../ImageDialoguePanel.vue'
 import ImageDialogueFooter from '../ImageDialogueFooter.vue'
 import type { ImageDialogueFooterParams } from '../ImageDialogueFooter.vue'
+import CanvasImageResizeOverlay from './CanvasImageResizeOverlay.vue'
 import ImageCropOverlay from '../ImageCropOverlay.vue'
 import ImageGridSplitOverlay from '../ImageGridSplitOverlay.vue'
 import ImageEraseOverlay from '../ImageEraseOverlay.vue'
@@ -459,6 +467,15 @@ const props = defineProps<{
   imageGenPromptPos: { left: number; top: number; width: number }
   videoGenPromptPos: { left: number; top: number; width: number }
   imageCropPos: { left: number; top: number; width: number; height: number }
+  showImageResizeOverlay: boolean
+  imageResizeOverlay: {
+    left: number
+    top: number
+    width: number
+    height: number
+    dimensionLabel: string
+    nodeId: string
+  }
   imageGridSplitPos: { left: number; top: number; width: number; height: number }
   imageErasePos: { left: number; top: number; width: number; height: number }
   imageInpaintPos: { left: number; top: number; width: number; height: number }
@@ -556,6 +573,7 @@ const emit = defineEmits<{
   'generate-image': []
   'close-image-crop': []
   'image-crop-complete': [payload: { dataUrl: string; width: number; height: number }]
+  'image-resize-start': [event: MouseEvent, corner: import('../graph').ImageResizeCorner]
   'close-image-grid-split': []
   'image-grid-split-complete': [payload: {
     rows: number

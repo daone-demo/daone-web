@@ -133,6 +133,15 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showElementSelectMode = ref(false)
   const elementSelectReturnNodeId = ref('')
   const imageCropPos = ref({ left: 0, top: 0, width: 360, height: 420 })
+  const imageResizeOverlay = ref({
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+    dimensionLabel: '',
+    nodeId: '',
+  })
+  const showImageResizeOverlay = ref(false)
   const imageGridSplitPos = ref({ left: 0, top: 0, width: 420, height: 520 })
   const videoHdPos = ref({ left: 0, top: 0, width: 320 })
   const selectedKind = ref<NodeKind | null>(null)
@@ -269,6 +278,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showElementSelectMode,
     elementSelectReturnNodeId,
     imageCropPos,
+    imageResizeOverlay,
+    showImageResizeOverlay,
     imageGridSplitPos,
     videoHdPos,
     selectedKind,
