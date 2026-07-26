@@ -68,6 +68,10 @@ export interface CanvasNodeData {
   imageDialogueText?: string
   /** 图片对话面板生成设置（比例、画质、模型、工作流等，按节点独立保存） */
   imageDialogueSettings?: Partial<ImageDialogueSettings>
+  /** 视频对话面板输入的提示词（按节点独立保存） */
+  videoDialogueText?: string
+  /** 视频对话面板生成设置（模型、比例、清晰度等，按节点独立保存） */
+  videoDialogueSettings?: Partial<VideoDialogueSettings>
   inputUpdated?: boolean
   genPrompt?: string
   genSeed?: number
@@ -645,6 +649,16 @@ export type VideoDialogueSubmitPayload = {
   duration: number
   generateAudio: boolean
   videoCount: number
+  mode: VideoDialogueMode
+}
+
+/** 视频对话面板生成设置（持久化到节点 data） */
+export interface VideoDialogueSettings {
+  modelKey: string
+  aspectRatio: VideoGenAspectRatio
+  resolution: VideoGenResolution
+  duration: VideoGenDuration
+  generateAudio: boolean
   mode: VideoDialogueMode
 }
 
@@ -1521,6 +1535,17 @@ export const VIDEO_DIALOGUE_MODEL_MENU: VideoDialogueModelItem[] = [
   { key: 'happy-horse-1.0', name: 'happy-horse-1.0', icon: 'happy-horse' },
   { key: 'kling-3.0', name: 'kling-3.0', icon: 'kling' },
 ]
+
+export function createDefaultVideoDialogueSettings(): VideoDialogueSettings {
+  return {
+    modelKey: VIDEO_DIALOGUE_MODEL_MENU[0].key,
+    aspectRatio: '16:9',
+    resolution: '720P',
+    duration: 5,
+    generateAudio: true,
+    mode: 'reference',
+  }
+}
 
 function resolveVideoDialogueModelIcon(key: string, index: number): VideoDialogueModelIcon {
   const lower = key.toLowerCase()

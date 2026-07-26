@@ -1191,54 +1191,75 @@
   }
 }
 
+.canvas__prompt-workflow-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-right: 4px;
+  margin-bottom: 12px;
+}
+
 .canvas__prompt-model-wrap {
   position: relative;
-}
-
-.canvas__prompt-workflow-select {
-  min-width: 180px;
-  max-width: 280px;
-
-  :deep(.ant-select-selection-placeholder) {
-    color: #9ca3af;
-  }
-}
-
-.canvas__prompt--light .canvas__prompt-workflow-select {
-  :deep(.ant-select-selector) {
-    border-color: #e5e7eb !important;
-    background: #fff !important;
-  }
 }
 
 .canvas__prompt-model-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 4px;
+  padding: 5px 10px;
   border: 1px solid #3d3d45;
   border-radius: 999px;
   background: #252528;
   color: #d1d5db;
   font-size: 12px;
+  line-height: 1;
   cursor: pointer;
 
-  &--active {
-    border-color: #6b7cff;
+  &:hover {
+    background: #2f2f35;
   }
+
+  &--active {
+    background: #35353d;
+    border-color: #6b7280;
+  }
+
+  &--light {
+    border-color: #e5e7eb;
+    background: #fff;
+    color: #374151;
+
+    &:hover {
+      background: #f9fafb;
+    }
+
+    &.canvas__prompt-model-chip--active {
+      background: #f3f4f6;
+      border-color: #d1d5db;
+    }
+  }
+}
+
+.canvas__prompt-model-arrow {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' viewBox='0 0 10 10'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.2' d='M2.5 3.75 5 6.25 7.5 3.75'/%3E%3C/svg%3E") center / 10px 10px no-repeat;
 }
 
 .canvas__prompt-model-menu {
   position: absolute;
-  left: 0;
-  bottom: calc(100% + 8px);
+  top: calc(100% + 8px);
+  right: 0;
   z-index: 30;
   width: 248px;
   padding: 6px;
   border: 1px solid #ebedf0;
-  border-radius: 14px;
+  border-radius: 12px;
   background: #fff;
-  box-shadow: 0 16px 44px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
 }
 
 .canvas__prompt-model-item {

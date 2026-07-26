@@ -32,6 +32,7 @@ type GridSplitCanvasApi = Pick<
   | 'imageResizeOverlay'
   | 'videoGenAspectRatio'
   | 'imageDialogueSettings'
+  | 'videoDialogueSettings'
 > &
   Pick<
     CanvasBindings,
@@ -61,6 +62,7 @@ type GridSplitCanvasApi = Pick<
     | 'promptSubmitLabel'
     | 'onImageResizePointerDown'
     | 'persistImageDialogueFields'
+    | 'persistVideoDialogueFields'
   >
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {

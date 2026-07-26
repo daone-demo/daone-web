@@ -73,6 +73,7 @@ import {
   type VideoDialogueSubmitPayload,
   type VideoGenPromptSubmitPayload,
   createDefaultImageDialogueSettings,
+  createDefaultVideoDialogueSettings,
 } from '../../constants'
 import { splitImageIntoGrid, snapGridSplitNodePosition, areAllGridSplitResultNodes } from '../../gridSplitUtils'
 import {
@@ -214,6 +215,8 @@ export function registerCore(bind: CanvasBindings) {
     showVideoFramesPanel,
     imageDialogueText,
     imageDialogueSettings,
+    videoDialogueText,
+    videoDialogueSettings,
     videoHdMagnification,
     textFormatToolbarPos,
     textDownloadPos,
@@ -231,6 +234,7 @@ export function registerCore(bind: CanvasBindings) {
   let canvasHistory: ReturnType<typeof createCanvasHistory> | null = null
   let historyPushTimer: ReturnType<typeof setTimeout> | null = null
   let activeImageDialogueNodeId = ''
+  let activeVideoDialogueNodeId = ''
   let autoSaveTimer: number | null = null
   let autoSaveEnabled = true
   let canvasContentReady = false
@@ -2331,11 +2335,23 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function toggleVideoDialogue() {
-    showVideoDialogue.value = !showVideoDialogue.value
     if (showVideoDialogue.value) {
-      closeVideoSubPanels('dialogue')
-      updateNodeToolbar()
+      persistVideoDialogueFields()
+      showVideoDialogue.value = false
+      activeVideoDialogueNodeId = ''
+      return
     }
+
+    const id = selectedNodeId.value
+    if (activeVideoDialogueNodeId && activeVideoDialogueNodeId !== id) {
+      persistVideoDialogueFields(activeVideoDialogueNodeId)
+    }
+    if (id && selectedKind.value === 'video') {
+      loadVideoDialogueFields(id)
+    }
+    showVideoDialogue.value = true
+    closeVideoSubPanels('dialogue')
+    updateNodeToolbar()
   }
 
   function toggleVideoHdPanel() {
@@ -2631,7 +2647,9 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function resetVideoDialogue() {
+    persistVideoDialogueFields()
     showVideoDialogue.value = false
+    activeVideoDialogueNodeId = ''
   }
 
   function triggerFileInputClick(
@@ -2742,6 +2760,51 @@ export function registerCore(bind: CanvasBindings) {
 
     data.imageDialogueText = imageDialogueText.value
     data.imageDialogueSettings = { ...imageDialogueSettings.value }
+    cell.setData(data, { overwrite: true })
+  }
+
+  function normalizeVideoDialogueSettings(
+    saved?: CanvasNodeData['videoDialogueSettings'],
+  ) {
+    const defaults = createDefaultVideoDialogueSettings()
+    if (!saved) return defaults
+    return {
+      modelKey: saved.modelKey ?? defaults.modelKey,
+      aspectRatio: saved.aspectRatio ?? defaults.aspectRatio,
+      resolution: saved.resolution ?? defaults.resolution,
+      duration: saved.duration ?? defaults.duration,
+      generateAudio: saved.generateAudio ?? defaults.generateAudio,
+      mode: saved.mode ?? defaults.mode,
+    }
+  }
+
+  function loadVideoDialogueFields(nodeId: string) {
+    const g = graph.value
+    if (!g) return
+    const cell = g.getCellById(nodeId)
+    if (!cell?.isNode()) return
+    const data = cell.getData() as CanvasNodeData
+    if (data.kind !== 'video') return
+
+    activeVideoDialogueNodeId = nodeId
+    videoDialogueText.value = data.videoDialogueText ?? ''
+    videoDialogueSettings.value = normalizeVideoDialogueSettings(data.videoDialogueSettings)
+  }
+
+  function persistVideoDialogueFields(nodeId?: string) {
+    const g = graph.value
+    const id =
+      nodeId ||
+      activeVideoDialogueNodeId ||
+      (showVideoDialogue.value ? selectedNodeId.value : '')
+    if (!g || !id) return
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return
+    const data = { ...(cell.getData() as CanvasNodeData) }
+    if (data.kind !== 'video') return
+
+    data.videoDialogueText = videoDialogueText.value
+    data.videoDialogueSettings = { ...videoDialogueSettings.value }
     cell.setData(data, { overwrite: true })
   }
 
@@ -3871,6 +3934,7 @@ export function registerCore(bind: CanvasBindings) {
     if (!g) return null
 
     persistImageDialogueFields()
+    persistVideoDialogueFields()
 
     return getCanvasSnapshot(g, {
       projectId: activeProjectId.value,
@@ -4008,6 +4072,7 @@ export function registerCore(bind: CanvasBindings) {
     if (!g) return
 
     persistImageDialogueFields()
+    persistVideoDialogueFields()
 
     const snapshot = getCanvasSnapshot(g, {
       projectId: activeProjectId.value,
@@ -4690,6 +4755,7 @@ export function registerCore(bind: CanvasBindings) {
     if (!g) return
 
     const prevDialogueNodeId = activeImageDialogueNodeId
+    const prevVideoDialogueNodeId = activeVideoDialogueNodeId
     const ids = getGraphSelectedNodeIds()
     selectedNodeIds.value = ids
 
@@ -4710,10 +4776,18 @@ export function registerCore(bind: CanvasBindings) {
     if (prevDialogueNodeId && prevDialogueNodeId !== selectedNodeId.value) {
       persistImageDialogueFields(prevDialogueNodeId)
     }
+    if (prevVideoDialogueNodeId && prevVideoDialogueNodeId !== selectedNodeId.value) {
+      persistVideoDialogueFields(prevVideoDialogueNodeId)
+    }
     if (showImageDialogue.value && selectedNodeId.value && selectedKind.value === 'image') {
       loadImageDialogueFields(selectedNodeId.value)
     } else if (!selectedNodeId.value) {
       activeImageDialogueNodeId = ''
+    }
+    if (showVideoDialogue.value && selectedNodeId.value && selectedKind.value === 'video') {
+      loadVideoDialogueFields(selectedNodeId.value)
+    } else if (!selectedNodeId.value) {
+      activeVideoDialogueNodeId = ''
     }
 
     syncNodeSelectionHighlight(ids)
@@ -7075,6 +7149,7 @@ export function registerCore(bind: CanvasBindings) {
     linkImageSourceFromEdge,
     loadImageGenPromptFields,
     loadImageDialogueFields,
+    loadVideoDialogueFields,
     loadPromptBarContext,
     loadVideoGenPromptFields,
     moveNodeLayer,
@@ -7127,6 +7202,7 @@ export function registerCore(bind: CanvasBindings) {
     pasteNodePayload,
     persistImageGenPrompt,
     persistImageDialogueFields,
+    persistVideoDialogueFields,
     persistPromptBarDraft,
     persistTextExpandContent,
     persistVideoGenPrompt,

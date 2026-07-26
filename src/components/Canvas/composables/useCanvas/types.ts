@@ -115,6 +115,8 @@ export type CanvasBindings = CanvasState & {
   onVideoToolbarAction: (payload: import('../../constants').VideoToolbarClickPayload) => void
   loadImageDialogueFields: (nodeId: string) => void
   persistImageDialogueFields: (nodeId?: string) => void
+  loadVideoDialogueFields: (nodeId: string) => void
+  persistVideoDialogueFields: (nodeId?: string) => void
   graph: ShallowRef<Graph | null>
   [key: string]: unknown
 }

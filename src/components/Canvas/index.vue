@@ -219,6 +219,7 @@
       :image-dialogue-preview-url="imageDialoguePreviewUrl"
       :image-dialogue-previews="imageDialoguePreviews"
       :video-dialogue-text="videoDialogueText"
+      :video-dialogue-settings="videoDialogueSettings"
       :video-hd-magnification="videoHdMagnification"
       :video-num="videoNum"
       :image-capabilities="imageCapabilities"
@@ -245,7 +246,8 @@
       @add-image-dialogue-canvas-node="onImageDialogueAddCanvasNode"
       @submit-image-dialogue="handleImageDialogueSubmit"
       @submit-video-dialogue="handleVideoDialogueSubmit"
-      @update:video-dialogue-text="videoDialogueText = $event"
+      @update:video-dialogue-text="videoDialogueText = $event; persistVideoDialogueFields()"
+      @update:video-dialogue-settings="videoDialogueSettings = $event; persistVideoDialogueFields()"
       @update:video-hd-magnification="videoHdMagnification = $event"
       @close-image-crop="closeImageCrop"
       @image-resize-start="onImageResizePointerDown"
@@ -578,6 +580,7 @@ const {
   panMode,
   persistImageGenPrompt,
   persistImageDialogueFields,
+  persistVideoDialogueFields,
   persistPromptBarDraft,
   persistVideoGenPrompt,
   promptPos,
@@ -656,6 +659,7 @@ const {
   userMenuPoints,
   userMenuRole,
   videoDialogueText,
+  videoDialogueSettings,
   videoGenActiveTab,
   videoGenAspectRatio,
   videoGenPromptPos,

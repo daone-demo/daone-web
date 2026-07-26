@@ -23,35 +23,27 @@
         <p class="canvas__prompt-drop-text">点击或拖拽图片到此处上传</p>
       </div>
     </div>
-    <div style="display: flex;justify-content: flex-end;padding-right: 20px;margin-bottom: 12px;">
-      <a-select
+    <div class="canvas__prompt-workflow-row">
+      <DialogueWorkflowSelect
         v-if="isText2ImageTask"
-        v-model:value="selectedText2ImageWorkFlow"
-        class="canvas__prompt-workflow-select"
+        v-model="selectedText2ImageWorkFlow"
+        :options="imageWorkflowOptions"
         placeholder="请选择工作流"
-        allow-clear
-        @mousedown.stop
-        @click.stop
-      >
-        <a-select-option
-          v-for="workflow in imageWorkflowOptions"
-          :key="workflow.id"
-          :value="workflow.id"
-        >
-          {{ workflow.name }}
-        </a-select-option>
-      </a-select>
+        :light="canvasBgTheme === 'light'"
+      />
       <div v-else class="canvas__prompt-model-wrap">
         <button
           type="button"
           class="canvas__prompt-model-chip"
-          :class="{ 'canvas__prompt-model-chip--active': showPromptWorkFlow }"
+          :class="{
+            'canvas__prompt-model-chip--active': showPromptWorkFlow,
+            'canvas__prompt-model-chip--light': canvasBgTheme === 'light',
+          }"
           @mousedown.stop
           @click.stop="togglePromptWorkFlow"
         >
-          <span class="canvas__prompt-model-mark" aria-hidden="true" />
           {{ promptSubmitLabel || selectedPromptWorkFlowName }}
-          <span class="canvas__prompt-model-arrow">▾</span>
+          <span class="canvas__prompt-model-arrow" aria-hidden="true" />
         </button>
         <div
           v-if="showPromptWorkFlow"
@@ -372,8 +364,10 @@
   >
     <VideoDialoguePanel
       :model-value="videoDialogueText"
+      :settings="videoDialogueSettings"
       :chat-tools="chatTools"
       @update:model-value="emit('update:videoDialogueText', $event)"
+      @update:settings="emit('update:videoDialogueSettings', $event)"
       @submit="emit('submit-video-dialogue', $event)"
     />
   </div>
@@ -415,6 +409,7 @@
 import ImageGenPromptPanel from '../ImageGenPromptPanel.vue'
 import VideoGenPromptPanel from '../VideoGenPromptPanel.vue'
 import ImageDialoguePanel from '../ImageDialoguePanel.vue'
+import DialogueWorkflowSelect from '../DialogueWorkflowSelect.vue'
 import ImageDialogueFooter from '../ImageDialogueFooter.vue'
 import type { ImageDialogueFooterParams } from '../ImageDialogueFooter.vue'
 import CanvasImageResizeOverlay from './CanvasImageResizeOverlay.vue'
@@ -442,6 +437,7 @@ import {
   type ImageDialogueSubmitPayload,
   type ImageDialogueSettings,
   type VideoDialogueSubmitPayload,
+  type VideoDialogueSettings,
   type VideoGenPromptSubmitPayload,
   type VideoGenAspectRatio,
   type NodeKind,
@@ -556,6 +552,7 @@ const props = defineProps<{
   imageDialoguePreviewUrl: string
   imageDialoguePreviews: ImageSourceRef[]
   videoDialogueText: string
+  videoDialogueSettings: VideoDialogueSettings
   videoHdMagnification: VideoHdMagnification
   imageCapabilities: ImageCapability[]
 }>()
@@ -580,6 +577,7 @@ const emit = defineEmits<{
   'submit-video-dialogue': [payload: VideoDialogueSubmitPayload]
   'submit-video-gen-prompt': [payload: VideoGenPromptSubmitPayload]
   'update:videoDialogueText': [value: string]
+  'update:videoDialogueSettings': [value: VideoDialogueSettings]
   'update:videoHdMagnification': [value: VideoHdMagnification]
   'persist-prompt-bar-draft': []
   'submit-text-prompt': [payload?: VideoDialogueSubmitPayload | ImageDialogueSubmitPayload]

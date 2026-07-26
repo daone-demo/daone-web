@@ -4,9 +4,11 @@ import {
   type ImageDialogueSettings,
   type ImageSourceRef,
   type NodeKind,
+  type VideoDialogueSettings,
   type VideoGenAspectRatio,
   type VideoHdMagnification,
   createDefaultImageDialogueSettings,
+  createDefaultVideoDialogueSettings,
 } from '../../constants'
 import { refreshCanvasNodeViews } from '../../graph'
 import type { ImageExpandOverlayLayout } from '../../graph'
@@ -189,6 +191,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const imageDialogueText = ref('')
   const imageDialogueSettings = ref<ImageDialogueSettings>(createDefaultImageDialogueSettings())
   const videoDialogueText = ref('')
+  const videoDialogueSettings = ref<VideoDialogueSettings>(createDefaultVideoDialogueSettings())
   const videoHdMagnification = ref<VideoHdMagnification>('2')
   const canvasCredits = ref(12003)
   const textFormatToolbarPos = ref({ left: 0, top: 0, width: 420 })
@@ -329,6 +332,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     imageDialogueText,
     imageDialogueSettings,
     videoDialogueText,
+    videoDialogueSettings,
     videoHdMagnification,
     canvasCredits,
     textFormatToolbarPos,

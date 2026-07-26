@@ -172,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import VideoGenSettingsPopover from './VideoGenSettingsPopover.vue'
 import VideoStoryboardPanel from './VideoStoryboardPanel.vue'
 import {
@@ -189,6 +189,7 @@ import {
   VIDEO_DIALOGUE_MODEL_MENU,
   type ChatTools,
   type VideoDialogueModelItem,
+  type VideoDialogueSettings,
   type VideoDialogueSubmitPayload,
   type VideoGenAspectRatio,
   type VideoGenDuration,
@@ -199,11 +200,13 @@ import {
 
 const props = defineProps<{
   modelValue: string
+  settings: VideoDialogueSettings
   chatTools?: ChatTools | null
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  'update:settings': [value: VideoDialogueSettings]
   submit: [payload: VideoDialogueSubmitPayload]
 }>()
 
@@ -220,6 +223,50 @@ const videoAspectRatio = ref<VideoGenAspectRatio>('16:9')
 const videoResolution = ref<VideoGenResolution>('720P')
 const generateAudio = ref(true)
 const selectedModelKey = ref(VIDEO_DIALOGUE_MODEL_MENU[0].key)
+let skipSettingsWatch = false
+
+function buildSettingsFromRefs(): VideoDialogueSettings {
+  return {
+    modelKey: selectedModelKey.value,
+    aspectRatio: videoAspectRatio.value,
+    resolution: videoResolution.value,
+    duration: videoDuration.value,
+    generateAudio: generateAudio.value,
+    mode: 'reference',
+  }
+}
+
+function applySettingsToRefs(settings: VideoDialogueSettings) {
+  skipSettingsWatch = true
+  selectedModelKey.value = settings.modelKey
+  videoAspectRatio.value = settings.aspectRatio
+  videoResolution.value = settings.resolution
+  videoDuration.value = settings.duration
+  generateAudio.value = settings.generateAudio
+  nextTick(() => {
+    skipSettingsWatch = false
+  })
+}
+
+function emitSettings() {
+  if (skipSettingsWatch) return
+  emit('update:settings', buildSettingsFromRefs())
+}
+
+watch(
+  () => props.settings,
+  (settings) => {
+    applySettingsToRefs(settings)
+  },
+  { deep: true, immediate: true },
+)
+
+watch(
+  [selectedModelKey, videoAspectRatio, videoResolution, videoDuration, generateAudio],
+  () => {
+    emitSettings()
+  },
+)
 
 const modelMenu = computed(() =>
   buildVideoDialogueModelsFromCapabilities(props.chatTools),
@@ -352,8 +399,7 @@ function onSend() {
     duration: videoDuration.value,
     generateAudio: generateAudio.value,
     videoCount: 1,
-    // 视频节点对话默认走全能参考；无参考素材时由上层降级为 text-to-video
-    mode: 'reference',
+    mode: props.settings.mode,
   }
   emit('submit', payload)
 }

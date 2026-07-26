@@ -16,20 +16,14 @@
         <p class="image-dialogue__drop-text">点击或拖拽图片到此处上传</p>
       </div>
     </div>
-    <div style="display: flex;justify-content: flex-end;padding-right: 20px;">
-      <a-select 
-        v-model="selectedWorkFlow"
-        class="image-dialogue__model-select"
+    <div class="image-dialogue__workflow-row">
+      <DialogueWorkflowSelect
+        :model-value="selectedWorkFlow || undefined"
+        :options="workflowOptions"
         placeholder="选择工作流"
-      >
-        <a-select-option
-          v-for="workflow in workflowOptions"
-          :key="workflow.id"
-          :value="workflow.id"
-        >
-          {{ workflow.name }}
-        </a-select-option>
-      </a-select>
+        :light="isLightTheme"
+        @update:model-value="onWorkflowChange"
+      />
       <button type="button" class="image-dialogue__expand" title="展开">
         <span class="image-dialogue__expand-icon" aria-hidden="true" />
       </button>
@@ -225,6 +219,7 @@ import { isRequestError } from '@/utils/request';
 import { useCanvasBgTheme } from './useCanvasBgTheme';
 import ImageGenSettingsPopover from './ImageGenSettingsPopover.vue';
 import ImageStylePanel from './ImageStylePanel.vue';
+import DialogueWorkflowSelect from './DialogueWorkflowSelect.vue';
 import { createPromptMentionApi, isInputComposing, needsSpaceBeforeMention } from './promptMention';
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
@@ -327,6 +322,10 @@ function applySettingsToRefs(settings: ImageDialogueSettings) {
 function emitSettings() {
   if (skipSettingsWatch) return
   emit('update:settings', buildSettingsFromRefs())
+}
+
+function onWorkflowChange(workflowId: string | undefined) {
+  selectedWorkFlow.value = workflowId ?? ''
 }
 
 watch(
@@ -731,10 +730,16 @@ onBeforeUnmount(() => {
   }
 }
 
+.image-dialogue__workflow-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-right: 4px;
+  margin-bottom: 12px;
+}
+
 .image-dialogue__expand {
-  position: absolute;
-  top: 12px;
-  right: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -745,6 +750,7 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   background: transparent;
   cursor: pointer;
+  flex-shrink: 0;
 
   &:hover {
     background: #2a2a30;
