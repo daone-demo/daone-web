@@ -24,7 +24,7 @@
     </button>
 
     <button
-      v-if="!data.previewUrl || data.compactPreview"
+      v-if="(!data.previewUrl || data.compactPreview) && !isGridSplitNode"
       type="button"
       class="canvas-node__delete-float"
       title="删除节点"
@@ -610,10 +610,10 @@ onMounted(() => {
     opacity: 0;
   }
 
-  &:hover .image-node__scale-btn,
-  &:hover .canvas-node__delete-float,
-  &.image-node--selected .image-node__scale-btn,
-  &.image-node--selected .canvas-node__delete-float,
+  &:not(.image-node--grid-split):hover .image-node__scale-btn,
+  &:not(.image-node--grid-split):hover .canvas-node__delete-float,
+  &:not(.image-node--grid-split).image-node--selected .image-node__scale-btn,
+  &:not(.image-node--grid-split).image-node--selected .canvas-node__delete-float,
   .image-node__scale-btn--active {
     opacity: 1;
   }

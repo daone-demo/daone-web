@@ -72,7 +72,7 @@ import {
   type VideoDialogueSubmitPayload,
   type VideoGenPromptSubmitPayload,
 } from '../../constants'
-import { splitImageIntoGrid, snapGridSplitNodePosition } from '../../gridSplitUtils'
+import { splitImageIntoGrid, snapGridSplitNodePosition, areAllGridSplitResultNodes } from '../../gridSplitUtils'
 import {
   createSkillId,
   listSavedCanvasSkills,
@@ -283,7 +283,23 @@ export function registerCore(bind: CanvasBindings) {
     return getCompleteGroupSelection(g, selectedNodeIds.value)
   })
 
-  const showGroupToolbar = computed(() => activeGroupSelection.value != null && !imagePreviewUrl.value)
+  const showGroupToolbar = computed(() => {
+    if (imagePreviewUrl.value) return false
+    const group = activeGroupSelection.value
+    if (!group) return false
+    const g = graph.value
+    if (g && areAllGridSplitResultNodes(g, group.nodeIds)) return false
+    return true
+  })
+
+  const showMultiSelectToolbar = computed(() => {
+    if (selectedNodeIds.value.length < 2 || showGroupToolbar.value || imagePreviewUrl.value) {
+      return false
+    }
+    const g = graph.value
+    if (g && areAllGridSplitResultNodes(g, selectedNodeIds.value)) return false
+    return true
+  })
 
   const showPromptBar = computed(() => {
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
@@ -491,9 +507,6 @@ export function registerCore(bind: CanvasBindings) {
   const showNodeToolbar = computed(
     () => Boolean(selectedNodeId.value) && !showGroupToolbar.value && !imagePreviewUrl.value,
   )
-  const showMultiSelectToolbar = computed(
-    () => selectedNodeIds.value.length >= 2 && !showGroupToolbar.value && !imagePreviewUrl.value,
-  )
 
   function onGoHome() {
     router.push({ name: 'home' })
@@ -559,6 +572,7 @@ export function registerCore(bind: CanvasBindings) {
 
   function canShowImageToolbar(data: CanvasNodeData | undefined) {
     if (!data || data.kind !== 'image') return false
+    if (data.gridSplitTile) return false
     if (data.imageGenTask === 'picker') return false
     if (data.imageGenTask === 'img2img' || data.imageGenTask === 'hd') return true
     return data.mode === 'editor'

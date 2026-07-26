@@ -1,4 +1,5 @@
 import type { Graph, Node } from '@antv/x6'
+import type { CanvasNodeData } from './constants'
 import { canvasToObjectUrl, loadDrawableImage } from './drawableImage'
 
 export type GridSplitTile = {
@@ -27,9 +28,48 @@ export function computeGridSplitGap(_width?: number, _height?: number) {
   return GRID_SPLIT_GAP
 }
 
+export function isGridSplitResultNodeData(data: CanvasNodeData | undefined) {
+  return Boolean(data?.gridSplitTile)
+}
+
+export function areAllGridSplitResultNodes(graph: Graph, nodeIds: string[]) {
+  if (!nodeIds.length) return false
+  return nodeIds.every((id) => {
+    const cell = graph.getCellById(id)
+    if (!cell?.isNode()) return false
+    return isGridSplitResultNodeData(cell.getData() as CanvasNodeData)
+  })
+}
+
 function isGridSplitSibling(node: Node, sourceNodeId: string) {
   const data = node.getData() as { gridSplitTile?: unknown; sourceNodeId?: string }
   return Boolean(data.gridSplitTile && data.sourceNodeId === sourceNodeId)
+}
+
+export function getGridSplitResultNodes(graph: Graph, sourceNodeId: string) {
+  return graph.getNodes().filter((candidate) => isGridSplitSibling(candidate, sourceNodeId))
+}
+
+/** 计算新宫格批次左上角：在源图右侧，并避开同源已有宫格批次 */
+export function computeGridSplitContentOrigin(
+  graph: Graph,
+  sourceNode: Node,
+  gridHeight: number,
+  layoutGap: number,
+) {
+  const bbox = sourceNode.getBBox()
+  const siblings = getGridSplitResultNodes(graph, sourceNode.id)
+
+  let anchorRight = bbox.x + bbox.width
+  siblings.forEach((node) => {
+    const nodeBBox = node.getBBox()
+    anchorRight = Math.max(anchorRight, nodeBBox.x + nodeBBox.width)
+  })
+
+  return {
+    x: anchorRight + layoutGap,
+    y: bbox.y + Math.max(0, (bbox.height - gridHeight) / 2),
+  }
 }
 
 /** 拖拽宫格碎片时，与同源碎片边缘吸附对齐（保留 GRID_SPLIT_GAP 缝宽） */

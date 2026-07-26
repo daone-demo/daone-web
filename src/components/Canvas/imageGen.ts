@@ -1,7 +1,7 @@
 import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData, ImageGenTask } from './constants'
 import { addCanvasNode, getNodeSize } from './graph'
-import { GRID_SPLIT_GAP } from './gridSplitUtils'
+import { GRID_SPLIT_GAP, computeGridSplitContentOrigin } from './gridSplitUtils'
 
 import { getFlowEdgeAttrs } from './edgeStyle'
 
@@ -542,8 +542,12 @@ export function spawnGridSplitResultNodes(
   }
 
   const gridHeight = cursorY
-  const contentX = bbox.x + bbox.width + GEN_GAP
-  const contentY = bbox.y + previewOffsetY + Math.max(0, (bbox.height - gridHeight) / 2)
+  const { x: contentX, y: contentY } = computeGridSplitContentOrigin(
+    graph,
+    sourceNode,
+    gridHeight,
+    GEN_GAP,
+  )
 
   const nodes: Node[] = []
   for (let row = 0; row < rows; row += 1) {
