@@ -1754,47 +1754,171 @@ export function registerCore(bind: CanvasBindings) {
     })
   }
 
-  function handleImageDialogueSubmit(payload: ImageDialogueSubmitPayload) {
+  async function handleImageDialogueSubmit(payload: ImageDialogueSubmitPayload) {
     const prompt = payload.prompt.trim()
     if (!prompt) {
       message.warning('请输入提示词')
       return
     }
 
-    const data = getSelectedNodeData()
+    const g = graph.value
+    const sourceNodeId = selectedNodeId.value
+    if (!g || !sourceNodeId) return
+
+    const cell = g.getCellById(sourceNodeId)
+    if (!cell?.isNode()) return
+
+    const sourceNode = cell as Node
+    const sourceData = sourceNode.getData() as CanvasNodeData
+    if (sourceData.uploadState === 'uploading' || sourceData.imageGenState === 'loading') return
+
+    persistImageDialogueFields(sourceNodeId)
+
     const referenceAssetIds = imageDialoguePreviews.value
       .map((item) => item.assetId)
       .filter((id): id is string => Boolean(id))
-    const assetId = referenceAssetIds[0] || resolveImageAssetId(data) || ''
+    const assetId = referenceAssetIds[0] || resolveImageAssetId(sourceData) || ''
 
-    const event: ImageToolbarClickEvent = {
-      key: IMAGE_GENERAL_CAPABILITY_CODE,
-      label: '文生图',
-      assetId,
+    const title = buildImageActionResultTitle('文生图')
+    const sourceFileName = sourceData.fileName || sourceData.title || ''
+    const buildFileName = (name: string) => (name ? `文生图-${name}` : '文生图.png')
+    const requestedCount = Math.max(1, Math.floor(Number(payload.count)) || 1)
+    const taskParameters: Record<string, unknown> = {
+      model: payload.model,
+      aspectRatio: payload.aspectRatio,
+      count: 1,
+    }
+    if (payload.resolution) {
+      taskParameters.resolution = payload.resolution
     }
 
-    void runImageGenerationTask(event, {
-      capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
-      title: buildImageActionResultTitle('文生图'),
-      prompt,
-      workflowId: payload.workflowId,
-      requireAssetId: false,
-      requireSourcePreview: false,
-      resolveReferenceAssetIds: () => referenceAssetIds,
-      buildFileName: (sourceFileName) =>
-        sourceFileName ? `文生图-${sourceFileName}` : '文生图.png',
-      buildParameters: () => {
-        const params: Record<string, unknown> = {
-          model: payload.model,
-          aspectRatio: payload.aspectRatio,
-          count: payload.count,
-        }
-        if (payload.resolution) {
-          params.resolution = payload.resolution
-        }
-        return params
+    sourceNode.setData(
+      {
+        ...sourceData,
+        imageGenState: 'loading',
+        imageGenProgress: 0,
+        genPrompt: prompt,
       },
+      { overwrite: true },
+    )
+
+    selectedNodeId.value = sourceNodeId
+    selectedKind.value = 'image'
+    syncNodeSelectionHighlight(sourceNodeId)
+    bumpToolbarRevision()
+    updateNodeToolbar()
+
+    const resultNodes: Node[] = [sourceNode]
+
+    for (let index = 1; index < requestedCount; index += 1) {
+      resultNodes.push(
+        spawnGenerationResultNode(g, sourceNode, {
+          title,
+          fileName: resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount),
+          layoutSlot: index,
+          layoutTotal: requestedCount,
+          placement: 'above',
+        }),
+      )
+    }
+
+    const runners = resultNodes.map((resultNode, index) => {
+      const fileName = resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount)
+
+      return startImageGenerationOnNode(resultNode, {
+        title,
+        fileName,
+        createTask: async () => {
+          const idempotencyKey =
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+              ? crypto.randomUUID()
+              : `img-dialogue-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`
+
+          return api.createGenerationTask<GenerationTaskDetail>(
+            {
+              taskType: 'IMAGE',
+              capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+              prompt,
+              parameters: taskParameters,
+              projectId: activeProjectId.value,
+              nodeId: resultNode.id,
+              referenceAssetIds:
+                referenceAssetIds.length > 0
+                  ? referenceAssetIds
+                  : assetId
+                    ? [assetId]
+                    : undefined,
+              workflowId: resolveGenerationTaskWorkflowId(payload.workflowId),
+            },
+            idempotencyKey,
+          )
+        },
+        onTaskBound: () => persistGenerationTaskBinding(),
+        onError: (reason) => message.error(reason),
+        onComplete: async (result) => {
+          if (!result.success || index !== 0) return
+
+          const extraResults = result.extraResults ?? []
+          if (!extraResults.length) return
+
+          const totalCount = 1 + extraResults.length
+          const extraNodes = await spawnNodesForExtraGenerationResults(g, sourceNode, extraResults, {
+            title,
+            sourceFileName,
+            buildFileName,
+            resultIndexOffset: 1,
+            totalCount,
+            placement: 'above',
+          })
+
+          if (!extraNodes.length) return
+
+          syncNodeCount()
+          bumpToolbarRevision()
+          updateNodeToolbar()
+          scheduleHistoryPush()
+
+          nextTick(() => {
+            const scroller = getScroller(g)
+            if (!scroller) return
+            const boxes = [sourceNode, ...extraNodes].map((node) => node.getBBox())
+            const minX = Math.min(...boxes.map((box) => box.x))
+            const maxX = Math.max(...boxes.map((box) => box.x + box.width))
+            const minY = Math.min(...boxes.map((box) => box.y))
+            const maxY = Math.max(...boxes.map((box) => box.y + box.height))
+            scroller.transitionToPoint((minX + maxX) / 2, (minY + maxY) / 2, {
+              duration: '280ms',
+            })
+          })
+        },
+      })
     })
+
+    try {
+      const outcomes = await Promise.allSettled(runners)
+      const started = outcomes.some(
+        (outcome) => outcome.status === 'fulfilled' && outcome.value.started,
+      )
+      if (!started) {
+        if (sourceNode.getData().imageGenState === 'loading') {
+          markGenerationNodeFailed(sourceNode)
+        }
+        return
+      }
+
+      scheduleHistoryPush()
+    } catch (error) {
+      resultNodes.forEach((node) => {
+        if (node.id !== sourceNodeId) markGenerationNodeFailed(node)
+      })
+      if (sourceNode.getData().imageGenState === 'loading') {
+        markGenerationNodeFailed(sourceNode)
+      }
+      message.error(isRequestError(error) ? error.message : '生成失败，请稍后重试')
+    } finally {
+      bumpToolbarRevision()
+      updateNodeToolbar()
+    }
   }
 
   /** 视频节点对话框提交（与图片对话框平行，逻辑独立） */
@@ -2025,6 +2149,7 @@ export function registerCore(bind: CanvasBindings) {
       buildFileName: (sourceFileName: string) => string
       resultIndexOffset: number
       totalCount: number
+      placement?: import('../../imageGen').ResultPlacement
     },
   ): Promise<Node[]> {
     const nodes: Node[] = []
@@ -2045,6 +2170,9 @@ export function registerCore(bind: CanvasBindings) {
         assetId: resolved.assetId,
         mediaWidth: resolved.width ?? undefined,
         mediaHeight: resolved.height ?? undefined,
+        layoutSlot: config.resultIndexOffset + index,
+        layoutTotal: config.totalCount,
+        placement: config.placement,
       })
       nodes.push(node)
     }
@@ -2061,6 +2189,7 @@ export function registerCore(bind: CanvasBindings) {
       workflowId?: string | number | null
       requireAssetId?: boolean
       requireSourcePreview?: boolean
+      resultPlacement?: import('../../imageGen').ResultPlacement
       buildFileName: (sourceFileName: string) => string
       buildParameters: (event: ImageToolbarClickEvent) => Record<string, unknown>
       resolveReferenceAssetIds?: (event: ImageToolbarClickEvent) => string[]
@@ -2108,6 +2237,9 @@ export function registerCore(bind: CanvasBindings) {
             index,
             requestedCount,
           ),
+          layoutSlot: index,
+          layoutTotal: requestedCount,
+          placement: config.resultPlacement,
         }),
       )
     }
@@ -2172,6 +2304,7 @@ export function registerCore(bind: CanvasBindings) {
             buildFileName: config.buildFileName,
             resultIndexOffset: 1,
             totalCount,
+            placement: config.resultPlacement,
           })
 
           if (!extraNodes.length) return

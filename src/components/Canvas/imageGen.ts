@@ -7,27 +7,52 @@ import { getFlowEdgeAttrs } from './edgeStyle'
 
 const GEN_GAP = 56
 
+export type ResultPlacement = 'right' | 'above'
+
 type OutgoingResultLayoutOptions = {
   layoutSlot?: number
   layoutTotal?: number
+  placement?: ResultPlacement
 }
 
 function countOutgoingSlots(graph: Graph, sourceId: string) {
   return graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceId).length
 }
 
-/** 并行生成结果节点：同列纵向错位排布，避免落在同一水平线 */
+/** 并行生成结果节点：右侧纵向或上方横向错位排布，避免重叠 */
 export function computeOutgoingResultNodePoint(
   sourceNode: Node,
   size: { width: number; height: number },
   options: OutgoingResultLayoutOptions = {},
 ) {
   const bbox = sourceNode.getBBox()
+  const placement = options.placement ?? 'right'
+  const slot = options.layoutSlot ?? 0
+  const total = options.layoutTotal
+
+  if (placement === 'above') {
+    const centerX = bbox.x + bbox.width / 2
+    const y = bbox.y - GEN_GAP - size.height / 2
+    const step = size.width + GEN_GAP
+
+    if (typeof total === 'number' && total > 1) {
+      const span = total * size.width + (total - 1) * GEN_GAP
+      const startX = centerX - span / 2 + size.width / 2
+      return { x: startX + slot * step, y }
+    }
+
+    if (slot === 0) {
+      return { x: centerX, y }
+    }
+
+    const layer = Math.ceil(slot / 2)
+    const direction = slot % 2 === 1 ? 1 : -1
+    return { x: centerX + direction * layer * step, y }
+  }
+
   const x = bbox.x + bbox.width + GEN_GAP + size.width / 2
   const centerY = bbox.y + bbox.height / 2
   const step = size.height + GEN_GAP
-  const slot = options.layoutSlot ?? 0
-  const total = options.layoutTotal
 
   if (typeof total === 'number' && total > 1) {
     const span = total * size.height + (total - 1) * GEN_GAP
@@ -263,6 +288,7 @@ export function spawnGenerationResultNode(
     fileName?: string
     layoutSlot?: number
     layoutTotal?: number
+    placement?: ResultPlacement
   },
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
@@ -285,6 +311,7 @@ export function spawnGenerationResultNode(
   const point = computeOutgoingResultNodePoint(sourceNode, size, {
     layoutSlot: slot,
     layoutTotal: options.layoutTotal,
+    placement: options.placement,
   })
 
   const node = addCanvasNode(graph, 'image', point, overrides)
@@ -305,6 +332,7 @@ export function spawnCompletedImageResultNode(
     mediaHeight?: number
     layoutSlot?: number
     layoutTotal?: number
+    placement?: ResultPlacement
   },
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
@@ -330,6 +358,7 @@ export function spawnCompletedImageResultNode(
   const point = computeOutgoingResultNodePoint(sourceNode, size, {
     layoutSlot: slot,
     layoutTotal: options.layoutTotal,
+    placement: options.placement,
   })
 
   const node = addCanvasNode(graph, 'image', point, overrides)
