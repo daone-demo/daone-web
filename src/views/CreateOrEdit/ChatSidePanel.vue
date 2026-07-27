@@ -2077,11 +2077,87 @@ defineExpose({
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.28);
+  overflow: visible;
+  isolation: isolate;
+  animation: chat-panel-msg-icon-glow 2.8s ease-in-out infinite;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      rgba(124, 58, 237, 0.5) 0%,
+      rgba(124, 58, 237, 0.16) 48%,
+      transparent 72%
+    );
+    opacity: 0.75;
+    animation: chat-panel-msg-icon-ring 2.8s ease-in-out infinite;
+    pointer-events: none;
+    z-index: -1;
+  }
 
   &--light {
     border: 1px solid #ffffff;
     background: #ffffff;
+    animation-name: chat-panel-msg-icon-glow-light;
+
+    &::before {
+      background: radial-gradient(
+        circle,
+        rgba(124, 58, 237, 0.34) 0%,
+        rgba(124, 58, 237, 0.1) 48%,
+        transparent 72%
+      );
+    }
+  }
+
+  &:hover::before {
+    opacity: 1;
+  }
+}
+
+@keyframes chat-panel-msg-icon-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(124, 58, 237, 0.35),
+      0 4px 12px rgba(124, 58, 237, 0.25);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(124, 58, 237, 0),
+      0 4px 18px rgba(124, 58, 237, 0.45);
+  }
+}
+
+@keyframes chat-panel-msg-icon-glow-light {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(124, 58, 237, 0.28),
+      0 4px 14px rgba(124, 58, 237, 0.22);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 8px rgba(124, 58, 237, 0),
+      0 6px 22px rgba(124, 58, 237, 0.38);
+  }
+}
+
+@keyframes chat-panel-msg-icon-ring {
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.55;
+  }
+
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
   }
 }
 
