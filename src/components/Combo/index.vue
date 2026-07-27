@@ -588,8 +588,8 @@ async function loadUserProfile() {
   }
 
   try {
-    const res = await api.getCurrentUser<UserProfile>()
-    userProfile.value = res
+    const res:any = await api.getCurrentUser<UserProfile>()
+    userProfile.value = res;
     if (res.points) {
       userInfoStore.setPointAccount({
         available: res.points.available ?? 0,

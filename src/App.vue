@@ -94,13 +94,14 @@ import Combo from '@components/Combo/index.vue';
 import Points from '@components/Points/index.vue';
 import { useModalStore } from '@stores/useModal';
 import Login from '@components/Login/index.vue';
-
+import { useUserInfo } from '@stores/useUserInfo';
 import { useRoute, useRouter } from 'vue-router';
 import { nextTick, onMounted, onUnmounted, watch, ref } from 'vue';
 import api from '@/services/api';
 import { bindOnUnauthorized, resetAuthRedirecting, unbindOnUnauthorized } from '@/utils/request';
 
-const modalStore = useModalStore()
+const modalStore = useModalStore();
+const userInfoStore = useUserInfo();
 const showNav = ref(true)
 
 const route = useRoute()
@@ -135,6 +136,7 @@ const onGoUrl = (type: string) => {
 const onDoAction = (key: string) => {
   api.getCurrentUser()
     .then((res: any) => {
+      userInfoStore.setPointAccount(res.points);
       if (res.id) {
         if (key=== 'createProject') {
           api.createProject({ title: `新项目-${Date.now()}` }).then((res: any) => {

@@ -110,10 +110,10 @@
       </div>
     </div>
     <div class="canvas__header-actions">
-      <button type="button" class="canvas__header-pill" @click="emit('export')">
+      <!-- <button type="button" class="canvas__header-pill" @click="emit('export')">
         <span class="canvas__header-pill-icon canvas__header-pill-icon--share" aria-hidden="true" />
         导出
-      </button>
+      </button> -->
       <div class="canvas__header-user-wrap">
         <button
           type="button"
@@ -133,7 +133,7 @@
             v-else
           />
           <span class="canvas__header-credits-value">{{ userInfoStore?.pointAccount?.available || 0 }}</span>
-          <span class="canvas__header-avatar" aria-hidden="true" />
+          <!-- <span class="canvas__header-avatar" aria-hidden="true" /> -->
         </button>
 
         <div v-if="showUserMenu" class="canvas__user-menu" @mousedown.stop>
