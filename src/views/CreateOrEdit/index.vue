@@ -56,11 +56,13 @@ import ChatSidePanel from './ChatSidePanel.vue'
 import type { ChatSendPayload } from './chatTypes'
 import api, { type ProjectCanvasResponse } from '@/services/api'
 import { useModalStore } from '@stores/useModal'
+import { useUserInfo } from '@stores/useUserInfo';
 import {
   normalizeImageCapabilities,
   type ImageCapability,
 } from '@/components/Canvas/constants'
 
+const userInfoStore = useUserInfo();
 const ImageCapabilities = ref<ImageCapability[]>([])
 const VideoCapabilities = ref<ImageCapability[]>([])
 const TextCapabilities = ref<ImageCapability[]>([])
@@ -409,6 +411,7 @@ watch(
 onMounted(() => {
   window.addEventListener('beforeunload', onBrowserBeforeUnload)
   void initializePage()
+  void userInfoStore.queryPointAccount()
 })
 
 onUnmounted(() => {

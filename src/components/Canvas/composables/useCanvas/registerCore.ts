@@ -4,6 +4,7 @@ import type { Edge, Graph, Node } from '@antv/x6'
 import type { CanvasBindings } from './types'
 import type { UploadFilter } from './state'
 import { unpackBind } from './bindContext'
+import { useUserInfo } from '@stores/useUserInfo';
 import {
   clearCanvasAssetDrag,
   consumeCanvasAssetDragPayload,
@@ -236,7 +237,7 @@ export function registerCore(bind: CanvasBindings) {
     groupOverlayDrag,
     groupMoveState,
   } = unpackBind(bind)
-
+  const userInfoStore = useUserInfo();
   let canvasHistory: ReturnType<typeof createCanvasHistory> | null = null
   let historyPushTimer: ReturnType<typeof setTimeout> | null = null
   let activeImageDialogueNodeId = ''
@@ -1300,7 +1301,7 @@ export function registerCore(bind: CanvasBindings) {
       if (!taskId) {
         throw new Error(`创建${config.title}任务失败`)
       }
-
+      userInfoStore.queryPointAccount();
       bindGenerationTaskId(resultNode, taskId, 'VIDEO')
       persistGenerationTaskBinding()
 
@@ -1536,7 +1537,7 @@ export function registerCore(bind: CanvasBindings) {
       if (!taskId) {
         throw new Error('创建反推提示词任务失败')
       }
-
+      userInfoStore.queryPointAccount();
       bindGenerationTaskId(resultNode, taskId, 'TEXT')
       persistGenerationTaskBinding()
 
@@ -1631,7 +1632,7 @@ export function registerCore(bind: CanvasBindings) {
       if (!taskId) {
         throw new Error('创建 3D 生成任务失败')
       }
-
+      userInfoStore.queryPointAccount();
       bindGenerationTaskId(resultNode, taskId, 'MODEL')
       persistGenerationTaskBinding()
 
@@ -2024,7 +2025,7 @@ export function registerCore(bind: CanvasBindings) {
               ? crypto.randomUUID()
               : `img-dialogue-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`
 
-          return api.createGenerationTask<GenerationTaskDetail>(
+          const created = await api.createGenerationTask<GenerationTaskDetail>(
             {
               taskType: 'IMAGE',
               capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
@@ -2042,6 +2043,8 @@ export function registerCore(bind: CanvasBindings) {
             },
             idempotencyKey,
           )
+          userInfoStore.queryPointAccount()
+          return created; 
         },
         onTaskBound: () => persistGenerationTaskBinding(),
         onError: (reason) => message.error(reason),
@@ -2062,7 +2065,6 @@ export function registerCore(bind: CanvasBindings) {
           })
 
           if (!extraNodes.length) return
-
           syncNodeCount()
           bumpToolbarRevision()
           updateNodeToolbar()
@@ -2300,7 +2302,7 @@ export function registerCore(bind: CanvasBindings) {
         if (!taskId) {
           throw new Error('创建视频生成任务失败')
         }
-
+        userInfoStore.queryPointAccount();
         bindGenerationTaskId(sourceNode, taskId, 'VIDEO')
         persistGenerationTaskBinding()
 
@@ -2488,7 +2490,7 @@ export function registerCore(bind: CanvasBindings) {
               ? crypto.randomUUID()
               : `gen-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`
 
-          return api.createGenerationTask<GenerationTaskDetail>(
+          const created = await api.createGenerationTask<GenerationTaskDetail>(
             {
               taskType: 'IMAGE',
               capabilityCode: config.capabilityCode,
@@ -2501,12 +2503,13 @@ export function registerCore(bind: CanvasBindings) {
             },
             idempotencyKey,
           )
+          userInfoStore.queryPointAccount()
+          return created; 
         },
         onTaskBound: () => persistGenerationTaskBinding(),
         onError: (reason) => message.error(reason),
         onComplete: async (result) => {
           if (!result.success) return
-
           const extraResults = result.extraResults ?? []
           if (!extraResults.length) return
 
@@ -3619,7 +3622,7 @@ export function registerCore(bind: CanvasBindings) {
           if (!taskId) {
             throw new Error('创建反推提示词任务失败')
           }
-
+          userInfoStore.queryPointAccount();
           bindGenerationTaskId(cell as Node, taskId, 'TEXT')
           persistGenerationTaskBinding()
 
@@ -3724,7 +3727,7 @@ export function registerCore(bind: CanvasBindings) {
           if (!taskId) {
             throw new Error('创建文生视频任务失败')
           }
-
+          userInfoStore.queryPointAccount();
           bindGenerationTaskId(resultNode, taskId, 'VIDEO')
           persistGenerationTaskBinding()
 
@@ -3789,7 +3792,7 @@ export function registerCore(bind: CanvasBindings) {
                   ? crypto.randomUUID()
                   : `text2image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-              return api.createGenerationTask<GenerationTaskDetail>(
+              const created = await api.createGenerationTask<GenerationTaskDetail>(
                 {
                   taskType: 'IMAGE',
                   capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
@@ -3801,6 +3804,8 @@ export function registerCore(bind: CanvasBindings) {
                 },
                 idempotencyKey,
               )
+              userInfoStore.queryPointAccount()
+              return created
             },
             onTaskBound: () => persistGenerationTaskBinding(),
             onError: (reason) => message.error(reason),
@@ -3900,7 +3905,7 @@ export function registerCore(bind: CanvasBindings) {
           if (!taskId) {
             throw new Error('创建文案生成任务失败')
           }
-
+          userInfoStore.queryPointAccount();
           bindGenerationTaskId(cell as Node, taskId, 'TEXT')
           persistGenerationTaskBinding()
 
@@ -3975,7 +3980,7 @@ export function registerCore(bind: CanvasBindings) {
               ? crypto.randomUUID()
               : `img-prompt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-          return api.createGenerationTask<GenerationTaskDetail>(
+          const created = await api.createGenerationTask<GenerationTaskDetail>(
             {
               taskType: 'IMAGE',
               capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
@@ -3987,6 +3992,8 @@ export function registerCore(bind: CanvasBindings) {
             },
             idempotencyKey,
           )
+          userInfoStore.queryPointAccount()
+          return created; 
         },
         onTaskBound: () => persistGenerationTaskBinding(),
         onError: (reason) => message.error(reason),

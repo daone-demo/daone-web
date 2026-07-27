@@ -3,6 +3,7 @@ import api from '@/services/api'
 import type { CanvasNodeData } from './constants'
 import { resolveImageNaturalSizeCached } from './imageDisplayUrl'
 import { syncNodeShapeFromData, getNodeSize } from './graph'
+import { useUserInfo } from '@stores/useUserInfo';
 
 export type GenerationTaskResult = {
   assetId?: string
@@ -30,7 +31,16 @@ const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELED'])
 export function isGenerationTaskTerminal(status: string) {
   return TERMINAL_STATUSES.has(status)
 }
+const userInfoStore = useUserInfo();
 
+async function getGenerationTaskDetail<T = GenerationTaskDetail>(taskId: string): Promise<T> {
+  const result = await api.getGenerationTask<T>(taskId)
+  const task = normalizeGenerationTaskDetail(result)
+  if (isGenerationTaskTerminal(task.status)) {
+    void userInfoStore.queryPointAccount()
+  }
+  return result
+}
 function setNodeData(node: Node, data: CanvasNodeData) {
   node.setData(data, { overwrite: true })
 }
@@ -474,7 +484,7 @@ export async function pollGenerationTask(
   const maxAttempts = 180
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const raw = await api.getGenerationTask<GenerationTaskDetail>(taskId)
+    const raw = await getGenerationTaskDetail<GenerationTaskDetail>(taskId)
     const task = normalizeGenerationTaskDetail(raw)
     options.onProgress?.(task)
 
@@ -611,7 +621,7 @@ async function pollAndApplyImageTaskOnNode(
   try {
     const first =
       options.initialTask ??
-      normalizeGenerationTaskDetail(await api.getGenerationTask<GenerationTaskDetail>(taskId))
+      normalizeGenerationTaskDetail(await getGenerationTaskDetail<GenerationTaskDetail>(taskId))
 
     const initialTarget = resolveNode()
     if (!initialTarget) {
@@ -726,7 +736,7 @@ export async function followTextGenerationTaskOnNode(
     if (isTextResultApplied(current)) return true
 
     const first = normalizeGenerationTaskDetail(
-      await api.getGenerationTask<GenerationTaskDetail>(taskId),
+      await getGenerationTaskDetail<GenerationTaskDetail>(taskId),
     )
     updateTextGenerationNodeProgress(current, first.progress ?? 5)
 
@@ -794,7 +804,7 @@ export async function followModelGenerationTaskOnNode(
     if (currentData.previewUrl && currentData.imageGenState !== 'loading') return true
 
     const first = normalizeGenerationTaskDetail(
-      await api.getGenerationTask<GenerationTaskDetail>(taskId),
+      await getGenerationTaskDetail<GenerationTaskDetail>(taskId),
     )
     updateGenerationNodeProgress(current, first.progress ?? 5)
 
@@ -864,7 +874,7 @@ export async function followVideoGenerationTaskOnNode(
     if (currentData.previewUrl && currentData.uploadState !== 'uploading') return true
 
     const first = normalizeGenerationTaskDetail(
-      await api.getGenerationTask<GenerationTaskDetail>(taskId),
+      await getGenerationTaskDetail<GenerationTaskDetail>(taskId),
     )
     updateVideoGenerationNodeProgress(current, first.progress ?? 5)
 

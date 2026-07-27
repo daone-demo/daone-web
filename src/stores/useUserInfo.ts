@@ -7,7 +7,7 @@ import {
   setToken as persistToken,
   unbindOnSessionClear,
 } from '@/utils/request'
-
+import api from '@/services/api'
 export const USER_INFO_KEY = 'daone_user_info'
 export const POINT_ACCOUNT_KEY = 'daone_point_account'
 
@@ -85,7 +85,18 @@ export const useUserInfo = defineStore('userInfo', () => {
     }
   }
 
+  async function queryPointAccount() {
+    const res: any = await api.getPointsAccount<any>()
+    let data = {
+      available: res.availablePoints,
+      frozen: res.frozenPoints,
+      grantedTotal: res.grantedTotal
+    }
+    setPointAccount(data);
+  }
+
   function setPointAccount(value: PointAccount | null) {
+    console.log('setPointAccount', value)
     pointAccount.value = value
     if (value) {
       localStorage.setItem(POINT_ACCOUNT_KEY, JSON.stringify(value))
@@ -153,7 +164,8 @@ export const useUserInfo = defineStore('userInfo', () => {
     clearUserInfo,
     clearSession,
     setPointAccount,
-    logout
+    logout,
+    queryPointAccount
   }
 })
 
