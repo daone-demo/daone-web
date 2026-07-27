@@ -1,0 +1,50 @@
+@mixin node-icon-plus($arm: 8px, $stroke: 1.5px) {
+  font-size: 0;
+  line-height: 0;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border-radius: 1px;
+    background: currentColor;
+    transform: translate(-50%, -50%);
+  }
+
+  &::before {
+    width: $arm;
+    height: $stroke;
+  }
+
+  &::after {
+    width: $stroke;
+    height: $arm;
+  }
+}
+
+@mixin node-icon-close($size: 10px, $stroke: 1.5px) {
+  font-size: 0;
+  line-height: 0;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: $size;
+    height: $stroke;
+    border-radius: 1px;
+    background: currentColor;
+  }
+
+  &::before {
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+
+  &::after {
+    transform: translate(-50%, -50%) rotate(-45deg);
+  }
+}

@@ -330,6 +330,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
+@import './node-glyphs';
 @import './node-delete.scss';
 @import './node-port-plus.scss';
 @import './node-light-theme.scss';
@@ -478,9 +479,9 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: rgba(17, 24, 39, 0.72);
   color: #fff;
-  font-size: 16px;
-  line-height: 1;
   cursor: pointer;
+
+  @include node-icon-close(11px, 1.5px);
 
   &:hover {
     background: rgba(17, 24, 39, 0.9);

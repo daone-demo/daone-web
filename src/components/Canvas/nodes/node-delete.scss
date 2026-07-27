@@ -1,3 +1,5 @@
+@import './node-glyphs';
+
 .canvas-node__delete {
   flex-shrink: 0;
   display: flex;
@@ -11,14 +13,14 @@
   border-radius: 6px;
   background: transparent;
   color: #9ca3af;
-  font-size: 16px;
-  line-height: 1;
   cursor: pointer;
   opacity: 0;
   transition:
     opacity 0.15s,
     background 0.15s,
     color 0.15s;
+
+  @include node-icon-close(10px, 1.5px);
 
   .text-node:hover &,
   .image-node:hover &,
@@ -62,13 +64,13 @@
   border-radius: 6px;
   background: rgba(17, 24, 39, 0.55);
   color: #fff;
-  font-size: 15px;
-  line-height: 1;
   cursor: pointer;
   opacity: 0;
   transition:
     opacity 0.15s,
     background 0.15s;
+
+  @include node-icon-close(10px, 1.5px);
 
   .text-node:hover &,
   .image-node:hover &,
