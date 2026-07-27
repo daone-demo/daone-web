@@ -73,25 +73,25 @@ const currentSessionId = ref('');
 const sessionName = ref('');
 const chatTools = ref<any>({});
 const workflows = ref<any[]>([]);
-const ImageIcon = ref({
-  IMAGE_REMOVE_BG: '', // 抠图
-  quick: '', // 快速
-  precise: '', // 精准
-  IMAGE_HD: '', // 高清
-  '2K': '', // 2K
-  '4K': '', // 4K
-  IMAGE_CROP: '', // 智能裁剪
-  IMAGE_INPAINT: '', // 局部修改
-  IMAGE_PREVIEW: '', // 预览
-  IMAGE_GRID9: '', // 九宫格
-  IMAGE_REVERSE: '', // 扩图
-  IMAGE_EDIT_TEXT: '', // 编辑文本
-  IMAGE_LAYER_SPLIT: '', // 图层分离
-  IMAGE_GRID_SPLIT: '', // 宫格拆分
-  IMAGE_TO_3D: '', // 图片转3D
-  IMAGE_PROMPT_REVERSE: '', //反推提示词
-  IMAGE_TOPAZ_ENHANCE: '', // 图葩增强
-})
+// const ImageIcon = ref({
+//   IMAGE_REMOVE_BG: '', // 抠图
+//   quick: '', // 快速
+//   precise: '', // 精准
+//   IMAGE_HD: '', // 高清
+//   '2K': '', // 2K
+//   '4K': '', // 4K
+//   IMAGE_CROP: '', // 智能裁剪
+//   IMAGE_INPAINT: '', // 局部修改
+//   IMAGE_PREVIEW: '', // 预览
+//   IMAGE_GRID9: '', // 九宫格
+//   IMAGE_REVERSE: '', // 扩图
+//   IMAGE_EDIT_TEXT: '', // 编辑文本
+//   IMAGE_LAYER_SPLIT: '', // 图层分离
+//   IMAGE_GRID_SPLIT: '', // 宫格拆分
+//   IMAGE_TO_3D: '', // 图片转3D
+//   IMAGE_PROMPT_REVERSE: '', //反推提示词
+//   IMAGE_TOPAZ_ENHANCE: '', // 图葩增强
+// })
 
 type CanvasExpose = {
   addImagesFromFiles: (files: File[]) => Promise<Node[]>
@@ -288,18 +288,6 @@ const onLoadAiCapabilities = async (key: string) => {
       TextCapabilities.value = list
       break
     case 'IMAGE':
-      console.log('IMAGE', list)
-      list.push({
-        code: 'Custom_tool',
-        name: '自定义',
-        implemented: true,
-        nodeType: 'IMAGE',
-        toolbar: {
-          type: 'button',
-          group: 'custom',
-          visible: true,
-        },
-      });
       ImageCapabilities.value = list
       break
     case 'VIDEO':

@@ -600,7 +600,7 @@ export function resolveVideoToolbarIcon(code: string, icon?: string): string | u
 }
 
 /** 不进图片节点工具栏的能力（纯文生图入口，无选中源图） */
-const IMAGE_TOOLBAR_EXCLUDED_CODES = new Set(['IMAGE_GENERAL_V1'])
+const IMAGE_TOOLBAR_EXCLUDED_CODES = new Set(['IMAGE_GENERAL_V1', 'Custom_tool'])
 
 /** 不进视频节点工具栏的能力（通用视频生成入口） */
 const VIDEO_TOOLBAR_EXCLUDED_CODES = new Set(['VIDEO_GENERAL_V1'])
