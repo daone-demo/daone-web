@@ -24,6 +24,7 @@ export function useNodeConnect() {
     const graph = node.model?.graph
     if (!graph || !canOpenConnectMenu(node)) return
     const g = graph
+    ;(g as CanvasGraph).__deactivateTextEditorToolbar?.()
 
     if (activeEdgeId) {
       const stale = g.getCellById(activeEdgeId)

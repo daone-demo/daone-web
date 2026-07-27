@@ -225,6 +225,7 @@ export function registerCore(bind: CanvasBindings) {
     videoHdMagnification,
     textFormatToolbarPos,
     textDownloadPos,
+    textEditorToolbarActive,
     textExpandOpen,
     textExpandNodeId,
     textExpandTitle,
@@ -467,7 +468,21 @@ export function registerCore(bind: CanvasBindings) {
   const showTextFormatToolbar = computed(() => {
     void toolbarRevision.value
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
-    if (!selectedNodeId.value || showImageCrop.value || showImageGridSplit.value || showImageErase.value || showImageInpaint.value || showImageExpand.value || showImageEditText.value || textExpandOpen.value) return false
+    if (
+      !selectedNodeId.value ||
+      !textEditorToolbarActive.value ||
+      showConnectMenu.value ||
+      showPromptBar.value ||
+      showImageCrop.value ||
+      showImageGridSplit.value ||
+      showImageErase.value ||
+      showImageInpaint.value ||
+      showImageExpand.value ||
+      showImageEditText.value ||
+      textExpandOpen.value
+    ) {
+      return false
+    }
     const data = getSelectedNodeData()
     return (
       data?.kind === 'text' &&
@@ -715,6 +730,12 @@ export function registerCore(bind: CanvasBindings) {
 
   function bumpToolbarRevision() {
     toolbarRevision.value += 1
+  }
+
+  function setTextEditorToolbarActive(active: boolean) {
+    if (textEditorToolbarActive.value === active) return
+    textEditorToolbarActive.value = active
+    bumpToolbarRevision()
   }
 
   const showToolbarFeatureButtons = computed(() => {
@@ -2951,9 +2972,17 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   /** 关闭图片/视频节点底部对话框（打开连线菜单等互斥浮层时调用） */
+  function closeTextPromptBar() {
+    if (!activePickerNodeId.value) return
+    persistPromptBarDraft()
+    activePickerNodeId.value = ''
+    bumpToolbarRevision()
+  }
+
   function closeNodeDialoguePanels() {
     if (showImageDialogue.value) resetImageDialogue()
     if (showVideoDialogue.value) resetVideoDialogue()
+    closeTextPromptBar()
   }
 
   function triggerFileInputClick(
@@ -4515,6 +4544,7 @@ export function registerCore(bind: CanvasBindings) {
 
     closeAddMenu()
     closeNodeDialoguePanels()
+    setTextEditorToolbarActive(false)
     connectSourceNodeId.value = source.id
     connectReleasePoint.value = releasePoint
     const { left, top } = getConnectMenuPosition(
@@ -4948,6 +4978,7 @@ export function registerCore(bind: CanvasBindings) {
     if (key === 'write') {
       activePickerNodeId.value = ''
       modelType.value = 'free'
+      setTextEditorToolbarActive(false)
       bumpToolbarRevision()
       updateNodeToolbar()
       scheduleHistoryPush()
@@ -6240,6 +6271,8 @@ export function registerCore(bind: CanvasBindings) {
       closeConnectMenu()
     }
 
+    setTextEditorToolbarActive(false)
+
     let data = node.getData() as CanvasNodeData
     if (data.kind === 'video' && data.previewUrl && data.mode === 'picker') {
       data = { ...data, mode: 'editor' }
@@ -6315,6 +6348,7 @@ export function registerCore(bind: CanvasBindings) {
     closeShortcutsPanel()
     closeHistoryPanel()
     closeConnectMenu()
+    setTextEditorToolbarActive(false)
     activePickerNodeId.value = ''
     graph.value?.cleanSelection()
     selectedNodeId.value = ''
@@ -6464,6 +6498,10 @@ export function registerCore(bind: CanvasBindings) {
       activePickerNodeId.value = ''
       return true
     }
+    if (textEditorToolbarActive.value) {
+      setTextEditorToolbarActive(false)
+      return true
+    }
     if (showElementSelectMode.value) {
       exitElementSelectMode()
       return true
@@ -6482,6 +6520,7 @@ export function registerCore(bind: CanvasBindings) {
       selectedNodeId.value = ''
       selectedNodeIds.value = []
       selectedKind.value = null
+      setTextEditorToolbarActive(false)
       resetImageToolbarMore()
       resetImageDialogue()
       resetImageCrop()
@@ -7161,6 +7200,16 @@ export function registerCore(bind: CanvasBindings) {
       if (!cell?.isNode()) return
       selectGraphNodes(cell as Node)
     }
+    instance.__onTextEditorFocus = (nodeId: string) => {
+      if (selectedNodeId.value && selectedNodeId.value !== nodeId) return
+      selectedNodeId.value = nodeId
+      selectedKind.value = 'text'
+      setTextEditorToolbarActive(true)
+      updateNodeToolbar()
+    }
+    instance.__deactivateTextEditorToolbar = () => {
+      setTextEditorToolbarActive(false)
+    }
     instance.__notifyNodeDragMove = updateNodeToolbar
     instance.__notifyNodeDragEnd = () => {
       updateNodeToolbar()
@@ -7262,6 +7311,7 @@ export function registerCore(bind: CanvasBindings) {
       if (data.kind === 'text' && data.mode === 'picker') {
         node.setData({ ...data, mode: 'editor', promptBarPinned: false })
         selectGraphNodes(node)
+        setTextEditorToolbarActive(false)
         bumpToolbarRevision()
       }
     })

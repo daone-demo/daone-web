@@ -32,7 +32,7 @@ export const BIND_KEYS = [
   'showImageEditText', 'editTextSourceNodeId', 'imageEditTextPos', 'imageEditTextEntries', 'imageEditTextRecognizing',
   'showVideoDialogue', 'showVideoHdPanel',
   'showVideoFramesPanel', 'imageDialogueText', 'imageDialogueSettings', 'videoDialogueText', 'videoDialogueSettings', 'videoHdMagnification',
-  'canvasCredits', 'textFormatToolbarPos', 'textDownloadPos', 'textExpandOpen',
+  'canvasCredits', 'textFormatToolbarPos', 'textDownloadPos', 'textEditorToolbarActive', 'textExpandOpen',
   'textExpandNodeId', 'textExpandTitle', 'toolbarRevision', 'router', 'modalStore',
   'canvasHistory', 'historyPushTimer', 'scrollerScrollTarget', 'textEditorApis',
   'groupOverlayDrag', 'groupMoveState', 'zoomPercent', 'currentProjectName', 'canvasBgThemeLabel',

@@ -282,6 +282,7 @@ function onEditorInput() {
 }
 
 function onEditorFocus() {
+  canvasGraph().__onTextEditorFocus?.(getNode().id)
   canvasGraph().__textEditorRegistry?.get(getNode().id)?.focus()
 }
 
@@ -353,6 +354,7 @@ function onEditorMouseDown(event: MouseEvent) {
     } else {
       el?.focus()
       placeCaretAtPoint(upEvent.clientX, upEvent.clientY)
+      canvasGraph().__onTextEditorFocus?.(node.id)
     }
   }
 

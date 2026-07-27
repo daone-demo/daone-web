@@ -106,7 +106,7 @@
     />
 
     <CanvasNodeToolbar
-      v-if="showNodeToolbar && !showMultiSelectToolbar && !showGroupToolbar && showToolbarFeatureButtons && !showImageCrop && !showImageGridSplit && !showImageErase && !showImageInpaint && !showImageExpand && !showImageEditText && !showImageDialogue && !showVideoDialogue"
+      v-if="showNodeToolbar && !showMultiSelectToolbar && !showGroupToolbar && showToolbarFeatureButtons && !showImageCrop && !showImageGridSplit && !showImageErase && !showImageInpaint && !showImageExpand && !showImageEditText && !showImageDialogue && !showVideoDialogue && !showPromptBar"
       :position="toolbarPos"
       :is-light="isLightNodeToolbar"
       :show-feature-buttons="showToolbarFeatureButtons"

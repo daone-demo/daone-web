@@ -196,6 +196,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const canvasCredits = ref(12003)
   const textFormatToolbarPos = ref({ left: 0, top: 0, width: 420 })
   const textDownloadPos = ref({ left: 0, top: 0 })
+  /** 用户点击文本编辑区后才显示上方格式工具栏 */
+  const textEditorToolbarActive = ref(false)
   const textExpandOpen = ref(false)
   const textExpandNodeId = ref('')
   const textExpandTitle = ref('')
@@ -337,6 +339,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     canvasCredits,
     textFormatToolbarPos,
     textDownloadPos,
+    textEditorToolbarActive,
     textExpandOpen,
     textExpandNodeId,
     textExpandTitle,
