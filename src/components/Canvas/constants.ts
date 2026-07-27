@@ -54,6 +54,8 @@ export interface CanvasNodeData {
   isSelected?: boolean
   /** 宫格碎片：仅单独选中时展示连线加号 */
   showConnectPlus?: boolean
+  /** 连线添加上下文菜单打开时隐藏节点标题栏 */
+  hideNodeMeta?: boolean
   /** 节点所属分组 ID，同组节点可整组移动与解组 */
   groupId?: string
   imageGenTask?: ImageGenTask

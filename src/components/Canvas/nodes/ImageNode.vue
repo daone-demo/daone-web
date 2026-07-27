@@ -34,7 +34,7 @@
       ×
     </button>
 
-    <div v-if="data.previewUrl && !data.compactPreview" class="image-node__meta canvas-node__meta">
+    <div v-if="data.previewUrl && !data.compactPreview && !data.hideNodeMeta" class="image-node__meta canvas-node__meta">
       <span class="image-node__title">
         <!-- <span class="image-node__title-icon">▣</span> -->
         <i class="iconfont icon-tupian" style="font-size: 18px;" />

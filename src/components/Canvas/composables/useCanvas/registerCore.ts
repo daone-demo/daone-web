@@ -741,6 +741,8 @@ export function registerCore(bind: CanvasBindings) {
   const showToolbarFeatureButtons = computed(() => {
     void toolbarRevision.value
 
+    if (showConnectMenu.value) return false
+
     const data = getSelectedNodeData()
     if (isNodeGenerating(data)) return false
 
@@ -4090,7 +4092,21 @@ export function registerCore(bind: CanvasBindings) {
     edge.setTarget(g.clientToLocal(clientX, clientY))
   }
 
+  function setConnectSourceNodeMetaHidden(hidden: boolean) {
+    const g = graph.value
+    const sourceId = connectSourceNodeId.value
+    if (!g || !sourceId) return
+
+    const cell = g.getCellById(sourceId)
+    if (!cell?.isNode()) return
+
+    const data = cell.getData() as CanvasNodeData
+    if (Boolean(data.hideNodeMeta) === hidden) return
+    cell.setData({ ...data, hideNodeMeta: hidden })
+  }
+
   function closeConnectMenu() {
+    setConnectSourceNodeMetaHidden(false)
     removeConnectPreviewEdge()
     showConnectMenu.value = false
     connectSourceNodeId.value = ''
@@ -4545,6 +4561,9 @@ export function registerCore(bind: CanvasBindings) {
     closeAddMenu()
     closeNodeDialoguePanels()
     setTextEditorToolbarActive(false)
+    if (connectSourceNodeId.value && connectSourceNodeId.value !== source.id) {
+      setConnectSourceNodeMetaHidden(false)
+    }
     connectSourceNodeId.value = source.id
     connectReleasePoint.value = releasePoint
     const { left, top } = getConnectMenuPosition(
@@ -4555,6 +4574,7 @@ export function registerCore(bind: CanvasBindings) {
     )
     connectMenuPos.value = { left, top }
     showConnectMenu.value = true
+    setConnectSourceNodeMetaHidden(true)
     // 仅吞掉打开菜单同一次 mouseup 随后触发的 blank:click，避免立刻关掉。
     // 用 setTimeout(0) 在 click 事件之后清 flag，避免 nextTick 过早清掉导致菜单闪关，
     // 也避免 flag 粘住导致后续点击画布关不掉。
