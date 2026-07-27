@@ -868,9 +868,14 @@ onBeforeUnmount(() => {
 }
 
 .text-node__title {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   font-size: 12px;
   color: #9ca3af;
   cursor: move;
@@ -899,6 +904,7 @@ onBeforeUnmount(() => {
 }
 
 .text-node__body {
+  height: 100%;
   border: 1px solid #4b4b55;
   border-radius: 14px;
   background: #1e1e22;

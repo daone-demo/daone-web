@@ -302,6 +302,10 @@ onBeforeUnmount(() => {
 }
 
 .model3d-node__meta {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -346,7 +350,7 @@ onBeforeUnmount(() => {
 
 .model3d-node__body {
   position: relative;
-  flex: 1;
+  height: 100%;
   min-height: 0;
   border: 1px solid #3d3d45;
   border-radius: 12px;

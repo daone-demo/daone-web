@@ -14,7 +14,7 @@
     }"
   >
     <button
-      v-if="(!data.compactPreview && !isGridSplitNode) || data.showConnectPlus"
+      v-if="!data.compactPreview || isGridSplitNode"
       type="button"
       class="node-port-plus"
       title="添加连线节点"

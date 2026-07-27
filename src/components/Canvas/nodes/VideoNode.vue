@@ -7,7 +7,9 @@
       'video-node--picker-card': data.mode === 'picker',
       'video-node--generating': isVideoGenerating,
       'video-node--preview': hasVideoPreview,
+      'video-node--uploading': data.uploadState === 'uploading',
     }"
+    @dblclick.stop="onVideoNodeDblClick"
   >
     <button
       type="button"
@@ -212,6 +214,7 @@
 import { computed, inject, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import type { Node } from '@antv/x6'
 import type { CanvasNodeData } from '../constants'
+import type { CanvasGraph } from '../graph'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
@@ -282,6 +285,12 @@ function triggerUpload() {
   requestCanvasUpload?.(getNode().id)
 }
 
+function onVideoNodeDblClick() {
+  const node = getNode()
+  const g = node.model?.graph as CanvasGraph | undefined
+  g?.__openVideoDialogue?.(node.id)
+}
+
 function onVideoLoadedMetadata(event: Event) {
   onLoadedMetadata()
   const video = event.target as HTMLVideoElement
@@ -337,20 +346,6 @@ onBeforeUnmount(() => {
   color: #f3f4f6;
   pointer-events: auto;
   overflow: visible;
-}
-
-.video-node--preview {
-  .node-port-plus {
-    right: -5px;
-    width: 24px;
-    height: 24px;
-    border: 1px solid #d1d5db;
-    background: #fff;
-    color: #9ca3af;
-    font-size: 16px;
-    font-weight: 300;
-    opacity: 1;
-  }
 }
 
 .video-node--picker-card {

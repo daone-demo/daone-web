@@ -250,6 +250,10 @@ onMounted(() => {
 }
 
 .image-gen-node__meta {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
   margin-bottom: 6px;
   font-size: 12px;
 }
@@ -291,7 +295,7 @@ onMounted(() => {
   position: relative;
   display: flex;
   flex-direction: column;
-  height: calc(100% - 24px);
+  height: 100%;
   border: 1px solid #4b4b55;
   border-radius: 14px;
   background: #1e1e22;

@@ -1,4 +1,4 @@
-import { computed, nextTick, onBeforeUnmount, onMounted, provide } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import type { Edge, Graph, Node } from '@antv/x6'
 import type { CanvasBindings } from './types'
@@ -248,6 +248,31 @@ export function registerCore(bind: CanvasBindings) {
   let pendingRemoteSaveType: 'MANUAL' | 'AUTO' | null = null
   let scrollerScrollTarget: HTMLElement | null = null
   let pendingProjectCanvas: ProjectCanvasResponse | null = null
+  let videoToolbarDeferTimer: ReturnType<typeof setTimeout> | null = null
+  const videoToolbarClickDeferred = ref(false)
+  const VIDEO_TOOLBAR_CLICK_DEFER_MS = 280
+
+  function cancelVideoToolbarDefer() {
+    if (videoToolbarDeferTimer) {
+      clearTimeout(videoToolbarDeferTimer)
+      videoToolbarDeferTimer = null
+    }
+    videoToolbarClickDeferred.value = false
+  }
+
+  function scheduleVideoToolbarDefer() {
+    cancelVideoToolbarDefer()
+    videoToolbarClickDeferred.value = true
+    videoToolbarDeferTimer = setTimeout(() => {
+      videoToolbarDeferTimer = null
+      videoToolbarClickDeferred.value = false
+      bumpToolbarRevision()
+    }, VIDEO_TOOLBAR_CLICK_DEFER_MS)
+  }
+
+  function shouldDeferVideoToolbarOnClick(data: CanvasNodeData) {
+    return data.kind === 'video' && !data.groupId
+  }
 
   function toggleUserMenu() {
     showUserMenu.value = !showUserMenu.value
@@ -635,13 +660,17 @@ export function registerCore(bind: CanvasBindings) {
     return data?.sourcePreviewUrl || data?.previewUrl || ''
   })
 
-  const showNodeToolbar = computed(
-    () =>
+  const showNodeToolbar = computed(() => {
+    void toolbarRevision.value
+    if (videoToolbarClickDeferred.value) return false
+    if (showVideoDialogue.value && selectedKind.value === 'video') return false
+    return (
       Boolean(selectedNodeId.value) &&
       selectedNodeIds.value.length <= 1 &&
       !showGroupToolbar.value &&
-      !imagePreviewUrl.value,
-  )
+      !imagePreviewUrl.value
+    )
+  })
 
   function onGoHome() {
     router.push({ name: 'home' })
@@ -2655,24 +2684,45 @@ export function registerCore(bind: CanvasBindings) {
     openImageDialogue(node.id)
   }
 
+  function openVideoDialogue(nodeId?: string) {
+    const g = graph.value
+    if (!g) return
+    const id = nodeId ?? selectedNodeId.value
+    if (!id) return
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return
+    const data = cell.getData() as CanvasNodeData
+    if (data.kind !== 'video') return
+
+    cancelVideoToolbarDefer()
+
+    if (activeVideoDialogueNodeId && activeVideoDialogueNodeId !== id) {
+      persistVideoDialogueFields(activeVideoDialogueNodeId)
+    }
+
+    selectedNodeId.value = id
+    selectedKind.value = 'video'
+    loadVideoDialogueFields(id)
+    showVideoDialogue.value = true
+    closeVideoSubPanels('dialogue')
+    closeVideoGenPromptBar()
+    syncNodeSelectionHighlight(id)
+    updateNodeToolbar()
+  }
+
   function toggleVideoDialogue() {
     if (showVideoDialogue.value) {
       persistVideoDialogueFields()
       showVideoDialogue.value = false
       activeVideoDialogueNodeId = ''
+      updateNodeToolbar()
       return
     }
+    openVideoDialogue()
+  }
 
-    const id = selectedNodeId.value
-    if (activeVideoDialogueNodeId && activeVideoDialogueNodeId !== id) {
-      persistVideoDialogueFields(activeVideoDialogueNodeId)
-    }
-    if (id && selectedKind.value === 'video') {
-      loadVideoDialogueFields(id)
-    }
-    showVideoDialogue.value = true
-    closeVideoSubPanels('dialogue')
-    updateNodeToolbar()
+  function handleVideoNodeDblClick({ node }: { node: Node }) {
+    openVideoDialogue(node.id)
   }
 
   function toggleVideoHdPanel() {
@@ -5168,18 +5218,13 @@ export function registerCore(bind: CanvasBindings) {
           : getGraphSelectedNodeIds(),
     )
 
-    const soleSelection = idSet.size === 1
     g.getNodes().forEach((node) => {
       const data = node.getData() as CanvasNodeData
       const isSelected = idSet.has(node.id)
-      const showConnectPlus = soleSelection && isSelected && Boolean(data.gridSplitTile)
-      if (
-        Boolean(data.isSelected) === isSelected &&
-        Boolean(data.showConnectPlus) === showConnectPlus
-      ) {
+      if (Boolean(data.isSelected) === isSelected) {
         return
       }
-      node.setData({ ...data, isSelected, showConnectPlus })
+      node.setData({ ...data, isSelected })
     })
   }
 
@@ -6305,13 +6350,21 @@ export function registerCore(bind: CanvasBindings) {
     selectedKind.value = data.kind
 
     if (data.groupId && !multiSelect) {
+      cancelVideoToolbarDefer()
       syncSelectionFromGraph()
       return
     }
 
     if (multiSelect) {
+      cancelVideoToolbarDefer()
       syncSelectionFromGraph()
       return
+    }
+
+    if (shouldDeferVideoToolbarOnClick(data)) {
+      scheduleVideoToolbarDefer()
+    } else {
+      cancelVideoToolbarDefer()
     }
 
     resetImageToolbarMore()
@@ -6361,6 +6414,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function resetCanvasInteractionState() {
+    cancelVideoToolbarDefer()
     closeAddMenu()
     closeProjectMenu()
     closeUserMenu()
@@ -7206,6 +7260,7 @@ export function registerCore(bind: CanvasBindings) {
     const instance = createGraph(graphRef.value) as CanvasGraph
     instance.__openConnectMenu = openConnectMenuByNodeId
     instance.__openImageDialogue = openImageDialogue
+    instance.__openVideoDialogue = openVideoDialogue
     instance.__deleteCanvasNode = removeNodeById
     instance.__uploadFileToCanvasNode = uploadFileToCanvasNode
     instance.__requestTextExpand = openTextExpand
@@ -7326,6 +7381,10 @@ export function registerCore(bind: CanvasBindings) {
       const data = node.getData() as CanvasNodeData
       if (data.kind === 'image') {
         handleImageNodeDblClick({ node })
+        return
+      }
+      if (data.kind === 'video') {
+        handleVideoNodeDblClick({ node })
         return
       }
       if (data.kind === 'text' && data.mode === 'picker') {
@@ -7603,6 +7662,7 @@ export function registerCore(bind: CanvasBindings) {
     closeSaveSkillPopover,
     listSavedCanvasSkills,
     handleImageNodeDblClick,
+    handleVideoNodeDblClick,
     handleLogout,
     handleMergeStoryboardGroup,
     handleMultiSelectGroup,
@@ -7684,6 +7744,7 @@ export function registerCore(bind: CanvasBindings) {
     openImageInpaint,
     openImageExpand,
     openImageDialogue,
+    openVideoDialogue,
     openImageGenPromptBar,
     openImagePreview,
     openImageToolbarMore,

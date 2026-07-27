@@ -447,6 +447,7 @@ export type CanvasGraph = Graph & {
   __scroller?: Scroller
   __openConnectMenu?: ConnectMenuOpener
   __openImageDialogue?: (nodeId: string) => void
+  __openVideoDialogue?: (nodeId: string) => void
   __deleteCanvasNode?: (nodeId: string) => void
   __uploadFileToCanvasNode?: (nodeId: string, file: File) => void
   __textEditorRegistry?: TextEditorRegistry

@@ -1,20 +1,20 @@
 .node-port-plus {
   position: absolute;
   top: 50%;
-  right: 6px;
-  z-index: 3;
+  right: -20px;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  border: 1.5px solid #6b7280;
+  border: 1px solid #6b7280;
   border-radius: 50%;
   background: #2a2a30;
   color: #f3f4f6;
-  font-size: 15px;
-  line-height: 1;
+  font-size: 16px;
+  font-weight: 300;
   cursor: crosshair;
   opacity: 0;
   transform: translateY(-50%);
@@ -30,7 +30,9 @@
   .image-gen-node:hover &,
   .image-gen-node--selected &,
   .text-node:hover &,
-  .text-node--selected & {
+  .text-node--selected &,
+  .model3d-node:hover &,
+  .model3d-node--selected & {
     opacity: 1;
   }
 
