@@ -951,8 +951,8 @@ export function buildImageDialogueCountOptionsFromCapabilities(
 
 /**
  * 从 imageCapabilities 生成图片节点工具栏 actions。
- * 已实现且未显式隐藏的能力都会进入；无 toolbar 时按 button 兜底。
- * 仅排除 IMAGE_GENERAL_V1（通用生图入口）。
+ * 仅展示 toolbar.visible === true 的已实现能力；排除 IMAGE_GENERAL_V1。
+ * 顺序：先按 toolbar.order，相同时按接口数组下标（接口返回顺序）稳定排序。
  */
 export function buildImageToolbarActionsFromCapabilities(
   capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
@@ -961,16 +961,16 @@ export function buildImageToolbarActionsFromCapabilities(
   if (!list.length) return []
 
   const mapped = list
-    .filter((item) => {
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => {
       if (!item?.code || !item?.name) return false
       if (item.implemented === false) return false
-      // 仅排除 IMAGE_GENERAL_V1（通用生图入口）；其余已实现能力全部进入工具栏。
-      // 注意：不再按 toolbar.visible 过滤——后端会给部分能力返回 visible:false，
-      // 但节点工具栏需要把所有已实现能力都暴露出来（主栏 6 个 + 更多）。
       if (IMAGE_TOOLBAR_EXCLUDED_CODES.has(item.code)) return false
+      if (item.nodeType && item.nodeType !== 'IMAGE') return false
+      if (item.toolbar?.visible !== true) return false
       return true
     })
-    .map((item, index) => {
+    .map(({ item, index }) => {
       const toolbar = item.toolbar
       const type = toolbar?.type === 'dropdown' ? 'dropdown' : 'button'
       return {
@@ -979,13 +979,11 @@ export function buildImageToolbarActionsFromCapabilities(
         icon: resolveCapabilityToolbarIcon(item.icon),
         type,
         modes: Array.isArray(toolbar?.modes) ? toolbar!.modes! : [],
-        order: typeof toolbar?.order === 'number' ? toolbar.order : 999,
+        order: typeof toolbar?.order === 'number' ? toolbar.order : index,
         capability: item,
         _index: index,
       } satisfies ImageCapabilityToolbarAction & { _index: number }
     })
-    // 有 toolbar.order 的优先按 order；其余保持接口返回的原始顺序（数组下标），
-    // 不再按 code 字母序，避免展示顺序与后端返回不一致。
     .sort((a, b) => a.order - b.order || a._index - b._index)
     .map(({ _index, ...action }) => action)
 
@@ -1000,6 +998,7 @@ export function buildImageToolbarActionsFromCapabilities(
 /**
  * 从 videoCapabilities 生成视频节点工具栏 actions。
  * 仅展示 toolbar.visible === true 的已实现能力；排除 VIDEO_GENERAL_V1。
+ * 顺序与图片工具栏一致：先按 toolbar.order，相同时按接口数组下标。
  */
 export function buildVideoToolbarActionsFromCapabilities(
   capabilities: ImageCapability[] | null | undefined | Record<string, unknown>,
@@ -1008,15 +1007,16 @@ export function buildVideoToolbarActionsFromCapabilities(
   if (!list.length) return []
 
   const mapped = list
-    .filter((item) => {
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => {
       if (!item?.code || !item?.name) return false
       if (item.implemented === false) return false
       if (VIDEO_TOOLBAR_EXCLUDED_CODES.has(item.code)) return false
-      // 视频工具栏按接口显式 visible 控制展示
+      if (item.nodeType && item.nodeType !== 'VIDEO') return false
       if (item.toolbar?.visible !== true) return false
       return true
     })
-    .map((item, index) => {
+    .map(({ item, index }) => {
       const toolbar = item.toolbar
       const type = toolbar?.type === 'dropdown' ? 'dropdown' : 'button'
       return {
@@ -1025,7 +1025,7 @@ export function buildVideoToolbarActionsFromCapabilities(
         icon: resolveVideoToolbarIcon(item.code, item.icon),
         type,
         modes: Array.isArray(toolbar?.modes) ? toolbar!.modes! : [],
-        order: typeof toolbar?.order === 'number' ? toolbar.order : 999,
+        order: typeof toolbar?.order === 'number' ? toolbar.order : index,
         capability: item,
         _index: index,
       } satisfies ImageCapabilityToolbarAction & { _index: number }
