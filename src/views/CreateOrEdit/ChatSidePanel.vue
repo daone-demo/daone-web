@@ -291,17 +291,23 @@
       <span class="chat-panel__icon chat-panel__icon--expand" aria-hidden="true" />
     </button>
   </aside>
-  <img
+  <button
     v-if="collapsed"
-    src="@/assets/images/stmsge.png"
-    alt="logo"
+    type="button"
     class="chat-panel__msg-icon"
+    :class="{ 'chat-panel__msg-icon--light': isLightTheme }"
+    title="展开面板"
+    aria-label="展开面板"
     @click="collapsed = false"
-  />
+  >
+    <img :src="logoSrc" alt="logo" class="chat-panel__msg-icon-logo" />
+  </button>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import logoWhite from '@assets/images/logo_white.png'
+import logoBlack from '@assets/images/logo_black.png'
 import { useCanvasBgTheme } from '@/components/Canvas/useCanvasBgTheme'
 import type { ChatAttachment, ChatSendPayload, ChatSession } from './chatTypes'
 import { CHAT_TIPS } from './chatTypes'
@@ -397,6 +403,7 @@ const canSend = computed(() =>
 
 const { isLightTheme } = useCanvasBgTheme()
 const isDarkTheme = computed(() => !isLightTheme.value)
+const logoSrc = computed(() => (isLightTheme.value ? logoBlack : logoWhite))
 
 function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -2059,9 +2066,31 @@ defineExpose({
   position: fixed;
   bottom: 20px;
   right: 20px;
-  width: 40px;
-  height: 40px;
+  z-index: 120;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
   cursor: pointer;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.28);
+
+  &--light {
+    border: 1px solid #ffffff;
+    background: #ffffff;
+  }
+}
+
+.chat-panel__msg-icon-logo {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 /* Dark theme overrides */

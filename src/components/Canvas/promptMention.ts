@@ -1,5 +1,13 @@
 export const PROMPT_MENTION_REGEX = /@图片\d+/g
 
+/**
+ * 将画布提示词中的 `@图片N` 转为后端约定格式 `[Image N]`。
+ * 例：`@图片1 模特拿着@图片2 杯子` → `[Image 1] 模特拿着[Image 2]杯子`
+ */
+export function toVideoApiPrompt(prompt: string): string {
+  return String(prompt || '').replace(/@图片(\d+)/g, '[Image $1]')
+}
+
 /** 中文等 IME 组合输入过程中应暂停重绘 contenteditable，否则会打断输入 */
 export function isInputComposing(event?: Event): boolean {
   return Boolean((event as InputEvent | KeyboardEvent | undefined)?.isComposing)

@@ -38,6 +38,7 @@ import {
 } from '../../editTextUtils'
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import { downloadCanvasMedia } from '../../mediaDownload'
+import { toVideoApiPrompt } from '../../promptMention'
 import {
   bindGenerationTaskId,
   followModelGenerationTaskOnNode,
@@ -1233,7 +1234,7 @@ export function registerCore(bind: CanvasBindings) {
           {
             taskType: 'VIDEO',
             capabilityCode: config.capabilityCode,
-            prompt: config.prompt?.trim() ?? '',
+            prompt: toVideoApiPrompt(config.prompt?.trim() ?? ''),
             parameters: taskParameters,
             projectId: activeProjectId.value,
             nodeId: resultNode.id,
@@ -2233,7 +2234,7 @@ export function registerCore(bind: CanvasBindings) {
             {
               taskType: 'VIDEO',
               capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
-              prompt,
+              prompt: toVideoApiPrompt(prompt),
               parameters,
               projectId: activeProjectId.value,
               nodeId: sourceNodeId,
@@ -3623,7 +3624,7 @@ export function registerCore(bind: CanvasBindings) {
               {
                 taskType: 'VIDEO',
                 capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
-                prompt: trimmedPrompt,
+                prompt: toVideoApiPrompt(trimmedPrompt),
                 parameters: videoParameters,
                 projectId: activeProjectId.value,
                 nodeId: resultNode.id,
