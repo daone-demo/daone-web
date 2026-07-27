@@ -2950,6 +2950,12 @@ export function registerCore(bind: CanvasBindings) {
     activeVideoDialogueNodeId = ''
   }
 
+  /** 关闭图片/视频节点底部对话框（打开连线菜单等互斥浮层时调用） */
+  function closeNodeDialoguePanels() {
+    if (showImageDialogue.value) resetImageDialogue()
+    if (showVideoDialogue.value) resetVideoDialogue()
+  }
+
   function triggerFileInputClick(
     accept: string,
     filter: UploadFilter,
@@ -4508,6 +4514,7 @@ export function registerCore(bind: CanvasBindings) {
     if (!g || !overlayRoot) return
 
     closeAddMenu()
+    closeNodeDialoguePanels()
     connectSourceNodeId.value = source.id
     connectReleasePoint.value = releasePoint
     const { left, top } = getConnectMenuPosition(
