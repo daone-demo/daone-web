@@ -13,6 +13,7 @@
     <button
       type="button"
       class="node-port-plus"
+      :style="portPlusStyle"
       title="添加连线节点"
       @mousedown.stop="onPlusPointerDown"
     >
@@ -123,6 +124,7 @@ import {
 import { createEmptyNodeData } from '../constants'
 import type { CanvasGraph } from '../graph'
 import { useNodeConnect } from './useNodeConnect'
+import { useNodePortPlusStyle } from './useNodePortPlusStyle'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import type { TextEditorApi } from './useTextEditorRegistry'
 import { syncNodeViewData } from './syncNodeViewData'
@@ -163,6 +165,7 @@ if (!vsvProto.__btnPatched) {
 const getNode = inject<() => Node>('getNode')!
 const { isLightTheme } = useCanvasBgTheme()
 const { onPlusPointerDown } = useNodeConnect()
+const { portPlusStyle } = useNodePortPlusStyle()
 
 /**
  * 删除当前文本节点：不依赖外部链路（可能被清理函数中断），

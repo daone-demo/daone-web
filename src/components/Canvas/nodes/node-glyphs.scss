@@ -14,13 +14,13 @@
   }
 
   &::before {
-    width: $arm;
-    height: $stroke;
+    width: var(--node-port-plus-arm, #{$arm});
+    height: var(--node-port-plus-stroke, #{$stroke});
   }
 
   &::after {
-    width: $stroke;
-    height: $arm;
+    width: var(--node-port-plus-stroke, #{$stroke});
+    height: var(--node-port-plus-arm, #{$arm});
   }
 }
 

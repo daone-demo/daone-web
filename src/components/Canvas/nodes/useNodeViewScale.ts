@@ -1,10 +1,9 @@
 import { inject, ref } from 'vue'
 import type { Node } from '@antv/x6'
 import type { CanvasNodeData } from '../constants'
-import { getBaseNodeSize } from '../graph'
+import { getBaseNodeSize, IMAGE_NODE_MIN_VIEW_SCALE } from '../graph'
 
-const MIN_VIEW_SCALE = 0.35
-const MAX_VIEW_SCALE = 3
+const MIN_VIEW_SCALE = IMAGE_NODE_MIN_VIEW_SCALE
 
 export function useNodeViewScale() {
   const getNode = inject<() => Node>('getNode')!
@@ -37,7 +36,7 @@ export function useNodeViewScale() {
       const delta = (dx + dy) / 2
       const nextScale = Math.max(
         MIN_VIEW_SCALE,
-        Math.min(MAX_VIEW_SCALE, startScale + delta / baseSize.width),
+        startScale + delta / baseSize.width,
       )
 
       previewScale.value = nextScale

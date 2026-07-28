@@ -10,6 +10,7 @@
     <button
       type="button"
       class="node-port-plus"
+      :style="portPlusStyle"
       title="添加连线节点"
       @mousedown.stop="onPlusPointerDown"
     >
@@ -74,12 +75,14 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import type { CanvasNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
+import { useNodePortPlusStyle } from './useNodePortPlusStyle'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import { syncNodeViewData } from './syncNodeViewData'
 
 const getNode = inject<() => Node>('getNode')!
 const { removeSelf } = useNodeDelete()
 const { onPlusPointerDown } = useNodeConnect()
+const { portPlusStyle } = useNodePortPlusStyle()
 const { isLightTheme } = useCanvasBgTheme()
 
 const viewerRef = ref<HTMLDivElement | null>(null)

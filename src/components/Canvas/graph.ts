@@ -34,7 +34,6 @@ import {
 } from './constants'
 
 export const IMAGE_NODE_MIN_VIEW_SCALE = 0.35
-export const IMAGE_NODE_MAX_VIEW_SCALE = 3
 
 export function canResizeImageNode(data?: Partial<CanvasNodeData>) {
   if (!data || data.kind !== 'image') return false
@@ -68,10 +67,7 @@ export function getImageNodeViewScale(node: Node) {
   const baseSize = getBaseNodeSize(data.kind, data.mode, { ...data, viewScale: 1 })
   if (!baseSize.width) return data.viewScale ?? 1
   const scale = node.getSize().width / baseSize.width
-  return Math.max(
-    IMAGE_NODE_MIN_VIEW_SCALE,
-    Math.min(IMAGE_NODE_MAX_VIEW_SCALE, scale),
-  )
+  return Math.max(IMAGE_NODE_MIN_VIEW_SCALE, scale)
 }
 
 export function getImageNodeDisplayDimensions(node: Node) {
@@ -202,7 +198,7 @@ export function startImageNodeCornerResize(
 
     const nextScale = Math.max(
       IMAGE_NODE_MIN_VIEW_SCALE,
-      Math.min(IMAGE_NODE_MAX_VIEW_SCALE, startScale + delta / baseSize.width),
+      startScale + delta / baseSize.width,
     )
 
     const minWidth = getImageNodeResizeMinWidth(data)

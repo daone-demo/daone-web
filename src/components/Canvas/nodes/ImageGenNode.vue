@@ -12,6 +12,7 @@
     <button
       type="button"
       class="node-port-plus"
+      :style="portPlusStyle"
       title="添加连线节点"
       @mousedown.stop="onPlusPointerDown"
     >
@@ -146,6 +147,7 @@ import type { CanvasNodeData } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
+import { useNodePortPlusStyle } from './useNodePortPlusStyle'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import { syncNodeViewData } from './syncNodeViewData'
 import { useCanvasNodeImage } from './useCanvasNodeImage'
@@ -156,6 +158,7 @@ const requestCanvasUpload = inject<(nodeId: string) => void>('requestCanvasUploa
 const uploadFileToCanvasNode = inject<(nodeId: string, file: File) => void>('uploadFileToCanvasNode')
 const { removeSelf } = useNodeDelete()
 const { onPlusPointerDown } = useNodeConnect()
+const { portPlusStyle } = useNodePortPlusStyle()
 
 const data = reactive<CanvasNodeData>({
   ...createEmptyNodeData(),
