@@ -22,7 +22,7 @@
     </button>
 
     <button
-      v-if="!hasVideoPreview"
+      v-if="!hasVideoPreview && !isFileUploading"
       type="button"
       class="canvas-node__delete-float"
       title="删除节点"
@@ -215,6 +215,7 @@
 import { computed, inject, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import type { Node } from '@antv/x6'
 import type { CanvasNodeData } from '../constants'
+import { isNodeFileUploading } from '../constants'
 import type { CanvasGraph } from '../graph'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
@@ -272,6 +273,8 @@ const isVideoGenerating = computed(
 const hasVideoPreview = computed(
   () => Boolean(data.previewUrl?.trim()) && !isVideoGenerating.value,
 )
+
+const isFileUploading = computed(() => isNodeFileUploading(data))
 
 const genProgressText = computed(() => {
   const progress = data.uploadProgress ?? 0
@@ -462,7 +465,7 @@ onBeforeUnmount(() => {
 .video-node__video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   background: #111;
 }

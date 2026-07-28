@@ -122,6 +122,19 @@
       </div>
 
       <div ref="cursorRef" class="image-inpaint-overlay__cursor" aria-hidden="true" />
+
+      <button
+        v-if="isImageOutOfView"
+        type="button"
+        class="image-inpaint-overlay__recenter"
+        @click.stop="recenterView"
+        @pointerdown.stop
+        @pointerup.stop
+        @mousedown.stop
+      >
+        <span class="image-inpaint-overlay__icon image-inpaint-overlay__icon--fit" aria-hidden="true" />
+        回到视图中心
+      </button>
     </div>
 
     <div class="image-inpaint-overlay__prompt">
@@ -140,13 +153,12 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
-  drawEraseDot,
-  drawEraseSegment,
   exportEraseMask,
   getEraseImageBounds,
   INPAINT_BRUSH_DISPLAY_COLOR,
+  normalizedPointToStage,
   redrawEraseDisplayCanvas,
-  type ErasePoint,
+  stagePointToNormalized,
   type EraseStroke,
 } from './eraseUtils'
 
@@ -166,7 +178,7 @@ const emit = defineEmits<{
 }>()
 
 const DRAG_IGNORE_SELECTOR =
-  'button, textarea, input, select, a, [contenteditable], .ant-dropdown, .ant-dropdown-menu, .image-inpaint-overlay__stage, .image-inpaint-overlay__stage *'
+  'button, textarea, input, select, a, [contenteditable], .ant-dropdown, .ant-dropdown-menu, .image-inpaint-overlay__stage, .image-inpaint-overlay__stage *, .image-inpaint-overlay__recenter'
 
 const MIN_VIEW_SCALE = 0.25
 const MAX_VIEW_SCALE = 6
@@ -200,7 +212,6 @@ const redoStack = shallowRef<EraseStroke[]>([])
 let drawing = false
 let activePointerId: number | null = null
 let currentStroke: EraseStroke | null = null
-let paintCtx: CanvasRenderingContext2D | null = null
 let rafId = 0
 let pendingPointer: { x: number; y: number } | null = null
 let panPointerId: number | null = null
@@ -246,6 +257,26 @@ const isDefaultView = computed(
     Math.abs(viewPan.value.y) < 0.5,
 )
 
+const isImageOutOfView = computed(() => {
+  const bounds = imageBounds.value
+  const stage = stageSize.value
+  if (!bounds.width || !bounds.height || !stage.width || !stage.height) {
+    return false
+  }
+
+  return (
+    bounds.x + bounds.width <= 0 ||
+    bounds.y + bounds.height <= 0 ||
+    bounds.x >= stage.width ||
+    bounds.y >= stage.height
+  )
+})
+
+function recenterView() {
+  viewPan.value = { x: 0, y: 0 }
+  refreshDisplayCanvas()
+}
+
 function resetView() {
   viewScale.value = 1
   viewPan.value = { x: 0, y: 0 }
@@ -263,29 +294,6 @@ function zoomAroundImageCenter(scaleFactor: number) {
   refreshDisplayCanvas()
 }
 
-function zoomAtPoint(scaleFactor: number, pointX: number, pointY: number) {
-  const oldBounds = imageBounds.value
-  if (!oldBounds.width || !oldBounds.height) return
-
-  const nextScale = clampViewScale(viewScale.value * scaleFactor)
-  if (nextScale === viewScale.value) return
-
-  const ratioX = (pointX - oldBounds.x) / oldBounds.width
-  const ratioY = (pointY - oldBounds.y) / oldBounds.height
-  const base = baseImageBounds.value
-  const nextWidth = base.width * nextScale
-  const nextHeight = base.height * nextScale
-  const nextCenterX = pointX - ratioX * nextWidth
-  const nextCenterY = pointY - ratioY * nextHeight
-
-  viewScale.value = nextScale
-  viewPan.value = {
-    x: nextCenterX - base.x - base.width / 2,
-    y: nextCenterY - base.y - base.height / 2,
-  }
-  refreshDisplayCanvas()
-}
-
 function zoomIn() {
   zoomAroundImageCenter(ZOOM_STEP)
 }
@@ -295,10 +303,8 @@ function zoomOut() {
 }
 
 function onStageWheel(event: WheelEvent) {
-  const point = getStagePoint(event)
-  if (!point) return
   const factor = Math.exp(-event.deltaY * ZOOM_SENSITIVITY)
-  zoomAtPoint(factor, point.x, point.y)
+  zoomAroundImageCenter(factor)
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
@@ -345,15 +351,6 @@ function getBounds() {
   return imageBounds.value
 }
 
-function getPaintContext() {
-  const canvas = displayCanvasRef.value
-  if (!canvas) return null
-  if (!paintCtx || paintCtx.canvas !== canvas) {
-    paintCtx = canvas.getContext('2d', { alpha: true })
-  }
-  return paintCtx
-}
-
 function refreshDisplayCanvas() {
   const canvas = displayCanvasRef.value
   if (!canvas) return
@@ -361,7 +358,7 @@ function refreshDisplayCanvas() {
     canvas,
     strokes.value,
     getBounds(),
-    null,
+    currentStroke,
     INPAINT_BRUSH_DISPLAY_COLOR,
   )
 }
@@ -411,18 +408,6 @@ function updateCursor(x: number, y: number, visible: boolean) {
   cursor.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`
 }
 
-function paintPointerPoint(point: ErasePoint) {
-  const ctx = getPaintContext()
-  if (!ctx || !currentStroke) return
-  drawEraseDot(ctx, point, currentStroke.size, getBounds(), INPAINT_BRUSH_DISPLAY_COLOR)
-}
-
-function paintPointerSegment(from: ErasePoint, to: ErasePoint) {
-  const ctx = getPaintContext()
-  if (!ctx || !currentStroke) return
-  drawEraseSegment(ctx, from, to, currentStroke.size, getBounds(), INPAINT_BRUSH_DISPLAY_COLOR)
-}
-
 function processPointerPoint(x: number, y: number) {
   if (panning.value || spaceHeld.value || shiftHeld.value) {
     updateCursor(x, y, false)
@@ -433,19 +418,17 @@ function processPointerPoint(x: number, y: number) {
 
   if (!drawing || !currentStroke) return
 
+  const bounds = getBounds()
   const points = currentStroke.points
   const last = points[points.length - 1]
-  const dx = x - last.x
-  const dy = y - last.y
+  const lastStage = normalizedPointToStage(last, bounds)
+  const dx = x - lastStage.x
+  const dy = y - lastStage.y
   if (dx * dx + dy * dy < 1) return
 
-  const next = { x, y }
-  if (points.length === 1) {
-    paintPointerPoint(next)
-  } else {
-    paintPointerSegment(last, next)
-  }
+  const next = stagePointToNormalized({ x, y }, bounds)
   points.push(next)
+  refreshDisplayCanvas()
 }
 
 function schedulePointerPoint(x: number, y: number) {
@@ -470,6 +453,9 @@ function getStagePoint(event: { clientX: number; clientY: number }) {
 }
 
 function onPointerDown(event: PointerEvent) {
+  const target = event.target as HTMLElement | null
+  if (target?.closest('button, .image-inpaint-overlay__recenter')) return
+
   const point = getStagePoint(event)
   if (!point) return
 
@@ -486,11 +472,13 @@ function onPointerDown(event: PointerEvent) {
   activePointerId = event.pointerId
   drawing = true
   redoStack.value = []
+  const bounds = getBounds()
+  const normalized = stagePointToNormalized(point, bounds)
   currentStroke = {
-    points: [{ x: point.x, y: point.y }],
-    size: brushSize.value,
+    points: [normalized],
+    sizeRatio: brushSize.value / bounds.width,
   }
-  paintPointerPoint(point)
+  refreshDisplayCanvas()
 }
 
 function onPointerMove(event: PointerEvent) {
@@ -542,6 +530,7 @@ function onPointerUp(event?: PointerEvent) {
     commitStrokeLists([...strokes.value, currentStroke], redoStack.value)
   }
   currentStroke = null
+  refreshDisplayCanvas()
 }
 
 function onPointerLeave(event: PointerEvent) {
@@ -832,12 +821,43 @@ onBeforeUnmount(() => {
   left: 0;
   display: none;
   margin: 0;
-  border: 2px solid rgba(255, 59, 48, 0.85);
+  border: 1.5px solid rgba(255, 59, 48, 0.72);
   border-radius: 50%;
-  background: rgba(255, 59, 48, 0.35);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
+  background: rgba(255, 59, 48, 0.28);
+  box-shadow: 0 0 6px rgba(255, 59, 48, 0.22);
   pointer-events: none;
   will-change: transform, width, height;
+}
+
+.image-inpaint-overlay__recenter {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.88);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transform: translateX(-50%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+  touch-action: manipulation;
+
+  &:hover {
+    background: rgba(17, 24, 39, 0.95);
+  }
+
+  .image-inpaint-overlay__icon {
+    filter: brightness(0) invert(1);
+  }
 }
 
 .image-inpaint-overlay__prompt {

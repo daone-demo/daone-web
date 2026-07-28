@@ -96,6 +96,70 @@ function fileToBase64(file: File, onReadProgress?: (ratio: number) => void): Pro
   })
 }
 
+function readVideoSizeFromFile(
+  file: File,
+): Promise<{ width: number; height: number; durationSeconds?: number } | null> {
+  if (!file.type.startsWith('video/')) return Promise.resolve(null)
+
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl)
+    }
+
+    video.onloadedmetadata = () => {
+      cleanup()
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        resolve({
+          width: video.videoWidth,
+          height: video.videoHeight,
+          durationSeconds:
+            Number.isFinite(video.duration) && video.duration > 0
+              ? Math.round(video.duration * 10) / 10
+              : undefined,
+        })
+        return
+      }
+      resolve(null)
+    }
+
+    video.onerror = () => {
+      cleanup()
+      resolve(null)
+    }
+
+    video.src = objectUrl
+  })
+}
+
+export function resolveVideoNaturalSize(
+  previewUrl: string,
+): Promise<{ width: number; height: number; durationSeconds?: number }> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.onloadedmetadata = () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        resolve({
+          width: video.videoWidth,
+          height: video.videoHeight,
+          durationSeconds:
+            Number.isFinite(video.duration) && video.duration > 0
+              ? Math.round(video.duration * 10) / 10
+              : undefined,
+        })
+        return
+      }
+      reject(new Error('Failed to read video metadata'))
+    }
+    video.onerror = () => reject(new Error('Failed to load video metadata'))
+    video.src = previewUrl
+  })
+}
+
 export function resolveImageNaturalSize(
   previewUrl: string,
 ): Promise<{ width: number; height: number }> {
@@ -227,7 +291,7 @@ async function uploadCanvasFile(
   }
 }
 
-export function runUploadSimulation(graphNode: Node, file: File) {
+export async function runUploadSimulation(graphNode: Node, file: File) {
   const data = { ...(graphNode.getData() as CanvasNodeData) }
   data.uploadState = 'uploading'
   data.uploadProgress = 0
@@ -237,18 +301,27 @@ export function runUploadSimulation(graphNode: Node, file: File) {
     delete data.generationTaskType
     delete data.generationTaskId
   }
-  graphNode.setData(data)
 
   if (file.type.startsWith('image/')) {
-    void readImageSizeFromFile(file).then((size) => {
-      if (!size) return
-      const current = { ...(graphNode.getData() as CanvasNodeData) }
-      if (current.uploadState !== 'uploading') return
-      current.mediaWidth = size.width
-      current.mediaHeight = size.height
-      graphNode.setData(current)
-    })
+    const size = await readImageSizeFromFile(file)
+    if (size) {
+      data.mediaWidth = size.width
+      data.mediaHeight = size.height
+    }
   }
+
+  if (file.type.startsWith('video/')) {
+    const size = await readVideoSizeFromFile(file)
+    if (size) {
+      data.mediaWidth = size.width
+      data.mediaHeight = size.height
+      if (size.durationSeconds) {
+        data.durationSeconds = size.durationSeconds
+      }
+    }
+  }
+
+  graphNode.setData(data)
 
   void uploadCanvasFile(file, (progress) => {
     const current = { ...(graphNode.getData() as CanvasNodeData) }

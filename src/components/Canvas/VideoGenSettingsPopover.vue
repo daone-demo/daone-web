@@ -96,6 +96,12 @@
       </div>
     </section>
 
+    <div class="video-gen-settings__actions">
+      <button type="button" class="video-gen-settings__confirm" @click="emit('close')">
+        确认
+      </button>
+    </div>
+
     <div class="video-gen-settings__summary">
       <span
         class="video-gen-settings__summary-icon"
@@ -390,6 +396,28 @@ const settingsSummary = computed(() =>
   color: #374151;
   font-size: 12px;
   text-align: right;
+}
+
+.video-gen-settings__actions {
+  margin-top: 14px;
+  padding: 0 2px;
+}
+
+.video-gen-settings__confirm {
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: #111827;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: #1f2937;
+  }
 }
 
 .video-gen-settings__summary {

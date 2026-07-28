@@ -1914,6 +1914,36 @@ export function computeVideoNodeSizeByAspectRatio(
   }
 }
 
+/** 视频节点按原始媒体比例自适应高度（含用户上传中） */
+export function shouldAdaptVideoNodeHeight(data?: Partial<CanvasNodeData>) {
+  if (!data) return false
+  if (data.kind !== 'video') return false
+  if (!(data.mediaWidth! > 0 && data.mediaHeight! > 0)) return false
+
+  const isGenerating =
+    data.uploadState === 'uploading' &&
+    (data.generationTaskType === 'VIDEO' || Boolean(data.generationTaskId))
+  if (isGenerating) return false
+
+  if (data.previewUrl?.trim()) return true
+  if (data.uploadState === 'uploading' && data.mode === 'editor') return true
+
+  return false
+}
+
+export function getVideoAdaptiveNodeSize(data: Partial<CanvasNodeData>) {
+  const mediaW = data.mediaWidth ?? 0
+  const mediaH = data.mediaHeight ?? 0
+  if (!mediaW || !mediaH) {
+    return { ...NODE_SIZE.video.media }
+  }
+  const width = NODE_SIZE.video.media.width
+  return {
+    width,
+    height: Math.max(120, Math.round((width * mediaH) / mediaW)),
+  }
+}
+
 export const KIND_LABEL: Record<NodeKind, string> = {
   text: '文本节点',
   image: '图片节点',
@@ -1925,6 +1955,13 @@ export const KIND_LABEL: Record<NodeKind, string> = {
 export function formatDimensions(width: number, height: number) {
   if (!width || !height) return ''
   return `${width} × ${height}`
+}
+
+/** 用户本地文件正在上传（显示「上传中」时隐藏删除按钮） */
+export function isNodeFileUploading(data?: Partial<CanvasNodeData>) {
+  if (!data || data.uploadState !== 'uploading') return false
+  if (data.generationTaskType === 'VIDEO' || Boolean(data.generationTaskId)) return false
+  return true
 }
 
 export function isPortrait(width: number, height: number) {

@@ -66,6 +66,12 @@
         </button>
       </div>
     </section>
+
+    <div class="image-gen-settings__actions">
+      <button type="button" class="image-gen-settings__confirm" @click="emit('close')">
+        确认
+      </button>
+    </div>
   </div>
 </template>
 
@@ -267,6 +273,27 @@ const imageCount = computed({
     border-color: #111827;
     background: #fff;
     color: #111827;
+  }
+}
+
+.image-gen-settings__actions {
+  margin-top: 14px;
+}
+
+.image-gen-settings__confirm {
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: #111827;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: #1f2937;
   }
 }
 </style>

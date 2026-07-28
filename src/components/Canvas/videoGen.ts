@@ -1,5 +1,5 @@
 import type { Graph, Node } from '@antv/x6'
-import type { CanvasNodeData, ImageSourceRef } from './constants'
+import type { CanvasNodeData, ImageSourceRef, VideoDialogueMode } from './constants'
 import { isVideoNodeGenerating, resolveVideoAssetId } from './constants'
 
 export type VideoSourceRef = {
@@ -242,7 +242,7 @@ export function resolveVideoGenerationSubmitContext(
   graph: Graph,
   nodeId: string,
   data: CanvasNodeData,
-  options: { payloadMode: string; preferStored?: boolean },
+  options: { payloadMode: VideoDialogueMode; preferStored?: boolean },
 ) {
   const preferStored = options.preferStored ?? true
   const refs = resolveVideoSourceRefsForNode(graph, nodeId, data.videoSourceRefs, preferStored)
@@ -250,7 +250,7 @@ export function resolveVideoGenerationSubmitContext(
     .map((item) => item.assetId)
     .filter((id): id is string => Boolean(id))
   const videoAssetId = resolveVideoAssetId(data)
-  let mode = options.payloadMode
+  let mode: VideoDialogueMode = options.payloadMode
   if (!imageAssetIds.length && !videoAssetId) {
     mode = 'text-to-video'
   }

@@ -64,6 +64,7 @@ type GridSplitCanvasApi = Pick<
     | 'persistImageDialogueFields'
     | 'persistVideoDialogueFields'
     | 'videoDialogueSourceRefs'
+    | 'videoGenSavedSettings'
     | 'showVideoDialoguePanel'
   >
 

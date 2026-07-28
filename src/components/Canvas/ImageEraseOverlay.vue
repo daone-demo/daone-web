@@ -94,11 +94,15 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { message } from 'ant-design-vue'
 import {
-  drawEraseDot,
-  drawEraseSegment,
+  drawEraseDotLocal,
+  drawEraseSegmentLocal,
   exportErasedImage,
   getEraseImageBounds,
+  getStrokeDisplaySize,
+  normalizedPointToDisplay,
+  normalizedPointToStage,
   redrawEraseDisplayCanvas,
+  stagePointToNormalized,
   type ErasePoint,
   type EraseStroke,
 } from './eraseUtils'
@@ -218,16 +222,27 @@ function updateCursor(x: number, y: number, visible: boolean) {
   cursor.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`
 }
 
-function paintPointerPoint(point: ErasePoint) {
+function paintPointerPoint(normalized: ErasePoint) {
   const ctx = getPaintContext()
   if (!ctx || !currentStroke) return
-  drawEraseDot(ctx, point, currentStroke.size, getBounds())
+  const bounds = getBounds()
+  drawEraseDotLocal(
+    ctx,
+    normalizedPointToDisplay(normalized, bounds),
+    getStrokeDisplaySize(currentStroke, bounds),
+  )
 }
 
 function paintPointerSegment(from: ErasePoint, to: ErasePoint) {
   const ctx = getPaintContext()
   if (!ctx || !currentStroke) return
-  drawEraseSegment(ctx, from, to, currentStroke.size, getBounds())
+  const bounds = getBounds()
+  drawEraseSegmentLocal(
+    ctx,
+    normalizedPointToDisplay(from, bounds),
+    normalizedPointToDisplay(to, bounds),
+    getStrokeDisplaySize(currentStroke, bounds),
+  )
 }
 
 function processPointerPoint(x: number, y: number) {
@@ -235,13 +250,15 @@ function processPointerPoint(x: number, y: number) {
 
   if (!drawing || !currentStroke) return
 
+  const bounds = getBounds()
   const points = currentStroke.points
   const last = points[points.length - 1]
-  const dx = x - last.x
-  const dy = y - last.y
+  const lastStage = normalizedPointToStage(last, bounds)
+  const dx = x - lastStage.x
+  const dy = y - lastStage.y
   if (dx * dx + dy * dy < 1) return
 
-  const next = { x, y }
+  const next = stagePointToNormalized({ x, y }, bounds)
   if (points.length === 1) {
     paintPointerPoint(next)
   } else {
@@ -281,11 +298,13 @@ function onPointerDown(event: PointerEvent) {
   activePointerId = event.pointerId
   drawing = true
   redoStack.value = []
+  const bounds = getBounds()
+  const normalized = stagePointToNormalized(point, bounds)
   currentStroke = {
-    points: [{ x: point.x, y: point.y }],
-    size: brushSize.value,
+    points: [normalized],
+    sizeRatio: brushSize.value / bounds.width,
   }
-  paintPointerPoint(point)
+  paintPointerPoint(normalized)
 }
 
 function onPointerMove(event: PointerEvent) {

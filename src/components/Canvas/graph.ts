@@ -7,7 +7,7 @@ import { register } from '@antv/x6-vue-shape'
 import { getDefaultEdgeStroke } from './canvasTheme'
 import { bindFlowEdgeInteraction, getFlowEdgeAttrs, getPreviewEdgeAttrs } from './edgeStyle'
 import { canOpenConnectMenu } from './nodeConnect'
-import { resolveImageNaturalSize } from './upload'
+import { resolveImageNaturalSize, resolveVideoNaturalSize } from './upload'
 import '@antv/x6-vue-shape'
 import TextNode from './nodes/TextNode.vue'
 import ImageNode from './nodes/ImageNode.vue'
@@ -30,6 +30,8 @@ import {
   type NodeMode,
   getImageAdaptiveNodeSize,
   shouldAdaptImageNodeHeight,
+  getVideoAdaptiveNodeSize,
+  shouldAdaptVideoNodeHeight,
   computeVideoNodeSizeByAspectRatio,
 } from './constants'
 
@@ -525,6 +527,9 @@ export function getBaseNodeSize(
 
     if ((!hasPreview || isGenerating) && ratio && ratio !== 'auto') {
       return computeVideoNodeSizeByAspectRatio(ratio)
+    }
+    if (data && shouldAdaptVideoNodeHeight(data)) {
+      return getVideoAdaptiveNodeSize(data)
     }
     if (mode === 'picker' || !hasPreview) return NODE_SIZE.video.picker
     return NODE_SIZE.video.media
@@ -1225,10 +1230,50 @@ export async function hydrateImageNodeDimensions(node: Node) {
   }
 }
 
+function needsVideoDimensionHydration(data: CanvasNodeData) {
+  return (
+    data.kind === 'video' &&
+    Boolean(data.previewUrl?.trim()) &&
+    !(data.mediaWidth! > 0 && data.mediaHeight! > 0)
+  )
+}
+
+export async function hydrateVideoNodeDimensions(node: Node) {
+  const data = node.getData() as CanvasNodeData
+  if (!needsVideoDimensionHydration(data)) {
+    return data.mediaWidth! > 0 && data.mediaHeight! > 0
+  }
+
+  try {
+    const meta = await resolveVideoNaturalSize(data.previewUrl)
+    const current = { ...(node.getData() as CanvasNodeData) }
+    if (current.previewUrl !== data.previewUrl) return false
+    current.mediaWidth = meta.width
+    current.mediaHeight = meta.height
+    if (meta.durationSeconds) {
+      current.durationSeconds = meta.durationSeconds
+    }
+    node.setData(current)
+    syncNodeShapeFromData(node)
+    const size = getNodeSize(current.kind, current.mode, current)
+    node.resize(size.width, size.height)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** 画布恢复后，为缺失尺寸的图片节点补全 mediaWidth/mediaHeight */
 export async function hydrateMissingImageNodeDimensions(graph: Graph) {
-  const nodes = graph.getNodes().filter((node) =>
-    needsImageDimensionHydration(node.getData() as CanvasNodeData),
+  const nodes = graph.getNodes().filter((node) => {
+    const data = node.getData() as CanvasNodeData
+    return needsImageDimensionHydration(data) || needsVideoDimensionHydration(data)
+  })
+  await Promise.allSettled(
+    nodes.map((node) => {
+      const data = node.getData() as CanvasNodeData
+      if (data.kind === 'video') return hydrateVideoNodeDimensions(node)
+      return hydrateImageNodeDimensions(node)
+    }),
   )
-  await Promise.allSettled(nodes.map((node) => hydrateImageNodeDimensions(node)))
 }

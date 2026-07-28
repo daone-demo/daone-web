@@ -371,7 +371,7 @@ const selectedModelName = computed(
 
 const qualityLabel = computed(() => {
   const aspectLabel = genAspectRatio.value === 'auto' ? '自适应' : genAspectRatio.value
-  return `${aspectLabel} · 标准画质 · ${genResolution.value}`
+  return `${aspectLabel} · ${genResolution.value} · x${genImageCount.value}`
 })
 
 function syncDialogueDefaultsFromChatTools() {

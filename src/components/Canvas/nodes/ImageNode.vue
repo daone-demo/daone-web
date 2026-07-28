@@ -25,7 +25,7 @@
     </button>
 
     <button
-      v-if="(!data.previewUrl || data.compactPreview) && !isGridSplitNode"
+      v-if="(!data.previewUrl || data.compactPreview) && !isGridSplitNode && !isFileUploading"
       type="button"
       class="canvas-node__delete-float"
       title="删除节点"
@@ -42,18 +42,19 @@
         <span class="image-node__title-text">{{ data.title }}</span>
       </span>
       <span v-if="dimensionLabel" class="image-node__size">{{ dimensionLabel }}</span>
+    </div>
+
+    <div class="image-node__body">
       <button
+        v-if="data.previewUrl && !data.compactPreview && !isGridSplitNode && !isFileUploading"
         type="button"
-        class="canvas-node__delete"
+        class="canvas-node__delete-float image-node__preview-delete"
         title="删除节点"
         @mousedown.stop
         @click="removeSelf"
       >
         ×
       </button>
-    </div>
-
-    <div class="image-node__body">
       <input
         v-if="!isGridSplitNode"
         type="file"
@@ -141,7 +142,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Node } from '@antv/x6'
-import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
+import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
 import type { CanvasNodeData } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
@@ -166,6 +167,7 @@ const data = reactive<CanvasNodeData>({ ...createEmptyNodeData(), kind: 'image',
 const { displayUrl, isImageLoading, onImageLoad, onImageError } = useCanvasNodeImage(toRef(data, 'previewUrl'))
 const isGridSplitNode = computed(() => Boolean(data.gridSplitTile))
 const hasAdaptivePreview = computed(() => shouldAdaptImageNodeHeight(data))
+const isFileUploading = computed(() => isNodeFileUploading(data))
 
 const genProgressText = computed(() => {
   const progress = data.imageGenProgress ?? 0
@@ -414,6 +416,24 @@ onMounted(() => {
   border-radius: 14px;
   background: #1e1e22;
   box-sizing: border-box;
+}
+
+.image-node__preview-delete {
+  top: -30px;
+  right: -30px;
+  z-index: 4;
+  border-radius: 50%;
+  background: rgba(125, 125, 125, 0.72);
+  opacity: 0;
+}
+
+.image-node:hover .image-node__preview-delete,
+.image-node--selected .image-node__preview-delete {
+  opacity: 1;
+}
+
+.image-node__preview-delete:hover {
+  background: rgba(17, 24, 39, 0.9);
 }
 
 .image-node--selected .image-node__body {
