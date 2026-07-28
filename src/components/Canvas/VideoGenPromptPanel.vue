@@ -290,6 +290,7 @@ import {
   formatVideoGenSettings,
   type ChatTools,
   type VideoDialogueModelItem,
+  type VideoDialogueSettings,
   type VideoGenAspectRatio,
   type VideoGenDuration,
   type VideoGenResolution,
@@ -315,6 +316,7 @@ const props = defineProps<{
   activeTab: string
   aspectRatio?: VideoGenAspectRatio
   sourceRefs?: VideoSourceRef[]
+  savedSettings?: Partial<VideoDialogueSettings> | null
   elementSelectMode?: boolean
   chatTools?: ChatTools | null
 }>()
@@ -418,9 +420,28 @@ function syncToolbarDefaultsFromChatTools() {
   }
 }
 
+function applySavedSettings(saved?: Partial<VideoDialogueSettings> | null) {
+  if (!saved) return
+  if (saved.modelKey) selectedModelKey.value = saved.modelKey
+  if (saved.aspectRatio) videoAspectRatio.value = saved.aspectRatio
+  if (saved.resolution) videoResolution.value = saved.resolution
+  if (saved.duration !== undefined) videoDuration.value = saved.duration
+  if (saved.generateAudio !== undefined) generateAudio.value = saved.generateAudio
+  if (saved.videoCount !== undefined) emit('update:videoNum', saved.videoCount)
+}
+
 watch(
   () => props.chatTools,
   () => {
+    syncToolbarDefaultsFromChatTools()
+  },
+  { immediate: true, deep: true },
+)
+
+watch(
+  () => props.savedSettings,
+  (saved) => {
+    applySavedSettings(saved)
     syncToolbarDefaultsFromChatTools()
   },
   { immediate: true, deep: true },

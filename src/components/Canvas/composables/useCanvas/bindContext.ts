@@ -37,7 +37,7 @@ export const BIND_KEYS = [
   'canvasHistory', 'historyPushTimer', 'scrollerScrollTarget', 'textEditorApis',
   'groupOverlayDrag', 'groupMoveState', 'zoomPercent', 'currentProjectName', 'canvasBgThemeLabel',
   'activeGroupSelection', 'showGroupToolbar', 'showPromptBar', 'showImageGenPromptBar',
-  'showVideoGenPromptBar', 'videoGenSourceRefs', 'videoDialogueSourceRefs', 'onVideoGenAspectRatioChange', 'showImageCreativeToolbar',
+  'showVideoGenPromptBar', 'videoGenSourceRefs', 'videoGenSavedSettings', 'videoDialogueSourceRefs', 'onVideoGenAspectRatioChange', 'showImageCreativeToolbar',
   'showTextFormatToolbar', 'isImg2PromptTask', 'isText2VideoTask', 'isText2ImageTask', 'promptSubmitLabel', 'canSubmitTextPrompt', 'imageCropSource',
   'imageGridSplitSource', 'imageEraseSource', 'imageInpaintSource', 'imageExpandSource', 'imageDialoguePreviews', 'imageDialoguePreviewUrl', 'showNodeToolbar', 'showMultiSelectToolbar',
   'showToolbarFeatureButtons', 'isLightNodeToolbar', 'altVoiceTimer', 'bindKeyboard',

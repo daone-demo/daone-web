@@ -213,6 +213,7 @@
       :video-gen-active-tab="videoGenActiveTab"
       :video-gen-aspect-ratio="videoGenAspectRatio"
       :video-gen-source-refs="videoGenSourceRefs"
+      :video-gen-saved-settings="videoGenSavedSettings"
       :video-dialogue-source-refs="videoDialogueSourceRefs"
       :element-select-mode="showElementSelectMode"
       :image-dialogue-text="imageDialogueText"
@@ -670,6 +671,7 @@ const {
   videoGenPromptPos,
   videoGenPromptText,
   videoGenSourceRefs,
+  videoGenSavedSettings,
   videoDialogueSourceRefs,
   videoHdMagnification,
   videoHdPos,

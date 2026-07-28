@@ -378,6 +378,7 @@ export function markVideoGenerationNodeFailed(node: Node, errorMessage?: string)
   data.uploadState = 'idle'
   data.uploadProgress = 0
   delete data.generationTaskType
+  delete data.generationTaskId
   if (errorMessage) data.title = '生成失败'
   setNodeData(node, data)
 }

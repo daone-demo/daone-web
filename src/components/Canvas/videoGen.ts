@@ -1,5 +1,6 @@
 import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData, ImageSourceRef } from './constants'
+import { isVideoNodeGenerating, resolveVideoAssetId } from './constants'
 
 export type VideoSourceRef = {
   nodeId: string
@@ -201,4 +202,79 @@ export function getVideoGenTabValidation(tab: string, count: number): string | n
 
 export function canLinkImageToNode(targetData: CanvasNodeData) {
   return targetData.kind === 'video' || targetData.kind === 'text'
+}
+
+/** 视频生成失败、尚未成片的节点（可原地重试） */
+export function isVideoGenerationFailedNode(data: CanvasNodeData | undefined): boolean {
+  if (!data || data.kind !== 'video') return false
+  if (data.previewUrl?.trim()) return false
+  if (isVideoNodeGenerating(data)) return false
+  return Boolean(
+    data.generationTaskId ||
+      data.videoDialogueSettings ||
+      data.genPrompt?.trim() ||
+      data.videoDialogueText?.trim() ||
+      data.title === '生成失败' ||
+      (data.uploadState === 'idle' && data.mode === 'editor' && data.sourceNodeId),
+  )
+}
+
+/** 查找可复用的失败生成节点：当前节点本身，或连出的失败子节点 */
+export function findReusableVideoGenerationNode(graph: Graph, sourceNode: Node): Node | null {
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  if (isVideoGenerationFailedNode(sourceData)) return sourceNode
+
+  let candidate: Node | null = null
+  for (const edge of graph.getEdges()) {
+    if (edge.getSourceCellId() !== sourceNode.id) continue
+    const target = graph.getCellById(edge.getTargetCellId()!)
+    if (!target?.isNode()) continue
+    const data = target.getData() as CanvasNodeData
+    if (isVideoGenerationFailedNode(data)) {
+      candidate = target as Node
+    }
+  }
+  return candidate
+}
+
+/** 提交前解析参考图与生成模式（含失败重试时的溯源快照） */
+export function resolveVideoGenerationSubmitContext(
+  graph: Graph,
+  nodeId: string,
+  data: CanvasNodeData,
+  options: { payloadMode: string; preferStored?: boolean },
+) {
+  const preferStored = options.preferStored ?? true
+  const refs = resolveVideoSourceRefsForNode(graph, nodeId, data.videoSourceRefs, preferStored)
+  const imageAssetIds = refs
+    .map((item) => item.assetId)
+    .filter((id): id is string => Boolean(id))
+  const videoAssetId = resolveVideoAssetId(data)
+  let mode = options.payloadMode
+  if (!imageAssetIds.length && !videoAssetId) {
+    mode = 'text-to-video'
+  }
+  return { refs, imageAssetIds, videoAssetId, mode }
+}
+
+/** 将失败节点重置为生成中，用于原地重试 */
+export function resetVideoGenerationNodeForRetry(
+  node: Node,
+  options: { title: string; fileName: string; prompt?: string },
+) {
+  const data = { ...(node.getData() as CanvasNodeData) }
+  data.kind = 'video'
+  data.mode = 'editor'
+  data.uploadState = 'uploading'
+  data.uploadProgress = 0
+  data.generationTaskType = 'VIDEO'
+  data.title = options.title
+  data.fileName = options.fileName
+  data.previewUrl = ''
+  delete data.generationTaskId
+  if (options.prompt) {
+    data.genPrompt = options.prompt
+    data.videoDialogueText = options.prompt
+  }
+  node.setData(data, { overwrite: true })
 }

@@ -34,6 +34,9 @@ export {
   spawnVideoGenerationResultNode,
   spawnTextPromptResultNode,
   findOutgoingLoadingGenerationNode,
+  reserveOutgoingBatchColumnOffset,
+  resolveOutgoingResultNodePoint,
+  planOutgoingResultPoints,
 } from '../../imageGen'
 export {
   canImageNodeAcceptIncoming,
@@ -126,6 +129,10 @@ export {
   toPersistedVideoSourceRefs,
   plainTextFromNodeContent,
   VIDEO_GEN_TAB_IMAGE_RULES,
+  isVideoGenerationFailedNode,
+  findReusableVideoGenerationNode,
+  resolveVideoGenerationSubmitContext,
+  resetVideoGenerationNodeForRetry,
 } from '../../videoGen'
 export { useCanvasKeyboard } from '../useCanvasKeyboard'
 export { default as api } from '@/services/api'

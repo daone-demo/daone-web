@@ -38,10 +38,17 @@
           <span class="image-crop-overlay__icon image-crop-overlay__icon--rotate-right" aria-hidden="true" />
         </button>
         <button type="button" class="image-crop-overlay__icon-btn" title="水平翻转" @click="flipX = !flipX">
-          <span class="image-crop-overlay__icon image-crop-overlay__icon--flip-x" aria-hidden="true" />
+          <img
+            src="@/assets/images/out.png"
+            style="width: 12px; height: auto;"
+          />
         </button>
         <button type="button" class="image-crop-overlay__icon-btn" title="垂直翻转" @click="flipY = !flipY">
-          <span class="image-crop-overlay__icon image-crop-overlay__icon--flip-y" aria-hidden="true" />
+          <!-- <span class="image-crop-overlay__icon image-crop-overlay__icon--flip-y" aria-hidden="true" /> -->
+          <img
+            src="@/assets/images/up.png"
+            style="width: 12px; height: auto;"
+          />
         </button>
         <button type="button" class="image-crop-overlay__icon-btn" title="重置" @click="resetTransform">
           <span class="image-crop-overlay__icon image-crop-overlay__icon--reset" aria-hidden="true" />

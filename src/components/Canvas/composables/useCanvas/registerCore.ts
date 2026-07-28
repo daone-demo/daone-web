@@ -17,7 +17,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu,
+  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
   getConnectMenuPosition, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -30,7 +30,7 @@ import {
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
-  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES,
+  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
 import {
@@ -405,7 +405,21 @@ export function registerCore(bind: CanvasBindings) {
     const id = activeVideoGenPromptNodeId.value
     if (!g || !id) return []
     const data = g.getCellById(id)?.getData() as CanvasNodeData | undefined
-    return resolveVideoSourceRefsForNode(g, id, data?.videoSourceRefs, false)
+    return resolveVideoSourceRefsForNode(
+      g,
+      id,
+      data?.videoSourceRefs,
+      isVideoGenerationFailedNode(data),
+    )
+  })
+
+  const videoGenSavedSettings = computed(() => {
+    void toolbarRevision.value
+    const g = graph.value
+    const id = activeVideoGenPromptNodeId.value
+    if (!g || !id) return undefined
+    const data = g.getCellById(id)?.getData() as CanvasNodeData | undefined
+    return data?.videoDialogueSettings
   })
 
   const videoDialogueSourceRefs = computed(() => {
@@ -1252,7 +1266,6 @@ export function registerCore(bind: CanvasBindings) {
     resetVideoFramesPanel()
 
     const sourceFileName = sourceData.fileName || sourceData.title || ''
-    const fileName = config.buildFileName(sourceFileName)
     const taskParameters = config.buildParameters(event)
     const referenceAssetIds =
       config.resolveReferenceAssetIds?.(event) ??
@@ -1275,74 +1288,128 @@ export function registerCore(bind: CanvasBindings) {
     sourceNode.setData(midData, { overwrite: true })
 
     const refreshedSource = sourceNode.getData() as CanvasNodeData
-    const resultNode = spawnVideoGenerationResultNode(g, sourceNode, {
-      title: config.title,
-      fileName,
-      videoDialogueText: refreshedSource.videoDialogueText || prompt,
-      videoDialogueSettings: refreshedSource.videoDialogueSettings,
-      videoSourceRefs: refreshedSource.videoSourceRefs,
-      genPrompt: refreshedSource.genPrompt || prompt,
-    })
+    const requestedCount = Math.max(1, Math.floor(Number(taskParameters.videoCount)) || 1)
+    const singleTaskParameters = { ...taskParameters, videoCount: 1 }
+    const buildIndexedFileName = (index: number) =>
+      resolveGenerationResultFileName(
+        config.buildFileName,
+        sourceFileName,
+        index,
+        requestedCount,
+      )
 
-    // 结果节点也挂上参考图连线，对话框可直接读到 live refs
-    for (const ref of liveSourceRefs) {
-      if (!findImageToVideoEdge(g, ref.nodeId, resultNode.id)) {
-        connectGenEdge(g, ref.nodeId, resultNode.id)
+    const connectRefsToVideoNode = (node: Node) => {
+      for (const ref of liveSourceRefs) {
+        if (!findImageToVideoEdge(g, ref.nodeId, node.id)) {
+          connectGenEdge(g, ref.nodeId, node.id)
+        }
       }
     }
 
-    selectedNodeId.value = resultNode.id
+    const resultNodes: Node[] = []
+    const reusableNode = requestedCount === 1 ? findReusableVideoGenerationNode(g, sourceNode) : null
+
+    if (reusableNode) {
+      resultNodes.push(reusableNode)
+      resetVideoGenerationNodeForRetry(reusableNode, {
+        title: config.title,
+        fileName: buildIndexedFileName(0),
+        prompt,
+      })
+      const retryData = { ...(reusableNode.getData() as CanvasNodeData) }
+      retryData.videoDialogueText = refreshedSource.videoDialogueText || prompt
+      retryData.genPrompt = refreshedSource.genPrompt || prompt
+      retryData.videoDialogueSettings = refreshedSource.videoDialogueSettings
+        ? { ...refreshedSource.videoDialogueSettings }
+        : retryData.videoDialogueSettings
+      retryData.videoSourceRefs = refreshedSource.videoSourceRefs?.length
+        ? refreshedSource.videoSourceRefs.map((item) => ({ ...item }))
+        : toPersistedVideoSourceRefs(liveSourceRefs)
+      reusableNode.setData(retryData, { overwrite: true })
+      connectRefsToVideoNode(reusableNode)
+    } else {
+      const layoutSize = resolveVideoResultLayoutSize(refreshedSource)
+      const plannedPoints = planOutgoingResultPoints(
+        g,
+        sourceNode,
+        layoutSize,
+        requestedCount,
+        'right',
+      )
+
+      for (let index = 0; index < requestedCount; index += 1) {
+        const resultNode = spawnVideoGenerationResultNode(g, sourceNode, {
+          title: config.title,
+          fileName: buildIndexedFileName(index),
+          videoDialogueText: refreshedSource.videoDialogueText || prompt,
+          videoDialogueSettings: refreshedSource.videoDialogueSettings,
+          videoSourceRefs: refreshedSource.videoSourceRefs,
+          genPrompt: refreshedSource.genPrompt || prompt,
+          centerPoint: plannedPoints[index],
+        })
+        connectRefsToVideoNode(resultNode)
+        resultNodes.push(resultNode)
+      }
+    }
+
+    const primaryNode = resultNodes[0]
+    selectedNodeId.value = primaryNode.id
     selectedKind.value = 'video'
-    syncNodeSelectionHighlight(resultNode.id)
+    syncNodeSelectionHighlight(primaryNode.id)
     syncNodeCount()
     bumpToolbarRevision()
     updateNodeToolbar()
     scheduleHistoryPush()
 
-    const idempotencyKey =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `video-cap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    void Promise.all(
+      resultNodes.map(async (resultNode, index) => {
+        const nodeFileName = buildIndexedFileName(index)
+        const idempotencyKey =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `video-cap-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`
 
-    try {
-      const created = normalizeGenerationTaskDetail(
-        await api.createGenerationTask<GenerationTaskDetail>(
-          {
-            taskType: 'VIDEO',
-            capabilityCode: config.capabilityCode,
-            prompt: toVideoApiPrompt(config.prompt?.trim() ?? ''),
-            parameters: taskParameters,
-            projectId: activeProjectId.value,
-            nodeId: resultNode.id,
-            referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
-          },
-          idempotencyKey,
-        ),
-      )
+        try {
+          const created = normalizeGenerationTaskDetail(
+            await api.createGenerationTask<GenerationTaskDetail>(
+              {
+                taskType: 'VIDEO',
+                capabilityCode: config.capabilityCode,
+                prompt: toVideoApiPrompt(config.prompt?.trim() ?? ''),
+                parameters: singleTaskParameters,
+                projectId: activeProjectId.value,
+                nodeId: resultNode.id,
+                referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
+              },
+              idempotencyKey,
+            ),
+          )
 
-      const taskId = created.id
-      if (!taskId) {
-        throw new Error(`创建${config.title}任务失败`)
-      }
-      userInfoStore.queryPointAccount();
-      bindGenerationTaskId(resultNode, taskId, 'VIDEO')
-      persistGenerationTaskBinding()
+          const taskId = created.id
+          if (!taskId) {
+            throw new Error(`创建${config.title}任务失败`)
+          }
+          userInfoStore.queryPointAccount()
+          bindGenerationTaskId(resultNode, taskId, 'VIDEO')
+          persistGenerationTaskBinding()
 
-      startVideoGenerationTaskFollow(resultNode, taskId, {
-        title: config.title,
-        fileName,
-        onError: (reason) => message.error(reason),
-        onComplete: (success) => {
-          if (!success) return
-          bumpToolbarRevision()
-          updateNodeToolbar()
-          scheduleHistoryPush()
-        },
-      })
-    } catch (error) {
-      markVideoGenerationNodeFailed(resultNode)
-      message.error(isRequestError(error) ? error.message : `${config.title}失败，请稍后重试`)
-    }
+          startVideoGenerationTaskFollow(resultNode, taskId, {
+            title: config.title,
+            fileName: nodeFileName,
+            onError: (reason) => message.error(reason),
+            onComplete: (success) => {
+              if (!success) return
+              bumpToolbarRevision()
+              updateNodeToolbar()
+              scheduleHistoryPush()
+            },
+          })
+        } catch (error) {
+          markVideoGenerationNodeFailed(resultNode)
+          message.error(isRequestError(error) ? error.message : `${config.title}失败，请稍后重试`)
+        }
+      }),
+    )
   }
 
   function handleVideoDownloadAction(event: VideoToolbarClickEvent) {
@@ -2023,15 +2090,23 @@ export function registerCore(bind: CanvasBindings) {
     updateNodeToolbar()
 
     const resultNodes: Node[] = [sourceNode]
+    const batchPreviewSize = getNodeSize('image', 'editor', {
+      kind: 'image',
+      mode: 'editor',
+      imageGenState: 'loading',
+    })
+    const extraCount = Math.max(0, requestedCount - 1)
+    const plannedPoints =
+      extraCount > 0
+        ? planOutgoingResultPoints(g, sourceNode, batchPreviewSize, extraCount, 'above')
+        : []
 
     for (let index = 1; index < requestedCount; index += 1) {
       resultNodes.push(
         spawnGenerationResultNode(g, sourceNode, {
           title,
           fileName: resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount),
-          layoutSlot: index,
-          layoutTotal: requestedCount,
-          placement: 'above',
+          centerPoint: plannedPoints[index - 1],
         }),
       )
     }
@@ -2144,7 +2219,6 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
-    const data = getSelectedNodeData()
     const g = graph.value
     const sourceNodeId = selectedNodeId.value
     if (!g || !sourceNodeId) return
@@ -2152,17 +2226,17 @@ export function registerCore(bind: CanvasBindings) {
     const sourceCell = g.getCellById(sourceNodeId)
     if (!sourceCell?.isNode()) return
     const sourceNode = sourceCell as Node
+    const sourceData = sourceNode.getData() as CanvasNodeData
 
-    const imageAssetIds = getVideoSourceRefs(g, sourceNodeId)
-      .map((item) => item.assetId)
-      .filter((id): id is string => Boolean(id))
+    const submitCtx = resolveVideoGenerationSubmitContext(g, sourceNodeId, sourceData, {
+      payloadMode: payload.mode,
+      preferStored: true,
+    })
+    const { imageAssetIds, videoAssetId, mode } = submitCtx
     const imageAssetId = imageAssetIds[0] || ''
-    const videoAssetId = resolveVideoAssetId(data) || ''
-    // 有参考图片走对话面板指定 mode；无图片时降级文生视频
-    const mode = imageAssetId ? payload.mode : 'text-to-video'
 
     persistVideoDialogueFields(sourceNodeId)
-    applyVideoGenerationProvenance(sourceNode, { ...payload, prompt, mode })
+    applyVideoGenerationProvenance(sourceNode, { ...payload, prompt, mode }, submitCtx.refs)
     resetVideoDialogue()
 
     const event: VideoToolbarClickEvent = {
@@ -2190,8 +2264,9 @@ export function registerCore(bind: CanvasBindings) {
           generateAudio: payload.generateAudio,
           videoCount: payload.videoCount,
         }
-        if (imageAssetId) {
-          params.assetId = imageAssetId
+        const primaryAssetId = imageAssetId || videoAssetId
+        if (primaryAssetId) {
+          params.assetId = primaryAssetId
         }
         return params
       },
@@ -2221,21 +2296,21 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
-    const imageAssetIds = videoGenSourceRefs.value
-      .map((item) => item.assetId)
-      .filter((id): id is string => Boolean(id))
-    const assetId = imageAssetIds[0] || ''
+    const submitCtx = resolveVideoGenerationSubmitContext(g, sourceNodeId, sourceData, {
+      payloadMode: payload.mode,
+      preferStored: true,
+    })
+    const { imageAssetIds, mode: resolvedMode } = submitCtx
+    const assetId = imageAssetIds[0] || submitCtx.videoAssetId || ''
 
     const needsImage =
       payload.mode === 'reference' ||
       payload.mode === 'image-to-video' ||
       payload.mode === 'first-last-frame'
-    if (needsImage && !assetId) {
+    if (needsImage && !imageAssetIds.length) {
       message.warning('请先连接或上传参考图片')
       return
     }
-
-    const resolvedMode = assetId ? payload.mode : 'text-to-video'
 
     persistVideoGenPrompt()
     closeVideoGenPromptBar()
@@ -2251,7 +2326,7 @@ export function registerCore(bind: CanvasBindings) {
         videoCount: payload.videoCount,
         mode: resolvedMode,
       },
-      videoGenSourceRefs.value,
+      submitCtx.refs,
     )
 
     videoGenAspectRatio.value = payload.ratio as VideoGenAspectRatio
@@ -2259,10 +2334,131 @@ export function registerCore(bind: CanvasBindings) {
 
     const title = buildVideoActionResultTitle('视频生成')
     const sourceFileName = sourceData.fileName || sourceData.title || ''
-    const fileName = sourceFileName ? `视频生成-${sourceFileName}` : '视频生成.mp4'
+    const buildFileName = (name: string) => (name ? `视频生成-${name}` : '视频生成.mp4')
+    const requestedCount = Math.max(1, Math.floor(Number(payload.videoCount)) || 1)
+    const parameters: Record<string, unknown> = {
+      mode: resolvedMode,
+      model: payload.model,
+      ratio: payload.ratio,
+      clarity: toVideoApiClarity(payload.clarity),
+      duration: payload.duration,
+      generateAudio: payload.generateAudio,
+      videoCount: 1,
+    }
+    if (assetId) {
+      parameters.assetId = assetId
+    }
 
-    const provenanceData = sourceNode.getData() as CanvasNodeData
-    sourceNode.setData(
+    const connectRefsToVideoNode = (node: Node) => {
+      for (const ref of submitCtx.refs) {
+        if (!findImageToVideoEdge(g, ref.nodeId, node.id)) {
+          connectGenEdge(g, ref.nodeId, node.id)
+        }
+      }
+    }
+
+    if (requestedCount > 1) {
+      const refreshedSource = sourceNode.getData() as CanvasNodeData
+      const layoutSize = resolveVideoResultLayoutSize(refreshedSource)
+      const plannedPoints = planOutgoingResultPoints(
+        g,
+        sourceNode,
+        layoutSize,
+        requestedCount,
+        'right',
+      )
+      const resultNodes: Node[] = []
+
+      for (let index = 0; index < requestedCount; index += 1) {
+        const resultNode = spawnVideoGenerationResultNode(g, sourceNode, {
+          title,
+          fileName: resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount),
+          videoDialogueText: prompt,
+          videoDialogueSettings: refreshedSource.videoDialogueSettings,
+          videoSourceRefs: refreshedSource.videoSourceRefs,
+          genPrompt: prompt,
+          centerPoint: plannedPoints[index],
+        })
+        connectRefsToVideoNode(resultNode)
+        resultNodes.push(resultNode)
+      }
+
+      const primaryNode = resultNodes[0]
+      selectedNodeId.value = primaryNode.id
+      selectedKind.value = 'video'
+      syncNodeSelectionHighlight(primaryNode.id)
+      syncNodeCount()
+      bumpToolbarRevision()
+      updateNodeToolbar()
+      scheduleHistoryPush()
+
+      void Promise.all(
+        resultNodes.map(async (resultNode, index) => {
+          const nodeFileName = resolveGenerationResultFileName(
+            buildFileName,
+            sourceFileName,
+            index,
+            requestedCount,
+          )
+          const idempotencyKey =
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+              ? crypto.randomUUID()
+              : `video-gen-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`
+
+          try {
+            const created = normalizeGenerationTaskDetail(
+              await api.createGenerationTask<GenerationTaskDetail>(
+                {
+                  taskType: 'VIDEO',
+                  capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
+                  prompt: toVideoApiPrompt(prompt),
+                  parameters,
+                  projectId: activeProjectId.value,
+                  nodeId: resultNode.id,
+                  referenceAssetIds: imageAssetIds.length ? imageAssetIds : undefined,
+                },
+                idempotencyKey,
+              ),
+            )
+
+            const taskId = created.id
+            if (!taskId) {
+              throw new Error('创建视频生成任务失败')
+            }
+            userInfoStore.queryPointAccount()
+            bindGenerationTaskId(resultNode, taskId, 'VIDEO')
+            persistGenerationTaskBinding()
+
+            startVideoGenerationTaskFollow(resultNode, taskId, {
+              title,
+              fileName: nodeFileName,
+              onError: (reason) => message.error(reason),
+              onComplete: (success) => {
+                if (!success) return
+                bumpToolbarRevision()
+                updateNodeToolbar()
+                scheduleHistoryPush()
+              },
+            })
+          } catch (error) {
+            markVideoGenerationNodeFailed(resultNode)
+            message.error(isRequestError(error) ? error.message : '视频生成失败，请稍后重试')
+          }
+        }),
+      )
+      return
+    }
+
+    const reusableNode = findReusableVideoGenerationNode(g, sourceNode)
+    const targetNode = reusableNode ?? sourceNode
+    const fileName = buildFileName(sourceFileName)
+
+    if (reusableNode) {
+      resetVideoGenerationNodeForRetry(reusableNode, { title, fileName, prompt })
+    }
+
+    const provenanceData = targetNode.getData() as CanvasNodeData
+    targetNode.setData(
       {
         ...provenanceData,
         kind: 'video',
@@ -2276,13 +2472,15 @@ export function registerCore(bind: CanvasBindings) {
         fileName,
         videoGenAspectRatio: payload.ratio,
         videoGenTab: payload.tab,
+        generationTaskId: undefined,
       },
       { overwrite: true },
     )
+    connectRefsToVideoNode(targetNode)
 
-    selectedNodeId.value = sourceNodeId
+    selectedNodeId.value = targetNode.id
     selectedKind.value = 'video'
-    syncNodeSelectionHighlight(sourceNodeId)
+    syncNodeSelectionHighlight(targetNode.id)
     syncNodeCount()
     bumpToolbarRevision()
     updateNodeToolbar()
@@ -2292,19 +2490,6 @@ export function registerCore(bind: CanvasBindings) {
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `video-gen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-
-    const parameters: Record<string, unknown> = {
-      mode: resolvedMode,
-      model: payload.model,
-      ratio: payload.ratio,
-      clarity: toVideoApiClarity(payload.clarity),
-      duration: payload.duration,
-      generateAudio: payload.generateAudio,
-      videoCount: payload.videoCount,
-    }
-    if (assetId) {
-      parameters.assetId = assetId
-    }
 
     void (async () => {
       try {
@@ -2316,7 +2501,7 @@ export function registerCore(bind: CanvasBindings) {
               prompt: toVideoApiPrompt(prompt),
               parameters,
               projectId: activeProjectId.value,
-              nodeId: sourceNodeId,
+              nodeId: targetNode.id,
               referenceAssetIds: imageAssetIds.length ? imageAssetIds : undefined,
             },
             idempotencyKey,
@@ -2328,10 +2513,10 @@ export function registerCore(bind: CanvasBindings) {
           throw new Error('创建视频生成任务失败')
         }
         userInfoStore.queryPointAccount();
-        bindGenerationTaskId(sourceNode, taskId, 'VIDEO')
+        bindGenerationTaskId(targetNode, taskId, 'VIDEO')
         persistGenerationTaskBinding()
 
-        startVideoGenerationTaskFollow(sourceNode, taskId, {
+        startVideoGenerationTaskFollow(targetNode, taskId, {
           title,
           fileName,
           onError: (reason) => message.error(reason),
@@ -2343,7 +2528,7 @@ export function registerCore(bind: CanvasBindings) {
           },
         })
       } catch (error) {
-        markVideoGenerationNodeFailed(sourceNode)
+        markVideoGenerationNodeFailed(targetNode)
         message.error(isRequestError(error) ? error.message : '视频生成失败，请稍后重试')
       }
     })()
@@ -2379,6 +2564,19 @@ export function registerCore(bind: CanvasBindings) {
     return `${base}-${index + 1}`
   }
 
+  function resolveVideoResultLayoutSize(sourceData: CanvasNodeData) {
+    const ratio =
+      sourceData.videoGenAspectRatio ||
+      sourceData.videoDialogueSettings?.aspectRatio
+    return getNodeSize('video', 'editor', {
+      kind: 'video',
+      mode: 'editor',
+      uploadState: 'uploading',
+      generationTaskType: 'VIDEO',
+      videoGenAspectRatio: ratio,
+    })
+  }
+
   async function spawnNodesForExtraGenerationResults(
     g: Graph,
     sourceNode: Node,
@@ -2393,6 +2591,22 @@ export function registerCore(bind: CanvasBindings) {
     },
   ): Promise<Node[]> {
     const nodes: Node[] = []
+    if (!extraResults.length) return nodes
+
+    const batchPreviewSize = getNodeSize('image', 'editor', {
+      kind: 'image',
+      mode: 'editor',
+      uploadState: 'done',
+      previewUrl: 'placeholder',
+    })
+    const plannedPoints = planOutgoingResultPoints(
+      g,
+      sourceNode,
+      batchPreviewSize,
+      extraResults.length,
+      config.placement ?? 'right',
+    )
+    let pointIndex = 0
 
     for (let index = 0; index < extraResults.length; index += 1) {
       const resolved = await resolveGenerationResultPreview(extraResults[index])
@@ -2410,10 +2624,9 @@ export function registerCore(bind: CanvasBindings) {
         assetId: resolved.assetId,
         mediaWidth: resolved.width ?? undefined,
         mediaHeight: resolved.height ?? undefined,
-        layoutSlot: config.resultIndexOffset + index,
-        layoutTotal: config.totalCount,
-        placement: config.placement,
+        centerPoint: plannedPoints[pointIndex],
       })
+      pointIndex += 1
       nodes.push(node)
     }
 
@@ -2466,6 +2679,18 @@ export function registerCore(bind: CanvasBindings) {
     const requestedCount = Math.max(1, Math.floor(Number(taskParameters.count)) || 1)
     const singleTaskParameters = { ...taskParameters, count: 1 }
     const resultNodes: Node[] = []
+    const batchPreviewSize = getNodeSize('image', 'editor', {
+      kind: 'image',
+      mode: 'editor',
+      imageGenState: 'loading',
+    })
+    const plannedPoints = planOutgoingResultPoints(
+      g,
+      sourceNode,
+      batchPreviewSize,
+      requestedCount,
+      config.resultPlacement ?? 'right',
+    )
 
     for (let index = 0; index < requestedCount; index += 1) {
       resultNodes.push(
@@ -2477,9 +2702,7 @@ export function registerCore(bind: CanvasBindings) {
             index,
             requestedCount,
           ),
-          layoutSlot: index,
-          layoutTotal: requestedCount,
-          placement: config.resultPlacement,
+          centerPoint: plannedPoints[index],
         }),
       )
     }
@@ -3299,7 +3522,10 @@ export function registerCore(bind: CanvasBindings) {
     }
     videoGenPromptText.value = prompt
     videoGenActiveTab.value = data.videoGenTab ?? 'text2video'
-    videoGenAspectRatio.value = (data.videoGenAspectRatio as VideoGenAspectRatio) || '16:9'
+    videoGenAspectRatio.value =
+      (data.videoGenAspectRatio as VideoGenAspectRatio) ||
+      (data.videoDialogueSettings?.aspectRatio as VideoGenAspectRatio) ||
+      '16:9'
     if (prompt && prompt !== data.genPrompt) {
       cell.setData({ ...data, genPrompt: prompt })
     }
@@ -3700,12 +3926,27 @@ export function registerCore(bind: CanvasBindings) {
               ...createDefaultVideoDialogueSettings(),
               mode: 'text-to-video' as const,
             }
+        const sourceData = cell.getData() as CanvasNodeData
+        const requestedCount = Math.max(1, Math.floor(Number(text2videoSettings.videoCount)) || 1)
+        const layoutSize = resolveVideoResultLayoutSize({
+          ...sourceData,
+          videoGenAspectRatio: text2videoSettings.aspectRatio,
+          videoDialogueSettings: text2videoSettings,
+        })
+        const plannedPoints = planOutgoingResultPoints(
+          g,
+          cell as Node,
+          layoutSize,
+          requestedCount,
+          'right',
+        )
         const resultNode = spawnVideoGenerationResultNode(g, cell as Node, {
           title: '文生视频',
           fileName: '文生视频.mp4',
           videoDialogueText: trimmedPrompt,
           videoDialogueSettings: text2videoSettings,
           genPrompt: trimmedPrompt,
+          centerPoint: plannedPoints[0],
         })
         applyVideoGenerationProvenance(resultNode, {
           prompt: trimmedPrompt,
@@ -3791,9 +4032,16 @@ export function registerCore(bind: CanvasBindings) {
         }
 
         persistPromptBarDraft()
+        const imagePreviewSize = getNodeSize('image', 'editor', {
+          kind: 'image',
+          mode: 'editor',
+          imageGenState: 'loading',
+        })
+        const [imageCenterPoint] = planOutgoingResultPoints(g, cell as Node, imagePreviewSize, 1, 'right')
         const resultNode = spawnGenerationResultNode(g, cell as Node, {
           title: '文生图',
           fileName: '文生图.png',
+          centerPoint: imageCenterPoint,
         })
 
         const imageParameters: Record<string, unknown> = {
@@ -4045,7 +4293,7 @@ export function registerCore(bind: CanvasBindings) {
       const cell = g.getCellById(nodeId)
       if (cell?.isNode()) {
         const data = { ...(cell.getData() as CanvasNodeData) }
-        if (data.kind === 'video' && data.mode === 'editor' && !data.previewUrl) {
+        if (data.kind === 'video' && data.mode === 'editor' && !data.previewUrl && !isVideoGenerationFailedNode(data)) {
           data.mode = 'picker'
         }
         data.videoGenTab = tab
@@ -7885,6 +8133,7 @@ export function registerCore(bind: CanvasBindings) {
     removeHoveredEdge,
     uploadFileToCanvasNode,
     videoGenSourceRefs,
+    videoGenSavedSettings,
     videoDialogueSourceRefs,
     videoGenAspectRatio,
     onVideoGenAspectRatioChange,

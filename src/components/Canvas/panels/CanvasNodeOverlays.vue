@@ -173,6 +173,7 @@
       :active-tab="videoGenActiveTab"
       :aspect-ratio="videoGenAspectRatio"
       :source-refs="videoGenSourceRefs"
+      :saved-settings="videoGenSavedSettings"
       :element-select-mode="elementSelectMode"
       :video-num="videoNum"
       :chat-tools="chatTools"
@@ -550,6 +551,7 @@ const props = defineProps<{
   videoGenActiveTab: string
   videoGenAspectRatio: VideoGenAspectRatio
   videoGenSourceRefs: VideoSourceRef[]
+  videoGenSavedSettings?: VideoDialogueSettings
   videoDialogueSourceRefs: VideoSourceRef[]
   elementSelectMode: boolean
   imageDialogueText: string
