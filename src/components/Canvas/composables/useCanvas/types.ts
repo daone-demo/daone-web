@@ -45,6 +45,7 @@ export type CanvasBindings = CanvasState & {
   showPromptBar: ComputedRef<boolean>
   showImageGenPromptBar: ComputedRef<boolean>
   showVideoGenPromptBar: ComputedRef<boolean>
+  showVideoDialoguePanel: ComputedRef<boolean>
   videoGenSourceRefs: ComputedRef<import('../../videoGen').VideoSourceRef[]>
   videoDialogueSourceRefs: ComputedRef<import('../../videoGen').VideoSourceRef[]>
   showImageCreativeToolbar: ComputedRef<boolean>
