@@ -4,6 +4,7 @@
     :class="{
       'model3d-node--selected': data.isSelected,
       'model3d-node--light': isLightTheme,
+      'model3d-node--generating': data.imageGenState === 'loading',
     }"
   >
     <button

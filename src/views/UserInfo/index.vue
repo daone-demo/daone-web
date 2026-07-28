@@ -150,7 +150,7 @@
                   <td>{{ item.amount > 0 ? '增加' : '减少' }}</td>
                   <td>
                     <strong class="user-info__points-change">
-                      {{ item.amount }}
+                      {{ item.amount > 0 ? '+' : '' }}{{ item.amount }}
                     </strong>
                   </td>
                   <td>{{ dayjs(item.createdAt).format('YYYY-MM-DD HH:mm:ss') }}</td>

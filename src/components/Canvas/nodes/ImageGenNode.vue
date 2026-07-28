@@ -6,6 +6,7 @@
       'image-gen-node--img2img': data.imageGenTask === 'img2img',
       'image-gen-node--light': isLightTheme,
       'image-gen-node--card-only': isEmptyUpload,
+      'image-gen-node--generating': data.imageGenState === 'loading',
     }"
   >
     <button

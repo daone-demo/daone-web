@@ -38,6 +38,16 @@
     opacity: 1;
   }
 
+  .image-node--generating &,
+  .image-gen-node--generating &,
+  .video-node--generating &,
+  .text-node--loading &,
+  .model3d-node--generating & {
+    display: none !important;
+    pointer-events: none;
+    opacity: 0;
+  }
+
   &:hover {
     border-color: #6b7cff;
     background: #3d3d45;

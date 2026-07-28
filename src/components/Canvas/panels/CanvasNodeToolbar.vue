@@ -170,6 +170,7 @@ import {
   VIDEO_NODE_TOOLBAR,
   buildImageToolbarActionsFromCapabilities,
   buildVideoToolbarActionsFromCapabilities,
+  normalizeImageCapabilities,
   toCapabilityToolbarActions,
   splitImageToolbarActions,
   createAddToDialogToolbarAction,
@@ -226,8 +227,10 @@ const primaryActions = computed(() => splitActions.value.primaryActions)
 const overflowActions = computed(() => splitActions.value.overflowActions)
 
 const videoToolbarActions = computed<ImageCapabilityToolbarAction[]>(() => {
-  const fromApi = buildVideoToolbarActionsFromCapabilities(props.videoCapabilities)
-  if (fromApi.length) return fromApi
+  const capabilities = normalizeImageCapabilities(props.videoCapabilities)
+  if (capabilities.length > 0) {
+    return buildVideoToolbarActionsFromCapabilities(capabilities)
+  }
   return toCapabilityToolbarActions(VIDEO_NODE_TOOLBAR.actions)
 })
 

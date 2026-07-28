@@ -68,13 +68,17 @@ export function redrawEraseDisplayCanvas(
 
   const paintStrokes = currentStroke ? [...strokes, currentStroke] : strokes
   paintStrokes.forEach((stroke) => {
-    drawEraseStroke(ctx, {
-      points: stroke.points.map((point) => ({
-        x: point.x - bounds.x,
-        y: point.y - bounds.y,
-      })),
-      size: stroke.size,
-    })
+    drawEraseStroke(
+      ctx,
+      {
+        points: stroke.points.map((point) => ({
+          x: point.x - bounds.x,
+          y: point.y - bounds.y,
+        })),
+        size: stroke.size,
+      },
+      color,
+    )
   })
 }
 

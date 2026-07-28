@@ -72,7 +72,7 @@
     <section v-if="showGenerateAudio" class="video-gen-settings__section">
       <p class="video-gen-settings__title">
         {{ VIDEO_GEN_AUDIO_LABEL }}
-        <span class="video-gen-settings__help" title="开启后将生成配套音频">?</span>
+        <!-- <span class="video-gen-settings__help" title="开启后将生成配套音频"></span> -->
       </p>
       <div class="video-gen-settings__audio-grid">
         <button
