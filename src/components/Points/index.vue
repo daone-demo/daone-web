@@ -353,15 +353,16 @@ async function loadUserProfile() {
   }
 
   try {
-    const res = await api.getCurrentUser<UserProfile>()
-    userProfile.value = res
-    if (res.points) {
-      userInfoStore.setPointAccount({
-        available: res.points.available ?? 0,
-        frozen: 0,
-        grantedTotal: res.points.grantedTotal ?? 0,
-      })
-    }
+    void userInfoStore.queryPointAccount()
+    // const res = await api.getCurrentUser<UserProfile>()
+    // userProfile.value = res
+    // if (res.points) {
+    //   userInfoStore.setPointAccount({
+    //     available: res.points.available ?? 0,
+    //     frozen: 0,
+    //     grantedTotal: res.points.grantedTotal ?? 0,
+    //   })
+    // }
   } catch {
     userProfile.value = null
   }

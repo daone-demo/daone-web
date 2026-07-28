@@ -30,7 +30,13 @@
             class="home__project-card"
             @click="openProject(project.id)"
           >
-            <span class="home__project-cover" aria-hidden="true" />
+            <img
+              v-if="project.coverUrl"
+              :src="project.coverUrl"
+              class="home__project-img"
+              loading="lazy"
+            />
+            <span v-else class="home__project-cover" aria-hidden="true" />
             <div class="flexBox">
               <span class="home__project-name">{{ project.title }}</span>
               <div class="home__project-actions">

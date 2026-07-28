@@ -191,6 +191,7 @@
   </div>
 
   <CanvasImageResizeOverlay
+    ref="imageResizeOverlayRef"
     :visible="showImageResizeOverlay"
     :box="imageResizeOverlay"
     :dimension-label="imageResizeOverlay.dimensionLabel"
@@ -417,7 +418,9 @@ import ImageDialoguePanel from '../ImageDialoguePanel.vue'
 import DialogueWorkflowSelect from '../DialogueWorkflowSelect.vue'
 import ImageDialogueFooter from '../ImageDialogueFooter.vue'
 import type { ImageDialogueFooterParams } from '../ImageDialogueFooter.vue'
-import CanvasImageResizeOverlay from './CanvasImageResizeOverlay.vue'
+import CanvasImageResizeOverlay, {
+  type ImageResizeOverlayBox,
+} from './CanvasImageResizeOverlay.vue'
 import ImageCropOverlay from '../ImageCropOverlay.vue'
 import ImageGridSplitOverlay from '../ImageGridSplitOverlay.vue'
 import ImageEraseOverlay from '../ImageEraseOverlay.vue'
@@ -459,6 +462,7 @@ import { isRequestError } from '@/utils/request'
 import type { VideoSourceRef } from '../videoGen'
 
 const videoGenPromptPanelRef = ref<InstanceType<typeof VideoGenPromptPanel> | null>(null)
+const imageResizeOverlayRef = ref<InstanceType<typeof CanvasImageResizeOverlay> | null>(null)
 const isPromptDragOver = ref(false)
 const promptInputRef = ref<HTMLElement | null>(null)
 const mentionApi = createPromptMentionApi('canvas__prompt-mention')
@@ -865,8 +869,13 @@ function dismissVideoGenPromptOverlay() {
   return videoGenPromptPanelRef.value?.dismissTopOverlay() ?? false
 }
 
+function applyImageResizeOverlayBox(box: ImageResizeOverlayBox | null) {
+  imageResizeOverlayRef.value?.applyBox(box)
+}
+
 defineExpose({
   dismissVideoGenPromptOverlay,
+  applyImageResizeOverlayBox,
 })
 </script>
 <style scoped>

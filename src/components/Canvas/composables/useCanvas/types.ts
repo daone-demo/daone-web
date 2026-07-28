@@ -111,6 +111,11 @@ export type CanvasBindings = CanvasState & {
   }) => void
   onImageEditTextApply: (changes: import('../../editTextUtils').ImageEditTextChange[]) => void
   closeImageEditText: () => void
+  closeImageToolbarCustomize: () => void
+  saveImageToolbarCustomize: (
+    settings: import('../../imageToolbarCustomize').ImageToolbarCustomizeSettings,
+  ) => void
+  resetImageToolbarCustomize: () => void
   handleImageDialogueSubmit: (payload: import('../../constants').ImageDialogueSubmitPayload) => void
   handleVideoDialogueSubmit: (payload: import('../../constants').VideoDialogueSubmitPayload) => void
   handleVideoGenPromptSubmit: (payload: import('../../constants').VideoGenPromptSubmitPayload) => void

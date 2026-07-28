@@ -11,9 +11,16 @@
       type="button"
       class="canvas__node-toolbar-btn"
       :class="{ 'canvas__node-toolbar-btn--active': showImageHdMenu }"
+      :title="showToolNames ? undefined : item.label"
       @click="emit('action', item.key, undefined, item.label)"
     >
-      {{ item.label }}
+      <span v-if="showToolNames">{{ item.label }}</span>
+      <span
+        v-else
+        class="canvas__node-toolbar-icon"
+        :data-icon="item.icon || 'hd'"
+        aria-hidden="true"
+      />
     </button>
     <div
       v-if="showImageHdMenu"
@@ -50,7 +57,7 @@
         :data-icon="item.icon"
         aria-hidden="true"
       />
-      {{ item.label }}
+      <span v-if="showToolNames">{{ item.label }}</span>
     </button>
     <div
       class="canvas__node-toolbar-dropdown-menu"
@@ -77,6 +84,7 @@
     type="button"
     class="canvas__node-toolbar-btn"
     :class="{ 'canvas__node-toolbar-btn--active': item.key === 'crop' && showImageCrop }"
+    :title="showToolNames ? undefined : item.label"
     @click="emit('action', item.key, undefined, item.label)"
   >
     <span
@@ -85,18 +93,22 @@
       :data-icon="item.icon"
       aria-hidden="true"
     />
-    {{ item.label }}
+    <span v-if="showToolNames">{{ item.label }}</span>
   </button>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { IMAGE_HD_RESOLUTIONS, type ImageCapabilityToolbarAction } from '../constants'
 
-defineProps<{
+const props = defineProps<{
   item: ImageCapabilityToolbarAction
   showImageHdMenu?: boolean
   showImageCrop?: boolean
+  showToolNames?: boolean
 }>()
+
+const showToolNames = computed(() => props.showToolNames !== false)
 
 const emit = defineEmits<{
   action: [key: string, option?: string, label?: string]

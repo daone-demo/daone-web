@@ -656,5 +656,12 @@ const api = {
   ocrRecognize<T = unknown>(data: { assetId: string | number }) {
     return http.post<T>('/ocr/recognize', data)
   },
+  queryToolbarPreferences<T = unknown>(params:any) {
+    return http.get<T>('/canvas/toolbar-preferences', { params })
+  },
+  updateToolbarPreferences<T = unknown>(params:any) {
+    return http.put<T>('/canvas/toolbar-preferences', { params })
+  },
+  
 }
 export default api

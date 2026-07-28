@@ -71,6 +71,7 @@ declare module 'vue' {
     ImageInpaintOverlay: typeof import('./components/Canvas/ImageInpaintOverlay.vue')['default']
     ImageNode: typeof import('./components/Canvas/nodes/ImageNode.vue')['default']
     ImageStylePanel: typeof import('./components/Canvas/ImageStylePanel.vue')['default']
+    ImageToolbarCustomizeModal: typeof import('./components/Canvas/panels/ImageToolbarCustomizeModal.vue')['default']
     Login: typeof import('./components/Login/index.vue')['default']
     Model3DNode: typeof import('./components/Canvas/nodes/Model3DNode.vue')['default']
     Points: typeof import('./components/Points/index.vue')['default']

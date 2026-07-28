@@ -23,31 +23,27 @@
       <button
         type="button"
         class="canvas__multi-select-btn"
-        :class="{ 'canvas__multi-select-btn--active': showGroupMenu }"
         title="打组"
-        @click="toggleGroupMenu"
+        @click="emit('group')"
       >
         <span class="canvas__multi-select-icon" data-icon="group" aria-hidden="true" />
         打组
-        <span class="canvas__multi-select-caret" aria-hidden="true" />
       </button>
-      <div v-if="showGroupMenu" class="canvas__multi-select-menu" @mousedown.stop>
-        <button type="button" class="canvas__multi-select-menu-item" @click="onGroup">
+      <!-- <div v-if="showGroupMenu" class="canvas__multi-select-menu" @mousedown.stop>
+        <button type="button" class="canvas__multi-select-menu-item" @click="emit('group')">
           <span class="canvas__multi-select-icon" data-icon="group" aria-hidden="true" />
           打组
         </button>
-        <button type="button" class="canvas__multi-select-menu-item" @click="onMergeStoryboard">
+        <button type="button" class="canvas__multi-select-menu-item" @click="emit('merge-storyboard')">
           <span class="canvas__multi-select-icon" data-icon="merge-storyboard" aria-hidden="true" />
           合并分镜组
         </button>
-      </div>
+      </div> -->
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
-
 defineProps<{
   position: { left: number; top: number }
   isLight?: boolean
@@ -61,38 +57,4 @@ const emit = defineEmits<{
   group: []
   'merge-storyboard': []
 }>()
-
-const showGroupMenu = ref(false)
-
-function toggleGroupMenu() {
-  showGroupMenu.value = !showGroupMenu.value
-}
-
-function closeGroupMenu() {
-  showGroupMenu.value = false
-}
-
-function onGroup() {
-  closeGroupMenu()
-  emit('group')
-}
-
-function onMergeStoryboard() {
-  closeGroupMenu()
-  emit('merge-storyboard')
-}
-
-function onDocumentMouseDown(event: MouseEvent) {
-  const target = event.target
-  if (target instanceof Element && target.closest('.canvas__multi-select-group-wrap')) return
-  closeGroupMenu()
-}
-
-onMounted(() => {
-  document.addEventListener('mousedown', onDocumentMouseDown)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocumentMouseDown)
-})
 </script>

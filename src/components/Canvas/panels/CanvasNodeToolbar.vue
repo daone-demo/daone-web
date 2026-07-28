@@ -38,16 +38,18 @@
               type="button"
               class="canvas__node-toolbar-btn"
               :class="{ 'canvas__node-toolbar-btn--active': showImageDialogue }"
+              :title="showToolNames ? undefined : IMAGE_NODE_TOOLBAR.chat.label"
               @click="emitImageAction(IMAGE_NODE_TOOLBAR.chat.key)"
             >
               <span class="canvas__node-toolbar-icon" data-icon="chat" aria-hidden="true" />
-              {{ IMAGE_NODE_TOOLBAR.chat.label }}
+              <span v-if="showToolNames">{{ IMAGE_NODE_TOOLBAR.chat.label }}</span>
             </button>
           </div>
           <span class="canvas__node-toolbar-divider" aria-hidden="true" />
           <div class="canvas__node-toolbar-group">
             <CanvasToolbarActionItem
               :item="addToDialogAction"
+              :show-tool-names="showToolNames"
               @action="emitImageAction"
             />
             <CanvasToolbarActionItem
@@ -56,6 +58,7 @@
               :item="item"
               :show-image-hd-menu="showImageHdMenu"
               :show-image-crop="showImageCrop"
+              :show-tool-names="showToolNames"
               @action="emitImageAction"
             />
             <div v-if="overflowActions.length" class="canvas__node-toolbar-more">
@@ -63,6 +66,7 @@
                 type="button"
                 class="canvas__node-toolbar-btn"
                 :class="{ 'canvas__node-toolbar-btn--active': showImageToolbarMore }"
+                :title="showToolNames ? undefined : IMAGE_NODE_TOOLBAR.more.label"
                 @mousedown.stop
                 @click.stop="emitImageAction(IMAGE_NODE_TOOLBAR.more.key)"
               >
@@ -71,7 +75,7 @@
                   :data-icon="IMAGE_NODE_TOOLBAR.more.icon"
                   aria-hidden="true"
                 />
-                {{ IMAGE_NODE_TOOLBAR.more.label }}
+                <span v-if="showToolNames">{{ IMAGE_NODE_TOOLBAR.more.label }}</span>
                 <span class="canvas__node-toolbar-more-count">{{ overflowActions.length }}</span>
               </button>
               <div
@@ -87,6 +91,7 @@
                   :item="item"
                   :show-image-hd-menu="showImageHdMenu"
                   :show-image-crop="showImageCrop"
+                  :show-tool-names="showToolNames"
                   @action="onOverflowAction"
                 />
               </div>
@@ -182,6 +187,11 @@ import {
   type ImageCapabilityToolbarAction,
 } from '../constants'
 
+import {
+  orderImageToolbarActions,
+  type ImageToolbarCustomizeSettings,
+} from '../imageToolbarCustomize'
+
 const props = defineProps<{
   position: { left: number; top: number }
   isLight: boolean
@@ -198,6 +208,8 @@ const props = defineProps<{
   showVideoFramesPanel: boolean
   imageCapabilities: ImageCapability[]
   videoCapabilities?: ImageCapability[]
+  imageToolbarCustomizeSettings?: ImageToolbarCustomizeSettings
+  toolbarRevision?: number
 }>()
 
 const emit = defineEmits<{
@@ -213,10 +225,13 @@ const emit = defineEmits<{
 }>()
 
 const allActions = computed<ImageCapabilityToolbarAction[]>(() => {
+  void props.toolbarRevision
   const fromApi = buildImageToolbarActionsFromCapabilities(props.imageCapabilities)
-  if (fromApi.length) return fromApi
-  return toCapabilityToolbarActions(IMAGE_NODE_TOOLBAR.actions)
+  const raw = fromApi.length ? fromApi : toCapabilityToolbarActions(IMAGE_NODE_TOOLBAR.actions)
+  return orderImageToolbarActions(raw, props.imageToolbarCustomizeSettings)
 })
+
+const showToolNames = computed(() => props.imageToolbarCustomizeSettings?.showToolNames !== false)
 
 const splitActions = computed(() =>
   splitImageToolbarActions(allActions.value, IMAGE_TOOLBAR_VISIBLE_ACTION_LIMIT),

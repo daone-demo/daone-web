@@ -17,6 +17,10 @@ import { setSharedCanvasBgTheme } from '../../useCanvasBgTheme'
 import type { CanvasBgTheme } from '../../canvasTheme'
 import type { Project } from '@/stores/useProject'
 import type { CanvasDomRefs, CanvasEmit } from './types'
+import {
+  loadImageToolbarCustomizeSettings,
+  type ImageToolbarCustomizeSettings,
+} from '../../imageToolbarCustomize'
 
 export type UploadFilter = 'image' | 'video' | 'any'
 
@@ -154,6 +158,10 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const selectedKind = ref<NodeKind | null>(null)
   const showImageToolbarMore = ref(false)
   const showImageToolbarMoreMenu = ref(false)
+  const showImageToolbarCustomize = ref(false)
+  const imageToolbarCustomizeSettings = ref<ImageToolbarCustomizeSettings>(
+    loadImageToolbarCustomizeSettings(),
+  )
   const showImageHdMenu = ref(false)
   const showImageDialogue = ref(false)
   const showImageCrop = ref(false)
@@ -306,6 +314,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     selectedKind,
     showImageToolbarMore,
     showImageToolbarMoreMenu,
+    showImageToolbarCustomize,
+    imageToolbarCustomizeSettings,
     showImageHdMenu,
     showImageDialogue,
     showImageCrop,

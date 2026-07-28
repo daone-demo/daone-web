@@ -284,6 +284,7 @@ export function getViewportCenterLocal(graph: Graph): { x: number; y: number } {
 /**
  * 图坐标 → 浮层定位容器（.canvas）内的像素偏移。
  * 须使用不随 Scroller 滚动的容器；勿用 graph.container（会随内容滚动）。
+ * 统一走 graph.localToClient，缩放/滚动时与节点视觉位置保持同步。
  */
 export function graphLocalToContainerOffset(
   graph: Graph,
@@ -292,21 +293,6 @@ export function graphLocalToContainerOffset(
   container: HTMLElement,
 ) {
   const containerRect = container.getBoundingClientRect()
-  const scroller = getScroller(graph)
-  const scrollerImpl = scroller
-    ? (scroller as unknown as { scrollerImpl?: ScrollerImplLike }).scrollerImpl
-    : undefined
-
-  if (scroller && scrollerImpl) {
-    const bg = scrollerImpl.localToBackgroundPoint(localX, localY)
-    const scrollEl = scroller.container
-    const scrollRect = scrollEl.getBoundingClientRect()
-    return {
-      left: bg.x - scrollEl.scrollLeft + (scrollRect.left - containerRect.left),
-      top: bg.y - scrollEl.scrollTop + (scrollRect.top - containerRect.top),
-    }
-  }
-
   const client = graph.localToClient(localX, localY)
   return {
     left: client.x - containerRect.left,
@@ -459,6 +445,8 @@ export type CanvasGraph = Graph & {
   __deactivateTextEditorToolbar?: () => void
   __notifyNodeDragMove?: () => void
   __notifyNodeDragEnd?: () => void
+  __startImageNodeCornerResize?: (event: MouseEvent, corner: ImageResizeCorner) => void
+  __primarySelectedNodeId?: () => string
   __suppressBlankCloseForConnect?: boolean
   __connectPreviewEdgeId?: string
 }

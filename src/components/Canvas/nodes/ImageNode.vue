@@ -128,6 +128,22 @@
             @error="onImageError"
             @dragstart.stop="onPreviewDragStart"
           />
+          <div
+            v-if="showResizeHandles"
+            class="image-node__resize-frame"
+            @mousedown.stop
+          >
+            <span v-if="dimensionLabel" class="image-node__resize-size">{{ dimensionLabel }}</span>
+            <button
+              v-for="corner in resizeCorners"
+              :key="corner"
+              type="button"
+              class="image-node__resize-handle"
+              :class="`image-node__resize-handle--${corner}`"
+              title="缩放"
+              @mousedown.stop="onResizeHandlePointerDown($event, corner)"
+            />
+          </div>
           <!-- <span v-if="showUploadSuccess" class="image-node__success">上传成功</span> -->
         </template>
         <template v-else>
@@ -141,7 +157,7 @@
 
 <script setup lang="ts">
 import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
-import type { Node } from '@antv/x6'
+import type { Graph, Node } from '@antv/x6'
 import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
 import type { CanvasNodeData } from '../constants'
 import { createEmptyNodeData } from '../constants'
@@ -152,9 +168,17 @@ import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import { syncNodeViewData } from './syncNodeViewData'
 import { useCanvasNodeImage } from './useCanvasNodeImage'
 import { resolveImageNaturalSizeCached } from '../imageDisplayUrl'
-import { getBaseNodeSize, getNodeSize, syncNodeShapeFromData, type CanvasGraph } from '../graph'
+import {
+  canResizeImageNode,
+  getBaseNodeSize,
+  getNodeSize,
+  syncNodeShapeFromData,
+  type CanvasGraph,
+  type ImageResizeCorner,
+} from '../graph'
 
 const getNode = inject<() => Node>('getNode')!
+const getGraph = inject<() => Graph>('getGraph')!
 const requestCanvasUpload = inject<(nodeId: string) => void>('requestCanvasUpload')
 const uploadFileToCanvasNode = inject<(nodeId: string, file: File) => void>('uploadFileToCanvasNode')
 const { removeSelf } = useNodeDelete()
@@ -212,6 +236,22 @@ const dimensionLabel = computed(() => {
   const height = Math.round(data.mediaHeight * scale)
   return formatDimensions(width, height)
 })
+
+const resizeCorners: ImageResizeCorner[] = ['nw', 'ne', 'sw', 'se']
+
+const showResizeHandles = computed(() => {
+  void sizeRevision.value
+  const graph = getGraph() as CanvasGraph
+  return Boolean(
+    graph.__primarySelectedNodeId?.() === getNode().id &&
+    canResizeImageNode(data),
+  )
+})
+
+function onResizeHandlePointerDown(event: MouseEvent, corner: ImageResizeCorner) {
+  const graph = getGraph() as CanvasGraph
+  graph.__startImageNodeCornerResize?.(event, corner)
+}
 const isPortraitLayout = computed(() =>
   data.mediaWidth && data.mediaHeight
     ? isPortrait(data.mediaWidth, data.mediaHeight)
@@ -657,6 +697,70 @@ onMounted(() => {
 .image-node__placeholder-icon {
   font-size: 28px;
   opacity: 0.5;
+}
+
+.image-node__resize-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  box-sizing: border-box;
+  border: 1.5px solid #6b7cff;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.image-node__resize-size {
+  position: absolute;
+  left: 50%;
+  bottom: -18px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  line-height: 1;
+  color: #9ca3af;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.image-node__resize-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 1.5px solid #6b7cff;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85);
+  pointer-events: auto;
+  cursor: nwse-resize;
+  touch-action: none;
+
+  &--nw {
+    top: -5px;
+    left: -5px;
+    cursor: nwse-resize;
+  }
+
+  &--ne {
+    top: -5px;
+    right: -5px;
+    cursor: nesw-resize;
+  }
+
+  &--sw {
+    bottom: -5px;
+    left: -5px;
+    cursor: nesw-resize;
+  }
+
+  &--se {
+    bottom: -5px;
+    right: -5px;
+    cursor: nwse-resize;
+  }
+
+  &:hover {
+    background: #fff;
+  }
 }
 
 .image-node__spinner {

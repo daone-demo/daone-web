@@ -24,7 +24,7 @@ import {
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
   getNodeVideoGenPromptPosition, getNodePromptPosition, getNodeSidePanelPosition, getNodeTextDownloadPosition,
   getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition, getNodeToolbarPosition,
-  getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getImageNodeMediaScreenBox, getImageExpandOverlayLayout, syncImageNodeSizeToMediaAspect, startImageNodeCornerResize, canResizeImageNode, getImageNodeDisplayDimensions,
+  getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getImageNodeMediaScreenBox, getImageExpandOverlayLayout, syncImageNodeSizeToMediaAspect, startImageNodeCornerResize,
   hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
@@ -48,6 +48,8 @@ import {
   markTextGenerationNodeFailed,
   markVideoGenerationNodeFailed,
   normalizeGenerationTaskDetail,
+  pickImageGenerationResults,
+  applyGenerationResultToNode,
   resetResumedGenerationTaskCache,
   resumePendingGenerationTasks,
   runImageGenerationOnNode,
@@ -83,6 +85,11 @@ import {
   isVideoNodeGenerating,
 } from '../../constants'
 import { splitImageIntoGrid, snapGridSplitNodePosition, areAllGridSplitResultNodes } from '../../gridSplitUtils'
+import {
+  loadImageToolbarCustomizeSettings,
+  saveImageToolbarCustomizeSettings,
+  type ImageToolbarCustomizeSettings,
+} from '../../imageToolbarCustomize'
 import {
   createSkillId,
   listSavedCanvasSkills,
@@ -195,6 +202,8 @@ export function registerCore(bind: CanvasBindings) {
     selectedKind,
     showImageToolbarMore,
     showImageToolbarMoreMenu,
+    showImageToolbarCustomize,
+    imageToolbarCustomizeSettings,
     showImageHdMenu,
     showImageDialogue,
     showImageCrop,
@@ -895,6 +904,8 @@ export function registerCore(bind: CanvasBindings) {
       handleImageEditTextAction(event)
     } else if (event.key === 'IMAGE_EXPAND') {
       handleImageExpandAction(event)
+    } else if (event.key === 'IMAGE_CUSTOM' || event.key === 'customize') {
+      handleImageCustomAction(event)
     } else {
       handleImageCapabilityAction(event)
     }
@@ -935,6 +946,10 @@ export function registerCore(bind: CanvasBindings) {
     //   default:
     //     break
     // }
+  }
+
+  const handleImageCustomAction = (_event: ImageToolbarClickEvent) => {
+    void openImageCustom()
   }
 
   /**
@@ -1073,6 +1088,35 @@ export function registerCore(bind: CanvasBindings) {
         }),
       },
     )
+  }
+
+  async function openImageCustom() {
+    const ready = await ensureImageEditorReady('进行自定义')
+    if (!ready) return
+
+    showImageHdMenu.value = false
+    showImageToolbarMore.value = false
+    showImageToolbarMoreMenu.value = false
+    showImageToolbarCustomize.value = true
+  }
+
+  function closeImageToolbarCustomize() {
+    showImageToolbarCustomize.value = false
+  }
+
+  function saveImageToolbarCustomize(settings: ImageToolbarCustomizeSettings) {
+    imageToolbarCustomizeSettings.value = {
+      orderedKeys: [...settings.orderedKeys],
+      showToolNames: settings.showToolNames,
+    }
+    saveImageToolbarCustomizeSettings(imageToolbarCustomizeSettings.value)
+    closeImageToolbarCustomize()
+    bumpToolbarRevision()
+  }
+
+  function resetImageToolbarCustomize() {
+    imageToolbarCustomizeSettings.value = loadImageToolbarCustomizeSettings()
+    bumpToolbarRevision()
   }
 
   async function openImageExpand() {
@@ -2577,6 +2621,119 @@ export function registerCore(bind: CanvasBindings) {
     })
   }
 
+  function ensureGenerationResultLoadingNodes(
+    g: Graph,
+    sourceNode: Node,
+    resultNodes: Node[],
+    totalCount: number,
+    config: {
+      title: string
+      sourceFileName: string
+      buildFileName: (sourceFileName: string) => string
+      placement?: import('../../imageGen').ResultPlacement
+    },
+  ) {
+    if (totalCount <= resultNodes.length) return
+
+    const batchPreviewSize = getNodeSize('image', 'editor', {
+      kind: 'image',
+      mode: 'editor',
+      imageGenState: 'loading',
+    })
+    const plannedPoints = planOutgoingResultPoints(
+      g,
+      sourceNode,
+      batchPreviewSize,
+      totalCount,
+      config.placement ?? 'right',
+    )
+
+    for (let index = resultNodes.length; index < totalCount; index += 1) {
+      resultNodes.push(
+        spawnGenerationResultNode(g, sourceNode, {
+          title: config.title,
+          fileName: resolveGenerationResultFileName(
+            config.buildFileName,
+            config.sourceFileName,
+            index,
+            totalCount,
+          ),
+          centerPoint: plannedPoints[index],
+          layoutSlot: index,
+          layoutTotal: totalCount,
+        }),
+      )
+    }
+  }
+
+  async function distributeMultiImageGenerationResults(
+    g: Graph,
+    sourceNode: Node,
+    resultNodes: Node[],
+    allResults: GenerationTaskResult[],
+    config: {
+      title: string
+      sourceFileName: string
+      buildFileName: (sourceFileName: string) => string
+      placement?: import('../../imageGen').ResultPlacement
+    },
+  ): Promise<Node[]> {
+    const totalCount = allResults.length
+    if (totalCount <= 1) return []
+
+    ensureGenerationResultLoadingNodes(g, sourceNode, resultNodes, totalCount, config)
+
+    const appliedNodes: Node[] = []
+    const failedResults: { result: GenerationTaskResult; index: number }[] = []
+
+    for (let index = 1; index < totalCount; index += 1) {
+      const node = resultNodes[index]
+      const result = allResults[index]
+      if (!node || !result) continue
+
+      const data = node.getData() as CanvasNodeData
+      if (data.previewUrl?.trim() && data.imageGenState !== 'loading') {
+        appliedNodes.push(node)
+        continue
+      }
+
+      const resolved = await resolveGenerationResultPreview(result)
+      if (!resolved?.previewUrl?.trim()) {
+        failedResults.push({ result, index })
+        continue
+      }
+
+      const didApply = await applyGenerationResultToNode(node, resolved, {
+        title: config.title,
+        fileName: resolveGenerationResultFileName(
+          config.buildFileName,
+          config.sourceFileName,
+          index,
+          totalCount,
+        ),
+      })
+      if (didApply) {
+        appliedNodes.push(node)
+      } else {
+        failedResults.push({ result, index })
+      }
+    }
+
+    for (const item of failedResults) {
+      const spawnedNodes = await spawnNodesForExtraGenerationResults(g, sourceNode, [item.result], {
+        title: config.title,
+        sourceFileName: config.sourceFileName,
+        buildFileName: config.buildFileName,
+        resultIndexOffset: item.index,
+        totalCount,
+        placement: config.placement,
+      })
+      appliedNodes.push(...spawnedNodes)
+    }
+
+    return appliedNodes
+  }
+
   async function spawnNodesForExtraGenerationResults(
     g: Graph,
     sourceNode: Node,
@@ -2721,6 +2878,13 @@ export function registerCore(bind: CanvasBindings) {
       config.resolveReferenceAssetIds?.(event) ??
       (event.assetId ? [event.assetId] : [])
 
+    const distributionConfig = {
+      title: config.title,
+      sourceFileName,
+      buildFileName: config.buildFileName,
+      placement: config.resultPlacement,
+    }
+
     const runners = resultNodes.map((resultNode, index) => {
       const fileName = resolveGenerationResultFileName(
         config.buildFileName,
@@ -2754,22 +2918,37 @@ export function registerCore(bind: CanvasBindings) {
           userInfoStore.queryPointAccount()
           return created; 
         },
+        onTaskCreated: (created) => {
+          if (index !== 0) return
+          const apiResultCount = pickImageGenerationResults(created).length
+          if (apiResultCount <= 1) return
+
+          ensureGenerationResultLoadingNodes(
+            g,
+            sourceNode,
+            resultNodes,
+            apiResultCount,
+            distributionConfig,
+          )
+          syncNodeCount()
+          bumpToolbarRevision()
+          updateNodeToolbar()
+        },
         onTaskBound: () => persistGenerationTaskBinding(),
         onError: (reason) => message.error(reason),
         onComplete: async (result) => {
-          if (!result.success) return
-          const extraResults = result.extraResults ?? []
-          if (!extraResults.length) return
+          if (!result.success || index !== 0) return
 
-          const totalCount = 1 + extraResults.length
-          const extraNodes = await spawnNodesForExtraGenerationResults(g, sourceNode, extraResults, {
-            title: config.title,
-            sourceFileName,
-            buildFileName: config.buildFileName,
-            resultIndexOffset: 1,
-            totalCount,
-            placement: config.resultPlacement,
-          })
+          const allResults = result.allResults ?? []
+          if (allResults.length <= 1) return
+
+          const extraNodes = await distributeMultiImageGenerationResults(
+            g,
+            sourceNode,
+            resultNodes,
+            allResults,
+            distributionConfig,
+          )
 
           if (!extraNodes.length) return
 
@@ -2781,7 +2960,7 @@ export function registerCore(bind: CanvasBindings) {
           nextTick(() => {
             const scroller = getScroller(g)
             if (!scroller) return
-            const boxes = extraNodes.map((node) => node.getBBox())
+            const boxes = [primaryNode, ...extraNodes].map((node) => node.getBBox())
             const minX = Math.min(...boxes.map((box) => box.x))
             const maxX = Math.max(...boxes.map((box) => box.x + box.width))
             const minY = Math.min(...boxes.map((box) => box.y))
@@ -5872,7 +6051,7 @@ export function registerCore(bind: CanvasBindings) {
     }
   }
 
-  function updateNodeToolbar() {
+  function updateNodeToolbar(options?: { skipImageResizeOverlay?: boolean }) {
     updatePromptBarPosition()
     updateTextFormatToolbarPosition()
     updateImageGenPromptBarPosition()
@@ -5885,10 +6064,20 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     const overlayRoot = canvasRef.value
     const id = selectedNodeId.value
-    if (!g || !overlayRoot || !id) return
+    if (!g || !overlayRoot || !id) {
+      if (!options?.skipImageResizeOverlay) {
+        updateImageResizeOverlay()
+      }
+      return
+    }
 
     const cell = g.getCellById(id)
-    if (!cell?.isNode()) return
+    if (!cell?.isNode()) {
+      if (!options?.skipImageResizeOverlay) {
+        updateImageResizeOverlay()
+      }
+      return
+    }
 
     const data = cell.getData() as CanvasNodeData
     selectedKind.value = data.kind
@@ -5936,54 +6125,34 @@ export function registerCore(bind: CanvasBindings) {
     if (data.kind === 'video' && showVideoHdPanel.value) {
       videoHdPos.value = getNodeSidePanelPosition(g, node, overlayRoot)
     }
-    updateImageResizeOverlay()
+    if (!options?.skipImageResizeOverlay) {
+      updateImageResizeOverlay()
+    }
   }
 
-  function shouldBlockImageResizeOverlay() {
-    return (
-      showImageCrop.value ||
-      showImageGridSplit.value ||
-      showImageErase.value ||
-      showImageInpaint.value ||
-      showImageExpand.value ||
-      showImageEditText.value
-    )
+  function paintImageResizeOverlay(
+    box: {
+      left: number
+      top: number
+      width: number
+      height: number
+      dimensionLabel: string
+      nodeId: string
+    } | null,
+  ) {
+    if (!box) {
+      showImageResizeOverlay.value = false
+      nodeOverlaysRef.value?.applyImageResizeOverlayBox(null)
+      return
+    }
+
+    imageResizeOverlay.value = box
+    showImageResizeOverlay.value = true
+    nodeOverlaysRef.value?.applyImageResizeOverlayBox(box)
   }
 
   function updateImageResizeOverlay() {
-    const g = graph.value
-    const overlayRoot = canvasRef.value
-    const id = selectedNodeId.value
-
-    if (!g || !overlayRoot || !id || shouldBlockImageResizeOverlay()) {
-      showImageResizeOverlay.value = false
-      return
-    }
-
-    const cell = g.getCellById(id)
-    if (!cell?.isNode()) {
-      showImageResizeOverlay.value = false
-      return
-    }
-
-    const node = cell as Node
-    const data = node.getData() as CanvasNodeData
-    if (!canResizeImageNode(data) || getGraphSelectedNodeIds().length !== 1) {
-      showImageResizeOverlay.value = false
-      return
-    }
-
-    syncImageNodeSizeToMediaAspect(node)
-    const box = getImageNodeMediaScreenBox(g, node, overlayRoot)
-    imageResizeOverlay.value = {
-      left: box.left,
-      top: box.top,
-      width: box.width,
-      height: box.height,
-      dimensionLabel: getImageNodeDisplayDimensions(node),
-      nodeId: id,
-    }
-    showImageResizeOverlay.value = true
+    paintImageResizeOverlay(null)
   }
 
   function onImageResizePointerDown(event: MouseEvent, corner: ImageResizeCorner) {
@@ -6767,6 +6936,10 @@ export function registerCore(bind: CanvasBindings) {
     if (nodeOverlaysRef.value?.dismissVideoGenPromptOverlay()) {
       return true
     }
+    if (showImageToolbarCustomize.value) {
+      closeImageToolbarCustomize()
+      return true
+    }
     if (showImageHdMenu.value) {
       showImageHdMenu.value = false
       return true
@@ -7503,7 +7676,7 @@ export function registerCore(bind: CanvasBindings) {
   })
 
   function onScrollerScroll() {
-    updateNodeToolbar()
+    updateNodeToolbar({ skipImageResizeOverlay: true })
     updateEdgeDeleteButtonPosition()
     syncViewportNodeVisibility()
   }
@@ -7541,6 +7714,18 @@ export function registerCore(bind: CanvasBindings) {
     instance.__openConnectMenu = openConnectMenuByNodeId
     instance.__openImageDialogue = openImageDialogue
     instance.__openVideoDialogue = openVideoDialogue
+    instance.__primarySelectedNodeId = () => selectedNodeId.value
+    instance.__startImageNodeCornerResize = (event, corner) => {
+      const g = graph.value
+      const id = selectedNodeId.value
+      if (!g || !id) return
+      const cell = g.getCellById(id)
+      if (!cell?.isNode()) return
+      startImageNodeCornerResize(g, cell as Node, event, corner, () => {
+        bumpToolbarRevision()
+        updateNodeToolbar({ skipImageResizeOverlay: true })
+      })
+    }
     instance.__deleteCanvasNode = removeNodeById
     instance.__uploadFileToCanvasNode = uploadFileToCanvasNode
     instance.__requestTextExpand = openTextExpand
@@ -7592,16 +7777,14 @@ export function registerCore(bind: CanvasBindings) {
     instance.on('blank:dblclick', handleBlankDblClick)
     instance.on('scale', ({ sx }) => {
       syncZoom(sx)
-      requestAnimationFrame(() => {
-        updateNodeToolbar()
-        updateEdgeDeleteButtonPosition()
-        syncViewportNodeVisibility()
-      })
-    })
-    instance.on('translate', () => {
-      updateNodeToolbar()
       updateEdgeDeleteButtonPosition()
       syncViewportNodeVisibility()
+      updateNodeToolbar({ skipImageResizeOverlay: true })
+    })
+    instance.on('translate', () => {
+      updateEdgeDeleteButtonPosition()
+      syncViewportNodeVisibility()
+      updateNodeToolbar({ skipImageResizeOverlay: true })
     })
     instance.on('node:moving', ({ node }) => {
       syncGroupedNodeMove(node)
@@ -7648,6 +7831,14 @@ export function registerCore(bind: CanvasBindings) {
           updateGroupToolbarPosition()
         } else if (showMultiSelectToolbar.value) {
           updateMultiSelectToolbarPosition()
+        }
+        const gAfter = graph.value
+        const selectedId = selectedNodeId.value
+        if (gAfter && selectedId && getGraphSelectedNodeIds().length === 1) {
+          const cell = gAfter.getCellById(selectedId)
+          if (cell?.isNode()) {
+            syncImageNodeSizeToMediaAspect(cell as Node)
+          }
         }
         updateImageResizeOverlay()
       })
@@ -7940,6 +8131,9 @@ export function registerCore(bind: CanvasBindings) {
     handleGroupToStoryboard,
     handleSubmitSaveSkill,
     closeSaveSkillPopover,
+    closeImageToolbarCustomize,
+    saveImageToolbarCustomize,
+    resetImageToolbarCustomize,
     listSavedCanvasSkills,
     handleImageNodeDblClick,
     handleVideoNodeDblClick,
@@ -8073,6 +8267,8 @@ export function registerCore(bind: CanvasBindings) {
     saveSkillSubmitting,
     showImageCreativeToolbar,
     showImageGenPromptBar,
+    showImageToolbarCustomize,
+    imageToolbarCustomizeSettings,
     showMultiSelectToolbar,
     showNodeToolbar,
     showPromptBar,

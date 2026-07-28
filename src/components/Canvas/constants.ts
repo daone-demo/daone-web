@@ -1989,14 +1989,13 @@ export function getImageAdaptiveNodeSize(data: Partial<CanvasNodeData>) {
     return nodeCardSize2x3()
   }
   const width = data.editorWidth ?? NODE_DEFAULT_WIDTH
-  const previewHeight = Math.round(width * mediaH / mediaW)
-  const chromeHeight = data.compactPreview
-    ? 0
-    : IMAGE_NODE_LAYOUT_BODY_BORDER
-
+  const contentW = Math.max(1, width - IMAGE_NODE_LAYOUT_BODY_BORDER)
   return {
     width,
-    height: Math.max(120, chromeHeight + previewHeight),
+    height: Math.max(
+      120,
+      IMAGE_NODE_LAYOUT_BODY_BORDER + Math.round((contentW * mediaH) / mediaW),
+    ),
   }
 }
 

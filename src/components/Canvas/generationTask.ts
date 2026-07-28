@@ -131,13 +131,26 @@ export function pickImageGenerationResults(task: GenerationTaskDetail): Generati
   return task.results?.filter((item) => item.previewUrl || item.assetId) ?? []
 }
 
+export function countImageGenerationResults(task: GenerationTaskDetail | unknown): number {
+  const normalized = normalizeGenerationTaskDetail(task)
+  return Math.max(1, pickImageGenerationResults(normalized).length)
+}
+
 export type ImageGenerationOnNodeResult = {
   success: boolean
   extraResults?: GenerationTaskResult[]
+  allResults?: GenerationTaskResult[]
+  resultCount?: number
 }
 
-function collectExtraImageGenerationResults(task: GenerationTaskDetail): GenerationTaskResult[] {
-  return pickImageGenerationResults(task).slice(1)
+function buildImageGenerationSuccessResult(task: GenerationTaskDetail): ImageGenerationOnNodeResult {
+  const allResults = pickImageGenerationResults(task)
+  return {
+    success: true,
+    allResults,
+    extraResults: allResults.slice(1),
+    resultCount: Math.max(1, allResults.length),
+  }
 }
 
 export function pickPrimaryGenerationResult(task: GenerationTaskDetail): GenerationTaskResult | null {
@@ -614,10 +627,8 @@ async function pollAndApplyImageTaskOnNode(
       })
   }
 
-  const buildSuccessResult = (task: GenerationTaskDetail): ImageGenerationOnNodeResult => ({
-    success: true,
-    extraResults: collectExtraImageGenerationResults(task),
-  })
+  const buildSuccessResult = (task: GenerationTaskDetail): ImageGenerationOnNodeResult =>
+    buildImageGenerationSuccessResult(task)
 
   try {
     const first =
@@ -1019,6 +1030,7 @@ export async function startImageGenerationOnNode(
     createTask: () => Promise<GenerationTaskDetail | unknown>
     onError?: (message: string) => void
     onTaskBound?: (taskId: string) => void
+    onTaskCreated?: (task: GenerationTaskDetail) => void
     onComplete?: (result: ImageGenerationOnNodeResult) => void
   },
 ): Promise<{ started: boolean; taskId?: string }> {
@@ -1032,6 +1044,8 @@ export async function startImageGenerationOnNode(
     options.onError?.(error instanceof Error ? error.message : '创建生成任务失败')
     return { started: false }
   }
+
+  options.onTaskCreated?.(created)
 
   const taskId = String(created.id ?? '').trim()
   if (!taskId) {

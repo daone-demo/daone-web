@@ -105,8 +105,16 @@
       @submit="handleSubmitSaveSkill"
     />
 
+    <ImageToolbarCustomizeModal
+      v-if="showImageToolbarCustomize"
+      :image-capabilities="imageCapabilities"
+      :settings="imageToolbarCustomizeSettings"
+      @cancel="closeImageToolbarCustomize"
+      @save="saveImageToolbarCustomize"
+    />
+
     <CanvasNodeToolbar
-      v-if="showNodeToolbar && !showMultiSelectToolbar && !showGroupToolbar && showToolbarFeatureButtons && !showConnectMenu && !showImageCrop && !showImageGridSplit && !showImageErase && !showImageInpaint && !showImageExpand && !showImageEditText && !showImageDialogue && !showVideoDialogue && !showPromptBar"
+      v-if="showNodeToolbar && !showMultiSelectToolbar && !showGroupToolbar && showToolbarFeatureButtons && !showConnectMenu && !showImageCrop && !showImageGridSplit && !showImageErase && !showImageInpaint && !showImageExpand && !showImageEditText && !showImageDialogue && !showVideoDialogue && !showPromptBar && !showImageToolbarCustomize"
       :position="toolbarPos"
       :is-light="isLightNodeToolbar"
       :show-feature-buttons="showToolbarFeatureButtons"
@@ -130,6 +138,8 @@
       @add-video-to-dialog="addVideoToDialog"
       :image-capabilities="imageCapabilities"
       :video-capabilities="videoCapabilities"
+      :image-toolbar-customize-settings="imageToolbarCustomizeSettings"
+      :toolbar-revision="toolbarRevision"
     />
 
     <CanvasAssetsPanel
@@ -382,6 +392,7 @@ import CanvasEdgeDeleteButton from './panels/CanvasEdgeDeleteButton.vue'
 import CanvasGroupOverlay from './panels/CanvasGroupOverlay.vue'
 import CanvasGroupToolbar from './panels/CanvasGroupToolbar.vue'
 import CanvasSaveSkillPopover from './panels/CanvasSaveSkillPopover.vue'
+import ImageToolbarCustomizeModal from './panels/ImageToolbarCustomizeModal.vue'
 import CanvasElementSelectBar from './panels/CanvasElementSelectBar.vue'
 import CanvasNodeOverlays from './panels/CanvasNodeOverlays.vue'
 import CanvasImagePreview from './panels/CanvasImagePreview.vue'
@@ -498,6 +509,8 @@ const {
   handleGroupToStoryboard,
   handleSubmitSaveSkill,
   closeSaveSkillPopover,
+  closeImageToolbarCustomize,
+  saveImageToolbarCustomize,
   listSavedCanvasSkills,
   handleLogout,
   handleMergeStoryboardGroup,
@@ -624,6 +637,8 @@ const {
   showImageHdMenu,
   showImageToolbarMore,
   showImageToolbarMoreMenu,
+  showImageToolbarCustomize,
+  imageToolbarCustomizeSettings,
   showMinimap,
   showMultiSelectToolbar,
   showNodeToolbar,
@@ -643,6 +658,7 @@ const {
   textExpandOpen,
   textExpandTitle,
   textFormatToolbarPos,
+  toolbarRevision,
   toggleAddMenu,
   toggleAssetsPanel,
   toggleAssetCenterPanel,

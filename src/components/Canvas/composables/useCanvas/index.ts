@@ -31,8 +31,10 @@ type GridSplitCanvasApi = Pick<
   | 'showImageResizeOverlay'
   | 'imageResizeOverlay'
   | 'videoGenAspectRatio'
-  | 'imageDialogueSettings'
-  | 'videoDialogueSettings'
+    | 'imageDialogueSettings'
+    | 'videoDialogueSettings'
+    | 'showImageToolbarCustomize'
+    | 'imageToolbarCustomizeSettings'
 > &
   Pick<
     CanvasBindings,
@@ -66,6 +68,8 @@ type GridSplitCanvasApi = Pick<
     | 'videoDialogueSourceRefs'
     | 'videoGenSavedSettings'
     | 'showVideoDialoguePanel'
+    | 'closeImageToolbarCustomize'
+    | 'saveImageToolbarCustomize'
   >
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {

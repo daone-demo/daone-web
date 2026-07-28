@@ -45,7 +45,7 @@
       <span class="canvas__group-icon" data-icon="toolbox" aria-hidden="true" />
       添加到工具箱
     </button>
-    <button 
+    <!-- <button 
       type="button"
       class="canvas__group-btn"
       title="转分镜组"
@@ -53,7 +53,7 @@
     >
       <span class="canvas__group-icon" data-icon="storyboard" aria-hidden="true" />
       转分镜组
-    </button>
+    </button> -->
     <button 
       type="button"
       class="canvas__group-btn"
