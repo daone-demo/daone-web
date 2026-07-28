@@ -80,6 +80,7 @@ import {
   type VideoGenDuration,
   createDefaultImageDialogueSettings,
   createDefaultVideoDialogueSettings,
+  isVideoNodeGenerating,
 } from '../../constants'
 import { splitImageIntoGrid, snapGridSplitNodePosition, areAllGridSplitResultNodes } from '../../gridSplitUtils'
 import {
@@ -363,18 +364,40 @@ export function registerCore(bind: CanvasBindings) {
       !showImageEditText.value,
   )
   const showVideoGenPromptBar = computed(
-    () =>
-      !showMultiSelectToolbar.value &&
-      !showGroupToolbar.value &&
-      Boolean(activeVideoGenPromptNodeId.value) &&
-      nodeCount.value > 0 &&
-      !showImageCrop.value &&
-      !showImageGridSplit.value &&
-      !showImageErase.value &&
-      !showImageInpaint.value &&
-      !showImageExpand.value &&
-      !showImageEditText.value,
+    () => {
+      if (
+        showMultiSelectToolbar.value ||
+        showGroupToolbar.value ||
+        !activeVideoGenPromptNodeId.value ||
+        nodeCount.value === 0 ||
+        showImageCrop.value ||
+        showImageGridSplit.value ||
+        showImageErase.value ||
+        showImageInpaint.value ||
+        showImageExpand.value ||
+        showImageEditText.value
+      ) {
+        return false
+      }
+      const g = graph.value
+      const id = activeVideoGenPromptNodeId.value
+      if (g && id) {
+        const data = g.getCellById(id)?.getData() as CanvasNodeData | undefined
+        if (isVideoNodeGenerating(data)) return false
+      }
+      return true
+    },
   )
+
+  const showVideoDialoguePanel = computed(() => {
+    if (!showVideoDialogue.value || selectedKind.value !== 'video') return false
+    const g = graph.value
+    const id = selectedNodeId.value
+    if (!g || !id) return showVideoDialogue.value
+    const data = g.getCellById(id)?.getData() as CanvasNodeData | undefined
+    if (isVideoNodeGenerating(data)) return false
+    return true
+  })
 
   const videoGenSourceRefs = computed(() => {
     void toolbarRevision.value
@@ -2140,6 +2163,7 @@ export function registerCore(bind: CanvasBindings) {
 
     persistVideoDialogueFields(sourceNodeId)
     applyVideoGenerationProvenance(sourceNode, { ...payload, prompt, mode })
+    resetVideoDialogue()
 
     const event: VideoToolbarClickEvent = {
       key: VIDEO_GENERAL_CAPABILITY_CODE,
@@ -2214,6 +2238,7 @@ export function registerCore(bind: CanvasBindings) {
     const resolvedMode = assetId ? payload.mode : 'text-to-video'
 
     persistVideoGenPrompt()
+    closeVideoGenPromptBar()
     applyVideoGenerationProvenance(
       sourceNode,
       {
@@ -7806,6 +7831,7 @@ export function registerCore(bind: CanvasBindings) {
     showTextFormatToolbar,
     showToolbarFeatureButtons,
     showVideoGenPromptBar,
+    showVideoDialoguePanel,
     spawnMediaFilesAtPoint,
     submitTextPrompt,
     syncConnectPreviewEdgeTarget,

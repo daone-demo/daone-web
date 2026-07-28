@@ -188,7 +188,7 @@
       :grid-split-rows="gridSplitRows"
       :grid-split-cols="gridSplitCols"
       :show-image-dialogue="showImageDialogue"
-      :show-video-dialogue="showVideoDialogue"
+      :show-video-dialogue="showVideoDialoguePanel"
       :show-video-hd-panel="showVideoHdPanel"
       :show-video-frames-panel="showVideoFramesPanel"
       :image-crop-source="imageCropSource"
@@ -633,6 +633,7 @@ const {
   showToolbarFeatureButtons,
   showUserMenu,
   showVideoDialogue,
+  showVideoDialoguePanel,
   showVideoFramesPanel,
   showVideoGenPromptBar,
   showVideoHdPanel,

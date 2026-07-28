@@ -144,6 +144,7 @@ import {
   drawEraseSegment,
   exportEraseMask,
   getEraseImageBounds,
+  INPAINT_BRUSH_DISPLAY_COLOR,
   redrawEraseDisplayCanvas,
   type ErasePoint,
   type EraseStroke,
@@ -356,7 +357,13 @@ function getPaintContext() {
 function refreshDisplayCanvas() {
   const canvas = displayCanvasRef.value
   if (!canvas) return
-  redrawEraseDisplayCanvas(canvas, strokes.value, getBounds())
+  redrawEraseDisplayCanvas(
+    canvas,
+    strokes.value,
+    getBounds(),
+    null,
+    INPAINT_BRUSH_DISPLAY_COLOR,
+  )
 }
 
 function commitStrokeLists(nextStrokes: EraseStroke[], nextRedo: EraseStroke[] = []) {
@@ -407,13 +414,13 @@ function updateCursor(x: number, y: number, visible: boolean) {
 function paintPointerPoint(point: ErasePoint) {
   const ctx = getPaintContext()
   if (!ctx || !currentStroke) return
-  drawEraseDot(ctx, point, currentStroke.size, getBounds())
+  drawEraseDot(ctx, point, currentStroke.size, getBounds(), INPAINT_BRUSH_DISPLAY_COLOR)
 }
 
 function paintPointerSegment(from: ErasePoint, to: ErasePoint) {
   const ctx = getPaintContext()
   if (!ctx || !currentStroke) return
-  drawEraseSegment(ctx, from, to, currentStroke.size, getBounds())
+  drawEraseSegment(ctx, from, to, currentStroke.size, getBounds(), INPAINT_BRUSH_DISPLAY_COLOR)
 }
 
 function processPointerPoint(x: number, y: number) {
@@ -825,9 +832,10 @@ onBeforeUnmount(() => {
   left: 0;
   display: none;
   margin: 0;
-  border: 2px solid rgba(17, 24, 39, 0.85);
+  border: 2px solid rgba(255, 59, 48, 0.85);
   border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+  background: rgba(255, 59, 48, 0.35);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
   pointer-events: none;
   will-change: transform, width, height;
 }

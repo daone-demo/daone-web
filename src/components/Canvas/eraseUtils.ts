@@ -11,6 +11,11 @@ export interface EraseStroke {
   size: number
 }
 
+/** 擦除工具画笔展示色 */
+export const ERASE_BRUSH_DISPLAY_COLOR = 'rgba(255, 255, 255, 0.92)'
+/** 局部修改画笔展示色（红色半透明） */
+export const INPAINT_BRUSH_DISPLAY_COLOR = 'rgba(255, 59, 48, 0.45)'
+
 export function getEraseImageBounds(
   workspaceWidth: number,
   workspaceHeight: number,
@@ -23,7 +28,7 @@ export function getEraseImageBounds(
 export function drawEraseStroke(
   ctx: CanvasRenderingContext2D,
   stroke: EraseStroke,
-  color = 'rgba(255, 255, 255, 0.92)',
+  color = ERASE_BRUSH_DISPLAY_COLOR,
 ) {
   if (stroke.points.length < 2) return
 
@@ -59,6 +64,7 @@ export function redrawEraseDisplayCanvas(
   strokes: EraseStroke[],
   bounds: { x: number; y: number; width: number; height: number },
   currentStroke?: EraseStroke | null,
+  color = ERASE_BRUSH_DISPLAY_COLOR,
 ) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
@@ -88,7 +94,7 @@ export function drawEraseSegment(
   to: ErasePoint,
   size: number,
   bounds: { x: number; y: number },
-  color = 'rgba(255, 255, 255, 0.92)',
+  color = ERASE_BRUSH_DISPLAY_COLOR,
 ) {
   ctx.save()
   ctx.lineCap = 'round'
@@ -107,7 +113,7 @@ export function drawEraseDot(
   point: ErasePoint,
   size: number,
   bounds: { x: number; y: number },
-  color = 'rgba(255, 255, 255, 0.92)',
+  color = ERASE_BRUSH_DISPLAY_COLOR,
 ) {
   ctx.save()
   ctx.fillStyle = color

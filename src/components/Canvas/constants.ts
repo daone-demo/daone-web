@@ -1515,6 +1515,15 @@ export function formatVideoGenSettings(
 
 export const VIDEO_GENERAL_CAPABILITY_CODE = 'VIDEO_GENERAL_V1'
 
+/** 视频节点是否处于视频生成任务进行中 */
+export function isVideoNodeGenerating(data: CanvasNodeData | undefined): boolean {
+  if (!data || data.kind !== 'video') return false
+  return (
+    data.uploadState === 'uploading' &&
+    (data.generationTaskType === 'VIDEO' || Boolean(String(data.generationTaskId ?? '').trim()))
+  )
+}
+
 export type VideoDialogueSource = ImageDialogueSource
 
 /** 解析视频对话面板数据源：优先 chatTools.video */
