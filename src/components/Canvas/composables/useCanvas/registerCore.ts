@@ -194,6 +194,7 @@ export function registerCore(bind: CanvasBindings) {
     imageExpandDragOffset,
     showElementSelectMode,
     showVideoGenCanvasPickMode,
+    showImageDialogueCanvasPickMode,
     elementSelectReturnNodeId,
     imageCropPos,
     imageResizeOverlay,
@@ -677,8 +678,14 @@ export function registerCore(bind: CanvasBindings) {
 
   const imageDialoguePreviews = computed<ImageSourceRef[]>(() => {
     void toolbarRevision.value
-    const data = getSelectedNodeData()
-    if (!data) return []
+    const id = showImageDialogue.value
+      ? (activeImageDialogueNodeId || (selectedKind.value === 'image' ? selectedNodeId.value : ''))
+      : selectedNodeId.value
+    if (!id) return []
+    const g = graph.value
+    const cell = g?.getCellById(id)
+    if (!cell?.isNode()) return []
+    const data = cell.getData() as CanvasNodeData
     const refs = Array.isArray(data.imageSourceRefs)
       ? data.imageSourceRefs.filter((item) => item.previewUrl)
       : []
@@ -704,13 +711,18 @@ export function registerCore(bind: CanvasBindings) {
 
   const imageDialoguePreviewUrl = computed(() => {
     void toolbarRevision.value
-    const data = getSelectedNodeData()
+    const id = showImageDialogue.value
+      ? (activeImageDialogueNodeId || (selectedKind.value === 'image' ? selectedNodeId.value : ''))
+      : selectedNodeId.value
+    if (!id) return ''
+    const data = graph.value?.getCellById(id)?.getData() as CanvasNodeData | undefined
     return data?.sourcePreviewUrl || data?.previewUrl || ''
   })
 
   const showNodeToolbar = computed(() => {
     void toolbarRevision.value
     if (videoToolbarClickDeferred.value) return false
+    if (showVideoGenCanvasPickMode.value || showImageDialogueCanvasPickMode.value) return false
     if (showVideoDialogue.value && selectedKind.value === 'video') return false
     return (
       Boolean(selectedNodeId.value) &&
@@ -3230,6 +3242,77 @@ export function registerCore(bind: CanvasBindings) {
     persistImageDialogueFields()
     showImageDialogue.value = false
     activeImageDialogueNodeId = ''
+    exitImageDialogueCanvasPickMode()
+  }
+
+  function getActiveImageDialogueTargetNodeId() {
+    if (activeImageDialogueNodeId) return activeImageDialogueNodeId
+    if (showImageDialogue.value && selectedNodeId.value && selectedKind.value === 'image') {
+      return selectedNodeId.value
+    }
+    return ''
+  }
+
+  function restoreCanvasPickTargetSelection() {
+    const g = graph.value
+    if (!g) return
+
+    const targetId = showImageDialogueCanvasPickMode.value
+      ? getActiveImageDialogueTargetNodeId()
+      : showVideoGenCanvasPickMode.value
+        ? getActiveVideoTargetNodeId()
+        : ''
+    if (!targetId) {
+      g.cleanSelection()
+      syncNodeSelectionHighlight([])
+      updateImageResizeOverlay()
+      return
+    }
+
+    const cell = g.getCellById(targetId)
+    if (!cell?.isNode()) return
+
+    const targetData = cell.getData() as CanvasNodeData
+    const currentIds = getGraphSelectedNodeIds()
+    if (currentIds.length !== 1 || currentIds[0] !== targetId) {
+      clearEdgeSelection()
+      g.cleanSelection()
+      g.select(cell)
+    }
+
+    selectedNodeIds.value = [targetId]
+    selectedNodeId.value = targetId
+    selectedKind.value = targetData.kind
+    syncNodeSelectionHighlight(targetId)
+    bumpToolbarRevision()
+
+    const overlayRoot = canvasRef.value
+    if (overlayRoot) {
+      const node = cell as Node
+      if (showImageDialogue.value && targetData.kind === 'image') {
+        dialoguePos.value = getNodeDialoguePosition(g, node, overlayRoot)
+      }
+      if (activeVideoGenPromptNodeId.value === targetId) {
+        updateVideoGenPromptBarPosition()
+      }
+    }
+    updateImageResizeOverlay()
+  }
+
+  function hasImageDialogueSourceRef(
+    targetNodeId: string,
+    imageNodeId: string,
+    previewUrl: string,
+  ) {
+    const g = graph.value
+    if (!g || !targetNodeId) return false
+    const cell = g.getCellById(targetNodeId)
+    if (!cell?.isNode()) return false
+    const data = cell.getData() as CanvasNodeData
+    const refs = seedImageDialogueRefs(data, targetNodeId)
+    return refs.some(
+      (item) => item.nodeId === imageNodeId || item.previewUrl === previewUrl,
+    )
   }
 
   function seedImageDialogueRefs(data: CanvasNodeData, targetNodeId: string): ImageSourceRef[] {
@@ -4497,6 +4580,7 @@ export function registerCore(bind: CanvasBindings) {
   function enterElementSelectMode() {
     elementSelectReturnNodeId.value = activeVideoGenPromptNodeId.value
     exitVideoGenCanvasPickMode()
+    exitImageDialogueCanvasPickMode()
     showElementSelectMode.value = true
   }
 
@@ -4507,6 +4591,7 @@ export function registerCore(bind: CanvasBindings) {
 
   function enterVideoGenCanvasPickMode() {
     exitElementSelectMode()
+    exitImageDialogueCanvasPickMode()
     showVideoGenCanvasPickMode.value = true
   }
 
@@ -4520,6 +4605,63 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
     enterVideoGenCanvasPickMode()
+  }
+
+  function enterImageDialogueCanvasPickMode() {
+    exitElementSelectMode()
+    exitVideoGenCanvasPickMode()
+    const targetId = getActiveImageDialogueTargetNodeId()
+    if (!targetId) return
+    if (!activeImageDialogueNodeId) {
+      activeImageDialogueNodeId = targetId
+    }
+    showImageDialogueCanvasPickMode.value = true
+  }
+
+  function exitImageDialogueCanvasPickMode() {
+    showImageDialogueCanvasPickMode.value = false
+  }
+
+  function toggleImageDialogueCanvasPickMode() {
+    if (showImageDialogueCanvasPickMode.value) {
+      exitImageDialogueCanvasPickMode()
+      return
+    }
+    if (!getActiveImageDialogueTargetNodeId()) return
+    enterImageDialogueCanvasPickMode()
+  }
+
+  async function handleImageDialogueCanvasPick(nodeId: string) {
+    const targetNodeId = getActiveImageDialogueTargetNodeId()
+    if (!targetNodeId || !nodeId || nodeId === targetNodeId) return
+
+    const g = graph.value
+    if (!g) return
+
+    const source = g.getCellById(nodeId)
+    if (!source?.isNode()) return
+
+    const sourceData = source.getData() as CanvasNodeData
+    if (
+      sourceData.kind !== 'image' ||
+      !sourceData.previewUrl ||
+      sourceData.uploadState === 'uploading' ||
+      sourceData.imageGenTask === 'picker'
+    ) {
+      return
+    }
+
+    if (hasImageDialogueSourceRef(targetNodeId, nodeId, sourceData.previewUrl)) {
+      message.info('该图片已添加')
+      return
+    }
+
+    const linked = await linkImageNodeToImageDialogue(nodeId, targetNodeId)
+    if (linked) {
+      message.success('已添加参考图')
+      bumpToolbarRevision()
+      restoreCanvasPickTargetSelection()
+    }
   }
 
   async function handleVideoGenCanvasPick(nodeId: string) {
@@ -4554,7 +4696,8 @@ export function registerCore(bind: CanvasBindings) {
     const linked = await linkImageNodeToVideoGen(nodeId)
     if (linked) {
       message.success('已添加参考图')
-      updateNodeToolbar()
+      bumpToolbarRevision()
+      restoreCanvasPickTargetSelection()
     }
   }
 
@@ -5747,6 +5890,11 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     if (!g) return
 
+    if (showVideoGenCanvasPickMode.value || showImageDialogueCanvasPickMode.value) {
+      restoreCanvasPickTargetSelection()
+      return
+    }
+
     const prevDialogueNodeId = activeImageDialogueNodeId
     const prevVideoDialogueNodeId = activeVideoDialogueNodeId
     const ids = getGraphSelectedNodeIds()
@@ -6850,6 +6998,23 @@ export function registerCore(bind: CanvasBindings) {
     }
     const multiSelect = Boolean(e?.ctrlKey || e?.metaKey)
 
+    if (
+      !multiSelect &&
+      (showVideoGenCanvasPickMode.value || showImageDialogueCanvasPickMode.value)
+    ) {
+      clearEdgeSelection()
+      if (data.kind === 'image' && data.previewUrl) {
+        if (showVideoGenCanvasPickMode.value) {
+          void handleVideoGenCanvasPick(node.id)
+        } else {
+          void handleImageDialogueCanvasPick(node.id)
+        }
+      } else {
+        restoreCanvasPickTargetSelection()
+      }
+      return
+    }
+
     clearEdgeSelection()
     selectedNodeId.value = node.id
     selectedKind.value = data.kind
@@ -6862,14 +7027,6 @@ export function registerCore(bind: CanvasBindings) {
 
     if (multiSelect) {
       cancelVideoToolbarDefer()
-      syncSelectionFromGraph()
-      return
-    }
-
-    if (showVideoGenCanvasPickMode.value) {
-      if (data.kind === 'image' && data.previewUrl) {
-        void handleVideoGenCanvasPick(node.id)
-      }
       syncSelectionFromGraph()
       return
     }
@@ -6956,6 +7113,7 @@ export function registerCore(bind: CanvasBindings) {
     closeTextExpand()
     exitElementSelectMode()
     exitVideoGenCanvasPickMode()
+    exitImageDialogueCanvasPickMode()
     syncNodeSelectionHighlight([])
     selectedEdgeId.value = ''
     clearEdgeHoverState()
@@ -7096,6 +7254,10 @@ export function registerCore(bind: CanvasBindings) {
     }
     if (showVideoGenCanvasPickMode.value) {
       exitVideoGenCanvasPickMode()
+      return true
+    }
+    if (showImageDialogueCanvasPickMode.value) {
+      exitImageDialogueCanvasPickMode()
       return true
     }
     if (showElementSelectMode.value) {
@@ -7878,6 +8040,11 @@ export function registerCore(bind: CanvasBindings) {
     instance.on('edge:mouseenter', handleEdgeMouseEnter)
     instance.on('edge:mouseleave', handleEdgeMouseLeave)
     instance.on('selection:changed', () => {
+      if (showVideoGenCanvasPickMode.value || showImageDialogueCanvasPickMode.value) {
+        restoreCanvasPickTargetSelection()
+        return
+      }
+
       const g = graph.value
       if (!g) {
         syncSelectionFromGraph()
@@ -8171,7 +8338,9 @@ export function registerCore(bind: CanvasBindings) {
     enterElementSelectMode,
     exitElementSelectMode,
     exitVideoGenCanvasPickMode,
+    exitImageDialogueCanvasPickMode,
     toggleVideoGenCanvasPickMode,
+    toggleImageDialogueCanvasPickMode,
     filterUploadFiles,
     finishConnectSpawn,
     generateImageFromPrompt,

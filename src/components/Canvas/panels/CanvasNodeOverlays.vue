@@ -175,7 +175,7 @@
       :source-refs="videoGenSourceRefs"
       :saved-settings="videoGenSavedSettings"
       :element-select-mode="elementSelectMode"
-      :canvas-pick-mode="canvasPickMode"
+      :canvas-pick-mode="videoGenCanvasPickMode"
       :video-num="videoNum"
       :chat-tools="chatTools"
       @update:prompt="emit('update:videoGenPromptText', $event)"
@@ -345,6 +345,7 @@
       :settings="imageDialogueSettings"
       :preview-url="imageDialoguePreviewUrl"
       :previews="imageDialoguePreviews"
+      :canvas-pick-mode="imageDialogueCanvasPickMode"
       :chat-tools="chatTools"
       :workflows="workflows"
       @update:model-value="emit('update:imageDialogueText', $event)"
@@ -352,6 +353,7 @@
       @remove="emit('remove-image-dialogue-preview', $event)"
       @upload-images="emit('upload-image-dialogue-images', $event)"
       @add-canvas-node="emit('add-image-dialogue-canvas-node', $event)"
+      @toggle-canvas-pick="emit('toggle-image-dialogue-canvas-pick')"
       @submit="emit('submit-image-dialogue', $event)"
     />
   </div>
@@ -560,7 +562,8 @@ const props = defineProps<{
   videoGenSavedSettings?: VideoDialogueSettings
   videoDialogueSourceRefs: VideoSourceRef[]
   elementSelectMode: boolean
-  canvasPickMode: boolean
+  videoGenCanvasPickMode: boolean
+  imageDialogueCanvasPickMode: boolean
   imageDialogueText: string
   imageDialogueSettings: ImageDialogueSettings
   imageDialoguePreviewUrl: string
@@ -633,6 +636,7 @@ const emit = defineEmits<{
   'upload-video-gen-images': [files: File[]]
   'add-video-gen-canvas-node': [nodeId: string]
   'toggle-video-gen-canvas-pick': []
+  'toggle-image-dialogue-canvas-pick': []
 }>()
 
 const showPromptWorkFlow = ref(false)

@@ -214,8 +214,8 @@
         <template #title>从画布选图</template>
         <button
           type="button"
-          class="video-gen-prompt-panel__tool"
-          :class="{ 'video-gen-prompt-panel__tool--active': canvasPickMode }"
+          class="canvas-dialogue-tool"
+          :class="{ 'canvas-dialogue-tool--active': canvasPickMode }"
           title="从画布选图"
           @mousedown.stop
           @click.stop="emit('toggle-canvas-pick')"
@@ -1334,22 +1334,12 @@ onMounted(() => {
     opacity: 0.55;
   }
 
-  &--active {
-    background: rgba(59, 130, 246, 0.16);
-    color: #60a5fa;
-  }
-
   .video-gen-prompt-panel--light & {
     color: #6b7280;
 
     &:hover:not(:disabled) {
       background: #f3f4f6;
       color: #374151;
-    }
-
-    &--active {
-      background: rgba(59, 130, 246, 0.12);
-      color: #2563eb;
     }
   }
 }

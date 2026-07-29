@@ -977,6 +977,55 @@
   pointer-events: auto;
 }
 
+.canvas-dialogue-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: #f3f4f6;
+    color: #374151;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  &--active {
+    background: #e5e7eb;
+    color: #111827;
+  }
+
+  &--loading {
+    opacity: 0.55;
+  }
+}
+
+.video-gen-prompt-panel:not(.video-gen-prompt-panel--light) .canvas-dialogue-tool {
+  color: #9ca3af;
+
+  &:hover:not(:disabled) {
+    background: #252528;
+    color: #e5e7eb;
+  }
+
+  &--active {
+    background: #2a2a30;
+    color: #f3f4f6;
+  }
+}
+
 .canvas__element-select {
   position: absolute;
   top: 88px;

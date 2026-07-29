@@ -6,7 +6,7 @@
       `canvas--bg-${canvasBgTheme}`,
       { 'canvas--file-dragover': isCanvasFileDragOver },
       { 'canvas--group-selected': showGroupToolbar },
-      { 'canvas--video-gen-pick': showVideoGenCanvasPickMode },
+      { 'canvas--video-gen-pick': showVideoGenCanvasPickMode || showImageDialogueCanvasPickMode },
     ]"
     @dragenter.prevent="onCanvasDragEnter"
     @dragover.prevent="onCanvasDragOver"
@@ -53,7 +53,7 @@
       @exit="exitElementSelectMode"
     />
 
-    <CanvasVideoGenPickHint v-if="showVideoGenCanvasPickMode" />
+    <CanvasVideoGenPickHint v-if="showVideoGenCanvasPickMode || showImageDialogueCanvasPickMode" />
 
     <CanvasMultiSelectToolbar
       v-if="showMultiSelectToolbar"
@@ -229,7 +229,8 @@
       :video-gen-saved-settings="videoGenSavedSettings"
       :video-dialogue-source-refs="videoDialogueSourceRefs"
       :element-select-mode="showElementSelectMode"
-      :canvas-pick-mode="showVideoGenCanvasPickMode"
+      :video-gen-canvas-pick-mode="showVideoGenCanvasPickMode"
+      :image-dialogue-canvas-pick-mode="showImageDialogueCanvasPickMode"
       :image-dialogue-text="imageDialogueText"
       :image-dialogue-settings="imageDialogueSettings"
       :image-dialogue-preview-url="imageDialoguePreviewUrl"
@@ -291,6 +292,7 @@
       @upload-video-gen-images="onVideoGenUploadFiles"
       @add-video-gen-canvas-node="onVideoGenAddCanvasNode"
       @toggle-video-gen-canvas-pick="toggleVideoGenCanvasPickMode"
+      @toggle-image-dialogue-canvas-pick="toggleImageDialogueCanvasPickMode"
     />
 
     <CanvasHiddenFileInput
@@ -627,7 +629,9 @@ const {
   showEdgeDeleteButton,
   showElementSelectMode,
   showVideoGenCanvasPickMode,
+  showImageDialogueCanvasPickMode,
   toggleVideoGenCanvasPickMode,
+  toggleImageDialogueCanvasPickMode,
   showGroupToolbar,
   showSaveSkillPopover,
   saveSkillPopoverPos,
