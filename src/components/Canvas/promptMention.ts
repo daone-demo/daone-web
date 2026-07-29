@@ -1,4 +1,65 @@
-export const PROMPT_MENTION_REGEX = /@图片\d+/g
+import type { ImageMarkBBox } from './constants'
+
+/** 图片引用与标记 mention，如 `@图片1`、`@标记#id：耳环` */
+export const PROMPT_MENTION_REGEX = /@(?:图片\d+|标记(?:#[^：\s]+)?：[^\s@]+)/g
+
+export const PROMPT_MARK_MENTION_THUMB_CLASS = 'prompt-mark-mention__thumb'
+export const PROMPT_MARK_MENTION_LABEL_CLASS = 'prompt-mark-mention__label'
+export const PROMPT_MARK_MENTION_CHEVRON_CLASS = 'prompt-mark-mention__chevron'
+
+export function buildImageMarkMentionToken(mark: { id: string; label: string }) {
+  const label = mark.label.trim()
+  return label ? `@标记#${mark.id}：${label}` : ''
+}
+
+export function isImageMarkMentionToken(token: string) {
+  return token.startsWith('@标记')
+}
+
+export function parseImageMarkMentionToken(token: string) {
+  const match = token.match(/^@标记(?:#([^：\s]+))?：(.+)$/)
+  if (!match) return null
+  return { markId: match[1] ?? '', label: match[2] }
+}
+
+export interface PromptMarkMentionMeta {
+  label: string
+  thumbStyle?: Record<string, string>
+}
+
+export function buildMarkMentionThumbStyle(options: {
+  thumbUrl: string
+  imageWidth: number
+  imageHeight: number
+  bbox?: ImageMarkBBox
+}): Record<string, string> {
+  const { thumbUrl, imageWidth, imageHeight, bbox } = options
+  if (!thumbUrl) return {}
+
+  const safeUrl = thumbUrl.replace(/"/g, '\\"')
+
+  if (bbox && bbox.width > 0 && bbox.height > 0 && imageWidth > 0 && imageHeight > 0) {
+    const sizeX = (imageWidth / bbox.width) * 100
+    const sizeY = (imageHeight / bbox.height) * 100
+    const posX = imageWidth > bbox.width
+      ? (bbox.x / (imageWidth - bbox.width)) * 100
+      : 0
+    const posY = imageHeight > bbox.height
+      ? (bbox.y / (imageHeight - bbox.height)) * 100
+      : 0
+    return {
+      backgroundImage: `url("${safeUrl}")`,
+      backgroundSize: `${sizeX}% ${sizeY}%`,
+      backgroundPosition: `${posX}% ${posY}%`,
+    }
+  }
+
+  return {
+    backgroundImage: `url("${safeUrl}")`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+  }
+}
 
 /**
  * 将画布提示词中的 `@图片N` 转为后端约定格式 `[Image N]`。
@@ -13,15 +74,51 @@ export function isInputComposing(event?: Event): boolean {
   return Boolean((event as InputEvent | KeyboardEvent | undefined)?.isComposing)
 }
 
-export function createPromptMentionApi(mentionClass: string) {
+export function createPromptMentionApi(
+  mentionClass: string,
+  options?: {
+    resolveMention?: (token: string) => PromptMarkMentionMeta | null
+  },
+) {
   const isMentionEl = (node: Node | null): node is HTMLElement =>
     node instanceof HTMLElement && node.classList.contains(mentionClass)
+
+  function applyThumbStyle(el: HTMLElement, style?: Record<string, string>) {
+    if (!style) return
+    Object.assign(el.style, style)
+  }
 
   function createMentionSpan(token: string) {
     const span = document.createElement('span')
     span.className = mentionClass
     span.contentEditable = 'false'
     span.dataset.mention = token
+
+    if (isImageMarkMentionToken(token)) {
+      const parsed = parseImageMarkMentionToken(token)
+      const meta = options?.resolveMention?.(token)
+      const label = meta?.label ?? parsed?.label ?? token
+
+      span.classList.add(`${mentionClass}--mark`)
+
+      const thumb = document.createElement('span')
+      thumb.className = PROMPT_MARK_MENTION_THUMB_CLASS
+      thumb.setAttribute('aria-hidden', 'true')
+      applyThumbStyle(thumb, meta?.thumbStyle)
+
+      const labelEl = document.createElement('span')
+      labelEl.className = PROMPT_MARK_MENTION_LABEL_CLASS
+      labelEl.textContent = label
+
+      const chevron = document.createElement('span')
+      chevron.className = PROMPT_MARK_MENTION_CHEVRON_CLASS
+      chevron.setAttribute('aria-hidden', 'true')
+      chevron.textContent = '›'
+
+      span.append(thumb, labelEl, chevron)
+      return span
+    }
+
     span.textContent = token
     return span
   }

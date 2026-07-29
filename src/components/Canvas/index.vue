@@ -7,6 +7,7 @@
       { 'canvas--file-dragover': isCanvasFileDragOver },
       { 'canvas--group-selected': showGroupToolbar },
       { 'canvas--video-gen-pick': showVideoGenCanvasPickMode || showImageDialogueCanvasPickMode },
+      { 'canvas--element-select': showElementSelectMode },
     ]"
     @dragenter.prevent="onCanvasDragEnter"
     @dragover.prevent="onCanvasDragOver"
@@ -235,6 +236,9 @@
       :image-dialogue-settings="imageDialogueSettings"
       :image-dialogue-preview-url="imageDialoguePreviewUrl"
       :image-dialogue-previews="imageDialoguePreviews"
+      :element-marks="elementMarks"
+      :mention-insert-serial="mentionInsertSerial"
+      :mention-insert-token="mentionInsertToken"
       :video-dialogue-text="videoDialogueText"
       :video-dialogue-settings="videoDialogueSettings"
       :video-hd-magnification="videoHdMagnification"
@@ -293,6 +297,8 @@
       @add-video-gen-canvas-node="onVideoGenAddCanvasNode"
       @toggle-video-gen-canvas-pick="toggleVideoGenCanvasPickMode"
       @toggle-image-dialogue-canvas-pick="toggleImageDialogueCanvasPickMode"
+      @toggle-image-dialogue-mark="toggleImageDialogueMarkMode"
+      @mention-inserted="onMentionInserted"
     />
 
     <CanvasHiddenFileInput
@@ -495,6 +501,9 @@ const {
   dialoguePos,
   duplicateSelectedNodes,
   edgeDeleteBtnPos,
+  elementMarks,
+  mentionInsertSerial,
+  mentionInsertToken,
   exitElementSelectMode,
   fileInputAccept,
   fileInputMultiple,
@@ -633,6 +642,7 @@ const {
   showImageDialogueCanvasPickMode,
   toggleVideoGenCanvasPickMode,
   toggleImageDialogueCanvasPickMode,
+  toggleImageDialogueMarkMode,
   showGroupToolbar,
   showSaveSkillPopover,
   saveSkillPopoverPos,
@@ -714,6 +724,16 @@ const {
   addImagesFromFiles,
   getNodeCount,
 } = canvasRuntime
+
+function onMentionInserted() {
+  if (showImageDialogue.value) {
+    persistImageDialogueFields()
+    return
+  }
+  if (showVideoGenPromptBar.value) {
+    persistVideoGenPrompt()
+  }
+}
 
 defineExpose({
   addImageFromFile,

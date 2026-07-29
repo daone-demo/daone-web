@@ -1,0 +1,63 @@
+.prompt-mark-mention__thumb {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: #e5e7eb;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+}
+
+.prompt-mark-mention__label {
+  font-size: 13px;
+  line-height: 1;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.prompt-mark-mention__chevron {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: #9ca3af;
+}
+
+@mixin prompt-mark-mention-pill($mention-class) {
+  :deep(.#{$mention-class}--mark) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    margin: 0 1px;
+    padding: 2px 8px 2px 2px;
+    border-radius: 999px;
+    background: #f2f2f2;
+    color: #111827;
+    font-weight: 400;
+    line-height: 1;
+    vertical-align: middle;
+    user-select: all;
+    cursor: default;
+    white-space: nowrap;
+  }
+}
+
+@mixin prompt-mark-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border: none;
+  border-radius: 999px;
+  background: #f2f2f2;
+  color: #111827;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: #e8e8e8;
+  }
+}

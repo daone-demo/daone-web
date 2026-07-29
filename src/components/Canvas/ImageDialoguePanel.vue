@@ -174,7 +174,14 @@
         </button> -->
         <a-tooltip>
           <template #title>标记</template>
-          <button type="button" class="video-gen-prompt-panel__tool" title="标记">
+          <button
+            type="button"
+            class="video-gen-prompt-panel__tool"
+            :class="{ 'video-gen-prompt-panel__tool--active': elementSelectMode }"
+            title="标记"
+            @mousedown.stop
+            @click.stop="emit('toggle-mark')"
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -247,7 +254,14 @@ import { useCanvasBgTheme } from './useCanvasBgTheme';
 import ImageGenSettingsPopover from './ImageGenSettingsPopover.vue';
 import ImageStylePanel from './ImageStylePanel.vue';
 import DialogueWorkflowSelect from './DialogueWorkflowSelect.vue';
-import { createPromptMentionApi, isInputComposing, needsSpaceBeforeMention } from './promptMention';
+import {
+  buildMarkMentionThumbStyle,
+  createPromptMentionApi,
+  isInputComposing,
+  needsSpaceBeforeMention,
+  parseImageMarkMentionToken,
+  type PromptMarkMentionMeta,
+} from './promptMention';
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
   IMAGE_DIALOGUE_PLACEHOLDER,
@@ -265,6 +279,7 @@ import {
   type ImageDialogueSettings,
   type ImageDialogueSubmitPayload,
   type ImageSourceRef,
+  type ImageMarkItem,
   type ImageStyleCard,
   type WorkflowRecord,
 } from './constants';
@@ -275,6 +290,10 @@ const props = defineProps<{
   previewUrl?: string
   previews?: ImageSourceRef[]
   canvasPickMode?: boolean
+  elementSelectMode?: boolean
+  elementMarks?: ImageMarkItem[]
+  mentionInsertSerial?: number
+  mentionInsertToken?: string
   chatTools?: ChatTools | null
   workflows: WorkflowRecord[]
 }>();
@@ -286,11 +305,12 @@ const emit = defineEmits<{
   'upload-images': [files: File[]]
   'add-canvas-node': [nodeId: string]
   'toggle-canvas-pick': []
+  'toggle-mark': []
+  'mention-inserted': []
   submit: [payload: ImageDialogueSubmitPayload]
 }>()
 
 const { isLightTheme } = useCanvasBgTheme()
-const mentionApi = createPromptMentionApi('image-dialogue__mention')
 const promptInputRef = ref<HTMLElement | null>(null)
 let skipPromptWatch = false
 const isPromptComposing = ref(false)
@@ -310,6 +330,44 @@ const previewList = computed(() => {
     return [{ key: 'src-0', nodeId: '', previewUrl: props.previewUrl }]
   }
   return []
+})
+
+function resolveMarkPreviewUrl(mark: ImageMarkItem) {
+  const ref = previewList.value.find((item) => item.nodeId === mark.sourceNodeId)
+  return ref?.previewUrl || props.previewUrl || ''
+}
+
+function getMarkThumbStyle(mark: ImageMarkItem) {
+  const thumbUrl = resolveMarkPreviewUrl(mark)
+  return buildMarkMentionThumbStyle({
+    thumbUrl,
+    imageWidth: mark.imageWidth,
+    imageHeight: mark.imageHeight,
+    bbox: mark.bbox,
+  })
+}
+
+function resolveMarkMentionMeta(token: string): PromptMarkMentionMeta | null {
+  const parsed = parseImageMarkMentionToken(token)
+  if (!parsed) return null
+
+  const mark = (props.elementMarks ?? []).find((item) =>
+    item.mentionToken === token
+    || (parsed.markId && item.id === parsed.markId)
+    || item.label === parsed.label,
+  )
+
+  const label = mark?.label ?? parsed.label
+  if (!mark) return { label }
+
+  return {
+    label,
+    thumbStyle: getMarkThumbStyle(mark),
+  }
+}
+
+const mentionApi = createPromptMentionApi('image-dialogue__mention', {
+  resolveMention: resolveMarkMentionMeta,
 })
 
 const hoveredThumb = ref<string | null>(null)
@@ -487,8 +545,8 @@ function syncPromptView(text = props.modelValue) {
   mentionApi.setPlainTextOffset(el, offset)
 }
 
-function insertRefMention(index: number) {
-  const token = `@图片${index}`
+function insertMentionToken(token: string) {
+  if (!token) return
   const el = promptInputRef.value
   if (!el) {
     const current = props.modelValue
@@ -531,6 +589,25 @@ function insertRefMention(index: number) {
 
   emitPrompt(mentionApi.serializePromptEl(el))
   nextTick(() => syncPromptView())
+}
+
+function insertRefMention(index: number) {
+  insertMentionToken(`@图片${index}`)
+}
+
+function promptContainsMarkToken(token: string) {
+  if (!token) return false
+  return props.modelValue.includes(token)
+}
+
+function syncMissingMarksIntoPrompt() {
+  const marks = props.elementMarks ?? []
+  const missing = marks.filter((mark) => mark.mentionToken && !promptContainsMarkToken(mark.mentionToken))
+  if (!missing.length) return
+
+  for (const mark of missing) {
+    insertMentionToken(mark.mentionToken)
+  }
 }
 
 function onPromptCompositionStart() {
@@ -596,8 +673,19 @@ watch(
   },
 )
 
+watch(
+  () => props.elementMarks?.length ?? 0,
+  (length, prevLength) => {
+    if (length <= prevLength) return
+    nextTick(() => syncMissingMarksIntoPrompt())
+  },
+)
+
 onMounted(() => {
-  nextTick(() => syncPromptView())
+  nextTick(() => {
+    syncPromptView()
+    syncMissingMarksIntoPrompt()
+  })
 })
 
 // function openStyleModal() {
@@ -749,6 +837,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
+@import './promptMention.scss';
 .image-dialogue {
   position: relative;
   width: 100%;
@@ -863,6 +952,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.video-gen-prompt-panel__tool--active {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
 }
 
 .image-dialogue__thumb {
@@ -1083,6 +1177,8 @@ onBeforeUnmount(() => {
     user-select: all;
     cursor: default;
   }
+
+  @include prompt-mark-mention-pill('image-dialogue__mention');
 
   .image-dialogue--light & {
     color: #111827;

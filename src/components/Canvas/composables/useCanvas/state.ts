@@ -144,6 +144,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showElementSelectMode = ref(false)
   const showVideoGenCanvasPickMode = ref(false)
   const showImageDialogueCanvasPickMode = ref(false)
+  const elementSelectContext = ref<'image-dialogue' | 'video-gen' | null>(null)
   const elementSelectReturnNodeId = ref('')
   const imageCropPos = ref({ left: 0, top: 0, width: 360, height: 420 })
   const imageResizeOverlay = ref({
@@ -199,6 +200,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showVideoHdPanel = ref(false)
   const showVideoFramesPanel = ref(false)
   const imageDialogueText = ref('')
+  const mentionInsertSerial = ref(0)
+  const mentionInsertToken = ref('')
   const imageDialogueSettings = ref<ImageDialogueSettings>(createDefaultImageDialogueSettings())
   const videoDialogueText = ref('')
   const videoDialogueSettings = ref<VideoDialogueSettings>(createDefaultVideoDialogueSettings())
@@ -309,6 +312,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showElementSelectMode,
     showVideoGenCanvasPickMode,
     showImageDialogueCanvasPickMode,
+    elementSelectContext,
     elementSelectReturnNodeId,
     imageCropPos,
     imageResizeOverlay,
@@ -346,6 +350,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showVideoHdPanel,
     showVideoFramesPanel,
     imageDialogueText,
+    mentionInsertSerial,
+    mentionInsertToken,
     imageDialogueSettings,
     videoDialogueText,
     videoDialogueSettings,

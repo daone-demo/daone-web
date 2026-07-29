@@ -173,9 +173,12 @@
       :active-tab="videoGenActiveTab"
       :aspect-ratio="videoGenAspectRatio"
       :source-refs="videoGenSourceRefs"
+      :element-marks="elementMarks"
       :saved-settings="videoGenSavedSettings"
       :element-select-mode="elementSelectMode"
       :canvas-pick-mode="videoGenCanvasPickMode"
+      :mention-insert-serial="mentionInsertSerial"
+      :mention-insert-token="mentionInsertToken"
       :video-num="videoNum"
       :chat-tools="chatTools"
       @update:prompt="emit('update:videoGenPromptText', $event)"
@@ -188,6 +191,7 @@
       @upload-images="emit('upload-video-gen-images', $event)"
       @add-canvas-node="emit('add-video-gen-canvas-node', $event)"
       @toggle-canvas-pick="emit('toggle-video-gen-canvas-pick')"
+      @mention-inserted="emit('mention-inserted')"
       @submit="emit('submit-video-gen-prompt', $event)"
     />
   </div>
@@ -346,6 +350,10 @@
       :preview-url="imageDialoguePreviewUrl"
       :previews="imageDialoguePreviews"
       :canvas-pick-mode="imageDialogueCanvasPickMode"
+      :element-select-mode="elementSelectMode"
+      :element-marks="elementMarks"
+      :mention-insert-serial="mentionInsertSerial"
+      :mention-insert-token="mentionInsertToken"
       :chat-tools="chatTools"
       :workflows="workflows"
       @update:model-value="emit('update:imageDialogueText', $event)"
@@ -354,6 +362,8 @@
       @upload-images="emit('upload-image-dialogue-images', $event)"
       @add-canvas-node="emit('add-image-dialogue-canvas-node', $event)"
       @toggle-canvas-pick="emit('toggle-image-dialogue-canvas-pick')"
+      @toggle-mark="emit('toggle-image-dialogue-mark')"
+      @mention-inserted="emit('mention-inserted')"
       @submit="emit('submit-image-dialogue', $event)"
     />
   </div>
@@ -444,6 +454,7 @@ import {
   TEXT_PROMPT_MODEL_MENU,
   buildImageWorkflowOptions,
   type ImageSourceRef,
+  type ImageMarkItem,
   type ChatTools,
   type ImageCapability,
   type ImageDialogueSubmitPayload,
@@ -568,6 +579,9 @@ const props = defineProps<{
   imageDialogueSettings: ImageDialogueSettings
   imageDialoguePreviewUrl: string
   imageDialoguePreviews: ImageSourceRef[]
+  elementMarks: ImageMarkItem[]
+  mentionInsertSerial: number
+  mentionInsertToken: string
   videoDialogueText: string
   videoDialogueSettings: VideoDialogueSettings
   videoHdMagnification: VideoHdMagnification
@@ -638,6 +652,8 @@ const emit = defineEmits<{
   'add-video-gen-canvas-node': [nodeId: string]
   'toggle-video-gen-canvas-pick': []
   'toggle-image-dialogue-canvas-pick': []
+  'toggle-image-dialogue-mark': []
+  'mention-inserted': []
 }>()
 
 const showPromptWorkFlow = ref(false)

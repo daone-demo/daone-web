@@ -39,16 +39,27 @@ import {
 } from '../../editTextUtils'
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import { downloadCanvasMedia } from '../../mediaDownload'
+import {
+  appendElementMarkToNode,
+  appendImageMarkToNode,
+  buildImageMarkItem,
+  clientPointToImageNaturalCoords,
+  parseImageMarkRecognizeResult,
+  setImageMarkAnalyzing,
+  isImageMarkAnalyzing,
+} from '../../imageMarkUtils'
 import { toVideoApiPrompt } from '../../promptMention'
 import {
   bindGenerationTaskId,
   followModelGenerationTaskOnNode,
   followTextGenerationTaskOnNode,
+  isGenerationTaskTerminal,
   markGenerationNodeFailed,
   markTextGenerationNodeFailed,
   markVideoGenerationNodeFailed,
   normalizeGenerationTaskDetail,
   pickImageGenerationResults,
+  pollGenerationTask,
   applyGenerationResultToNode,
   resetResumedGenerationTaskCache,
   resumePendingGenerationTasks,
@@ -195,6 +206,7 @@ export function registerCore(bind: CanvasBindings) {
     showElementSelectMode,
     showVideoGenCanvasPickMode,
     showImageDialogueCanvasPickMode,
+    elementSelectContext,
     elementSelectReturnNodeId,
     imageCropPos,
     imageResizeOverlay,
@@ -232,6 +244,8 @@ export function registerCore(bind: CanvasBindings) {
     showVideoHdPanel,
     showVideoFramesPanel,
     imageDialogueText,
+    mentionInsertSerial,
+    mentionInsertToken,
     imageDialogueSettings,
     videoDialogueText,
     videoDialogueSettings,
@@ -263,6 +277,7 @@ export function registerCore(bind: CanvasBindings) {
   let pendingProjectCanvas: ProjectCanvasResponse | null = null
   let videoToolbarDeferTimer: ReturnType<typeof setTimeout> | null = null
   const videoToolbarClickDeferred = ref(false)
+  const imageMarkRecognizing = ref(false)
   const VIDEO_TOOLBAR_CLICK_DEFER_MS = 280
 
   function cancelVideoToolbarDefer() {
@@ -717,6 +732,16 @@ export function registerCore(bind: CanvasBindings) {
     if (!id) return ''
     const data = graph.value?.getCellById(id)?.getData() as CanvasNodeData | undefined
     return data?.sourcePreviewUrl || data?.previewUrl || ''
+  })
+
+  const elementMarks = computed(() => {
+    void toolbarRevision.value
+    const returnId = elementSelectReturnNodeId.value
+      || (showImageDialogue.value ? getActiveImageDialogueTargetNodeId() : '')
+      || (showVideoGenPromptBar.value ? activeVideoGenPromptNodeId.value : '')
+    if (!returnId) return []
+    const data = graph.value?.getCellById(returnId)?.getData() as CanvasNodeData | undefined
+    return Array.isArray(data?.elementMarks) ? data!.elementMarks! : []
   })
 
   const showNodeToolbar = computed(() => {
@@ -4600,16 +4625,163 @@ export function registerCore(bind: CanvasBindings) {
     exitVideoGenCanvasPickMode()
   }
 
-  function enterElementSelectMode() {
-    elementSelectReturnNodeId.value = activeVideoGenPromptNodeId.value
+  function enterElementSelectMode(context: 'image-dialogue' | 'video-gen' = 'video-gen') {
+    const returnId = context === 'image-dialogue'
+      ? getActiveImageDialogueTargetNodeId()
+      : activeVideoGenPromptNodeId.value
+    if (!returnId) return
+    elementSelectContext.value = context
+    elementSelectReturnNodeId.value = returnId
     exitVideoGenCanvasPickMode()
     exitImageDialogueCanvasPickMode()
     showElementSelectMode.value = true
+    bumpToolbarRevision()
   }
 
   function exitElementSelectMode() {
     showElementSelectMode.value = false
+    elementSelectContext.value = null
     elementSelectReturnNodeId.value = ''
+    imageMarkRecognizing.value = false
+    const g = graph.value
+    if (!g) return
+    g.getNodes().forEach((cell) => {
+      const node = cell as Node
+      const data = node.getData() as CanvasNodeData
+      if (data.imageMarkAnalyzing) {
+        setImageMarkAnalyzing(node, null)
+      }
+    })
+    bumpToolbarRevision()
+  }
+
+  function queueMentionInsert(token: string) {
+    const trimmed = token.trim()
+    if (!trimmed) return
+    mentionInsertToken.value = trimmed
+    mentionInsertSerial.value += 1
+  }
+
+  async function handleImageMarkRecognize(sourceNode: Node, event?: MouseEvent) {
+    const g = graph.value
+    if (!g || !showElementSelectMode.value || !event) return
+
+    if (imageMarkRecognizing.value || isImageMarkAnalyzing(g)) {
+      message.warning('正在分析标记，请等待完成后再试')
+      return
+    }
+
+    const returnNodeId = elementSelectReturnNodeId.value
+    if (!returnNodeId) return
+
+    const sourceData = sourceNode.getData() as CanvasNodeData
+    if (sourceData.kind !== 'image' || !sourceData.previewUrl) return
+
+    const assetId = resolveImageAssetId(sourceData)
+    if (!assetId) {
+      message.warning('图片素材 ID 不存在，请等待上传完成')
+      return
+    }
+
+    const point = clientPointToImageNaturalCoords(g, sourceNode, event.clientX, event.clientY)
+    if (!point) {
+      message.warning('请点击图片区域进行标记')
+      return
+    }
+
+    imageMarkRecognizing.value = true
+    setImageMarkAnalyzing(sourceNode, { x: point.x, y: point.y })
+    bumpToolbarRevision()
+
+    const idempotencyKey =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `image-mark-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    try {
+      const created = normalizeGenerationTaskDetail(
+        await api.createGenerationTask<GenerationTaskDetail>(
+          {
+            taskType: 'TEXT',
+            capabilityCode: 'IMAGE_MARK_RECOGNIZE',
+            prompt: '',
+            parameters: {
+              assetId,
+              x: point.x,
+              y: point.y,
+              imageWidth: point.imageWidth,
+              imageHeight: point.imageHeight,
+            },
+            referenceAssetIds: [],
+            projectId: activeProjectId.value,
+            nodeId: '',
+            workflowId: null,
+          },
+          idempotencyKey,
+        ),
+      )
+
+      const taskId = created.id
+      if (!taskId) {
+        throw new Error('创建标记识别任务失败')
+      }
+
+      userInfoStore.queryPointAccount()
+
+      const finalTask = isGenerationTaskTerminal(created.status)
+        ? created
+        : await pollGenerationTask(taskId)
+
+      if (finalTask.status !== 'SUCCEEDED') {
+        throw new Error(finalTask.error?.message || '标记识别失败')
+      }
+
+      const parsed = parseImageMarkRecognizeResult(finalTask, point)
+      if (!parsed?.label) {
+        throw new Error('未返回标记识别结果')
+      }
+
+      const mark = buildImageMarkItem({
+        sourceNodeId: sourceNode.id,
+        assetId,
+        x: point.x,
+        y: point.y,
+        imageWidth: point.imageWidth,
+        imageHeight: point.imageHeight,
+        label: parsed.label,
+        description: parsed.description,
+        bbox: parsed.bbox,
+      })
+
+      appendImageMarkToNode(sourceNode, mark)
+
+      const returnCell = g.getCellById(returnNodeId)
+      if (returnCell?.isNode()) {
+        appendElementMarkToNode(returnCell as Node, mark)
+      }
+
+      if (mark.mentionToken) {
+        queueMentionInsert(mark.mentionToken)
+      }
+
+      message.success(`已识别：${mark.label}`)
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '标记识别失败，请稍后重试')
+    } finally {
+      imageMarkRecognizing.value = false
+      setImageMarkAnalyzing(sourceNode, null)
+      bumpToolbarRevision()
+      scheduleHistoryPush()
+    }
+  }
+
+  function toggleImageDialogueMarkMode() {
+    if (showElementSelectMode.value && elementSelectContext.value === 'image-dialogue') {
+      exitElementSelectMode()
+      return
+    }
+    if (!getActiveImageDialogueTargetNodeId()) return
+    enterElementSelectMode('image-dialogue')
   }
 
   function enterVideoGenCanvasPickMode() {
@@ -4726,12 +4898,20 @@ export function registerCore(bind: CanvasBindings) {
 
   function returnFromElementSelect() {
     const returnId = elementSelectReturnNodeId.value
+    const context = elementSelectContext.value
     exitElementSelectMode()
     if (!returnId) return
     const g = graph.value
     const cell = g?.getCellById(returnId)
     if (!cell?.isNode()) return
     selectedNodeId.value = returnId
+    if (context === 'image-dialogue') {
+      selectedKind.value = 'image'
+      syncNodeSelectionHighlight(returnId)
+      openImageDialogue(returnId)
+      updateNodeToolbar()
+      return
+    }
     selectedKind.value = 'video'
     syncNodeSelectionHighlight(returnId)
     openVideoGenPromptBar(returnId, videoGenActiveTab.value)
@@ -4740,11 +4920,11 @@ export function registerCore(bind: CanvasBindings) {
 
   function onVideoGenQuickAction(key: string) {
     if (key === 'mark') {
-      if (showElementSelectMode.value) {
+      if (showElementSelectMode.value && elementSelectContext.value === 'video-gen') {
         exitElementSelectMode()
         return
       }
-      enterElementSelectMode()
+      enterElementSelectMode('video-gen')
     }
   }
 
@@ -7038,6 +7218,21 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
+    if (
+      !multiSelect &&
+      showElementSelectMode.value &&
+      data.kind === 'image' &&
+      data.previewUrl &&
+      e
+    ) {
+      clearEdgeSelection()
+      selectedNodeId.value = node.id
+      selectedKind.value = 'image'
+      syncSelectionFromGraph()
+      void handleImageMarkRecognize(node, e)
+      return
+    }
+
     clearEdgeSelection()
     selectedNodeId.value = node.id
     selectedKind.value = data.kind
@@ -7061,7 +7256,9 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     resetImageToolbarMore()
-    resetImageDialogue()
+    if (!showElementSelectMode.value) {
+      resetImageDialogue()
+    }
     resetImageCrop()
     resetImageExpand()
     resetImageEditText()
@@ -7070,11 +7267,6 @@ export function registerCore(bind: CanvasBindings) {
     resetVideoHdPanel()
     resetVideoFramesPanel()
     bumpToolbarRevision()
-
-    if (showElementSelectMode.value && data.kind === 'image' && data.previewUrl) {
-      syncSelectionFromGraph()
-      return
-    }
 
     const showImageGenPrompt =
       data.kind === 'image' &&
@@ -8361,12 +8553,16 @@ export function registerCore(bind: CanvasBindings) {
     downloadSelectedTextNode,
     duplicateSelectedNodes,
     endSpacePan,
+    elementMarks,
+    mentionInsertSerial,
+    mentionInsertToken,
     enterElementSelectMode,
     exitElementSelectMode,
     exitVideoGenCanvasPickMode,
     exitImageDialogueCanvasPickMode,
     toggleVideoGenCanvasPickMode,
     toggleImageDialogueCanvasPickMode,
+    toggleImageDialogueMarkMode,
     filterUploadFiles,
     finishConnectSpawn,
     generateImageFromPrompt,

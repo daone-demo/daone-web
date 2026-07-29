@@ -195,7 +195,14 @@
       </div>
       <a-tooltip>
         <template #title>标记</template>
-        <button type="button" class="video-gen-prompt-panel__tool" title="标记">
+        <button
+          type="button"
+          class="video-gen-prompt-panel__tool"
+          :class="{ 'video-gen-prompt-panel__tool--active': elementSelectMode }"
+          title="标记"
+          @mousedown.stop
+          @click.stop="emit('quick-action', 'mark')"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -271,17 +278,14 @@ import { message } from 'ant-design-vue'
 import api, { type PromptTranslationData } from '@/services/api'
 import { isRequestError } from '@/utils/request'
 import { useCanvasBgTheme } from './useCanvasBgTheme'
-import { createPromptMentionApi, isInputComposing, needsSpaceBeforeMention } from './promptMention'
 import {
-  createMentionSpan,
-  findMentionAfterCursor,
-  findMentionBeforeCursor,
-  getPlainTextOffset,
-  renderPromptToEl,
-  serializePromptEl,
-  setPlainTextOffset,
-  VIDEO_GEN_MENTION_CLASS,
-} from './videoGenPromptMention'
+  buildMarkMentionThumbStyle,
+  createPromptMentionApi,
+  isInputComposing,
+  needsSpaceBeforeMention,
+  parseImageMarkMentionToken,
+  type PromptMarkMentionMeta,
+} from './promptMention'
 import VideoGenSettingsPopover from './VideoGenSettingsPopover.vue'
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
@@ -303,6 +307,7 @@ import {
   type VideoGenResolution,
   type VideoGenPromptSubmitPayload,
   resolveVideoGenApiMode,
+  type ImageMarkItem,
 } from './constants'
 import { getVideoGenTabValidation } from './videoGen'
 import type { VideoSourceRef } from './videoGen'
@@ -323,9 +328,12 @@ const props = defineProps<{
   activeTab: string
   aspectRatio?: VideoGenAspectRatio
   sourceRefs?: VideoSourceRef[]
+  elementMarks?: ImageMarkItem[]
   savedSettings?: Partial<VideoDialogueSettings> | null
   elementSelectMode?: boolean
   canvasPickMode?: boolean
+  mentionInsertSerial?: number
+  mentionInsertToken?: string
   chatTools?: ChatTools | null
 }>()
 
@@ -340,6 +348,7 @@ const emit = defineEmits<{
   'upload-images': [files: File[]]
   'add-canvas-node': [nodeId: string]
   'toggle-canvas-pick': []
+  'mention-inserted': []
   submit: [payload: VideoGenPromptSubmitPayload]
 }>()
 
@@ -601,6 +610,44 @@ async function onTranslatePrompt() {
   }
 }
 
+function resolveMarkPreviewUrl(mark: ImageMarkItem) {
+  const ref = props.sourceRefs?.find((item) => item.nodeId === mark.sourceNodeId)
+  return ref?.previewUrl || ''
+}
+
+function getMarkThumbStyle(mark: ImageMarkItem) {
+  const thumbUrl = resolveMarkPreviewUrl(mark)
+  return buildMarkMentionThumbStyle({
+    thumbUrl,
+    imageWidth: mark.imageWidth,
+    imageHeight: mark.imageHeight,
+    bbox: mark.bbox,
+  })
+}
+
+function resolveMarkMentionMeta(token: string): PromptMarkMentionMeta | null {
+  const parsed = parseImageMarkMentionToken(token)
+  if (!parsed) return null
+
+  const mark = (props.elementMarks ?? []).find((item) =>
+    item.mentionToken === token
+    || (parsed.markId && item.id === parsed.markId)
+    || item.label === parsed.label,
+  )
+
+  const label = mark?.label ?? parsed.label
+  if (!mark) return { label }
+
+  return {
+    label,
+    thumbStyle: getMarkThumbStyle(mark),
+  }
+}
+
+const mentionApi = createPromptMentionApi('video-gen-prompt-panel__mention', {
+  resolveMention: resolveMarkMentionMeta,
+})
+
 function syncPromptView(text = props.prompt) {
   if (isPromptComposing.value) return
   const el = promptInputRef.value
@@ -609,21 +656,19 @@ function syncPromptView(text = props.prompt) {
   const sel = window.getSelection()
   const range = sel?.rangeCount ? sel.getRangeAt(0) : null
   const offset = range && el.contains(range.startContainer)
-    ? getPlainTextOffset(el, range.startContainer, range.startOffset)
+    ? mentionApi.getPlainTextOffset(el, range.startContainer, range.startOffset)
     : text.length
 
-  renderPromptToEl(el, text)
-  setPlainTextOffset(el, offset)
+  mentionApi.renderPromptToEl(el, text)
+  mentionApi.setPlainTextOffset(el, offset)
 }
-
-const mentionApi = createPromptMentionApi(VIDEO_GEN_MENTION_CLASS)
 
 function needsSpaceBefore(range: Range, root: HTMLElement): boolean {
   return needsSpaceBeforeMention(range, root, mentionApi.isMentionEl)
 }
 
-function insertRefMention(ref: VideoSourceRef) {
-  const token = `@${getRefDisplayName(ref)}`
+function insertMentionToken(token: string) {
+  if (!token) return
   const el = promptInputRef.value
   if (!el) {
     const current = props.prompt
@@ -653,7 +698,7 @@ function insertRefMention(ref: VideoSourceRef) {
     range.collapse(false)
   }
 
-  const mention = createMentionSpan(token)
+  const mention = mentionApi.createMentionSpan(token)
   range.insertNode(mention)
   const space = document.createTextNode(' ')
   mention.after(space)
@@ -664,8 +709,27 @@ function insertRefMention(ref: VideoSourceRef) {
   sel.removeAllRanges()
   sel.addRange(nextRange)
 
-  emitPrompt(serializePromptEl(el))
+  emitPrompt(mentionApi.serializePromptEl(el))
   nextTick(() => syncPromptView())
+}
+
+function insertRefMention(ref: VideoSourceRef) {
+  insertMentionToken(`@${getRefDisplayName(ref)}`)
+}
+
+function promptContainsMarkToken(token: string) {
+  if (!token) return false
+  return props.prompt.includes(token)
+}
+
+function syncMissingMarksIntoPrompt() {
+  const marks = props.elementMarks ?? []
+  const missing = marks.filter((mark) => mark.mentionToken && !promptContainsMarkToken(mark.mentionToken))
+  if (!missing.length) return
+
+  for (const mark of missing) {
+    insertMentionToken(mark.mentionToken)
+  }
 }
 
 function onPromptCompositionStart() {
@@ -681,7 +745,7 @@ function onPromptInput(event?: Event) {
   const el = promptInputRef.value
   if (!el) return
 
-  const text = serializePromptEl(el)
+  const text = mentionApi.serializePromptEl(el)
   emitPrompt(text)
   if (isPromptComposing.value || isInputComposing(event)) return
   nextTick(() => syncPromptView(text))
@@ -696,14 +760,14 @@ function onPromptKeydown(event: KeyboardEvent) {
   if (!el) return
 
   const mention = event.key === 'Backspace'
-    ? findMentionBeforeCursor()
-    : findMentionAfterCursor()
+    ? mentionApi.findMentionBeforeCursor()
+    : mentionApi.findMentionAfterCursor()
 
   if (!mention) return
 
   event.preventDefault()
   mention.remove()
-  emitPrompt(serializePromptEl(el))
+  emitPrompt(mentionApi.serializePromptEl(el))
   nextTick(() => syncPromptView())
 }
 
@@ -792,17 +856,29 @@ watch(
   (value) => {
     if (skipPromptWatch || isPromptComposing.value) return
     const el = promptInputRef.value
-    if (!el || serializePromptEl(el) === value) return
+    if (!el || mentionApi.serializePromptEl(el) === value) return
     nextTick(() => syncPromptView(value))
   },
 )
 
+watch(
+  () => props.elementMarks?.length ?? 0,
+  (length, prevLength) => {
+    if (length <= prevLength) return
+    nextTick(() => syncMissingMarksIntoPrompt())
+  },
+)
+
 onMounted(() => {
-  nextTick(() => syncPromptView())
+  nextTick(() => {
+    syncPromptView()
+    syncMissingMarksIntoPrompt()
+  })
 })
 </script>
 
 <style scoped lang="scss">
+@import './promptMention.scss';
 .video-gen-prompt-panel {
   position: relative;
   box-sizing: border-box;
@@ -1149,6 +1225,8 @@ onMounted(() => {
     cursor: default;
   }
 
+  @include prompt-mark-mention-pill('video-gen-prompt-panel__mention');
+
   .video-gen-prompt-panel--light & {
     color: #111827;
 
@@ -1332,6 +1410,11 @@ onMounted(() => {
 
   &--loading {
     opacity: 0.55;
+  }
+
+  &--active {
+    background: rgba(37, 99, 235, 0.12);
+    color: #2563eb;
   }
 
   .video-gen-prompt-panel--light & {

@@ -129,6 +129,34 @@
             @dragstart.stop="onPreviewDragStart"
           />
           <div
+            v-if="data.imageMarkAnalyzing"
+            class="image-node__mark-layer"
+            aria-hidden="true"
+          >
+            <!-- <template v-for="mark in data.imageElementMarks ?? []" :key="mark.id">
+              <div
+                v-if="mark.bbox"
+                class="image-node__mark-box"
+                :style="markBoxStyle(mark)"
+              />
+              <div
+                class="image-node__mark-pill"
+                :style="markPillStyle(mark)"
+              >
+                <span class="image-node__mark-pill-icon" aria-hidden="true">✦</span>
+                {{ mark.label }}
+              </div>
+            </template> -->
+            <div
+              v-if="data.imageMarkAnalyzing"
+              class="image-node__mark-analyzing"
+              :style="markAnalyzingStyle(data.imageMarkAnalyzing)"
+            >
+              <span class="image-node__spinner" aria-hidden="true" />
+              分析中...
+            </div>
+          </div>
+          <div
             v-if="showResizeHandles"
             class="image-node__resize-frame"
             @mousedown.stop
@@ -159,7 +187,7 @@
 import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Graph, Node } from '@antv/x6'
 import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
-import type { CanvasNodeData } from '../constants'
+import type { CanvasNodeData, ImageMarkItem } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
@@ -168,6 +196,7 @@ import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import { syncNodeViewData } from './syncNodeViewData'
 import { useCanvasNodeImage } from './useCanvasNodeImage'
 import { resolveImageNaturalSizeCached } from '../imageDisplayUrl'
+import { markStyleFromNatural } from '../imageMarkUtils'
 import {
   canResizeImageNode,
   getBaseNodeSize,
@@ -236,6 +265,35 @@ const dimensionLabel = computed(() => {
   const height = Math.round(data.mediaHeight * scale)
   return formatDimensions(width, height)
 })
+
+function markBoxStyle(mark: ImageMarkItem) {
+  const bbox = mark.bbox
+  if (!bbox) return {}
+  return {
+    left: markStyleFromNatural(bbox.x, mark.imageWidth, 'x'),
+    top: markStyleFromNatural(bbox.y, mark.imageHeight, 'y'),
+    width: markStyleFromNatural(bbox.width, mark.imageWidth, 'size'),
+    height: markStyleFromNatural(bbox.height, mark.imageHeight, 'size'),
+  }
+}
+
+function markPillStyle(mark: ImageMarkItem) {
+  const anchorX = mark.bbox ? mark.bbox.x + mark.bbox.width / 2 : mark.x
+  const anchorY = mark.bbox ? mark.bbox.y : mark.y
+  return {
+    left: markStyleFromNatural(anchorX, mark.imageWidth, 'x'),
+    top: markStyleFromNatural(anchorY, mark.imageHeight, 'y'),
+  }
+}
+
+function markAnalyzingStyle(point: { x: number; y: number }) {
+  const imageWidth = data.mediaWidth || 1
+  const imageHeight = data.mediaHeight || 1
+  return {
+    left: markStyleFromNatural(point.x, imageWidth, 'x'),
+    top: markStyleFromNatural(point.y, imageHeight, 'y'),
+  }
+}
 
 const resizeCorners: ImageResizeCorner[] = ['nw', 'ne', 'sw', 'se']
 
@@ -578,6 +636,59 @@ onMounted(() => {
   justify-content: center;
   background: rgba(20, 20, 22, 0.72);
   pointer-events: none;
+}
+
+.image-node__mark-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.image-node__mark-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.image-node__mark-pill {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 12px);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.92);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 8px));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+
+.image-node__mark-pill-icon {
+  font-size: 10px;
+  opacity: 0.9;
+}
+
+.image-node__mark-analyzing {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #111827;
+  font-size: 12px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .image-node__preview--uploading {

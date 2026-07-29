@@ -38,6 +38,30 @@ export interface ImageSourceRef {
   fileName?: string
 }
 
+export interface ImageMarkBBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** 图片元素标记（局部识别结果） */
+export interface ImageMarkItem {
+  id: string
+  label: string
+  description?: string
+  /** 点击位置（原图像素坐标） */
+  x: number
+  y: number
+  bbox?: ImageMarkBBox
+  sourceNodeId: string
+  assetId: string
+  imageWidth: number
+  imageHeight: number
+  /** 插入输入框的可删除 mention 文本 */
+  mentionToken: string
+}
+
 export interface CanvasNodeData {
   kind: NodeKind
   title: string
@@ -114,6 +138,12 @@ export interface CanvasNodeData {
   generationTaskType?: 'IMAGE' | 'TEXT' | 'MODEL' | 'VIDEO'
   /** 视频时长（秒） */
   durationSeconds?: number
+  /** 图片元素标记（显示在图片节点上的识别框） */
+  imageElementMarks?: ImageMarkItem[]
+  /** 当前是否正在分析标记点 */
+  imageMarkAnalyzing?: { x: number; y: number } | null
+  /** 对话面板中的元素标记列表 */
+  elementMarks?: ImageMarkItem[]
 }
 
 /** 图片反推提示词默认示例图文件名 */

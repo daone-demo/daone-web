@@ -1118,7 +1118,8 @@
   }
 }
 
-.canvas--video-gen-pick .canvas__graph {
+.canvas--video-gen-pick .canvas__graph,
+.canvas--element-select .canvas__graph {
   cursor: crosshair;
 }
 
