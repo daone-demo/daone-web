@@ -1,3 +1,4 @@
+import { createCloudCropUrl } from './cloudImageProcess'
 import { loadDrawableImage } from './drawableImage'
 
 export interface CropRect {
@@ -20,47 +21,10 @@ export interface CropTransform {
   flipY: boolean
 }
 
-interface SourceCropRect {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
 function normalizeRotation(rotation: number) {
   return ((rotation % 360) + 360) % 360
 }
 
-function isAliyunOssUrl(url: URL) {
-  return url.hostname.toLowerCase().includes('.aliyuncs.com')
-}
-
-function createOssCropUrl(imageUrl: string, sourceCrop: SourceCropRect, transform: CropTransform) {
-  if (normalizeRotation(transform.rotation) !== 0 || transform.flipX || transform.flipY) return null
-
-  let url: URL
-  try {
-    url = new URL(imageUrl, window.location.href)
-  } catch {
-    return null
-  }
-
-  if (!['http:', 'https:'].includes(url.protocol) || !isAliyunOssUrl(url)) return null
-
-  const x = Math.max(0, Math.round(sourceCrop.x))
-  const y = Math.max(0, Math.round(sourceCrop.y))
-  const width = Math.max(1, Math.round(sourceCrop.width))
-  const height = Math.max(1, Math.round(sourceCrop.height))
-  const cropProcess = `crop,x_${x},y_${y},w_${width},h_${height}`
-  const existingProcess = url.searchParams.get('x-oss-process')
-
-  url.searchParams.set(
-    'x-oss-process',
-    existingProcess ? `${existingProcess}/${cropProcess}` : `image/${cropProcess}`,
-  )
-
-  return url.toString()
-}
 
 export function getTransformedSize(naturalWidth: number, naturalHeight: number, rotation: number) {
   const rot = normalizeRotation(rotation)
@@ -154,10 +118,10 @@ export async function exportCroppedImage(
   const cropWidth = Math.round(sw)
   const cropHeight = Math.round(sh)
 
-  const ossCropUrl = createOssCropUrl(imageUrl, { x: sx, y: sy, width: sw, height: sh }, transform)
-  if (ossCropUrl) {
+  const cloudCropUrl = createCloudCropUrl(imageUrl, { x: sx, y: sy, width: sw, height: sh }, transform)
+  if (cloudCropUrl) {
     return {
-      dataUrl: ossCropUrl,
+      dataUrl: cloudCropUrl,
       width: cropWidth,
       height: cropHeight,
     }

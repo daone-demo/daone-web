@@ -1,19 +1,16 @@
-import { toMediaProxyUrl } from './mediaProxy'
+import { buildMediaProxyCandidates } from './mediaProxy'
 
 function buildFetchCandidates(url: string): string[] {
   const source = url.trim()
   if (!source) return []
 
-  const candidates: string[] = []
   if (source.startsWith('blob:') || source.startsWith('data:') || source.startsWith('/')) {
-    candidates.push(source)
-    return candidates
+    return [source]
   }
 
-  const proxyUrl = toMediaProxyUrl(source)
-  if (proxyUrl) candidates.push(proxyUrl)
-  candidates.push(source)
-  return [...new Set(candidates)]
+  const candidates = buildMediaProxyCandidates(source)
+  if (candidates.length) return [...new Set(candidates)]
+  return [source]
 }
 
 function extensionFromMime(mime: string): string {

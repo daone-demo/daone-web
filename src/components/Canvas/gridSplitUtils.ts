@@ -1,6 +1,8 @@
 import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData } from './constants'
+import { createCloudCropUrl } from './cloudImageProcess'
 import { canvasToObjectUrl, loadDrawableImage } from './drawableImage'
+import { resolveImageNaturalSizeCached } from './imageDisplayUrl'
 
 export type GridSplitTile = {
   dataUrl: string
@@ -197,36 +199,87 @@ export async function splitImageIntoGrid(
   rows: number,
   cols: number,
   stops: GridSplitStops = {},
+  naturalSize?: { width: number; height: number },
 ): Promise<GridSplitTile[]> {
   const safeRows = Math.max(1, Math.min(10, Math.floor(rows)))
   const safeCols = Math.max(1, Math.min(10, Math.floor(cols)))
 
+  let naturalWidth = naturalSize?.width ?? 0
+  let naturalHeight = naturalSize?.height ?? 0
+  if (!naturalWidth || !naturalHeight) {
+    const size = await resolveImageNaturalSizeCached(imageUrl)
+    naturalWidth = size.width
+    naturalHeight = size.height
+  }
+
+  const xEdges = buildEdges(safeCols, stops.colStops).map((ratio) =>
+    Math.round(ratio * naturalWidth),
+  )
+  const yEdges = buildEdges(safeRows, stops.rowStops).map((ratio) =>
+    Math.round(ratio * naturalHeight),
+  )
+  xEdges[0] = 0
+  yEdges[0] = 0
+  xEdges[xEdges.length - 1] = naturalWidth
+  yEdges[yEdges.length - 1] = naturalHeight
+
+  const transform = { rotation: 0, flipX: false, flipY: false }
+  const cloudTiles: GridSplitTile[] = []
+  let canUseCloud = true
+
+  for (let row = 0; row < safeRows; row += 1) {
+    for (let col = 0; col < safeCols; col += 1) {
+      const sx = xEdges[col]
+      const sy = yEdges[row]
+      const sw = Math.max(1, xEdges[col + 1] - sx)
+      const sh = Math.max(1, yEdges[row + 1] - sy)
+      const cropUrl = createCloudCropUrl(imageUrl, { x: sx, y: sy, width: sw, height: sh }, transform)
+      if (!cropUrl) {
+        canUseCloud = false
+        break
+      }
+      cloudTiles.push({
+        dataUrl: cropUrl,
+        width: sw,
+        height: sh,
+        row: row + 1,
+        col: col + 1,
+        label: `${row + 1}-${col + 1}`,
+      })
+    }
+    if (!canUseCloud) break
+  }
+
+  if (canUseCloud && cloudTiles.length === safeRows * safeCols) {
+    return cloudTiles
+  }
+
   const { img, revoke } = await loadDrawableImage(imageUrl)
   try {
-    const naturalWidth = img.naturalWidth || img.width
-    const naturalHeight = img.naturalHeight || img.height
-    if (!naturalWidth || !naturalHeight) {
+    const imgWidth = img.naturalWidth || img.width
+    const imgHeight = img.naturalHeight || img.height
+    if (!imgWidth || !imgHeight) {
       throw new Error('图片尺寸无效')
     }
 
-    const xEdges = buildEdges(safeCols, stops.colStops).map((ratio) =>
-      Math.round(ratio * naturalWidth),
+    const canvasXEdges = buildEdges(safeCols, stops.colStops).map((ratio) =>
+      Math.round(ratio * imgWidth),
     )
-    const yEdges = buildEdges(safeRows, stops.rowStops).map((ratio) =>
-      Math.round(ratio * naturalHeight),
+    const canvasYEdges = buildEdges(safeRows, stops.rowStops).map((ratio) =>
+      Math.round(ratio * imgHeight),
     )
-    xEdges[0] = 0
-    yEdges[0] = 0
-    xEdges[xEdges.length - 1] = naturalWidth
-    yEdges[yEdges.length - 1] = naturalHeight
+    canvasXEdges[0] = 0
+    canvasYEdges[0] = 0
+    canvasXEdges[canvasXEdges.length - 1] = imgWidth
+    canvasYEdges[canvasYEdges.length - 1] = imgHeight
 
     const tiles: GridSplitTile[] = []
     for (let row = 0; row < safeRows; row += 1) {
       for (let col = 0; col < safeCols; col += 1) {
-        const sx = xEdges[col]
-        const sy = yEdges[row]
-        const sw = Math.max(1, xEdges[col + 1] - sx)
-        const sh = Math.max(1, yEdges[row + 1] - sy)
+        const sx = canvasXEdges[col]
+        const sy = canvasYEdges[row]
+        const sw = Math.max(1, canvasXEdges[col + 1] - sx)
+        const sh = Math.max(1, canvasYEdges[row + 1] - sy)
 
         const canvas = document.createElement('canvas')
         canvas.width = sw

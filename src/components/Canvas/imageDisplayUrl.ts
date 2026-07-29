@@ -1,4 +1,4 @@
-import { toMediaProxyUrl } from './mediaProxy'
+import { buildMediaProxyCandidates } from './mediaProxy'
 
 const OSS_HOST_RE = /\.aliyuncs\.com$/i
 const DEFAULT_CANVAS_IMAGE_MAX_EDGE = 960
@@ -34,12 +34,16 @@ function buildNaturalSizeCandidates(previewUrl: string): string[] {
       const parsed = new URL(source, window.location.origin)
       const inner = parsed.searchParams.get('url')?.trim()
       if (inner) candidates.push(inner)
+      const pathMatch = parsed.pathname.match(/^\/media-proxy\/([^/]+)\/(.+)$/)
+      if (pathMatch) {
+        candidates.push(`https://${pathMatch[1]}/${pathMatch[2]}${parsed.search}`)
+      }
     } catch {
       // ignore invalid proxy url
     }
   } else {
-    const proxyUrl = toMediaProxyUrl(source)
-    if (proxyUrl) candidates.push(proxyUrl)
+    const proxyCandidates = buildMediaProxyCandidates(source)
+    if (proxyCandidates.length) candidates.push(...proxyCandidates)
     candidates.push(source)
   }
 

@@ -1566,6 +1566,9 @@ export function registerCore(bind: CanvasBindings) {
       const tiles = await splitImageIntoGrid(sourceData.previewUrl, payload.rows, payload.cols, {
         rowStops: payload.rowStops,
         colStops: payload.colStops,
+      }, {
+        width: sourceData.mediaWidth ?? 0,
+        height: sourceData.mediaHeight ?? 0,
       })
       if (!tiles.length) {
         message.warning('拆分结果为空')

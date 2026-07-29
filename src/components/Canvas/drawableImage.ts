@@ -1,4 +1,4 @@
-import { toMediaProxyUrl } from './mediaProxy'
+import { buildMediaProxyCandidates } from './mediaProxy'
 
 function loadImageElement(url: string, crossOrigin?: boolean): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -18,6 +18,13 @@ function isCrossOriginUrl(url: string) {
   }
 }
 
+function isDrawableResponse(contentType: string, blob: Blob) {
+  const type = contentType.toLowerCase()
+  if (type.includes('image/')) return true
+  if (type.includes('application/octet-stream') && blob.type.startsWith('image/')) return true
+  return blob.type.startsWith('image/')
+}
+
 async function fetchAsObjectUrl(url: string): Promise<{ objectUrl: string; revoke: () => void }> {
   const response = await fetch(url, {
     mode: 'cors',
@@ -27,7 +34,11 @@ async function fetchAsObjectUrl(url: string): Promise<{ objectUrl: string; revok
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
   }
+  const contentType = response.headers.get('content-type') || ''
   const blob = await response.blob()
+  if (!isDrawableResponse(contentType, blob)) {
+    throw new Error(`unexpected content-type: ${contentType || blob.type || 'unknown'}`)
+  }
   const objectUrl = URL.createObjectURL(blob)
   return {
     objectUrl,
@@ -49,16 +60,17 @@ export async function loadDrawableImage(url: string): Promise<{
     return { img: await loadImageElement(url) }
   }
 
-  const candidates: string[] = []
-  const proxyUrl = toMediaProxyUrl(url)
-  if (proxyUrl) candidates.push(proxyUrl)
-  candidates.push(url)
+  const candidates: string[] = [...buildMediaProxyCandidates(url)]
+  const crossOrigin = isCrossOriginUrl(url)
+  if (!crossOrigin) {
+    candidates.push(url)
+  }
 
   let lastError: unknown
   for (const candidate of candidates) {
-    const crossOrigin = isCrossOriginUrl(candidate)
+    const candidateCrossOrigin = isCrossOriginUrl(candidate)
 
-    if (!crossOrigin) {
+    if (!candidateCrossOrigin) {
       try {
         const { objectUrl, revoke } = await fetchAsObjectUrl(candidate)
         try {
