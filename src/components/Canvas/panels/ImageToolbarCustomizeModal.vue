@@ -333,8 +333,8 @@ watch(
 }
 
 .image-toolbar-customize-modal__body {
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  display: flex;
+  flex-direction: column;
   gap: 20px;
   padding: 8px 28px 20px;
   min-height: 0;

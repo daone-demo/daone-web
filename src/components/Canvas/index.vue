@@ -427,6 +427,7 @@ const emit = defineEmits<{
   'new-project': []
   'rename-project': [projectId: string, name: string],
   'delete-project': [projectId: string],
+  'toolbar-preferences-saved': [payload: { nodeType: 'IMAGE' | 'VIDEO' | 'TEXT' }],
 }>();
 
 defineProps<{

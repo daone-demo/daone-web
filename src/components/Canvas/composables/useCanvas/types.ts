@@ -10,6 +10,7 @@ import type { CanvasState } from './state'
 export type CanvasEmit = {
   (event: 'focus-chat'): void
   (event: 'add-to-chat', payload: { previewUrl: string; fileName: string; assetId?: string }): void
+  (event: 'toolbar-preferences-saved', payload: { nodeType: 'IMAGE' | 'VIDEO' | 'TEXT' }): void
 }
 
 export type CanvasDomRefs = {
@@ -114,7 +115,7 @@ export type CanvasBindings = CanvasState & {
   closeImageToolbarCustomize: () => void
   saveImageToolbarCustomize: (
     settings: import('../../imageToolbarCustomize').ImageToolbarCustomizeSettings,
-  ) => void
+  ) => Promise<void>
   resetImageToolbarCustomize: () => void
   handleImageDialogueSubmit: (payload: import('../../constants').ImageDialogueSubmitPayload) => void
   handleVideoDialogueSubmit: (payload: import('../../constants').VideoDialogueSubmitPayload) => void

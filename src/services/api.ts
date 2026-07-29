@@ -659,8 +659,12 @@ const api = {
   queryToolbarPreferences<T = unknown>(params:any) {
     return http.get<T>('/canvas/toolbar-preferences', { params })
   },
-  updateToolbarPreferences<T = unknown>(params:any) {
-    return http.put<T>('/canvas/toolbar-preferences', { params })
+  updateToolbarPreferences<T = unknown>(data: {
+    hiddenCodes?: string[]
+    nodeType: string
+    orderedCodes?: string[]
+  }) {
+    return http.put<T>('/canvas/toolbar-preferences', data)
   },
   
 }

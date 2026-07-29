@@ -1117,7 +1117,19 @@ export function registerCore(bind: CanvasBindings) {
     showImageToolbarCustomize.value = false
   }
 
-  function saveImageToolbarCustomize(settings: ImageToolbarCustomizeSettings) {
+  async function saveImageToolbarCustomize(settings: ImageToolbarCustomizeSettings) {
+    try {
+      await api.updateToolbarPreferences({
+        nodeType: 'IMAGE',
+        orderedCodes: [...settings.orderedKeys],
+        hiddenCodes: [],
+      })
+    } catch (error) {
+      console.error('[Canvas] save toolbar preferences failed', error)
+      message.error('工具栏偏好保存失败，请稍后重试')
+      return
+    }
+
     imageToolbarCustomizeSettings.value = {
       orderedKeys: [...settings.orderedKeys],
       showToolNames: settings.showToolNames,
@@ -1125,6 +1137,7 @@ export function registerCore(bind: CanvasBindings) {
     saveImageToolbarCustomizeSettings(imageToolbarCustomizeSettings.value)
     closeImageToolbarCustomize()
     bumpToolbarRevision()
+    emit('toolbar-preferences-saved', { nodeType: 'IMAGE' })
   }
 
   function resetImageToolbarCustomize() {

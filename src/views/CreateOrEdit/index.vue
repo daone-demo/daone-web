@@ -20,6 +20,7 @@
         @new-project="onNewProject"
         @rename-project="onRenameProject"
         @delete-project="onDeleteProject"
+        @toolbar-preferences-saved="onToolbarPreferencesSaved"
       />
       <ChatSidePanel
         ref="chatPanelRef"
@@ -277,6 +278,10 @@ const onSetCurrentSessionId = (sessionId: string) => {
 
 const onSetSessionName = (name: string) => {
   sessionName.value = name;
+}
+
+const onToolbarPreferencesSaved = async (payload: { nodeType: 'IMAGE' | 'VIDEO' | 'TEXT' }) => {
+  await onLoadAiCapabilities(payload.nodeType)
 }
 
 const onLoadAiCapabilities = async (key: string) => {
