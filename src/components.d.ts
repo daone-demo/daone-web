@@ -74,6 +74,7 @@ declare module 'vue' {
     ImageStylePanel: typeof import('./components/Canvas/ImageStylePanel.vue')['default']
     ImageToolbarCustomizeModal: typeof import('./components/Canvas/panels/ImageToolbarCustomizeModal.vue')['default']
     Login: typeof import('./components/Login/index.vue')['default']
+    MarkLabelOptionMenu: typeof import('./components/Canvas/MarkLabelOptionMenu.vue')['default']
     Model3DNode: typeof import('./components/Canvas/nodes/Model3DNode.vue')['default']
     Points: typeof import('./components/Points/index.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

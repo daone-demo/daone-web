@@ -192,6 +192,7 @@
       @add-canvas-node="emit('add-video-gen-canvas-node', $event)"
       @toggle-canvas-pick="emit('toggle-video-gen-canvas-pick')"
       @mention-inserted="emit('mention-inserted')"
+      @select-mark-label="(markId, index) => emit('select-mark-label', markId, index)"
       @submit="emit('submit-video-gen-prompt', $event)"
     />
   </div>
@@ -364,6 +365,7 @@
       @toggle-canvas-pick="emit('toggle-image-dialogue-canvas-pick')"
       @toggle-mark="emit('toggle-image-dialogue-mark')"
       @mention-inserted="emit('mention-inserted')"
+      @select-mark-label="(markId, index) => emit('select-mark-label', markId, index)"
       @submit="emit('submit-image-dialogue', $event)"
     />
   </div>
@@ -654,6 +656,7 @@ const emit = defineEmits<{
   'toggle-image-dialogue-canvas-pick': []
   'toggle-image-dialogue-mark': []
   'mention-inserted': []
+  'select-mark-label': [markId: string, index: number]
 }>()
 
 const showPromptWorkFlow = ref(false)

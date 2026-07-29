@@ -41,6 +41,10 @@
     cursor: default;
     white-space: nowrap;
   }
+
+  :deep(.#{$mention-class}--mark-switchable) {
+    cursor: pointer;
+  }
 }
 
 @mixin prompt-mark-tag-pill {

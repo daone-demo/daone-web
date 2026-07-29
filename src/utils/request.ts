@@ -96,6 +96,15 @@ export function unbindOnSessionClear(): void {
   onSessionClear = null
 }
 
+function showRequestError(content: string, key?: string) {
+  const text = content.trim()
+  if (!text) return
+  message.error({
+    content: text,
+    key: key ?? `request:error:${text}`,
+  })
+}
+
 function isPublicApi(url: string | undefined): boolean {
   if (!url) return false
   return /^\/auth\/(sms-codes|sms-login|wechat\/qr-sessions)/.test(url)
@@ -187,7 +196,7 @@ instance.interceptors.request.use(
     return config
   },
   (error) => {
-    message.error('请求发送失败')
+    showRequestError('请求发送失败', 'request:send-failed')
     return Promise.reject(error)
   },
 )
@@ -213,17 +222,17 @@ instance.interceptors.response.use(
       const requestError = createRequestError(payload, httpStatus, {
         fallbackMessage: `请求错误 (${httpStatus})`,
       })
-      if (!config.silent) message.error(requestError.message)
+      if (!config.silent) showRequestError(requestError.message, `request:http:${httpStatus}`)
       return Promise.reject(requestError)
     }
 
     if (res == null || typeof res.code !== 'string') {
-      if (!config.silent) message.error('接口返回格式异常')
+      if (!config.silent) showRequestError('接口返回格式异常', 'request:format')
       return Promise.reject(createRequestError(payload, httpStatus, { fallbackMessage: '接口返回格式异常' }))
     }
 
     if (!isApiSuccess(res)) {
-      if (!config.silent) message.error(pickMessage(res) || '操作失败')
+      if (!config.silent) showRequestError(pickMessage(res) || '操作失败')
       return Promise.reject(createRequestError(res, httpStatus))
     }
 
@@ -254,16 +263,16 @@ instance.interceptors.response.use(
       const requestError = createRequestError(data, httpStatus, {
         fallbackMessage: `请求错误 (${httpStatus})`,
       })
-      if (!silent) message.error(requestError.message)
+      if (!silent) showRequestError(requestError.message, `request:http:${httpStatus}`)
       return Promise.reject(requestError)
     }
 
     if (error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '')) {
-      if (!silent) message.error('请求超时，请稍后重试')
+      if (!silent) showRequestError('请求超时，请稍后重试', 'request:timeout')
     } else if (error.request) {
-      if (!silent) message.error('网络异常，服务器无响应')
+      if (!silent) showRequestError('网络异常，服务器无响应', 'request:network')
     } else if (!silent) {
-      message.error(error.message || '请求失败')
+      showRequestError(error.message || '请求失败')
     }
 
     return Promise.reject(error)

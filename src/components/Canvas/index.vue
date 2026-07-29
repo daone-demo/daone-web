@@ -299,6 +299,7 @@
       @toggle-image-dialogue-canvas-pick="toggleImageDialogueCanvasPickMode"
       @toggle-image-dialogue-mark="toggleImageDialogueMarkMode"
       @mention-inserted="onMentionInserted"
+      @select-mark-label="updateImageMarkLabel"
     />
 
     <CanvasHiddenFileInput
@@ -643,6 +644,7 @@ const {
   toggleVideoGenCanvasPickMode,
   toggleImageDialogueCanvasPickMode,
   toggleImageDialogueMarkMode,
+  updateImageMarkLabel,
   showGroupToolbar,
   showSaveSkillPopover,
   saveSkillPopoverPos,

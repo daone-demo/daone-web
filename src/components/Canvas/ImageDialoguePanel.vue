@@ -78,20 +78,31 @@
       </div>
     </div>
 
-    <div
-      ref="promptInputRef"
-      class="image-dialogue__input image-dialogue__input--rich"
-      :class="{ 'image-dialogue__input--empty': !modelValue.length }"
-      contenteditable="true"
-      role="textbox"
-      aria-multiline="true"
-      :data-placeholder="IMAGE_DIALOGUE_PLACEHOLDER"
-      @input="onPromptInput"
-      @compositionstart="onPromptCompositionStart"
-      @compositionend="onPromptCompositionEnd"
-      @keydown="onPromptKeydown"
-      @paste="onPromptPaste"
-    />
+    <div class="image-dialogue__input-wrap">
+      <div
+        ref="promptInputRef"
+        class="image-dialogue__input image-dialogue__input--rich"
+        :class="{ 'image-dialogue__input--empty': !modelValue.length }"
+        contenteditable="true"
+        role="textbox"
+        aria-multiline="true"
+        :data-placeholder="IMAGE_DIALOGUE_PLACEHOLDER"
+        @input="onPromptInput"
+        @compositionstart="onPromptCompositionStart"
+        @compositionend="onPromptCompositionEnd"
+        @keydown="onPromptKeydown"
+        @paste="onPromptPaste"
+        @click="onPromptClick"
+      />
+      <MarkLabelOptionMenu
+        :visible="Boolean(markLabelMenu.menu)"
+        :options="markLabelMenu.activeMarkOptions"
+        :selected-index="markLabelMenu.activeMarkSelectedIndex"
+        :left="markLabelMenu.menu?.left ?? 0"
+        :top="markLabelMenu.menu?.top ?? 0"
+        @select="markLabelMenu.selectOption"
+      />
+    </div>
 
     <div class="image-dialogue__footer">
       <div class="image-dialogue__footer-left">
@@ -254,6 +265,8 @@ import { useCanvasBgTheme } from './useCanvasBgTheme';
 import ImageGenSettingsPopover from './ImageGenSettingsPopover.vue';
 import ImageStylePanel from './ImageStylePanel.vue';
 import DialogueWorkflowSelect from './DialogueWorkflowSelect.vue';
+import MarkLabelOptionMenu from './MarkLabelOptionMenu.vue';
+import { getMarkLabelOptions, hasMultipleMarkLabels, useImageMarkLabelMenu } from './useImageMarkLabelMenu';
 import {
   buildMarkMentionThumbStyle,
   createPromptMentionApi,
@@ -307,6 +320,7 @@ const emit = defineEmits<{
   'toggle-canvas-pick': []
   'toggle-mark': []
   'mention-inserted': []
+  'select-mark-label': [markId: string, index: number]
   submit: [payload: ImageDialogueSubmitPayload]
 }>()
 
@@ -354,17 +368,49 @@ function resolveMarkMentionMeta(token: string): PromptMarkMentionMeta | null {
   const mark = (props.elementMarks ?? []).find((item) =>
     item.mentionToken === token
     || (parsed.markId && item.id === parsed.markId)
-    || item.label === parsed.label,
+    || (parsed.label && item.label === parsed.label),
   )
 
-  const label = mark?.label ?? parsed.label
-  if (!mark) return { label }
+  const labelOptions = mark ? getMarkLabelOptions(mark) : (parsed.label ? [parsed.label] : [])
+  const label = mark?.label ?? parsed.label ?? token
+  if (!mark) {
+    return {
+      label,
+      markId: parsed.markId || undefined,
+      labelOptions,
+      switchable: labelOptions.length > 1,
+    }
+  }
 
   return {
     label,
+    markId: mark.id,
+    labelOptions,
+    selectedLabelIndex: mark.selectedLabelIndex ?? 0,
+    switchable: hasMultipleMarkLabels(mark),
     thumbStyle: getMarkThumbStyle(mark),
   }
 }
+
+const markLabelMenu = useImageMarkLabelMenu({
+  getMarks: () => props.elementMarks,
+  onSelectLabel: (markId, index) => emit('select-mark-label', markId, index),
+  onAfterSelect: () => nextTick(() => syncPromptView()),
+})
+
+onMounted(() => {
+  markLabelMenu.bindDocumentClose()
+  document.addEventListener('mousedown', onDocumentMouseDown, true)
+  nextTick(() => {
+    syncPromptView()
+    syncMissingMarksIntoPrompt()
+  })
+})
+
+onBeforeUnmount(() => {
+  markLabelMenu.unbindDocumentClose()
+  document.removeEventListener('mousedown', onDocumentMouseDown, true)
+})
 
 const mentionApi = createPromptMentionApi('image-dialogue__mention', {
   resolveMention: resolveMarkMentionMeta,
@@ -595,19 +641,30 @@ function insertRefMention(index: number) {
   insertMentionToken(`@图片${index}`)
 }
 
-function promptContainsMarkToken(token: string) {
-  if (!token) return false
-  return props.modelValue.includes(token)
+function promptContainsMark(mark: ImageMarkItem) {
+  const idToken = `@标记#${mark.id}`
+  if (props.modelValue.includes(idToken)) return true
+  return Boolean(mark.mentionToken && props.modelValue.includes(mark.mentionToken))
 }
 
 function syncMissingMarksIntoPrompt() {
   const marks = props.elementMarks ?? []
-  const missing = marks.filter((mark) => mark.mentionToken && !promptContainsMarkToken(mark.mentionToken))
+  const missing = marks.filter((mark) => mark.mentionToken && !promptContainsMark(mark))
   if (!missing.length) return
 
   for (const mark of missing) {
     insertMentionToken(mark.mentionToken)
   }
+}
+
+function onPromptClick(event: MouseEvent) {
+  const el = promptInputRef.value
+  if (!el) return
+  const mention = (event.target as HTMLElement).closest('.image-dialogue__mention--mark-switchable') as HTMLElement | null
+  if (!mention) return
+  event.preventDefault()
+  event.stopPropagation()
+  markLabelMenu.openMenuFromMention(mention, el.parentElement ?? el)
 }
 
 function onPromptCompositionStart() {
@@ -674,19 +731,19 @@ watch(
 )
 
 watch(
+  () => props.elementMarks?.map((mark) => `${mark.id}:${mark.selectedLabelIndex ?? 0}:${mark.label}`).join('|') ?? '',
+  () => {
+    nextTick(() => syncPromptView())
+  },
+)
+
+watch(
   () => props.elementMarks?.length ?? 0,
   (length, prevLength) => {
     if (length <= prevLength) return
     nextTick(() => syncMissingMarksIntoPrompt())
   },
 )
-
-onMounted(() => {
-  nextTick(() => {
-    syncPromptView()
-    syncMissingMarksIntoPrompt()
-  })
-})
 
 // function openStyleModal() {
 //   showStyleModal.value = true
@@ -827,13 +884,6 @@ function onDocumentMouseDown(event: MouseEvent) {
   }
 }
 
-onMounted(() => {
-  document.addEventListener('mousedown', onDocumentMouseDown, true)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocumentMouseDown, true)
-})
 </script>
 
 <style scoped lang="scss">
@@ -1147,6 +1197,10 @@ onBeforeUnmount(() => {
     object-fit: contain;
     border-radius: 8px;
   }
+}
+
+.image-dialogue__input-wrap {
+  position: relative;
 }
 
 .image-dialogue__input {

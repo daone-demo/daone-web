@@ -122,20 +122,31 @@
       />
     </div>
 
-    <div
-      ref="promptInputRef"
-      class="video-gen-prompt-panel__input video-gen-prompt-panel__input--rich"
-      :class="{ 'video-gen-prompt-panel__input--empty': !prompt.length }"
-      contenteditable="true"
-      role="textbox"
-      aria-multiline="true"
-      :data-placeholder="VIDEO_GEN_PROMPT_PLACEHOLDER"
-      @input="onPromptInput"
-      @compositionstart="onPromptCompositionStart"
-      @compositionend="onPromptCompositionEnd"
-      @keydown="onPromptKeydown"
-      @paste="onPromptPaste"
-    />
+    <div class="video-gen-prompt-panel__input-wrap">
+      <div
+        ref="promptInputRef"
+        class="video-gen-prompt-panel__input video-gen-prompt-panel__input--rich"
+        :class="{ 'video-gen-prompt-panel__input--empty': !prompt.length }"
+        contenteditable="true"
+        role="textbox"
+        aria-multiline="true"
+        :data-placeholder="VIDEO_GEN_PROMPT_PLACEHOLDER"
+        @input="onPromptInput"
+        @compositionstart="onPromptCompositionStart"
+        @compositionend="onPromptCompositionEnd"
+        @keydown="onPromptKeydown"
+        @paste="onPromptPaste"
+        @click="onPromptClick"
+      />
+      <MarkLabelOptionMenu
+        :visible="Boolean(markLabelMenu.menu)"
+        :options="markLabelMenu.activeMarkOptions"
+        :selected-index="markLabelMenu.activeMarkSelectedIndex"
+        :left="markLabelMenu.menu?.left ?? 0"
+        :top="markLabelMenu.menu?.top ?? 0"
+        @select="markLabelMenu.selectOption"
+      />
+    </div>
 
     <div class="video-gen-prompt-panel__footer">
       <div class="video-gen-prompt-panel__model-wrap">
@@ -273,7 +284,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import api, { type PromptTranslationData } from '@/services/api'
 import { isRequestError } from '@/utils/request'
@@ -287,6 +298,8 @@ import {
   type PromptMarkMentionMeta,
 } from './promptMention'
 import VideoGenSettingsPopover from './VideoGenSettingsPopover.vue'
+import MarkLabelOptionMenu from './MarkLabelOptionMenu.vue'
+import { getMarkLabelOptions, hasMultipleMarkLabels, useImageMarkLabelMenu } from './useImageMarkLabelMenu'
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
   VIDEO_GEN_PROMPT_PLACEHOLDER,
@@ -349,6 +362,7 @@ const emit = defineEmits<{
   'add-canvas-node': [nodeId: string]
   'toggle-canvas-pick': []
   'mention-inserted': []
+  'select-mark-label': [markId: string, index: number]
   submit: [payload: VideoGenPromptSubmitPayload]
 }>()
 
@@ -632,17 +646,35 @@ function resolveMarkMentionMeta(token: string): PromptMarkMentionMeta | null {
   const mark = (props.elementMarks ?? []).find((item) =>
     item.mentionToken === token
     || (parsed.markId && item.id === parsed.markId)
-    || item.label === parsed.label,
+    || (parsed.label && item.label === parsed.label),
   )
 
-  const label = mark?.label ?? parsed.label
-  if (!mark) return { label }
+  const labelOptions = mark ? getMarkLabelOptions(mark) : (parsed.label ? [parsed.label] : [])
+  const label = mark?.label ?? parsed.label ?? token
+  if (!mark) {
+    return {
+      label,
+      markId: parsed.markId || undefined,
+      labelOptions,
+      switchable: labelOptions.length > 1,
+    }
+  }
 
   return {
     label,
+    markId: mark.id,
+    labelOptions,
+    selectedLabelIndex: mark.selectedLabelIndex ?? 0,
+    switchable: hasMultipleMarkLabels(mark),
     thumbStyle: getMarkThumbStyle(mark),
   }
 }
+
+const markLabelMenu = useImageMarkLabelMenu({
+  getMarks: () => props.elementMarks,
+  onSelectLabel: (markId, index) => emit('select-mark-label', markId, index),
+  onAfterSelect: () => nextTick(() => syncPromptView()),
+})
 
 const mentionApi = createPromptMentionApi('video-gen-prompt-panel__mention', {
   resolveMention: resolveMarkMentionMeta,
@@ -717,19 +749,30 @@ function insertRefMention(ref: VideoSourceRef) {
   insertMentionToken(`@${getRefDisplayName(ref)}`)
 }
 
-function promptContainsMarkToken(token: string) {
-  if (!token) return false
-  return props.prompt.includes(token)
+function promptContainsMark(mark: ImageMarkItem) {
+  const idToken = `@标记#${mark.id}`
+  if (props.prompt.includes(idToken)) return true
+  return Boolean(mark.mentionToken && props.prompt.includes(mark.mentionToken))
 }
 
 function syncMissingMarksIntoPrompt() {
   const marks = props.elementMarks ?? []
-  const missing = marks.filter((mark) => mark.mentionToken && !promptContainsMarkToken(mark.mentionToken))
+  const missing = marks.filter((mark) => mark.mentionToken && !promptContainsMark(mark))
   if (!missing.length) return
 
   for (const mark of missing) {
     insertMentionToken(mark.mentionToken)
   }
+}
+
+function onPromptClick(event: MouseEvent) {
+  const el = promptInputRef.value
+  if (!el) return
+  const mention = (event.target as HTMLElement).closest('.video-gen-prompt-panel__mention--mark-switchable') as HTMLElement | null
+  if (!mention) return
+  event.preventDefault()
+  event.stopPropagation()
+  markLabelMenu.openMenuFromMention(mention, el.parentElement ?? el)
 }
 
 function onPromptCompositionStart() {
@@ -862,6 +905,13 @@ watch(
 )
 
 watch(
+  () => props.elementMarks?.map((mark) => `${mark.id}:${mark.selectedLabelIndex ?? 0}:${mark.label}`).join('|') ?? '',
+  () => {
+    nextTick(() => syncPromptView())
+  },
+)
+
+watch(
   () => props.elementMarks?.length ?? 0,
   (length, prevLength) => {
     if (length <= prevLength) return
@@ -870,10 +920,15 @@ watch(
 )
 
 onMounted(() => {
+  markLabelMenu.bindDocumentClose()
   nextTick(() => {
     syncPromptView()
     syncMissingMarksIntoPrompt()
   })
+})
+
+onBeforeUnmount(() => {
+  markLabelMenu.unbindDocumentClose()
 })
 </script>
 
@@ -1193,6 +1248,10 @@ onMounted(() => {
   text-align: center;
   border-radius: 50%;
   padding: 1px 0;
+}
+
+.video-gen-prompt-panel__input-wrap {
+  position: relative;
 }
 
 .video-gen-prompt-panel__input {

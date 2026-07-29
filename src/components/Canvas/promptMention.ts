@@ -1,15 +1,14 @@
 import type { ImageMarkBBox } from './constants'
 
-/** 图片引用与标记 mention，如 `@图片1`、`@标记#id：耳环` */
-export const PROMPT_MENTION_REGEX = /@(?:图片\d+|标记(?:#[^：\s]+)?：[^\s@]+)/g
+/** 图片引用与标记 mention，如 `@图片1`、`@标记#id` */
+export const PROMPT_MENTION_REGEX = /@(?:图片\d+|标记(?:#[^：\s@]+(?:：[^\s@]+)?|：[^\s@]+))/g
 
 export const PROMPT_MARK_MENTION_THUMB_CLASS = 'prompt-mark-mention__thumb'
 export const PROMPT_MARK_MENTION_LABEL_CLASS = 'prompt-mark-mention__label'
 export const PROMPT_MARK_MENTION_CHEVRON_CLASS = 'prompt-mark-mention__chevron'
 
-export function buildImageMarkMentionToken(mark: { id: string; label: string }) {
-  const label = mark.label.trim()
-  return label ? `@标记#${mark.id}：${label}` : ''
+export function buildImageMarkMentionToken(mark: { id: string }) {
+  return mark.id ? `@标记#${mark.id}` : ''
 }
 
 export function isImageMarkMentionToken(token: string) {
@@ -17,13 +16,21 @@ export function isImageMarkMentionToken(token: string) {
 }
 
 export function parseImageMarkMentionToken(token: string) {
-  const match = token.match(/^@标记(?:#([^：\s]+))?：(.+)$/)
-  if (!match) return null
-  return { markId: match[1] ?? '', label: match[2] }
+  const withId = token.match(/^@标记#([^：\s@]+)(?:：(.+))?$/)
+  if (withId) return { markId: withId[1], label: withId[2] ?? '' }
+
+  const legacy = token.match(/^@标记：(.+)$/)
+  if (legacy) return { markId: '', label: legacy[1] }
+
+  return null
 }
 
 export interface PromptMarkMentionMeta {
   label: string
+  markId?: string
+  labelOptions?: string[]
+  selectedLabelIndex?: number
+  switchable?: boolean
   thumbStyle?: Record<string, string>
 }
 
@@ -98,8 +105,13 @@ export function createPromptMentionApi(
       const parsed = parseImageMarkMentionToken(token)
       const meta = options?.resolveMention?.(token)
       const label = meta?.label ?? parsed?.label ?? token
+      const switchable = Boolean(meta?.switchable)
 
       span.classList.add(`${mentionClass}--mark`)
+      if (switchable) span.classList.add(`${mentionClass}--mark-switchable`)
+      if (parsed?.markId || meta?.markId) {
+        span.dataset.markId = parsed?.markId || meta?.markId
+      }
 
       const thumb = document.createElement('span')
       thumb.className = PROMPT_MARK_MENTION_THUMB_CLASS
@@ -110,12 +122,16 @@ export function createPromptMentionApi(
       labelEl.className = PROMPT_MARK_MENTION_LABEL_CLASS
       labelEl.textContent = label
 
-      const chevron = document.createElement('span')
-      chevron.className = PROMPT_MARK_MENTION_CHEVRON_CLASS
-      chevron.setAttribute('aria-hidden', 'true')
-      chevron.textContent = '›'
+      span.append(thumb, labelEl)
 
-      span.append(thumb, labelEl, chevron)
+      if (switchable) {
+        const chevron = document.createElement('span')
+        chevron.className = PROMPT_MARK_MENTION_CHEVRON_CLASS
+        chevron.setAttribute('aria-hidden', 'true')
+        chevron.textContent = '›'
+        span.append(chevron)
+      }
+
       return span
     }
 

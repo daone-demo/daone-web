@@ -47,6 +47,7 @@ import {
   parseImageMarkRecognizeResult,
   setImageMarkAnalyzing,
   isImageMarkAnalyzing,
+  updateImageMarkLabelOnNode,
 } from '../../imageMarkUtils'
 import { toVideoApiPrompt } from '../../promptMention'
 import {
@@ -3654,6 +3655,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   provide('uploadFileToCanvasNode', uploadFileToCanvasNode)
+  provide('updateImageMarkLabel', updateImageMarkLabel)
 
   function loadImageGenPromptFields(nodeId: string) {
     const g = graph.value
@@ -4749,6 +4751,7 @@ export function registerCore(bind: CanvasBindings) {
         imageWidth: point.imageWidth,
         imageHeight: point.imageHeight,
         label: parsed.label,
+        labelOptions: parsed.labelOptions,
         description: parsed.description,
         bbox: parsed.bbox,
       })
@@ -4773,6 +4776,26 @@ export function registerCore(bind: CanvasBindings) {
       bumpToolbarRevision()
       scheduleHistoryPush()
     }
+  }
+
+  function updateImageMarkLabel(markId: string, selectedLabelIndex: number) {
+    const g = graph.value
+    if (!g || !markId) return
+
+    let changed = false
+    g.getNodes().forEach((cell) => {
+      if (!cell.isNode()) return
+      if (updateImageMarkLabelOnNode(cell as Node, markId, selectedLabelIndex)) {
+        changed = true
+      }
+    })
+
+    if (!changed) return
+
+    bumpToolbarRevision()
+    scheduleHistoryPush()
+    if (showImageDialogue.value) persistImageDialogueFields()
+    if (showVideoGenPromptBar.value) persistVideoGenPrompt()
   }
 
   function toggleImageDialogueMarkMode() {
@@ -8563,6 +8586,7 @@ export function registerCore(bind: CanvasBindings) {
     toggleVideoGenCanvasPickMode,
     toggleImageDialogueCanvasPickMode,
     toggleImageDialogueMarkMode,
+    updateImageMarkLabel,
     filterUploadFiles,
     finishConnectSpawn,
     generateImageFromPrompt,

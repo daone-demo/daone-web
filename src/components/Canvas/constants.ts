@@ -49,6 +49,10 @@ export interface ImageMarkBBox {
 export interface ImageMarkItem {
   id: string
   label: string
+  /** 识别候选标签（多个结果时可切换） */
+  labelOptions?: string[]
+  /** 当前选中的候选索引 */
+  selectedLabelIndex?: number
   description?: string
   /** 点击位置（原图像素坐标） */
   x: number

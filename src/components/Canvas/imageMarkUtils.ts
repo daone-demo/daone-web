@@ -2,7 +2,7 @@ import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData, ImageMarkBBox, ImageMarkItem } from './constants'
 import { buildImageMarkMentionToken } from './promptMention'
 import { clientPointToGraphLocal, getImageNodeMediaGraphBBox } from './graph'
-import type { GenerationTaskDetail, GenerationTaskResult } from './generationTask'
+import type { GenerationTaskDetail } from './generationTask'
 
 export function createImageMarkId() {
   return `mark-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -79,25 +79,44 @@ function parseMarkContent(content: string, imageWidth: number, imageHeight: numb
 export function parseImageMarkRecognizeResult(
   task: GenerationTaskDetail,
   fallback: { x: number; y: number; imageWidth: number; imageHeight: number },
-): { label: string; description?: string; bbox?: ImageMarkBBox } | null {
-  const result = (task.results ?? []).find((item) => String(item.content || '').trim()) as
-    | GenerationTaskResult
-    | undefined
-  const content = result?.content?.trim() || ''
-  const fromContent = parseMarkContent(content, fallback.imageWidth, fallback.imageHeight)
-  if (fromContent) return fromContent
+): {
+  label: string
+  labelOptions: string[]
+  description?: string
+  bbox?: ImageMarkBBox
+} | null {
+  const labels: string[] = []
+  let description: string | undefined
+  let bbox: ImageMarkBBox | undefined
 
-  const label = String((result as Record<string, unknown> | undefined)?.label ?? '').trim()
-  if (label) {
-    const bbox = normalizeBBox(
-      (result as Record<string, unknown> | undefined)?.bbox,
-      fallback.imageWidth,
-      fallback.imageHeight,
-    )
-    return { label, bbox }
+  for (const item of task.results ?? []) {
+    const content = String(item.content || '').trim()
+    if (!content) {
+      const directLabel = String((item as Record<string, unknown>).label ?? '').trim()
+      if (directLabel) labels.push(directLabel)
+      continue
+    }
+
+    const parsed = parseMarkContent(content, fallback.imageWidth, fallback.imageHeight)
+    if (parsed?.label) {
+      labels.push(parsed.label)
+      if (!description && parsed.description) description = parsed.description
+      if (!bbox && parsed.bbox) bbox = parsed.bbox
+      continue
+    }
+
+    labels.push(content)
   }
 
-  return null
+  const labelOptions = [...new Set(labels.filter(Boolean))]
+  if (!labelOptions.length) return null
+
+  return {
+    label: labelOptions[0],
+    labelOptions,
+    description,
+    bbox,
+  }
 }
 
 export function buildImageMarkItem(options: {
@@ -108,13 +127,26 @@ export function buildImageMarkItem(options: {
   imageWidth: number
   imageHeight: number
   label: string
+  labelOptions?: string[]
+  selectedLabelIndex?: number
   description?: string
   bbox?: ImageMarkBBox
 }): ImageMarkItem {
   const id = createImageMarkId()
+  const labelOptions = options.labelOptions?.length
+    ? [...new Set(options.labelOptions.filter(Boolean))]
+    : [options.label]
+  const selectedLabelIndex = Math.min(
+    Math.max(0, options.selectedLabelIndex ?? 0),
+    labelOptions.length - 1,
+  )
+  const label = labelOptions[selectedLabelIndex] ?? options.label
+
   return {
     id,
-    label: options.label,
+    label,
+    labelOptions,
+    selectedLabelIndex,
     description: options.description,
     x: options.x,
     y: options.y,
@@ -123,8 +155,45 @@ export function buildImageMarkItem(options: {
     assetId: options.assetId,
     imageWidth: options.imageWidth,
     imageHeight: options.imageHeight,
-    mentionToken: buildImageMarkMentionToken({ id, label: options.label }),
+    mentionToken: buildImageMarkMentionToken({ id }),
   }
+}
+
+export function patchImageMarkLabel(mark: ImageMarkItem, selectedLabelIndex: number): ImageMarkItem {
+  const labelOptions = mark.labelOptions?.length ? mark.labelOptions : [mark.label]
+  const index = Math.min(Math.max(0, selectedLabelIndex), labelOptions.length - 1)
+  const label = labelOptions[index] ?? mark.label
+  return {
+    ...mark,
+    label,
+    labelOptions,
+    selectedLabelIndex: index,
+    mentionToken: buildImageMarkMentionToken({ id: mark.id }),
+  }
+}
+
+export function updateImageMarkLabelOnNode(node: Node, markId: string, selectedLabelIndex: number) {
+  const data = { ...(node.getData() as CanvasNodeData) }
+  let changed = false
+
+  const patchList = (list?: ImageMarkItem[]) => {
+    if (!list?.length) return list
+    const next = list.map((mark) => {
+      if (mark.id !== markId) return mark
+      changed = true
+      return patchImageMarkLabel(mark, selectedLabelIndex)
+    })
+    return next
+  }
+
+  if (data.elementMarks) data.elementMarks = patchList(data.elementMarks)
+  if (data.imageElementMarks) data.imageElementMarks = patchList(data.imageElementMarks)
+
+  if (changed) {
+    node.setData(data, { overwrite: true })
+  }
+
+  return changed
 }
 
 export function appendImageMarkToNode(node: Node, mark: ImageMarkItem) {

@@ -129,7 +129,7 @@
             @dragstart.stop="onPreviewDragStart"
           />
           <div
-            v-if="data.imageMarkAnalyzing"
+            v-if="(data.imageElementMarks?.length || 0) > 0 || data.imageMarkAnalyzing"
             class="image-node__mark-layer"
             aria-hidden="true"
           >
@@ -139,12 +139,40 @@
                 class="image-node__mark-box"
                 :style="markBoxStyle(mark)"
               />
-              <div
-                class="image-node__mark-pill"
-                :style="markPillStyle(mark)"
-              >
-                <span class="image-node__mark-pill-icon" aria-hidden="true">✦</span>
-                {{ mark.label }}
+              <div class="image-node__mark-pill-wrap" :style="markPillWrapStyle(mark)">
+                <button
+                  type="button"
+                  class="image-node__mark-pill"
+                  @mousedown.stop
+                  @click.stop="onMarkPillClick(mark.id)"
+                >
+                  <span class="image-node__mark-pill-icon" aria-hidden="true">✦</span>
+                  {{ mark.label }}
+                  <span
+                    v-if="hasMultipleMarkLabels(mark)"
+                    class="image-node__mark-pill-chevron"
+                    aria-hidden="true"
+                  >⌄</span>
+                </button>
+                <div
+                  v-if="openMarkMenuId === mark.id && hasMultipleMarkLabels(mark)"
+                  class="image-node__mark-menu"
+                  @mousedown.stop
+                >
+                  <button
+                    v-for="(option, index) in getMarkLabelOptions(mark)"
+                    :key="`${option}-${index}`"
+                    type="button"
+                    class="image-node__mark-menu-item"
+                    @click.stop="selectMarkLabel(mark.id, index)"
+                  >
+                    <span>{{ option }}</span>
+                    <span
+                      class="image-node__mark-menu-dot"
+                      :class="{ 'image-node__mark-menu-dot--active': index === (mark.selectedLabelIndex ?? 0) }"
+                    />
+                  </button>
+                </div>
               </div>
             </template> -->
             <div
@@ -184,7 +212,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, toRef } from 'vue'
 import type { Graph, Node } from '@antv/x6'
 import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
 import type { CanvasNodeData, ImageMarkItem } from '../constants'
@@ -197,6 +225,7 @@ import { syncNodeViewData } from './syncNodeViewData'
 import { useCanvasNodeImage } from './useCanvasNodeImage'
 import { resolveImageNaturalSizeCached } from '../imageDisplayUrl'
 import { markStyleFromNatural } from '../imageMarkUtils'
+import { getMarkLabelOptions, hasMultipleMarkLabels } from '../useImageMarkLabelMenu'
 import {
   canResizeImageNode,
   getBaseNodeSize,
@@ -210,6 +239,8 @@ const getNode = inject<() => Node>('getNode')!
 const getGraph = inject<() => Graph>('getGraph')!
 const requestCanvasUpload = inject<(nodeId: string) => void>('requestCanvasUpload')
 const uploadFileToCanvasNode = inject<(nodeId: string, file: File) => void>('uploadFileToCanvasNode')
+const updateImageMarkLabel = inject<(markId: string, index: number) => void>('updateImageMarkLabel')
+const openMarkMenuId = ref('')
 const { removeSelf } = useNodeDelete()
 const { onPlusPointerDown } = useNodeConnect()
 const { portPlusStyle } = useNodePortPlusStyle()
@@ -277,7 +308,7 @@ function markBoxStyle(mark: ImageMarkItem) {
   }
 }
 
-function markPillStyle(mark: ImageMarkItem) {
+function markPillWrapStyle(mark: ImageMarkItem) {
   const anchorX = mark.bbox ? mark.bbox.x + mark.bbox.width / 2 : mark.x
   const anchorY = mark.bbox ? mark.bbox.y : mark.y
   return {
@@ -285,6 +316,31 @@ function markPillStyle(mark: ImageMarkItem) {
     top: markStyleFromNatural(anchorY, mark.imageHeight, 'y'),
   }
 }
+
+function onMarkPillClick(markId: string) {
+  const mark = (data.imageElementMarks ?? []).find((item) => item.id === markId)
+  if (!mark || !hasMultipleMarkLabels(mark)) return
+  openMarkMenuId.value = openMarkMenuId.value === markId ? '' : markId
+}
+
+function selectMarkLabel(markId: string, index: number) {
+  updateImageMarkLabel?.(markId, index)
+  openMarkMenuId.value = ''
+}
+
+function onDocumentMouseDown(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.image-node__mark-pill-wrap')) return
+  openMarkMenuId.value = ''
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', onDocumentMouseDown, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocumentMouseDown, true)
+})
 
 function markAnalyzingStyle(point: { x: number; y: number }) {
   const imageWidth = data.mediaWidth || 1
@@ -643,6 +699,11 @@ onMounted(() => {
   inset: 0;
   pointer-events: none;
   z-index: 2;
+
+  .image-node__mark-pill-wrap,
+  .image-node__mark-menu {
+    pointer-events: auto;
+  }
 }
 
 .image-node__mark-box {
@@ -653,26 +714,81 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.image-node__mark-pill {
+.image-node__mark-pill-wrap {
   position: absolute;
+  transform: translate(-50%, calc(-100% - 8px));
+}
+
+.image-node__mark-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  max-width: calc(100% - 12px);
+  max-width: calc(100vw - 24px);
   padding: 4px 10px;
+  border: none;
   border-radius: 999px;
   background: rgba(17, 24, 39, 0.92);
   color: #fff;
   font-size: 12px;
   line-height: 1.2;
   white-space: nowrap;
-  transform: translate(-50%, calc(-100% - 8px));
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
 }
 
 .image-node__mark-pill-icon {
   font-size: 10px;
   opacity: 0.9;
+}
+
+.image-node__mark-pill-chevron {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.image-node__mark-menu {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  min-width: 120px;
+  padding: 6px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.image-node__mark-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: #f3f4f6;
+  }
+}
+
+.image-node__mark-menu-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+
+  &--active {
+    background: #9ca3af;
+  }
 }
 
 .image-node__mark-analyzing {
