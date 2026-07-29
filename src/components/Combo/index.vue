@@ -368,6 +368,11 @@
         </div>
       </div>
     </Transition>
+
+    <SlideVerifyModal
+      v-model:open="slideVerifyOpen"
+      @success="onSlideVerifySuccess"
+    />
   </Teleport>
 </template>
 
@@ -384,6 +389,7 @@ import { useUserInfo } from '@/stores/useUserInfo';
 import { useModalStore } from '@stores/useModal';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
+import SlideVerifyModal from '@/components/SlideVerifyModal/index.vue';
 
 interface PlanItem {
   code: string
@@ -455,6 +461,7 @@ const trialName = ref('')
 const trialPosition = ref('')
 const trialCodeCountdown = ref(0)
 const trialCodeSending = ref(false)
+const slideVerifyOpen = ref(false)
 const orderNo = ref('');
 const payUrl = ref('');
 const payExpireAt = ref('');
@@ -692,9 +699,15 @@ function startTrialCountdown(seconds = 60) {
   }, 1000)
 }
 
-async function sendTrialCode() {
+function sendTrialCode() {
+  if (!trialPhoneValid.value || trialCodeCountdown.value > 0 || trialCodeSending.value) return
+  slideVerifyOpen.value = true
+}
+
+async function onSlideVerifySuccess() {
   if (!trialPhoneValid.value || trialCodeCountdown.value > 0) return
   trialCodeSending.value = true
+  emit('send-trial-code', trialPhone.value.trim())
   try {
     await api.queryTrialSmsCode({ phone: trialPhone.value.trim() })
     startTrialCountdown()
@@ -725,6 +738,7 @@ function resetTrialForm() {
   trialCode.value = ''
   trialName.value = ''
   trialPosition.value = ''
+  slideVerifyOpen.value = false
   trialCodeCountdown.value = 0
   if (trialCountdownTimer) {
     clearInterval(trialCountdownTimer)

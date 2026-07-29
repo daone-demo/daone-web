@@ -1580,6 +1580,13 @@ vue-types@^3.0.0:
     "@vue/server-renderer" "3.5.38"
     "@vue/shared" "3.5.38"
 
+vue3-slide-verify@^1.1.8:
+  version "1.1.8"
+  resolved "https://registry.npmjs.org/vue3-slide-verify/-/vue3-slide-verify-1.1.8.tgz"
+  integrity sha512-qsGXM0w0pkPnI10p58neHQNAkMiGdX8ijGkvRo6eIYbFn3+6fQE05t8afdQsCY9llgG1chDrRD7H0XxV3Ts9Cw==
+  dependencies:
+    vue "^3.2.25"
+
 warning@^4.0.0:
   version "4.0.3"
   resolved "https://registry.npmjs.org/warning/-/warning-4.0.3.tgz"

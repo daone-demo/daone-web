@@ -99,6 +99,11 @@
         </div>
       </div>
     </Transition>
+
+    <SlideVerifyModal
+      v-model:open="slideVerifyOpen"
+      @success="onSlideVerifySuccess"
+    />
   </Teleport>
 </template>
 
@@ -107,6 +112,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useNeedReloadStore } from '@stores/useNeedReload';
 import api from '@/services/api'
 import { useUserInfo, type UserInfo } from '@/stores/useUserInfo'
+import SlideVerifyModal from '@/components/SlideVerifyModal/index.vue'
 
 interface SmsLoginResult {
   token: string
@@ -131,6 +137,7 @@ const phone = ref('');
 const smsCode = ref('');
 const codeCountdown = ref(0)
 const codeSending = ref(false)
+const slideVerifyOpen = ref(false)
 
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
@@ -175,7 +182,12 @@ function startCountdown(seconds = 60) {
 
 // onLoadWeChatCode();
 
-async function sendCode() {
+function sendCode() {
+  if (!phoneValid.value || codeCountdown.value > 0 || codeSending.value) return
+  slideVerifyOpen.value = true
+}
+
+async function onSlideVerifySuccess() {
   if (!phoneValid.value || codeCountdown.value > 0) return
   codeSending.value = true
   emit('send-code', phone.value.trim())
@@ -219,6 +231,7 @@ watch(open, (visible) => {
   if (!visible) {
     phone.value = ''
     smsCode.value = ''
+    slideVerifyOpen.value = false
     codeCountdown.value = 0
     if (countdownTimer) {
       clearInterval(countdownTimer)

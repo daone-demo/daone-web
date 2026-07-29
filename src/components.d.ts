@@ -78,6 +78,7 @@ declare module 'vue' {
     Points: typeof import('./components/Points/index.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SlideVerifyModal: typeof import('./components/SlideVerifyModal/index.vue')['default']
     TextFormatToolbar: typeof import('./components/Canvas/TextFormatToolbar.vue')['default']
     TextNode: typeof import('./components/Canvas/nodes/TextNode.vue')['default']
     UpdateProjectName: typeof import('./components/UpdateProjectName/index.vue')['default']
