@@ -1,8 +1,10 @@
 import type { Graph, Node } from '@antv/x6'
 import api from '@/services/api'
 import type { CanvasNodeData } from './constants'
+import { parseVideoAspectRatioValue } from './constants'
 import { resolveImageNaturalSizeCached } from './imageDisplayUrl'
 import { syncNodeShapeFromData, getNodeSize } from './graph'
+import { resolveVideoNaturalSize } from './upload'
 import { useUserInfo } from '@stores/useUserInfo';
 
 export type GenerationTaskResult = {
@@ -13,6 +15,7 @@ export type GenerationTaskResult = {
   content?: string
   width?: number | null
   height?: number | null
+  durationSeconds?: number | null
   fileName?: string
 }
 
@@ -83,11 +86,14 @@ function normalizeGenerationTaskResult(raw: unknown): GenerationTaskResult | nul
   ).trim()
 
   const width =
-    readResultField<number | null>(item, 'width') ??
-    readResultField<number | null>(nestedAsset ?? {}, 'width')
+    readResultField<number | null>(item, 'width', 'videoWidth', 'video_width') ??
+    readResultField<number | null>(nestedAsset ?? {}, 'width', 'videoWidth', 'video_width')
   const height =
-    readResultField<number | null>(item, 'height') ??
-    readResultField<number | null>(nestedAsset ?? {}, 'height')
+    readResultField<number | null>(item, 'height', 'videoHeight', 'video_height') ??
+    readResultField<number | null>(nestedAsset ?? {}, 'height', 'videoHeight', 'video_height')
+  const durationSeconds =
+    readResultField<number | null>(item, 'durationSeconds', 'duration_seconds', 'duration') ??
+    readResultField<number | null>(nestedAsset ?? {}, 'durationSeconds', 'duration_seconds', 'duration')
 
   if (!previewUrl && !assetId && !content) return null
 
@@ -99,6 +105,7 @@ function normalizeGenerationTaskResult(raw: unknown): GenerationTaskResult | nul
     content: content || undefined,
     width,
     height,
+    durationSeconds,
     fileName: fileName || undefined,
   }
 }
@@ -361,7 +368,7 @@ export function updateVideoGenerationNodeProgress(node: Node, progress: number) 
   setNodeData(node, data)
 }
 
-export function applyVideoGenerationResultToNode(
+export async function applyVideoGenerationResultToNode(
   node: Node,
   result: GenerationTaskResult,
   options: { title?: string; fileName?: string } = {},
@@ -378,7 +385,36 @@ export function applyVideoGenerationResultToNode(
   data.title = options.title || data.title || '文生视频'
   data.fileName = options.fileName || result.fileName || data.fileName || '文生视频.mp4'
   delete data.generationTaskType
+  delete data.generationTaskId
   if (result.assetId) data.assetId = String(result.assetId)
+
+  if (result.width && result.height) {
+    data.mediaWidth = result.width
+    data.mediaHeight = result.height
+    if (result.durationSeconds && result.durationSeconds > 0) {
+      data.durationSeconds = result.durationSeconds
+    }
+  } else {
+    try {
+      const meta = await resolveVideoNaturalSize(previewUrl)
+      data.mediaWidth = meta.width
+      data.mediaHeight = meta.height
+      if (meta.durationSeconds) {
+        data.durationSeconds = meta.durationSeconds
+      }
+    } catch {
+      const ratio =
+        data.videoGenAspectRatio ||
+        data.videoDialogueSettings?.aspectRatio
+      const aspect = parseVideoAspectRatioValue(ratio)
+      if (aspect) {
+        const baseWidth = 350
+        data.mediaWidth = baseWidth
+        data.mediaHeight = Math.max(120, Math.round(baseWidth / aspect))
+      }
+    }
+  }
+
   setNodeData(node, data)
   syncNodeShapeFromData(node)
   const size = getNodeSize(data.kind, data.mode, data)
@@ -522,6 +558,7 @@ type AssetPreviewDetail = {
   url?: string
   width?: number | null
   height?: number | null
+  durationSeconds?: number | null
   fileName?: string
 }
 
@@ -552,6 +589,7 @@ export async function resolveGenerationResultPreview(
           previewUrl,
           width: result.width ?? asset.width ?? undefined,
           height: result.height ?? asset.height ?? undefined,
+          durationSeconds: result.durationSeconds ?? asset.durationSeconds ?? undefined,
           fileName: result.fileName || asset.fileName,
         }
       }
@@ -921,7 +959,7 @@ export async function followVideoGenerationTaskOnNode(
       return false
     }
 
-    applyVideoGenerationResultToNode(finalTarget, resolved, {
+    await applyVideoGenerationResultToNode(finalTarget, resolved, {
       title: options.title,
       fileName: options.fileName || resolved.fileName || '文生视频.mp4',
     })

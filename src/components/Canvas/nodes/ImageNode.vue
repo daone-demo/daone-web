@@ -559,7 +559,7 @@ onMounted(() => {
   color: #9ca3af;
   font-size: 12px;
   cursor: pointer;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
 
   img {
