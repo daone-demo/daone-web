@@ -618,6 +618,7 @@ const emit = defineEmits<{
   'image-inpaint-complete': [payload: {
     prompt: string
     mask: { dataUrl: string; width: number; height: number }
+    settle?: () => void
   }]
   'image-inpaint-drag-start': [event: MouseEvent]
   'close-image-expand': []

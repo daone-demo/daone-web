@@ -1877,6 +1877,7 @@ export function registerCore(bind: CanvasBindings) {
   async function onImageInpaintComplete(payload: {
     prompt: string
     mask: { dataUrl: string; width: number; height: number }
+    settle?: () => void
   }) {
     await handleImageInpaintSubmit(payload)
   }
@@ -1907,17 +1908,21 @@ export function registerCore(bind: CanvasBindings) {
   async function handleImageInpaintSubmit(payload: {
     prompt: string
     mask: { dataUrl: string; width: number; height: number }
+    settle?: () => void
   }) {
+    const settle = () => payload.settle?.()
     const g = graph.value
     const sourceNodeId = inpaintSourceNodeId.value || selectedNodeId.value
     if (!g || !sourceNodeId) {
       closeImageInpaint()
+      settle()
       return
     }
 
     const cell = g.getCellById(sourceNodeId)
     if (!cell?.isNode()) {
       closeImageInpaint()
+      settle()
       return
     }
 
@@ -1925,6 +1930,7 @@ export function registerCore(bind: CanvasBindings) {
     const assetId = resolveImageAssetId(sourceData)
     if (!assetId) {
       message.warning('图片素材 ID 不存在，请等待上传完成')
+      settle()
       return
     }
 
@@ -1957,6 +1963,7 @@ export function registerCore(bind: CanvasBindings) {
       message.error(error instanceof Error ? error.message : '局部修改提交失败，请稍后重试')
     } finally {
       hideLoading()
+      settle()
     }
   }
 

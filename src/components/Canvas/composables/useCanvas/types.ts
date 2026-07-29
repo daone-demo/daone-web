@@ -102,6 +102,7 @@ export type CanvasBindings = CanvasState & {
   onImageInpaintComplete: (payload: {
     prompt: string
     mask: { dataUrl: string; width: number; height: number }
+    settle?: () => void
   }) => Promise<void>
   onImageInpaintDragStart: (event: MouseEvent) => void
   onImageResizePointerDown: (event: MouseEvent, corner: import('../../graph').ImageResizeCorner) => void

@@ -733,7 +733,7 @@ onMounted(() => {
   pointer-events: auto;
   cursor: nwse-resize;
   touch-action: none;
-
+  opacity: 0;
   &--nw {
     top: -5px;
     left: -5px;

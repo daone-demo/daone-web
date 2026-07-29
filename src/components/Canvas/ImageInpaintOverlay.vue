@@ -173,6 +173,8 @@ const emit = defineEmits<{
   complete: [payload: {
     prompt: string
     mask: { dataUrl: string; width: number; height: number }
+    /** 父级上传/提交结束后调用，用于失败时恢复按钮可点 */
+    settle?: () => void
   }]
   'drag-start': [event: MouseEvent]
 }>()
@@ -563,10 +565,13 @@ async function handleComplete() {
     emit('complete', {
       prompt: trimmedPrompt,
       mask,
+      settle: () => {
+        completing.value = false
+      },
     })
+    // 成功发出后保持禁用，直到父级 settle（失败重试）或弹层关闭（提交成功）
   } catch (error) {
     message.error(error instanceof Error ? error.message : '局部修改处理失败，请稍后重试')
-  } finally {
     completing.value = false
   }
 }
