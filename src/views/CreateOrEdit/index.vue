@@ -28,6 +28,7 @@
         :history-sessions="historySessions"
         :current-session-id="currentSessionId"
         :session-name="sessionName"
+        :chat-tools="chatTools"
         @load-history-sessions="onLoadHistorySessions"
         @set-current-session-id="onSetCurrentSessionId"
         @send="onChatSend"

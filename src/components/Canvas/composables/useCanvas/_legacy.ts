@@ -88,7 +88,7 @@ import {
   getCanvasBgThemeMeta,
   type CanvasBgTheme,
 } from '../../canvasTheme'
-import { layoutNodesInGroup, tidyCanvas, tidyNodes, type GroupLayoutDirection } from '../../layout'
+import { layoutNodesInGroup, tidyCanvas, type GroupLayoutDirection } from '../../layout'
 import {
   assignGroupId,
   expandSelectionToGroup,

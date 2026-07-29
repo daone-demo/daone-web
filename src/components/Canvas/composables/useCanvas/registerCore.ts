@@ -26,7 +26,7 @@ import {
   getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition, getNodeToolbarPosition,
   getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getImageNodeMediaScreenBox, getImageExpandOverlayLayout, syncImageNodeSizeToMediaAspect, startImageNodeCornerResize,
   hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions,
-  applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, tidyNodes, assignGroupId,
+  applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,

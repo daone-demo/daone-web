@@ -171,6 +171,62 @@
         @drop.prevent="onComposerDrop"
       >
         <div class="panel__composer_box">
+          <div
+            v-if="showSkillMenu"
+            class="chat-panel__skill-picker"
+            @mousedown.stop
+          >
+            <div class="chat-panel__skill-picker-head">
+              <span class="chat-panel__skill-picker-title">已启用 Skill</span>
+              <button type="button" class="chat-panel__skill-picker-create" @click="onCreateSkill">
+                + 创建
+              </button>
+            </div>
+            <ul class="chat-panel__skill-picker-list">
+              <li
+                v-for="skill in filteredChatSkills"
+                :key="skill.id"
+                class="chat-panel__skill-picker-item"
+                :class="{ 'chat-panel__skill-picker-item--hover': hoveredSkill?.id === skill.id }"
+                @mouseenter="onSkillItemEnter($event, skill)"
+                @mouseleave="onSkillItemLeave"
+                @mousedown.prevent
+                @click="selectChatSkill(skill)"
+              >
+                <span class="chat-panel__skill-picker-name">{{ skill.name }}</span>
+                <span class="chat-panel__skill-picker-cmd">/{{ skill.command }}</span>
+                <span class="chat-panel__skill-picker-desc">{{ skill.description }}</span>
+              </li>
+              <li v-if="!filteredChatSkills.length" class="chat-panel__skill-picker-empty">暂无可用 Skill</li>
+            </ul>
+            <div class="chat-panel__skill-picker-foot">
+              <button type="button" class="chat-panel__skill-picker-foot-item" @click="onAddSkill">
+                <span class="chat-panel__skill-picker-foot-icon" data-icon="plus" aria-hidden="true" />
+                添加技能
+                <span class="chat-panel__skill-picker-foot-chevron" aria-hidden="true" />
+              </button>
+              <button type="button" class="chat-panel__skill-picker-foot-item" @click="onManageSkill">
+                <span class="chat-panel__skill-picker-foot-icon" data-icon="settings" aria-hidden="true" />
+                管理 Skill
+              </button>
+            </div>
+          </div>
+
+          <Teleport to="body">
+            <div
+              v-if="hoveredSkill && showSkillMenu"
+              class="chat-panel__skill-tooltip"
+              :style="skillTooltipStyle"
+            >
+              {{ hoveredSkill.detail || hoveredSkill.description }}
+            </div>
+          </Teleport>
+
+          <div v-if="selectedSkill" class="chat-panel__skill-chip-row">
+            <span class="chat-panel__skill-chip">/{{ selectedSkill.command }}</span>
+            <span v-if="!message.trim()" class="chat-panel__skill-tab-hint">Tab</span>
+          </div>
+
           <div v-if="assetMentions.length" class="chat-panel__asset-mentions">
             <span
               v-for="mention in assetMentions"
@@ -216,7 +272,8 @@
             class="chat-panel__input"
             :placeholder="inputPlaceholder"
             rows="3"
-            @keydown.enter.exact.prevent="sendMessage"
+            @input="onMessageInput"
+            @keydown="onComposerKeydown"
           />
 
           <div class="chat-panel__composer-bar">
@@ -232,8 +289,81 @@
               <span class="chat-panel__icon chat-panel__icon--plus" aria-hidden="true" />
             </button>
             <span class="chat-panel__composer-divider" aria-hidden="true" />
-            <button type="button" class="chat-panel__meta-btn">模型</button>
-            <button type="button" class="chat-panel__meta-btn">Skill</button>
+            <div class="chat-panel__model-wrap">
+              <button
+                type="button"
+                class="chat-panel__meta-btn"
+                :class="{ 'chat-panel__meta-btn--active': showModelMenu }"
+                @click="toggleModelMenu"
+              >
+                {{ modelButtonLabel }}
+              </button>
+              <div
+                v-if="showModelMenu"
+                class="chat-panel__model-picker"
+                @mousedown.stop
+              >
+                <div class="chat-panel__model-picker-head">
+                  <span class="chat-panel__model-picker-title">模型</span>
+                  <label class="chat-panel__model-picker-all">
+                    <span>全选</span>
+                    <input
+                      type="checkbox"
+                      class="chat-panel__model-picker-switch"
+                      :checked="isAllModelsSelectedInTab"
+                      @change="toggleSelectAllModelsInTab"
+                    />
+                  </label>
+                </div>
+                <div class="chat-panel__model-picker-tabs">
+                  <button
+                    v-for="tab in modelCategoryTabs"
+                    :key="tab.key"
+                    type="button"
+                    class="chat-panel__model-picker-tab"
+                    :class="{ 'chat-panel__model-picker-tab--active': activeModelCategory === tab.key }"
+                    @click="activeModelCategory = tab.key"
+                  >
+                    {{ tab.label }}
+                  </button>
+                </div>
+                <ul class="chat-panel__model-picker-list">
+                  <li
+                    v-for="model in modelsInActiveCategory"
+                    :key="model.key"
+                    class="chat-panel__model-picker-item"
+                    @mousedown.prevent
+                    @click="toggleModelSelection(model.key)"
+                  >
+                    <span
+                      class="chat-panel__model-picker-icon"
+                      :data-icon="model.icon"
+                      aria-hidden="true"
+                    />
+                    <span class="chat-panel__model-picker-main">
+                      <span class="chat-panel__model-picker-name">{{ model.label }}</span>
+                      <span v-if="model.subtitle" class="chat-panel__model-picker-sub">{{ model.subtitle }}</span>
+                    </span>
+                    <span
+                      v-if="selectedModelKeys.has(model.key)"
+                      class="chat-panel__model-picker-check"
+                      aria-hidden="true"
+                    />
+                  </li>
+                  <li v-if="!modelsInActiveCategory.length" class="chat-panel__model-picker-empty">暂无模型</li>
+                </ul>
+              </div>
+            </div>
+            <div class="chat-panel__skill-wrap">
+              <button
+                type="button"
+                class="chat-panel__meta-btn"
+                :class="{ 'chat-panel__meta-btn--active': showSkillMenu }"
+                @click="toggleSkillMenu"
+              >
+                Skill
+              </button>
+            </div>
 
             <div class="chat-panel__auto-wrap">
               <button type="button" class="chat-panel__auto-btn" @click="showAutoMenu = !showAutoMenu">
@@ -298,7 +428,7 @@
     :class="{ 'chat-panel__msg-icon--light': isLightTheme }"
     title="展开面板"
     aria-label="展开面板"
-    @click="collapsed = false"
+    @click="onTargetCollapse"
   >
     <img :src="logoSrc" alt="logo" class="chat-panel__msg-icon-logo" />
   </button>
@@ -309,6 +439,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
 import { useCanvasBgTheme } from '@/components/Canvas/useCanvasBgTheme'
+import type { ImageCapability, ChatTools } from '@/components/Canvas/constants'
+import type { ElementGroupRecord } from '@/components/Canvas/assetCenterData'
 import type { ChatAttachment, ChatSendPayload, ChatSession } from './chatTypes'
 import { CHAT_TIPS } from './chatTypes'
 import { useSSE } from '@/hooks/useSSE'
@@ -321,6 +453,7 @@ const props = defineProps<{
   historySessions?: any[]
   currentSessionId?: string,
   sessionName?: string
+  chatTools?: any[]
 }>()
 
 const API_BASE = 'https://api.dev.daoneai.com/daone_dev/api/v1';
@@ -349,6 +482,71 @@ const skills = [
   '技能创建',
 ]
 
+type ChatModelCategory = 'image' | 'video' | 'audio'
+
+interface ChatModelItem {
+  key: string
+  category: ChatModelCategory
+  value: string
+  label: string
+  subtitle?: string
+  icon: string
+}
+
+interface ChatSkillItem {
+  id: string
+  name: string
+  command: string
+  description: string
+  detail?: string
+}
+
+const BUILTIN_CHAT_SKILLS: ChatSkillItem[] = [
+  {
+    id: 'builtin-audiobook',
+    name: '有声书',
+    command: 'audiobook',
+    description: '把书籍转化为多角色有声书',
+    detail: '把书籍转化为多角色有声书，支持角色配音与章节拆分。',
+  },
+  {
+    id: 'builtin-clip-export',
+    name: '剪映导出',
+    command: 'clip-export',
+    description: '把视频推送到剪映或CapCut草稿',
+    detail: '把视频推送到剪映或 CapCut 草稿，便于后续剪辑与导出。',
+  },
+  {
+    id: 'builtin-ecommerce-image',
+    name: '电商商品图',
+    command: 'ecommerce-image',
+    description: '从实拍图生成平台合规的电商组图',
+    detail: '适用于已有商品实拍图、需要批量上架或制作详情页的电商场景，适配 Amazon、Shopify、TikTok Shop、淘宝、天猫等主流电商平台规格。',
+  },
+  {
+    id: 'builtin-image-remix',
+    name: '图片重混',
+    command: 'image-remix',
+    description: '复刻参考图氛围生成新图',
+    detail: '复刻参考图氛围与构图逻辑，生成风格一致的新图像。',
+  },
+  {
+    id: 'builtin-short-drama',
+    name: '微短剧剧本',
+    command: 'short-drama',
+    description: '按选题撰写完整短剧剧本',
+    detail: '按选题撰写完整短剧剧本，包含分场、对白与镜头提示。',
+  },
+]
+
+const MODEL_CATEGORY_TABS: { key: ChatModelCategory; label: string }[] = [
+  { key: 'image', label: '图片' },
+  { key: 'video', label: '视频' },
+  { key: 'audio', label: '音频' },
+]
+
+const skillList = ref<ElementGroupRecord[]>([])
+
 const autoModes = [
   { value: 'Auto', label: '自动' },
   { value: 'Fast', label: '快速' },
@@ -364,12 +562,32 @@ const emit = defineEmits<{
   'close-chat': [],
 }>()
 
+const onTargetCollapse = () => {
+  collapsed.value = false
+  onLoadSkill()
+}
+
+const onLoadSkill = () => {
+  if (!props.projectId) return
+  api.queryElementGroups(props.projectId, { pageSize: 50, page: 1 }).then((res: any) => {
+    skillList.value = res.records ?? []
+  })
+}
+
 const collapsed = defineModel<boolean>('collapsed', { required: true })
 
 const message = ref('')
 const autoMode = ref('Auto')
 const showAutoMenu = ref(false)
 const showHistoryMenu = ref(false)
+const showModelMenu = ref(false)
+const showSkillMenu = ref(false)
+const skillMenuFromButton = ref(false)
+const activeModelCategory = ref<ChatModelCategory>('image')
+const selectedModelKeys = ref<Set<string>>(new Set())
+const selectedSkill = ref<ChatSkillItem | null>(null)
+const hoveredSkill = ref<ChatSkillItem | null>(null)
+const skillTooltipStyle = ref<Record<string, string>>({})
 const historySearch = ref('')
 const isProcessing = ref(false)
 const isSending = ref(false)
@@ -398,8 +616,56 @@ const inputPlaceholder = computed(() =>
 )
 
 const canSend = computed(() =>
-  Boolean(message.value.trim() || attachments.value.length || assetMentions.value.length),
+  Boolean(message.value.trim() || attachments.value.length || assetMentions.value.length || selectedSkill.value),
 )
+
+const chatToolsData = computed(() => (props.chatTools ?? {}) as ChatTools)
+
+const modelCategoryTabs = computed(() => MODEL_CATEGORY_TABS)
+
+const allChatModels = computed<ChatModelItem[]>(() => {
+  const tools = chatToolsData.value
+  const imageModels = parseModelsFromCapability(tools.image, 'image', 'image')
+  const videoModels = parseModelsFromCapability(tools.video, 'video', 'video')
+  const audioModels = parseModelsFromCapability(tools.text, 'audio', 'audio')
+  return [...imageModels, ...videoModels, ...audioModels]
+})
+
+const modelsInActiveCategory = computed(() =>
+  allChatModels.value.filter((item) => item.category === activeModelCategory.value),
+)
+
+const modelButtonLabel = computed(() => {
+  const count = selectedModelKeys.value.size
+  return count > 0 ? `模型 · ${count}` : '模型'
+})
+
+const isAllModelsSelectedInTab = computed(() => {
+  const models = modelsInActiveCategory.value
+  if (!models.length) return false
+  return models.every((item) => selectedModelKeys.value.has(item.key))
+})
+
+const chatSkills = computed<ChatSkillItem[]>(() => {
+  const byCommand = new Map<string, ChatSkillItem>()
+  BUILTIN_CHAT_SKILLS.forEach((item) => byCommand.set(item.command, item))
+  skillList.value.forEach((record) => {
+    const mapped = mapElementGroupToSkill(record)
+    if (mapped) byCommand.set(mapped.command, mapped)
+  })
+  return Array.from(byCommand.values())
+})
+
+const filteredChatSkills = computed(() => {
+  const query = detectSlashQuery(message.value)
+  if (!query) return chatSkills.value
+  const lower = query.toLowerCase()
+  return chatSkills.value.filter(
+    (item) =>
+      item.command.toLowerCase().includes(lower)
+      || item.name.toLowerCase().includes(lower),
+  )
+})
 
 const { isLightTheme } = useCanvasBgTheme()
 const isDarkTheme = computed(() => !isLightTheme.value)
@@ -407,6 +673,217 @@ const logoSrc = computed(() => (isLightTheme.value ? logoBlack : logoWhite))
 
 function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function slugifySkillCommand(name: string, id?: string | number) {
+  const builtin = BUILTIN_CHAT_SKILLS.find((item) => item.name === name)
+  if (builtin) return builtin.command
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w-]/g, '')
+  if (slug) return slug
+  return `skill-${id ?? Date.now()}`
+}
+
+function mapElementGroupToSkill(record: ElementGroupRecord): ChatSkillItem | null {
+  const name = String(record.projectName ?? record.name ?? '').trim()
+  if (!name) return null
+  const description = String(record.projectDescription ?? record.description ?? '').trim()
+  const id = String(record.id ?? name)
+  return {
+    id,
+    name,
+    command: slugifySkillCommand(name, id),
+    description: description || '自定义画布元素组 Skill',
+    detail: description || '来自画布保存的元素组工作流。',
+  }
+}
+
+function parseModelsFromCapability(
+  capability: ImageCapability | null | undefined,
+  category: ChatModelCategory,
+  icon: string,
+): ChatModelItem[] {
+  if (!capability?.parameters) return []
+  const params = capability.parameters
+  const result: ChatModelItem[] = []
+
+  if (category === 'image') {
+    const options = params.modelOptions
+    if (!Array.isArray(options)) return []
+    const resolution = Array.isArray(params.resolution)
+      ? String(params.resolution[params.resolution.length - 1] ?? '')
+      : ''
+    options.forEach((item) => {
+      if (typeof item === 'string') {
+        const value = item.trim()
+        if (!value) return
+        result.push({
+          key: `image:${value}`,
+          category,
+          value,
+          label: value,
+          subtitle: resolution || undefined,
+          icon,
+        })
+        return
+      }
+      if (!item || typeof item !== 'object') return
+      const value = String((item as { value?: string }).value ?? (item as { label?: string }).label ?? '').trim()
+      if (!value) return
+      const label = String((item as { label?: string }).label ?? value).trim()
+      result.push({
+        key: `image:${value}`,
+        category,
+        value,
+        label,
+        subtitle: resolution || String((item as { duration?: string }).duration ?? '') || undefined,
+        icon,
+      })
+    })
+    return result
+  }
+
+  const models = params.model
+  if (!Array.isArray(models)) return []
+  const clarity = Array.isArray(params.clarity)
+    ? String(params.clarity[params.clarity.length - 1] ?? '')
+    : ''
+  models.forEach((item) => {
+    const value = String(item ?? '').trim()
+    if (!value) return
+    result.push({
+      key: `${category}:${value}`,
+      category,
+      value,
+      label: value,
+      subtitle: clarity || undefined,
+      icon,
+    })
+  })
+  return result
+}
+
+function detectSlashQuery(text: string) {
+  const match = text.match(/(?:^|\s)\/([a-zA-Z0-9-]*)$/)
+  return match ? match[1] : null
+}
+
+function closeModelMenu() {
+  showModelMenu.value = false
+}
+
+function closeSkillMenu() {
+  showSkillMenu.value = false
+  skillMenuFromButton.value = false
+  hoveredSkill.value = null
+}
+
+function toggleModelMenu() {
+  showModelMenu.value = !showModelMenu.value
+  if (showModelMenu.value) {
+    closeSkillMenu()
+    showAutoMenu.value = false
+  }
+}
+
+function toggleSkillMenu() {
+  const next = !showSkillMenu.value
+  showSkillMenu.value = next
+  skillMenuFromButton.value = next
+  if (next) {
+    closeModelMenu()
+    showAutoMenu.value = false
+  } else {
+    hoveredSkill.value = null
+  }
+}
+
+function toggleModelSelection(key: string) {
+  const next = new Set(selectedModelKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  selectedModelKeys.value = next
+}
+
+function toggleSelectAllModelsInTab() {
+  const models = modelsInActiveCategory.value
+  if (!models.length) return
+  const next = new Set(selectedModelKeys.value)
+  const shouldSelectAll = !isAllModelsSelectedInTab.value
+  models.forEach((item) => {
+    if (shouldSelectAll) next.add(item.key)
+    else next.delete(item.key)
+  })
+  selectedModelKeys.value = next
+}
+
+function selectChatSkill(skill: ChatSkillItem) {
+  selectedSkill.value = skill
+  message.value = message.value.replace(/(^|\s)\/[a-zA-Z0-9-]*$/, '').trimStart()
+  closeSkillMenu()
+  focusInput()
+}
+
+function onSkillItemEnter(event: MouseEvent, skill: ChatSkillItem) {
+  hoveredSkill.value = skill
+  const target = event.currentTarget as HTMLElement | null
+  if (!target) return
+  const rect = target.getBoundingClientRect()
+  skillTooltipStyle.value = {
+    top: `${rect.top + rect.height / 2}px`,
+    left: `${rect.left - 12}px`,
+    transform: 'translate(-100%, -50%)',
+  }
+}
+
+function onSkillItemLeave() {
+  hoveredSkill.value = null
+}
+
+function onCreateSkill() {
+  closeSkillMenu()
+  message.value = '/'
+  onMessageInput()
+  focusInput()
+}
+
+function onAddSkill() {
+  closeSkillMenu()
+  openFilePicker()
+}
+
+function onManageSkill() {
+  closeSkillMenu()
+  focusInput()
+}
+
+function onMessageInput() {
+  const slashQuery = detectSlashQuery(message.value)
+  if (slashQuery !== null || message.value === '/') {
+    showSkillMenu.value = true
+    closeModelMenu()
+    showAutoMenu.value = false
+    return
+  }
+  if (!skillMenuFromButton.value) {
+    closeSkillMenu()
+  }
+}
+
+function onComposerKeydown(event: KeyboardEvent) {
+  if (event.key === 'Tab' && selectedSkill.value && !message.value.trim()) {
+    event.preventDefault()
+    message.value = ' '
+    focusInput()
+    return
+  }
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    event.preventDefault()
+    sendMessage()
+  }
 }
 
 function createEmptyDraft() {
@@ -654,8 +1131,9 @@ function buildMessageText() {
   const mentionText = assetMentions.value
     .map((item) => `@${item.role} ${item.name}`)
     .join(' ')
+  const skillPrefix = selectedSkill.value ? `/${selectedSkill.value.command}` : ''
   const body = message.value.trim()
-  return [mentionText, body].filter(Boolean).join(' ')
+  return [mentionText, skillPrefix, body].filter(Boolean).join(' ')
 }
 
 function addAttachments(files: File[], assetId?: string) {
@@ -725,6 +1203,11 @@ function clearAttachments() {
 
 function selectSkill(skill: string) {
   ensureActiveSession()
+  const matched = chatSkills.value.find((item) => item.name === skill)
+  if (matched) {
+    selectChatSkill(matched)
+    return
+  }
   message.value = skill
   focusInput()
 }
@@ -757,6 +1240,11 @@ function scrollMessagesToBottom() {
 }
 
 function resolveModel(mode: string) {
+  if (selectedModelKeys.value.size > 0) {
+    const firstKey = Array.from(selectedModelKeys.value)[0]
+    const model = allChatModels.value.find((item) => item.key === firstKey)
+    if (model) return model.value
+  }
   return AUTO_MODE_MODELS[mode] ?? 'gpt5.5'
 }
 
@@ -1114,6 +1602,7 @@ async function onSendMessage(
     message.value = ''
     clearAttachments()
     clearAssetMentions()
+    selectedSkill.value = null
     saveActiveDraft()
     scrollMessagesToBottom()
     if (text) {
@@ -1155,6 +1644,9 @@ function startNewChat() {
   close()
   isProcessing.value = false
   saveActiveDraft()
+  selectedSkill.value = null
+  closeModelMenu()
+  closeSkillMenu()
 
   const existingEmpty = sessions.value.find(
     (item) => item.isOpen && item.title === '新建对话' && !item.messages.length && !item.chatId,
@@ -1194,6 +1686,14 @@ function onDocumentMouseDown(event: MouseEvent) {
   if (!target?.closest('.chat-panel__history-wrap')) {
     showHistoryMenu.value = false
   }
+  if (!target?.closest('.chat-panel__model-wrap')) {
+    closeModelMenu()
+  }
+  if (!target?.closest('.chat-panel__skill-picker') && !target?.closest('.chat-panel__skill-wrap')) {
+    if (!detectSlashQuery(message.value) && message.value !== '/') {
+      closeSkillMenu()
+    }
+  }
 }
 
 onMounted(() => {
@@ -1201,7 +1701,15 @@ onMounted(() => {
   sessions.value = [initial]
   activeSessionId.value = initial.id
   document.addEventListener('mousedown', onDocumentMouseDown, true)
+  onLoadSkill()
 })
+
+watch(
+  () => props.projectId,
+  (projectId) => {
+    if (projectId) onLoadSkill()
+  },
+)
 
 watch(
   () => [props.historySessions, props.currentSessionId] as const,
@@ -1932,6 +2440,342 @@ defineExpose({
   &:hover {
     color: #111827;
   }
+
+  &--active {
+    color: #111827;
+    background: #f3f4f6;
+    border-radius: 6px;
+    padding: 2px 6px;
+  }
+}
+
+.chat-panel__model-wrap,
+.chat-panel__skill-wrap {
+  position: relative;
+}
+
+.chat-panel__model-picker {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 12;
+  width: 280px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+}
+
+.chat-panel__model-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.chat-panel__model-picker-title {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chat-panel__model-picker-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b7280;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chat-panel__model-picker-switch {
+  width: 28px;
+  height: 16px;
+  accent-color: #111827;
+  cursor: pointer;
+}
+
+.chat-panel__model-picker-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #f3f4f6;
+}
+
+.chat-panel__model-picker-tab {
+  flex: 1;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  cursor: pointer;
+
+  &--active {
+    background: #fff;
+    color: #111827;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  }
+}
+
+.chat-panel__model-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.chat-panel__model-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+
+  &:hover {
+    background: #f3f4f6;
+  }
+}
+
+.chat-panel__model-picker-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  background: #111827;
+  border-radius: 4px;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+
+  &[data-icon='image'] {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='currentColor'%3E%3Cpath d='M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5z'/%3E%3C/svg%3E");
+  }
+
+  &[data-icon='video'] {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='currentColor'%3E%3Cpath d='M2 4.5A1.5 1.5 0 0 1 3.5 3h5l2 2h3.5A1.5 1.5 0 0 1 14 6.5v5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 10.5z'/%3E%3C/svg%3E");
+  }
+
+  &[data-icon='audio'] {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='currentColor'%3E%3Cpath d='M8 2a3 3 0 0 0-3 3v4.17A2.5 2.5 0 0 0 6.5 13 2.5 2.5 0 0 0 9 10.5V5a1 1 0 1 1 2 0v5.5a4.5 4.5 0 0 1-4 4.47V14h2a1 1 0 1 1 0 2H7a1 1 0 1 1 0-2h1v-1.03A6.5 6.5 0 0 1 13 10.5V5a3 3 0 0 0-6 0z'/%3E%3C/svg%3E");
+  }
+}
+
+.chat-panel__model-picker-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-panel__model-picker-name {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.chat-panel__model-picker-sub {
+  color: #9ca3af;
+  font-size: 11px;
+}
+
+.chat-panel__model-picker-check {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23111827' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7.2 5.8 10 11 4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.chat-panel__model-picker-empty {
+  padding: 12px 8px;
+  color: #9ca3af;
+  font-size: 12px;
+  text-align: center;
+}
+
+.chat-panel__skill-picker {
+  margin: 0 10px 8px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.1);
+}
+
+.chat-panel__skill-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.chat-panel__skill-picker-title {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chat-panel__skill-picker-create {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover {
+    color: #111827;
+  }
+}
+
+.chat-panel__skill-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.chat-panel__skill-picker-item {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  gap: 2px 8px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+
+  &:hover,
+  &--hover {
+    background: #f3f4f6;
+  }
+}
+
+.chat-panel__skill-picker-name {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chat-panel__skill-picker-cmd {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.chat-panel__skill-picker-desc {
+  grid-column: 1 / -1;
+  color: #9ca3af;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chat-panel__skill-picker-empty {
+  padding: 12px 8px;
+  color: #9ca3af;
+  font-size: 12px;
+  text-align: center;
+}
+
+.chat-panel__skill-picker-foot {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.chat-panel__skill-picker-foot-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #374151;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: #f3f4f6;
+  }
+}
+
+.chat-panel__skill-picker-foot-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  background: #6b7280;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+
+  &[data-icon='plus'] {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='currentColor'%3E%3Cpath d='M7 2.5v9M2.5 7h9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  }
+
+  &[data-icon='settings'] {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='currentColor'%3E%3Cpath d='M2 10.5h10M2 7h10M2 3.5h10' stroke='currentColor' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E");
+  }
+}
+
+.chat-panel__skill-picker-foot-chevron {
+  margin-left: auto;
+  width: 10px;
+  height: 10px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' fill='none' stroke='%239ca3af' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 2.5 6.5 5 3.5 7.5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.chat-panel__skill-tooltip {
+  position: fixed;
+  z-index: 100;
+  max-width: 280px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #111827;
+  color: #f9fafb;
+  font-size: 12px;
+  line-height: 1.55;
+  pointer-events: none;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.24);
+}
+
+.chat-panel__skill-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 0;
+}
+
+.chat-panel__skill-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.chat-panel__skill-tab-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #9ca3af;
+  font-size: 11px;
 }
 
 .chat-panel__auto-wrap {
