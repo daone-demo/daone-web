@@ -18,7 +18,7 @@ const VERCEL_API_TARGETS = {
   },
 } as const
 
-const OSS_HOST_RE = /(^|\.)aliyuncs\.com$/i
+const MEDIA_PROXY_HOST_RE = /(^|\.)(aliyuncs\.com|myqcloud\.com)$/i
 
 function createMediaProxyPlugin(): Plugin {
   const handle = async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
@@ -51,7 +51,7 @@ function createMediaProxyPlugin(): Plugin {
         res.end('Invalid protocol')
         return
       }
-      if (!OSS_HOST_RE.test(parsed.hostname)) {
+      if (!MEDIA_PROXY_HOST_RE.test(parsed.hostname)) {
         res.statusCode = 403
         res.end('Host not allowed')
         return

@@ -36,9 +36,9 @@
       <span class="canvas__multi-select-icon" data-icon="duplicate" aria-hidden="true" />
       创建副本
     </button>
-    <button type="button" class="canvas__multi-select-btn canvas__multi-select-btn--icon" title="复制" @click="emit('copy')">
+    <!-- <button type="button" class="canvas__multi-select-btn canvas__multi-select-btn--icon" title="复制" @click="emit('copy')">
       <span class="canvas__multi-select-icon" data-icon="copy" aria-hidden="true" />
-    </button>
+    </button> -->
     <div class="canvas__multi-select-group-wrap">
       <button
         type="button"

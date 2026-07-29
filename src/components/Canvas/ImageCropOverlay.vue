@@ -1,5 +1,5 @@
 <template>
-  <div class="image-crop-overlay" @mousedown.stop>
+  <div ref="overlayRef" class="image-crop-overlay" @mousedown.stop>
     <div class="image-crop-overlay__toolbar">
       <button type="button" class="image-crop-overlay__btn" @click="emit('cancel')">
         <span class="image-crop-overlay__icon image-crop-overlay__icon--close" aria-hidden="true" />
@@ -16,7 +16,13 @@
           <span class="image-crop-overlay__icon image-crop-overlay__icon--crop" aria-hidden="true" />
           {{ currentRatioLabel }}
         </button>
-        <div v-if="showRatioMenu" class="image-crop-overlay__ratio-menu">
+        <div
+          v-if="showRatioMenu"
+          class="image-crop-overlay__ratio-menu"
+          :style="ratioMenuStyle"
+          @wheel.stop
+          @mousedown.stop
+        >
           <button
             v-for="item in IMAGE_CROP_ASPECT_RATIOS"
             :key="item.key"
@@ -136,7 +142,9 @@ const emit = defineEmits<{
   complete: [payload: { dataUrl: string; width: number; height: number }]
 }>()
 
+const overlayRef = ref<HTMLElement | null>(null)
 const workspaceRef = ref<HTMLElement | null>(null)
+const overlaySize = ref({ width: 360, height: 420 })
 const workspaceSize = ref({ width: 360, height: 420 })
 const aspectKey = ref<ImageCropAspectKey>('free')
 const showRatioMenu = ref(false)
@@ -169,6 +177,10 @@ const currentRatio = computed(() => {
 const currentRatioLabel = computed(
   () => IMAGE_CROP_ASPECT_RATIOS.find((item) => item.key === aspectKey.value)?.label ?? '比例裁剪',
 )
+
+const ratioMenuStyle = computed(() => ({
+  maxHeight: `${overlaySize.value.height * 0.75}px`,
+}))
 
 const imageBounds = computed(() =>
   getImageDisplayBounds(
@@ -262,7 +274,13 @@ function selectAspect(key: ImageCropAspectKey) {
   cropRect.value = clampCropRect(cropRect.value, imageBounds.value, currentRatio.value)
 }
 
-function updateWorkspaceSize() {
+function updateOverlaySize() {
+  if (overlayRef.value) {
+    overlaySize.value = {
+      width: overlayRef.value.clientWidth,
+      height: overlayRef.value.clientHeight,
+    }
+  }
   if (!workspaceRef.value) return
   workspaceSize.value = {
     width: workspaceRef.value.clientWidth,
@@ -388,10 +406,10 @@ watch(
 let resizeObserver: ResizeObserver | undefined
 
 onMounted(() => {
-  updateWorkspaceSize()
-  if (workspaceRef.value) {
-    resizeObserver = new ResizeObserver(updateWorkspaceSize)
-    resizeObserver.observe(workspaceRef.value)
+  updateOverlaySize()
+  if (overlayRef.value) {
+    resizeObserver = new ResizeObserver(updateOverlaySize)
+    resizeObserver.observe(overlayRef.value)
   }
 })
 
@@ -486,6 +504,8 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .image-crop-overlay__ratio-item {

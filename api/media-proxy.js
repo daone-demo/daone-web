@@ -45,7 +45,7 @@ export default async function mediaProxy(req, res) {
       res.end('Invalid protocol')
       return
     }
-    if (!/(^|\.)aliyuncs\.com$/i.test(parsed.hostname)) {
+    if (!/(^|\.)(aliyuncs\.com|myqcloud\.com)$/i.test(parsed.hostname)) {
       res.statusCode = 403
       res.end('Host not allowed')
       return

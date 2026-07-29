@@ -1,9 +1,9 @@
-/** 仅代理阿里云 OSS，避免开放代理被滥用 */
-const ALLOWED_PROXY_HOST_RE = /(^|\.)aliyuncs\.com$/i
+/** 仅代理受信对象存储域名，避免开放代理被滥用 */
+const ALLOWED_PROXY_HOST_RE = /(^|\.)(aliyuncs\.com|myqcloud\.com)$/i
 
 /**
- * 将跨域 OSS 地址转为同源 `/media-proxy?url=...`，便于 canvas 导出像素。
- * 非允许域名返回 null。
+ * 将跨域对象存储地址转为同源 `/media-proxy?url=...`，便于 canvas 读取像素。
+ * 支持阿里云 OSS、腾讯云 COS；非允许域名返回 null。
  */
 export function toMediaProxyUrl(url: string): string | null {
   if (!url || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('/')) {

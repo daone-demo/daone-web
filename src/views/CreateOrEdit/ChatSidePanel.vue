@@ -542,7 +542,7 @@ const BUILTIN_CHAT_SKILLS: ChatSkillItem[] = [
 const MODEL_CATEGORY_TABS: { key: ChatModelCategory; label: string }[] = [
   { key: 'image', label: '图片' },
   { key: 'video', label: '视频' },
-  { key: 'audio', label: '音频' },
+  // { key: 'audio', label: '音频' },
 ]
 
 const skillList = ref<ElementGroupRecord[]>([])

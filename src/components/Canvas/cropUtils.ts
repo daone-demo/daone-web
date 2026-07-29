@@ -1,3 +1,5 @@
+import { loadDrawableImage } from './drawableImage'
+
 export interface CropRect {
   x: number
   y: number
@@ -23,18 +25,6 @@ interface SourceCropRect {
   y: number
   width: number
   height: number
-}
-
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    if (!url.startsWith('blob:') && !url.startsWith('data:')) {
-      img.crossOrigin = 'anonymous'
-    }
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('Failed to load image'))
-    img.src = url
-  })
 }
 
 function normalizeRotation(rotation: number) {
@@ -173,36 +163,40 @@ export async function exportCroppedImage(
     }
   }
 
-  const img = await loadImage(imageUrl)
-  const canvas = document.createElement('canvas')
-  canvas.width = outW
-  canvas.height = outH
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas not supported')
+  const { img, revoke } = await loadDrawableImage(imageUrl)
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = outW
+    canvas.height = outH
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas not supported')
 
-  ctx.translate(outW / 2, outH / 2)
-  ctx.rotate((transform.rotation * Math.PI) / 180)
-  ctx.scale(transform.flipX ? -1 : 1, transform.flipY ? -1 : 1)
-  ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2)
+    ctx.translate(outW / 2, outH / 2)
+    ctx.rotate((transform.rotation * Math.PI) / 180)
+    ctx.scale(transform.flipX ? -1 : 1, transform.flipY ? -1 : 1)
+    ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2)
 
-  const cropCanvas = document.createElement('canvas')
-  cropCanvas.width = cropWidth
-  cropCanvas.height = cropHeight
-  const cropCtx = cropCanvas.getContext('2d')
-  if (!cropCtx) throw new Error('Canvas not supported')
+    const cropCanvas = document.createElement('canvas')
+    cropCanvas.width = cropWidth
+    cropCanvas.height = cropHeight
+    const cropCtx = cropCanvas.getContext('2d')
+    if (!cropCtx) throw new Error('Canvas not supported')
 
-  cropCtx.drawImage(canvas, sx, sy, sw, sh, 0, 0, cropCanvas.width, cropCanvas.height)
+    cropCtx.drawImage(canvas, sx, sy, sw, sh, 0, 0, cropCanvas.width, cropCanvas.height)
 
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    cropCanvas.toBlob((value) => {
-      if (value) resolve(value)
-      else reject(new Error('Failed to export crop'))
-    }, 'image/png')
-  })
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      cropCanvas.toBlob((value) => {
+        if (value) resolve(value)
+        else reject(new Error('Failed to export crop'))
+      }, 'image/png')
+    })
 
-  return {
-    dataUrl: URL.createObjectURL(blob),
-    width: cropCanvas.width,
-    height: cropCanvas.height,
+    return {
+      dataUrl: URL.createObjectURL(blob),
+      width: cropCanvas.width,
+      height: cropCanvas.height,
+    }
+  } finally {
+    revoke?.()
   }
 }
