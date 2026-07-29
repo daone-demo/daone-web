@@ -7200,14 +7200,14 @@ export function registerCore(bind: CanvasBindings) {
     scheduleHistoryPush()
   }
 
-  function handleMultiSelectLayout() {
+  function handleMultiSelectLayout(direction: GroupLayoutDirection = 'horizontal') {
     const g = graph.value
     const ids = selectedNodeIds.value
     if (!g || ids.length < 2) return
     const nodes = ids
       .map((id) => g.getCellById(id))
       .filter((cell): cell is Node => cell != null && cell.isNode())
-    tidyNodes(g, nodes)
+    layoutNodesInGroup(nodes, direction)
     updateNodeToolbar()
     scheduleHistoryPush()
   }
