@@ -1049,6 +1049,30 @@
   }
 }
 
+.canvas__video-gen-pick-hint {
+  position: absolute;
+  top: 88px;
+  left: 50%;
+  z-index: 6;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.92);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.2;
+  transform: translateX(-50%);
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+
+  &--light {
+    background: rgba(17, 24, 39, 0.88);
+  }
+}
+
+.canvas--video-gen-pick .canvas__graph {
+  cursor: crosshair;
+}
+
 .canvas:not(.canvas--bg-light) .canvas__element-select {
   border-color: #3d3d45;
   background: rgba(30, 30, 34, 0.98);

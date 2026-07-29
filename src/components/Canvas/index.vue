@@ -6,6 +6,7 @@
       `canvas--bg-${canvasBgTheme}`,
       { 'canvas--file-dragover': isCanvasFileDragOver },
       { 'canvas--group-selected': showGroupToolbar },
+      { 'canvas--video-gen-pick': showVideoGenCanvasPickMode },
     ]"
     @dragenter.prevent="onCanvasDragEnter"
     @dragover.prevent="onCanvasDragOver"
@@ -51,6 +52,8 @@
       @return-node="returnFromElementSelect"
       @exit="exitElementSelectMode"
     />
+
+    <CanvasVideoGenPickHint v-if="showVideoGenCanvasPickMode" />
 
     <CanvasMultiSelectToolbar
       v-if="showMultiSelectToolbar"
@@ -226,6 +229,7 @@
       :video-gen-saved-settings="videoGenSavedSettings"
       :video-dialogue-source-refs="videoDialogueSourceRefs"
       :element-select-mode="showElementSelectMode"
+      :canvas-pick-mode="showVideoGenCanvasPickMode"
       :image-dialogue-text="imageDialogueText"
       :image-dialogue-settings="imageDialogueSettings"
       :image-dialogue-preview-url="imageDialoguePreviewUrl"
@@ -286,6 +290,7 @@
       @remove-video-source-ref="onRemoveVideoSourceRef"
       @upload-video-gen-images="onVideoGenUploadFiles"
       @add-video-gen-canvas-node="onVideoGenAddCanvasNode"
+      @toggle-video-gen-canvas-pick="toggleVideoGenCanvasPickMode"
     />
 
     <CanvasHiddenFileInput
@@ -394,6 +399,7 @@ import CanvasGroupToolbar from './panels/CanvasGroupToolbar.vue'
 import CanvasSaveSkillPopover from './panels/CanvasSaveSkillPopover.vue'
 import ImageToolbarCustomizeModal from './panels/ImageToolbarCustomizeModal.vue'
 import CanvasElementSelectBar from './panels/CanvasElementSelectBar.vue'
+import CanvasVideoGenPickHint from './panels/CanvasVideoGenPickHint.vue'
 import CanvasNodeOverlays from './panels/CanvasNodeOverlays.vue'
 import CanvasImagePreview from './panels/CanvasImagePreview.vue'
 import CanvasEmptyHint from './panels/CanvasEmptyHint.vue'
@@ -620,6 +626,8 @@ const {
   showConnectMenu,
   showEdgeDeleteButton,
   showElementSelectMode,
+  showVideoGenCanvasPickMode,
+  toggleVideoGenCanvasPickMode,
   showGroupToolbar,
   showSaveSkillPopover,
   saveSkillPopoverPos,

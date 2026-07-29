@@ -52,6 +52,7 @@ declare module 'vue' {
     CanvasTextExpandEditor: typeof import('./components/Canvas/panels/CanvasTextExpandEditor.vue')['default']
     CanvasTextFormatAnchor: typeof import('./components/Canvas/panels/CanvasTextFormatAnchor.vue')['default']
     CanvasToolbarActionItem: typeof import('./components/Canvas/panels/CanvasToolbarActionItem.vue')['default']
+    CanvasVideoGenPickHint: typeof import('./components/Canvas/panels/CanvasVideoGenPickHint.vue')['default']
     CanvasVideoPlaybackBar: typeof import('./components/Canvas/panels/CanvasVideoPlaybackBar.vue')['default']
     Combo: typeof import('./components/Combo/index.vue')['default']
     DialogueWorkflowSelect: typeof import('./components/Canvas/DialogueWorkflowSelect.vue')['default']

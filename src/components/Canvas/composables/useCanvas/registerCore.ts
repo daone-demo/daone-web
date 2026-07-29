@@ -193,6 +193,7 @@ export function registerCore(bind: CanvasBindings) {
     imageInpaintDragOffset,
     imageExpandDragOffset,
     showElementSelectMode,
+    showVideoGenCanvasPickMode,
     elementSelectReturnNodeId,
     imageCropPos,
     imageResizeOverlay,
@@ -4490,16 +4491,71 @@ export function registerCore(bind: CanvasBindings) {
 
   function closeVideoGenPromptBar() {
     activeVideoGenPromptNodeId.value = ''
+    exitVideoGenCanvasPickMode()
   }
 
   function enterElementSelectMode() {
     elementSelectReturnNodeId.value = activeVideoGenPromptNodeId.value
+    exitVideoGenCanvasPickMode()
     showElementSelectMode.value = true
   }
 
   function exitElementSelectMode() {
     showElementSelectMode.value = false
     elementSelectReturnNodeId.value = ''
+  }
+
+  function enterVideoGenCanvasPickMode() {
+    exitElementSelectMode()
+    showVideoGenCanvasPickMode.value = true
+  }
+
+  function exitVideoGenCanvasPickMode() {
+    showVideoGenCanvasPickMode.value = false
+  }
+
+  function toggleVideoGenCanvasPickMode() {
+    if (showVideoGenCanvasPickMode.value) {
+      exitVideoGenCanvasPickMode()
+      return
+    }
+    enterVideoGenCanvasPickMode()
+  }
+
+  async function handleVideoGenCanvasPick(nodeId: string) {
+    const g = graph.value
+    const videoNodeId = getActiveVideoTargetNodeId()
+    if (!g || !videoNodeId || !nodeId || nodeId === videoNodeId) return
+
+    const source = g.getCellById(nodeId)
+    if (!source?.isNode()) return
+
+    const sourceData = source.getData() as CanvasNodeData
+    if (
+      sourceData.kind !== 'image' ||
+      !sourceData.previewUrl ||
+      sourceData.uploadState === 'uploading' ||
+      sourceData.imageGenTask === 'picker'
+    ) {
+      return
+    }
+
+    if (findImageToVideoEdge(g, nodeId, videoNodeId)) {
+      message.info('该图片已添加')
+      return
+    }
+
+    const currentCount = getVideoSourceRefs(g, videoNodeId).length
+    if (currentCount >= getVideoGenSourceLimit()) {
+      message.warning('参考图数量已达上限')
+      return
+    }
+
+    const linked = await linkImageNodeToVideoGen(nodeId)
+    if (linked) {
+      message.success('已添加参考图')
+      updateNodeToolbar()
+    }
   }
 
   function returnFromElementSelect() {
@@ -6810,6 +6866,14 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
+    if (showVideoGenCanvasPickMode.value) {
+      if (data.kind === 'image' && data.previewUrl) {
+        void handleVideoGenCanvasPick(node.id)
+      }
+      syncSelectionFromGraph()
+      return
+    }
+
     if (shouldDeferVideoToolbarOnClick(data)) {
       scheduleVideoToolbarDefer()
     } else {
@@ -6891,6 +6955,7 @@ export function registerCore(bind: CanvasBindings) {
     closeVideoGenPromptBar()
     closeTextExpand()
     exitElementSelectMode()
+    exitVideoGenCanvasPickMode()
     syncNodeSelectionHighlight([])
     selectedEdgeId.value = ''
     clearEdgeHoverState()
@@ -7027,6 +7092,10 @@ export function registerCore(bind: CanvasBindings) {
     }
     if (textEditorToolbarActive.value) {
       setTextEditorToolbarActive(false)
+      return true
+    }
+    if (showVideoGenCanvasPickMode.value) {
+      exitVideoGenCanvasPickMode()
       return true
     }
     if (showElementSelectMode.value) {
@@ -8101,6 +8170,8 @@ export function registerCore(bind: CanvasBindings) {
     endSpacePan,
     enterElementSelectMode,
     exitElementSelectMode,
+    exitVideoGenCanvasPickMode,
+    toggleVideoGenCanvasPickMode,
     filterUploadFiles,
     finishConnectSpawn,
     generateImageFromPrompt,

@@ -175,6 +175,12 @@
         <button type="button" class="image-dialogue__icon" title="标记">
           <span class="image-dialogue__chip-icon" data-icon="mark" aria-hidden="true" />
         </button>
+        <a-tooltip>
+          <template #title>从画布选图</template>
+          <button type="button" class="video-gen-prompt-panel__tool" title="标记">
+            <i className="iconfont icon-shubiaojiantou"></i>
+          </button>
+        </a-tooltip>
         <button
           type="button"
           class="image-dialogue__icon"

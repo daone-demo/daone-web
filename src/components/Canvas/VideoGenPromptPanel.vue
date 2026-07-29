@@ -212,8 +212,15 @@
       </a-tooltip>
       <a-tooltip>
         <template #title>从画布选图</template>
-        <button type="button" class="video-gen-prompt-panel__tool" title="标记">
-          <i className="iconfont icon-shubiaojiantou"></i>
+        <button
+          type="button"
+          class="video-gen-prompt-panel__tool"
+          :class="{ 'video-gen-prompt-panel__tool--active': canvasPickMode }"
+          title="从画布选图"
+          @mousedown.stop
+          @click.stop="emit('toggle-canvas-pick')"
+        >
+          <i class="iconfont icon-shubiaojiantou" />
         </button>
       </a-tooltip>
       <span class="video-gen-prompt-panel__tools">
@@ -318,6 +325,7 @@ const props = defineProps<{
   sourceRefs?: VideoSourceRef[]
   savedSettings?: Partial<VideoDialogueSettings> | null
   elementSelectMode?: boolean
+  canvasPickMode?: boolean
   chatTools?: ChatTools | null
 }>()
 
@@ -331,6 +339,7 @@ const emit = defineEmits<{
   'remove-source-ref': [nodeId: string]
   'upload-images': [files: File[]]
   'add-canvas-node': [nodeId: string]
+  'toggle-canvas-pick': []
   submit: [payload: VideoGenPromptSubmitPayload]
 }>()
 
@@ -1325,12 +1334,22 @@ onMounted(() => {
     opacity: 0.55;
   }
 
+  &--active {
+    background: rgba(59, 130, 246, 0.16);
+    color: #60a5fa;
+  }
+
   .video-gen-prompt-panel--light & {
     color: #6b7280;
 
     &:hover:not(:disabled) {
       background: #f3f4f6;
       color: #374151;
+    }
+
+    &--active {
+      background: rgba(59, 130, 246, 0.12);
+      color: #2563eb;
     }
   }
 }

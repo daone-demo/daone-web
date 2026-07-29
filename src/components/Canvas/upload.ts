@@ -40,6 +40,8 @@ let canvasUploader: CanvasUploader | null = null
 const UPLOAD_READ_MAX_PERCENT = 20
 /** 请求发送阶段进度上限（保留余量等待服务端响应） */
 const UPLOAD_XHR_MAX_PERCENT = 95
+/** 文件上传接口超时：5 分钟（其余接口仍使用全局默认超时） */
+const UPLOAD_HTTP_TIMEOUT = 5 * 60 * 1000
 
 function mapUploadProgress(readRatio: number, xhrLoaded: number, xhrTotal: number) {
   const readPart = Math.min(1, Math.max(0, readRatio)) * UPLOAD_READ_MAX_PERCENT
@@ -256,6 +258,7 @@ export async function uploadAssetFile(
       fileBase64,
     },
     {
+      timeout: UPLOAD_HTTP_TIMEOUT,
       onUploadProgress: (event) => {
         const total = event.total ?? 0
         if (!total) return
