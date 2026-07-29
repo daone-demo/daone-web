@@ -84,6 +84,7 @@ export type CanvasBindings = CanvasState & {
   } | null>
   imageDialoguePreviews: ComputedRef<import('../../constants').ImageSourceRef[]>
   imageDialoguePreviewUrl: ComputedRef<string>
+  elementMarks: ComputedRef<import('../../constants').ImageMarkItem[]>
   showNodeToolbar: ComputedRef<boolean>
   showMultiSelectToolbar: ComputedRef<boolean>
   showToolbarFeatureButtons: ComputedRef<boolean>
@@ -127,6 +128,8 @@ export type CanvasBindings = CanvasState & {
   persistImageDialogueFields: (nodeId?: string) => void
   loadVideoDialogueFields: (nodeId: string) => void
   persistVideoDialogueFields: (nodeId?: string) => void
+  toggleImageDialogueMarkMode: () => void
+  updateImageMarkLabel: (markId: string, selectedLabelIndex: number) => void
   graph: ShallowRef<Graph | null>
   [key: string]: unknown
 }

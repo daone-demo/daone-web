@@ -139,12 +139,12 @@
         @click="onPromptClick"
       />
       <MarkLabelOptionMenu
-        :visible="Boolean(markLabelMenu.menu)"
-        :options="markLabelMenu.activeMarkOptions"
-        :selected-index="markLabelMenu.activeMarkSelectedIndex"
-        :left="markLabelMenu.menu?.left ?? 0"
-        :top="markLabelMenu.menu?.top ?? 0"
-        @select="markLabelMenu.selectOption"
+        :visible="Boolean(markLabelMenuState)"
+        :options="activeMarkOptions"
+        :selected-index="activeMarkSelectedIndex"
+        :left="markLabelMenuState?.left ?? 0"
+        :top="markLabelMenuState?.top ?? 0"
+        @select="selectMarkLabelOption"
       />
     </div>
 
@@ -670,7 +670,15 @@ function resolveMarkMentionMeta(token: string): PromptMarkMentionMeta | null {
   }
 }
 
-const markLabelMenu = useImageMarkLabelMenu({
+const {
+  menu: markLabelMenuState,
+  activeMarkOptions,
+  activeMarkSelectedIndex,
+  openMenuFromMention,
+  selectOption: selectMarkLabelOption,
+  bindDocumentClose: bindMarkLabelMenuDocumentClose,
+  unbindDocumentClose: unbindMarkLabelMenuDocumentClose,
+} = useImageMarkLabelMenu({
   getMarks: () => props.elementMarks,
   onSelectLabel: (markId, index) => emit('select-mark-label', markId, index),
   onAfterSelect: () => nextTick(() => syncPromptView()),
@@ -772,7 +780,7 @@ function onPromptClick(event: MouseEvent) {
   if (!mention) return
   event.preventDefault()
   event.stopPropagation()
-  markLabelMenu.openMenuFromMention(mention, el.parentElement ?? el)
+  openMenuFromMention(mention, el.parentElement ?? el)
 }
 
 function onPromptCompositionStart() {
@@ -920,7 +928,7 @@ watch(
 )
 
 onMounted(() => {
-  markLabelMenu.bindDocumentClose()
+  bindMarkLabelMenuDocumentClose()
   nextTick(() => {
     syncPromptView()
     syncMissingMarksIntoPrompt()
@@ -928,7 +936,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  markLabelMenu.unbindDocumentClose()
+  unbindMarkLabelMenuDocumentClose()
 })
 </script>
 

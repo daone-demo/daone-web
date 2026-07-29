@@ -212,10 +212,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, toRef } from 'vue'
+import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Graph, Node } from '@antv/x6'
 import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
-import type { CanvasNodeData, ImageMarkItem } from '../constants'
+import type { CanvasNodeData } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
@@ -225,7 +225,6 @@ import { syncNodeViewData } from './syncNodeViewData'
 import { useCanvasNodeImage } from './useCanvasNodeImage'
 import { resolveImageNaturalSizeCached } from '../imageDisplayUrl'
 import { markStyleFromNatural } from '../imageMarkUtils'
-import { getMarkLabelOptions, hasMultipleMarkLabels } from '../useImageMarkLabelMenu'
 import {
   canResizeImageNode,
   getBaseNodeSize,
@@ -239,8 +238,6 @@ const getNode = inject<() => Node>('getNode')!
 const getGraph = inject<() => Graph>('getGraph')!
 const requestCanvasUpload = inject<(nodeId: string) => void>('requestCanvasUpload')
 const uploadFileToCanvasNode = inject<(nodeId: string, file: File) => void>('uploadFileToCanvasNode')
-const updateImageMarkLabel = inject<(markId: string, index: number) => void>('updateImageMarkLabel')
-const openMarkMenuId = ref('')
 const { removeSelf } = useNodeDelete()
 const { onPlusPointerDown } = useNodeConnect()
 const { portPlusStyle } = useNodePortPlusStyle()
@@ -295,51 +292,6 @@ const dimensionLabel = computed(() => {
   const width = Math.round(data.mediaWidth * scale)
   const height = Math.round(data.mediaHeight * scale)
   return formatDimensions(width, height)
-})
-
-function markBoxStyle(mark: ImageMarkItem) {
-  const bbox = mark.bbox
-  if (!bbox) return {}
-  return {
-    left: markStyleFromNatural(bbox.x, mark.imageWidth, 'x'),
-    top: markStyleFromNatural(bbox.y, mark.imageHeight, 'y'),
-    width: markStyleFromNatural(bbox.width, mark.imageWidth, 'size'),
-    height: markStyleFromNatural(bbox.height, mark.imageHeight, 'size'),
-  }
-}
-
-function markPillWrapStyle(mark: ImageMarkItem) {
-  const anchorX = mark.bbox ? mark.bbox.x + mark.bbox.width / 2 : mark.x
-  const anchorY = mark.bbox ? mark.bbox.y : mark.y
-  return {
-    left: markStyleFromNatural(anchorX, mark.imageWidth, 'x'),
-    top: markStyleFromNatural(anchorY, mark.imageHeight, 'y'),
-  }
-}
-
-function onMarkPillClick(markId: string) {
-  const mark = (data.imageElementMarks ?? []).find((item) => item.id === markId)
-  if (!mark || !hasMultipleMarkLabels(mark)) return
-  openMarkMenuId.value = openMarkMenuId.value === markId ? '' : markId
-}
-
-function selectMarkLabel(markId: string, index: number) {
-  updateImageMarkLabel?.(markId, index)
-  openMarkMenuId.value = ''
-}
-
-function onDocumentMouseDown(event: MouseEvent) {
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.image-node__mark-pill-wrap')) return
-  openMarkMenuId.value = ''
-}
-
-onMounted(() => {
-  document.addEventListener('mousedown', onDocumentMouseDown, true)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocumentMouseDown, true)
 })
 
 function markAnalyzingStyle(point: { x: number; y: number }) {

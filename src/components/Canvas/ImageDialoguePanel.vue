@@ -95,12 +95,12 @@
         @click="onPromptClick"
       />
       <MarkLabelOptionMenu
-        :visible="Boolean(markLabelMenu.menu)"
-        :options="markLabelMenu.activeMarkOptions"
-        :selected-index="markLabelMenu.activeMarkSelectedIndex"
-        :left="markLabelMenu.menu?.left ?? 0"
-        :top="markLabelMenu.menu?.top ?? 0"
-        @select="markLabelMenu.selectOption"
+        :visible="Boolean(markLabelMenuState)"
+        :options="activeMarkOptions"
+        :selected-index="activeMarkSelectedIndex"
+        :left="markLabelMenuState?.left ?? 0"
+        :top="markLabelMenuState?.top ?? 0"
+        @select="selectMarkLabelOption"
       />
     </div>
 
@@ -392,14 +392,22 @@ function resolveMarkMentionMeta(token: string): PromptMarkMentionMeta | null {
   }
 }
 
-const markLabelMenu = useImageMarkLabelMenu({
+const {
+  menu: markLabelMenuState,
+  activeMarkOptions,
+  activeMarkSelectedIndex,
+  openMenuFromMention,
+  selectOption: selectMarkLabelOption,
+  bindDocumentClose: bindMarkLabelMenuDocumentClose,
+  unbindDocumentClose: unbindMarkLabelMenuDocumentClose,
+} = useImageMarkLabelMenu({
   getMarks: () => props.elementMarks,
   onSelectLabel: (markId, index) => emit('select-mark-label', markId, index),
   onAfterSelect: () => nextTick(() => syncPromptView()),
 })
 
 onMounted(() => {
-  markLabelMenu.bindDocumentClose()
+  bindMarkLabelMenuDocumentClose()
   document.addEventListener('mousedown', onDocumentMouseDown, true)
   nextTick(() => {
     syncPromptView()
@@ -408,7 +416,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  markLabelMenu.unbindDocumentClose()
+  unbindMarkLabelMenuDocumentClose()
   document.removeEventListener('mousedown', onDocumentMouseDown, true)
 })
 
@@ -664,7 +672,7 @@ function onPromptClick(event: MouseEvent) {
   if (!mention) return
   event.preventDefault()
   event.stopPropagation()
-  markLabelMenu.openMenuFromMention(mention, el.parentElement ?? el)
+  openMenuFromMention(mention, el.parentElement ?? el)
 }
 
 function onPromptCompositionStart() {
