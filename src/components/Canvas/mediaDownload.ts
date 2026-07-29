@@ -1,3 +1,4 @@
+import { resolveOriginalMediaDownloadUrl } from './cloudImageProcess'
 import { buildMediaProxyCandidates } from './mediaProxy'
 
 function buildFetchCandidates(url: string): string[] {
@@ -41,11 +42,23 @@ function extensionFromUrl(url: string): string {
   }
 }
 
+function replaceFileExtension(name: string, extension: string) {
+  const base = name.replace(/\.[a-z0-9]{2,5}$/i, '')
+  return `${base}${extension}`
+}
+
 function ensureFileName(fileName: string | undefined, fallback: string, blob: Blob, sourceUrl: string) {
   const raw = (fileName || fallback).trim() || fallback
-  if (/\.[a-z0-9]{2,5}$/i.test(raw)) return raw
-  const ext = extensionFromMime(blob.type) || extensionFromUrl(sourceUrl) || ''
-  return ext ? `${raw}${ext}` : raw
+  const urlExt = extensionFromUrl(sourceUrl)
+  const mimeExt = extensionFromMime(blob.type)
+  const preferredExt = urlExt || mimeExt || extensionFromUrl(fallback) || ''
+
+  if (!preferredExt) return raw
+
+  const existingExt = raw.match(/(\.[a-z0-9]{2,5})$/i)?.[1]?.toLowerCase() ?? ''
+  if (!existingExt) return `${raw}${preferredExt}`
+  if (existingExt !== preferredExt) return replaceFileExtension(raw, preferredExt)
+  return raw
 }
 
 function triggerBlobDownload(blob: Blob, fileName: string) {
@@ -98,13 +111,14 @@ export async function downloadCanvasMedia(options: {
     return
   }
 
-  const candidates = buildFetchCandidates(sourceUrl)
+  const originalUrl = resolveOriginalMediaDownloadUrl(sourceUrl)
+  const candidates = buildFetchCandidates(originalUrl)
   let lastError: unknown
 
   for (const candidate of candidates) {
     try {
       const blob = await fetchBlob(candidate)
-      const fileName = ensureFileName(options.fileName, options.fallbackName, blob, sourceUrl)
+      const fileName = ensureFileName(options.fileName, options.fallbackName, blob, originalUrl)
       triggerBlobDownload(blob, fileName)
       return
     } catch (error) {

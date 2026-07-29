@@ -184,7 +184,7 @@
 
           <div class="canvas__user-menu-divider" aria-hidden="true" />
 
-          <button type="button" class="canvas__user-menu-logout" @click="emit('logout')">
+          <button type="button" class="canvas__user-menu-logout" @click="onLogout">
             <span class="canvas__user-menu-logout-icon" aria-hidden="true" />
             退出登录
           </button>
@@ -200,6 +200,9 @@ import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
 import type { CanvasBgTheme } from '../canvasTheme';
 import { useUserInfo } from '@/stores/useUserInfo';
+import { useRouter } from 'vue-router';
+import api from '@/services/api';
+const router = useRouter();
 // import { useRouter } from 'vue-router';
 
 // const router = useRouter();
@@ -243,6 +246,12 @@ const displayProjectName = computed(
     ?? props.currentProjectName
     ?? '未命名创作',
 )
+
+const onLogout = async () => {
+  await api.logout();
+  userInfoStore.logout();
+  router.replace('/');
+}
 
 const emit = defineEmits<{
   'go-home': []

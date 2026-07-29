@@ -3060,7 +3060,7 @@ export function registerCore(bind: CanvasBindings) {
     void downloadCanvasMedia({
       url,
       fileName: data?.fileName,
-      fallbackName: 'image.png',
+      fallbackName: 'image',
     }).catch((error) => {
       message.error(isRequestError(error) ? error.message : '图片下载失败，请稍后重试')
     })
@@ -7790,7 +7790,7 @@ export function registerCore(bind: CanvasBindings) {
             fileName: data.fileName,
             fallbackName: isVideo
               ? `group-video-${index + 1}.mp4`
-              : `group-image-${index + 1}.png`,
+              : `group-image-${index + 1}`,
           })
           success += 1
           // 避免浏览器连续触发下载被拦截

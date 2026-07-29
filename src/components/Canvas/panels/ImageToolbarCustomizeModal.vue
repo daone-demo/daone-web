@@ -69,7 +69,7 @@
               type="button"
               class="canvas__node-toolbar-btn canvas__node-toolbar-btn--icon"
               disabled
-              title="下载1"
+              title="下载"
             >
               <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" />
             </button>
