@@ -7902,7 +7902,8 @@ export function registerCore(bind: CanvasBindings) {
     openFileUploadPicker('image/*,video/*', 'any', true)
   }
 
-  const { altVoiceTimer, bindKeyboard, unbindKeyboard, endSpacePan } = useCanvasKeyboard({
+  const { altVoiceTimer, bindKeyboard, unbindKeyboard, bindLongPressPan, unbindLongPressPan, endSpacePan } =
+    useCanvasKeyboard({
     graph,
     panMode,
     selectedNodeId,
@@ -8024,6 +8025,7 @@ export function registerCore(bind: CanvasBindings) {
     bindGraphInteraction(instance)
     bindScrollerScrollListener(instance)
     bindKeyboard()
+    bindLongPressPan(instance)
 
     // 挂载即把全画布各层背景刷成当前主题色，避免拖拽到内容区外露出建图时的深色底（视图分层感）
     applyCanvasBgTheme(instance, canvasBgTheme.value, gridVisible.value)
@@ -8281,13 +8283,13 @@ export function registerCore(bind: CanvasBindings) {
     window.removeEventListener('pagehide', onPageUnload)
     stopAutoSave()
     unbindKeyboard()
+    unbindLongPressPan()
     unbindGraphDropListeners()
     setCanvasAssetDropHandler(null)
     clearCanvasAssetDrag()
     if (historyPushTimer) clearTimeout(historyPushTimer)
     if (edgeHoverLeaveTimer) window.clearTimeout(edgeHoverLeaveTimer)
     if (altVoiceTimer.value) clearTimeout(altVoiceTimer.value)
-    endSpacePan()
     canvasHistory = null
     unbindScrollerScrollListener()
     teardownMinimap()
@@ -8315,6 +8317,7 @@ export function registerCore(bind: CanvasBindings) {
     applyIncomingImageSource,
     applyZoomAfterChange,
     bindKeyboard,
+    bindLongPressPan,
     bindScrollerScrollListener,
     bumpToolbarRevision,
     canShowImageToolbar,
@@ -8575,6 +8578,7 @@ export function registerCore(bind: CanvasBindings) {
     triggerCanvasUploadShortcut,
     triggerFileInputClick,
     unbindKeyboard,
+    unbindLongPressPan,
     unbindScrollerScrollListener,
     updateAddMenuPosition,
     updateConnectMenuPosition,

@@ -40,7 +40,7 @@ export const CANVAS_SHORTCUT_GROUPS: CanvasShortcutGroup[] = [
     items: [
       { label: '适合屏幕', keys: ['Shift', '1'] },
       { label: '缩放至 100%', keys: [SHORTCUT_MOD_KEY, '0'] },
-      { label: '移动画布', keys: ['Space', '（按住）'] },
+      { label: '移动画布', keys: ['长按鼠标左键'] },
       { label: '上传图片/视频', keys: ['Shift', 'A'] },
     ],
   },

@@ -2,6 +2,24 @@ import { ref, type Ref, type ShallowRef } from 'vue'
 import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData } from '../constants'
 
+type ScrollerPanApi = {
+  togglePanning: (enabled: boolean) => unknown
+}
+
+type ScrollerImplPan = {
+  container: HTMLElement
+  startPanning: (e: MouseEvent) => void
+  once: (name: string, handler: (...args: unknown[]) => void) => void
+}
+
+type SelectionCancelApi = {
+  selectionImpl?: {
+    undelegateDocumentEvents: () => void
+    hideRubberband: () => void
+    container: HTMLElement
+  }
+}
+
 type CanvasKeyboardDeps = {
   graph: ShallowRef<Graph | null>
   panMode: Ref<boolean>
@@ -25,9 +43,14 @@ type CanvasKeyboardDeps = {
   hasSelectedEdge: () => boolean
   openImagePreview: () => void
   triggerCanvasUploadShortcut: () => void
-  getScroller: (graph: Graph) => { togglePanning: (enabled: boolean) => unknown } | null
+  getScroller: (graph: Graph) => ScrollerPanApi | null
   setRubberbandEnabled: (enabled: boolean) => void
 }
+
+/** 长按空白处进入拖拽画布的阈值（毫秒） */
+const LONG_PRESS_PAN_MS = 320
+/** 长按等待期间移动超过该像素则视为框选，取消长按拖拽 */
+const LONG_PRESS_MOVE_CANCEL_PX = 6
 
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -35,25 +58,111 @@ function isEditableTarget(target: EventTarget | null) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable
 }
 
+function cancelActiveRubberband(graph: Graph) {
+  const selection = graph.getPlugin('selection') as SelectionCancelApi | null
+  const impl = selection?.selectionImpl
+  if (!impl) return
+  impl.undelegateDocumentEvents()
+  impl.hideRubberband()
+  impl.container.removeAttribute('style')
+}
+
 export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
-  const spacePanActive = ref(false)
+  const tempPanActive = ref(false)
   const spaceKeyDownAt = ref(0)
   const altVoiceTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
-  function beginSpacePan() {
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null
+  let pressStart: { x: number; y: number; event: MouseEvent } | null = null
+  let longPressPanActive = false
+  let boundGraph: Graph | null = null
+
+  function beginTempPan() {
     const scroller = deps.graph.value ? deps.getScroller(deps.graph.value) : null
-    if (!scroller || spacePanActive.value) return
-    spacePanActive.value = true
+    if (!scroller || tempPanActive.value) return
+    tempPanActive.value = true
     deps.setRubberbandEnabled(false)
     if (!deps.panMode.value) scroller.togglePanning(true)
   }
 
-  function endSpacePan() {
+  function endTempPan() {
     const scroller = deps.graph.value ? deps.getScroller(deps.graph.value) : null
-    if (!scroller || !spacePanActive.value) return
-    spacePanActive.value = false
+    if (!scroller || !tempPanActive.value) return
+    tempPanActive.value = false
     scroller.togglePanning(deps.panMode.value)
     deps.setRubberbandEnabled(!deps.panMode.value)
+  }
+
+  function clearLongPressTimer() {
+    if (!longPressTimer) return
+    clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+
+  function removePressWindowListeners() {
+    window.removeEventListener('mousemove', onPressMove)
+    window.removeEventListener('mouseup', onPressUp)
+  }
+
+  function clearLongPressWatch() {
+    clearLongPressTimer()
+    pressStart = null
+    removePressWindowListeners()
+  }
+
+  function activateLongPressPan(event: MouseEvent) {
+    const g = deps.graph.value
+    if (!g || longPressPanActive || deps.panMode.value) return
+
+    const scroller = deps.getScroller(g)
+    const impl = scroller
+      ? (scroller as unknown as { scrollerImpl?: ScrollerImplPan }).scrollerImpl
+      : undefined
+    if (!scroller || !impl) return
+
+    longPressPanActive = true
+    clearLongPressTimer()
+    cancelActiveRubberband(g)
+    beginTempPan()
+    impl.container.dataset.panning = 'true'
+    impl.startPanning(event)
+    impl.once('pan:stop', () => {
+      impl.container.dataset.panning = 'false'
+      longPressPanActive = false
+      endTempPan()
+      clearLongPressWatch()
+    })
+  }
+
+  function onPressMove(event: MouseEvent) {
+    if (!pressStart || longPressPanActive) return
+    const dx = event.clientX - pressStart.x
+    const dy = event.clientY - pressStart.y
+    if (dx * dx + dy * dy > LONG_PRESS_MOVE_CANCEL_PX * LONG_PRESS_MOVE_CANCEL_PX) {
+      clearLongPressWatch()
+    }
+  }
+
+  function onPressUp() {
+    if (longPressPanActive) return
+    clearLongPressWatch()
+  }
+
+  function onBlankMouseDown({ e }: { e: MouseEvent }) {
+    if (e.button !== 0) return
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
+    if (deps.panMode.value || tempPanActive.value || longPressPanActive) return
+
+    pressStart = { x: e.clientX, y: e.clientY, event: e }
+    clearLongPressTimer()
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null
+      if (!pressStart) return
+      activateLongPressPan(pressStart.event)
+    }, LONG_PRESS_PAN_MS)
+
+    window.addEventListener('mousemove', onPressMove)
+    window.addEventListener('mouseup', onPressUp)
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -75,7 +184,6 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
     if (key === ' ' && !mod && !event.altKey) {
       if (!event.repeat) {
         spaceKeyDownAt.value = Date.now()
-        beginSpacePan()
       }
       event.preventDefault()
       return
@@ -186,7 +294,6 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
 
     if (event.key === ' ') {
       const heldMs = Date.now() - spaceKeyDownAt.value
-      endSpacePan()
       if (heldMs < 220 && !event.ctrlKey && !event.metaKey && !event.altKey) {
         deps.openImagePreview()
       }
@@ -210,10 +317,34 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
     window.removeEventListener('keyup', handleKeyup)
   }
 
+  function bindLongPressPan(g: Graph) {
+    boundGraph = g
+    g.on('blank:mousedown', onBlankMouseDown)
+  }
+
+  function unbindLongPressPan() {
+    if (boundGraph) {
+      boundGraph.off('blank:mousedown', onBlankMouseDown)
+      boundGraph = null
+    }
+    clearLongPressWatch()
+    longPressPanActive = false
+    endTempPan()
+  }
+
+  /** 结束临时拖拽态（卸载或强制收尾） */
+  function endSpacePan() {
+    clearLongPressWatch()
+    longPressPanActive = false
+    endTempPan()
+  }
+
   return {
     altVoiceTimer,
     bindKeyboard,
     unbindKeyboard,
+    bindLongPressPan,
+    unbindLongPressPan,
     endSpacePan,
   }
 }
