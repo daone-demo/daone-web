@@ -1,5 +1,181 @@
-import { http, type RequestConfig } from '@/utils/request'
+import {
+  getToken,
+  http,
+  removeToken,
+  type RequestConfig,
+} from '@/utils/request'
 import type { PostSmsLoginRequest, QuerySmsCodeRequest } from '@/types/types'
+
+/**
+ * uni.request 全局拦截器所需的最小类型。
+ *
+ * 当前项目是 Web/Vite 工程，没有引入 @dcloudio/types，因此这里不直接依赖
+ * UniApp 命名空间，保证 Web 构建和 uni-app 复用时都能通过类型检查。
+ */
+interface UniRequestOptions {
+  url: string
+  header?: Record<string, string>
+  timeout?: number
+  [key: string]: unknown
+}
+
+interface UniRequestResponse {
+  statusCode: number
+  data?: unknown
+  [key: string]: unknown
+}
+
+interface UniRequestInterceptor {
+  invoke?: (options: UniRequestOptions) => UniRequestOptions | void
+  success?: (response: UniRequestResponse) => UniRequestResponse | void
+  fail?: (error: unknown) => void
+}
+
+interface UniRuntime {
+  addInterceptor(
+    method: 'request',
+    interceptor: UniRequestInterceptor,
+  ): void
+  removeInterceptor?: (method: 'request', interceptor: UniRequestInterceptor) => void
+  showToast?: (options: { title: string; icon?: 'none' | 'success'; duration?: number }) => void
+  reLaunch?: (options: { url: string }) => void
+  getStorageSync?: (key: string) => unknown
+  removeStorageSync?: (key: string) => void
+}
+
+export interface UniRequestInterceptorOptions {
+  /** 接口地址前缀，默认读取 VITE_API_BASE_URL。 */
+  baseURL?: string
+  /** 请求超时时间，默认读取 VITE_HTTP_TIMEOUT，兜底 60 秒。 */
+  timeout?: number
+  /** 不携带 Token 的接口。 */
+  publicPaths?: Array<string | RegExp>
+  /** 登录失效后的页面地址；不传则只清理 Token。 */
+  loginPage?: string
+  /** 自定义登录失效处理。 */
+  onUnauthorized?: () => void
+  /** 自定义错误提示；传入空函数可关闭默认 Toast。 */
+  onError?: (message: string, response?: UniRequestResponse) => void
+}
+
+let uniRequestInterceptorInstalled = false
+let installedUniInterceptor: UniRequestInterceptor | null = null
+const UNI_TOKEN_KEY = 'daone_token'
+
+function getUniRuntime(): UniRuntime | null {
+  const runtime = (globalThis as typeof globalThis & { uni?: UniRuntime }).uni
+  return runtime?.addInterceptor ? runtime : null
+}
+
+function getCrossPlatformToken(uniRuntime: UniRuntime): string | null {
+  try {
+    return getToken()
+  } catch {
+    const token = uniRuntime.getStorageSync?.(UNI_TOKEN_KEY)
+    return typeof token === 'string' && token ? token : null
+  }
+}
+
+function removeCrossPlatformToken(uniRuntime: UniRuntime): void {
+  try {
+    removeToken()
+  } catch {
+    uniRuntime.removeStorageSync?.(UNI_TOKEN_KEY)
+  }
+}
+
+function isAbsoluteUrl(url: string): boolean {
+  return /^(?:https?:)?\/\//i.test(url)
+}
+
+function joinUrl(baseURL: string, url: string): string {
+  if (!baseURL || isAbsoluteUrl(url)) return url
+  return `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`
+}
+
+function matchesPublicPath(url: string, paths: Array<string | RegExp>): boolean {
+  return paths.some((path) => (
+    typeof path === 'string' ? url.includes(path) : path.test(url)
+  ))
+}
+
+function getUniResponseMessage(response: UniRequestResponse): string {
+  if (response.data == null || typeof response.data !== 'object') return ''
+  const payload = response.data as Record<string, unknown>
+  return String(payload.message ?? payload.msg ?? payload.errmsg ?? '')
+}
+
+/**
+ * 安装 uni.request 全局拦截器。
+ *
+ * 建议在 uni-app 的 main.ts 中、应用挂载前调用一次：
+ * `installUniRequestInterceptor({ loginPage: '/pages/login/index' })`。
+ * 重复调用不会重复注册；函数返回卸载方法，便于测试或微前端销毁。
+ */
+export function installUniRequestInterceptor(
+  options: UniRequestInterceptorOptions = {},
+): () => void {
+  const uniRuntime = getUniRuntime()
+  if (!uniRuntime || uniRequestInterceptorInstalled) return () => undefined
+
+  const baseURL = options.baseURL ?? import.meta.env.VITE_API_BASE_URL ?? ''
+  const timeout = options.timeout ?? (Number(import.meta.env.VITE_HTTP_TIMEOUT) || 60_000)
+  const publicPaths = options.publicPaths ?? [
+    /\/auth\/sms-codes(?:\?|$)/,
+    /\/auth\/sms-login(?:\?|$)/,
+    /\/auth\/wechat\/qr-sessions(?:\/|\?|$)/,
+  ]
+  const showError = options.onError ?? ((message: string) => {
+    uniRuntime.showToast?.({ title: message, icon: 'none', duration: 2500 })
+  })
+
+  installedUniInterceptor = {
+    invoke(requestOptions) {
+      requestOptions.url = joinUrl(baseURL, requestOptions.url)
+      requestOptions.timeout ??= timeout
+      requestOptions.header = {
+        'Content-Type': 'application/json',
+        ...requestOptions.header,
+      }
+
+      const token = getCrossPlatformToken(uniRuntime)
+      if (token && !matchesPublicPath(requestOptions.url, publicPaths)) {
+        requestOptions.header.Authorization = `Bearer ${token}`
+      }
+      return requestOptions
+    },
+    success(response) {
+      const message = getUniResponseMessage(response)
+      if (response.statusCode === 401) {
+        removeCrossPlatformToken(uniRuntime)
+        if (options.onUnauthorized) {
+          options.onUnauthorized()
+        } else if (options.loginPage) {
+          uniRuntime.reLaunch?.({ url: options.loginPage })
+        }
+        showError(message || '登录已失效，请重新登录', response)
+      } else if (response.statusCode < 200 || response.statusCode >= 300) {
+        showError(message || `请求失败 (${response.statusCode})`, response)
+      }
+      return response
+    },
+    fail(error) {
+      const message = error instanceof Error ? error.message : String(error ?? '')
+      showError(/timeout/i.test(message) ? '请求超时，请稍后重试' : '网络异常，请检查网络连接')
+    },
+  }
+
+  uniRuntime.addInterceptor('request', installedUniInterceptor)
+  uniRequestInterceptorInstalled = true
+
+  return () => {
+    if (installedUniInterceptor) {
+      uniRuntime.removeInterceptor?.('request', installedUniInterceptor)
+    }
+    installedUniInterceptor = null
+    uniRequestInterceptorInstalled = false
+  }
+}
 
 type JsonObject = Record<string, unknown>
 type Id = string
@@ -666,6 +842,9 @@ const api = {
   }) {
     return http.put<T>('/canvas/toolbar-preferences', data)
   },
-  
+  /** 删除指定项目。 */
+  deleteProjectElementGroup(groupId: Id) {
+    return http.delete(`/projects/{projectId}/element-groups/${groupId}`)
+  }
 }
 export default api

@@ -71,7 +71,7 @@ import api from '@/services/api';
 
 const uploadInputRef = ref<HTMLInputElement | null>(null)
 const uploadedFiles = ref<ProjectFileItem[]>([])
-const scope = ref('RECOMMENDED');
+const scope = ref('CENTER');
 const page = ref(1);
 const list = ref<any[]>([]);
 

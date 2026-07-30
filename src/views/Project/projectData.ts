@@ -1,5 +1,5 @@
 export const PROJECT_TABS = [
-  { key: 'RECOMMENDED', label: '智能推荐' },
+  // { key: 'RECOMMENDED', label: '智能推荐' },
   { key: 'CENTER', label: '素材中心' },
   { key: 'MINE', label: '我的素材' },
   { key: 'FAVORITE', label: '我的收藏' },
