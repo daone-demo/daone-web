@@ -239,6 +239,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const imageGenPromptText = ref('')
   const imageGenSeed = ref(58)
   const imageGenSourcePreviewUrl = ref('')
+  const imageGenSourceTextPreview = ref('')
   const imageGenSubmitting = ref(false)
   const activeVideoGenPromptNodeId = ref('')
   const videoGenPromptText = ref('')
@@ -4184,6 +4185,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     imageGenPromptText,
     imageGenSeed,
     imageGenSourcePreviewUrl,
+    imageGenSourceTextPreview,
     imageGenSubmitting,
     imagePreviewUrl,
     isCanvasFileDragOver,

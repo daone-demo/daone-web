@@ -424,8 +424,6 @@ function onVideoNumChange(value: unknown) {
   emit('update:videoNum', Number(value))
 }
 
-const sourceCount = computed(() => imageSourceCount.value)
-
 const imageSourceCount = computed(
   () => (props.sourceRefs ?? []).filter((ref) => ref.kind !== 'text' && ref.previewUrl).length,
 )

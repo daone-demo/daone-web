@@ -1,4 +1,5 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref } from 'vue'
+import { isNavigationFailure, NavigationFailureType } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { Edge, Graph, Node } from '@antv/x6'
 import type { CanvasBindings } from './types'
@@ -30,7 +31,7 @@ import {
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
-  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, isTextSourcedImageGenNode, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
+  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
 import {
@@ -5151,22 +5152,30 @@ export function registerCore(bind: CanvasBindings) {
     closeZoomMenu()
   }
 
-  function selectProject(projectId: string) {
+  async function selectProject(projectId: string) {
     if (projectId === activeProjectId.value) {
       closeProjectMenu()
       return
     }
 
-    const route = router.currentRoute.value
-    if (route.params.id !== projectId) {
-      router.replace({
-        name: route.name ?? undefined,
-        params: { ...route.params, id: projectId },
-      })
+    const currentRoute = router.currentRoute.value
+    if (currentRoute.params.id === projectId) {
+      activeProjectId.value = projectId
+      closeProjectMenu()
+      return
     }
 
-    activeProjectId.value = projectId
-    closeProjectMenu()
+    try {
+      await router.replace({
+        name: currentRoute.name ?? undefined,
+        params: { ...currentRoute.params, id: projectId },
+      })
+      activeProjectId.value = projectId
+      closeProjectMenu()
+    } catch (error) {
+      if (isNavigationFailure(error, NavigationFailureType.aborted)) return
+      console.error('[Canvas] switch project failed', error)
+    }
   }
 
   async function onLoadProjects() {

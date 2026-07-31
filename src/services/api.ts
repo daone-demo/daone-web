@@ -845,6 +845,12 @@ const api = {
   /** 删除指定项目。 */
   deleteProjectElementGroup(groupId: Id) {
     return http.delete(`/projects/{projectId}/element-groups/${groupId}`)
-  }
+  },
+  queryMaterialCategories<T = unknown>() {
+    return http.get<T>('/materials/categories', {  })
+  },
+  queryMaterials<T = unknown>(params:any) {
+    return http.get<T>('/materials', { params })
+  },
 }
 export default api

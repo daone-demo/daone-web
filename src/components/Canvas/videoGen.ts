@@ -211,22 +211,22 @@ export function getVideoTextSourceRefs(
   videoNodeId: string,
   resolvePlainText: (node: Node) => string,
 ): VideoSourceRef[] {
-  return findIncomingTextNodes(graph, videoNodeId)
-    .map((node, index) => {
-      const data = node.getData() as CanvasNodeData
-      const textPreview = resolvePlainText(node) || data.title || ''
-      if (!textPreview) return null
-      return {
-        nodeId: node.id,
-        kind: 'text' as const,
-        previewUrl: '',
-        fileName: data.title || '文本节点',
-        title: data.title || '文本节点',
-        textPreview,
-        index: index + 1,
-      }
+  const refs: VideoSourceRef[] = []
+  findIncomingTextNodes(graph, videoNodeId).forEach((node, index) => {
+    const data = node.getData() as CanvasNodeData
+    const textPreview = resolvePlainText(node) || data.title || ''
+    if (!textPreview) return
+    refs.push({
+      nodeId: node.id,
+      kind: 'text',
+      previewUrl: '',
+      fileName: data.title || '文本节点',
+      title: data.title || '文本节点',
+      textPreview,
+      index: index + 1,
     })
-    .filter((item): item is VideoSourceRef => Boolean(item))
+  })
+  return refs
 }
 
 export type VideoGenTabImageRule = {

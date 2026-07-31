@@ -96,7 +96,18 @@ function handleUploadChange(event: Event) {
 const onChangeScope = (key: string) => {
   scope.value = key;
   page.value = 1;
-  onLoadAssets();
+  if (scope.value === 'CENTER') {
+
+  }
+  else {
+    onLoadAssets();
+  }
+}
+
+const onLoadMaterialCategories = () => {
+  api.queryMaterialCategories().then((res: any) => {
+    console.log('res', res);
+  })
 }
 
 const onLoadAssets = () => {
@@ -111,6 +122,7 @@ const onLoadAssets = () => {
 }
 
 onMounted(()=>{
+  onLoadMaterialCategories();
   onLoadAssets();
 })
 </script>
