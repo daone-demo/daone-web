@@ -1510,15 +1510,11 @@ export function registerCore(bind: CanvasBindings) {
             title: config.title,
             fileName: nodeFileName,
             onError: (reason) => message.error(reason),
-            onComplete: (success) => {
-              if (!success) return
-              bumpToolbarRevision()
-              updateNodeToolbar()
-              scheduleHistoryPush()
-            },
+            onComplete: (success) => handleVideoGenerationTaskComplete(resultNode.id, success),
           })
         } catch (error) {
           markVideoGenerationNodeFailed(resultNode)
+          revealVideoDialogueAfterGenerationFailure(resultNode.id)
           message.error(isRequestError(error) ? error.message : `${config.title}失败，请稍后重试`)
         }
       }),
@@ -2557,15 +2553,11 @@ export function registerCore(bind: CanvasBindings) {
               title,
               fileName: nodeFileName,
               onError: (reason) => message.error(reason),
-              onComplete: (success) => {
-                if (!success) return
-                bumpToolbarRevision()
-                updateNodeToolbar()
-                scheduleHistoryPush()
-              },
+              onComplete: (success) => handleVideoGenerationTaskComplete(resultNode.id, success),
             })
           } catch (error) {
             markVideoGenerationNodeFailed(resultNode)
+            revealVideoDialogueAfterGenerationFailure(resultNode.id)
             message.error(isRequestError(error) ? error.message : '视频生成失败，请稍后重试')
           }
         }),
@@ -2644,15 +2636,11 @@ export function registerCore(bind: CanvasBindings) {
           title,
           fileName,
           onError: (reason) => message.error(reason),
-          onComplete: (success) => {
-            if (!success) return
-            bumpToolbarRevision()
-            updateNodeToolbar()
-            scheduleHistoryPush()
-          },
+          onComplete: (success) => handleVideoGenerationTaskComplete(targetNode.id, success),
         })
       } catch (error) {
         markVideoGenerationNodeFailed(targetNode)
+        revealVideoDialogueAfterGenerationFailure(targetNode.id)
         message.error(isRequestError(error) ? error.message : '视频生成失败，请稍后重试')
       }
     })()
@@ -3189,6 +3177,26 @@ export function registerCore(bind: CanvasBindings) {
 
   function handleImageNodeDblClick({ node }: { node: Node }) {
     openImageDialogue(node.id)
+  }
+
+  function revealVideoDialogueAfterGenerationFailure(nodeId: string) {
+    const g = graph.value
+    if (!g || !nodeId) return
+    const cell = g.getCellById(nodeId)
+    if (!cell?.isNode()) return
+    const data = cell.getData() as CanvasNodeData
+    if (data.kind !== 'video' || !isVideoGenerationFailedNode(data)) return
+    openVideoDialogue(nodeId)
+  }
+
+  function handleVideoGenerationTaskComplete(nodeId: string, success: boolean) {
+    if (success) {
+      bumpToolbarRevision()
+      updateNodeToolbar()
+      scheduleHistoryPush()
+      return
+    }
+    revealVideoDialogueAfterGenerationFailure(nodeId)
   }
 
   function openVideoDialogue(nodeId?: string) {
@@ -4345,12 +4353,7 @@ export function registerCore(bind: CanvasBindings) {
             title: '文生视频',
             fileName: '文生视频.mp4',
             onError: (reason) => message.error(reason),
-            onComplete: (success) => {
-              if (!success) return
-              bumpToolbarRevision()
-              updateNodeToolbar()
-              scheduleHistoryPush()
-            },
+            onComplete: (success) => handleVideoGenerationTaskComplete(resultNode.id, success),
           })
 
           selectedNodeId.value = resultNode.id
@@ -4362,6 +4365,7 @@ export function registerCore(bind: CanvasBindings) {
           scheduleHistoryPush()
         } catch (error) {
           markVideoGenerationNodeFailed(resultNode)
+          revealVideoDialogueAfterGenerationFailure(resultNode.id)
           message.error(isRequestError(error) ? error.message : '文生视频失败，请稍后重试')
         }
         return
@@ -5205,6 +5209,9 @@ export function registerCore(bind: CanvasBindings) {
       onError: (reason) => message.error(reason),
       onTaskBound: () => persistGenerationTaskBinding(),
       onTaskComplete: () => persistGenerationTaskBinding(),
+      onVideoGenerationComplete: (nodeId, success) => {
+        if (!success) revealVideoDialogueAfterGenerationFailure(nodeId)
+      },
     })
   }
 

@@ -1022,6 +1022,7 @@ export function resumePendingGenerationTasks(
     onError?: (message: string) => void
     onTaskBound?: () => void
     onTaskComplete?: () => void
+    onVideoGenerationComplete?: (nodeId: string, success: boolean) => void
   } = {},
 ) {
   graph.getNodes().forEach((node) => {
@@ -1071,7 +1072,10 @@ export function resumePendingGenerationTasks(
         title: data.title || '文生视频',
         fileName: data.fileName || '文生视频.mp4',
         onError: options.onError,
-        onComplete: notifyComplete,
+        onComplete: (success) => {
+          notifyComplete(success)
+          options.onVideoGenerationComplete?.(node.id, success)
+        },
       })
     }
   })

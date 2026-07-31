@@ -354,6 +354,7 @@ import {
   buildVideoDialogueModelsFromCapabilities,
   formatVideoGenSettings,
   normalizeVideoDialogueSettingsForModel,
+  resolveVideoDialogueModelApiValue,
   type ChatTools,
   type VideoDialogueModelItem,
   type VideoDialogueSettings,
@@ -946,7 +947,7 @@ function onSend() {
 
   const payload: VideoGenPromptSubmitPayload = {
     prompt,
-    model: selectedModelKey.value,
+    model: resolveVideoDialogueModelApiValue(selectedModelKey.value, props.chatTools),
     ratio: videoAspectRatio.value,
     clarity: videoResolution.value,
     duration: videoDuration.value,

@@ -104,6 +104,7 @@ import {
   buildVideoDialogueModelsFromCapabilities,
   formatVideoGenSettings,
   normalizeVideoDialogueSettingsForModel,
+  resolveVideoDialogueModelApiValue,
   type ChatTools,
   type VideoDialogueModelItem,
   type VideoDialogueSettings,
@@ -212,7 +213,7 @@ function selectModel(model: VideoDialogueModelItem) {
 function onSend() {
   if (props.disabled) return
   emit('submit', {
-    model: selectedModelKey.value,
+    model: resolveVideoDialogueModelApiValue(selectedModelKey.value, props.chatTools),
     ratio: videoAspectRatio.value,
     clarity: videoResolution.value,
     duration: videoDuration.value,

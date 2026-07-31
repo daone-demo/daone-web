@@ -1993,8 +1993,16 @@ export function createDefaultVideoDialogueSettings(
   return normalizeVideoDialogueSettingsForModel({ modelKey }, source)
 }
 
-/** 将 modelKey 规范为可用值；无效时回退 models 第一项 */
+/** 将 modelKey 规范为 models[].value；兼容误存 label 的场景 */
 export function resolveVideoDialogueModelKey(
+  preferred: string | undefined | null,
+  source?: VideoDialogueSource,
+): string {
+  return resolveVideoDialogueModelApiValue(preferred, source)
+}
+
+/** 提交视频生成任务时使用的模型值（models[].value） */
+export function resolveVideoDialogueModelApiValue(
   preferred: string | undefined | null,
   source?: VideoDialogueSource,
 ): string {
@@ -2002,8 +2010,16 @@ export function resolveVideoDialogueModelKey(
   if (!entries.length) {
     return preferred?.trim() || VIDEO_DIALOGUE_MODEL_MENU[0].key
   }
-  const key = preferred?.trim() ?? ''
-  if (key && entries.some((entry) => entry.key === key)) return key
+  const text = preferred?.trim() ?? ''
+  if (text) {
+    const byValue = entries.find((entry) => entry.key === text)
+    if (byValue) return byValue.key
+    const lower = text.toLowerCase()
+    const byLabel = entries.find(
+      (entry) => entry.label === text || entry.label.toLowerCase() === lower,
+    )
+    if (byLabel) return byLabel.key
+  }
   return entries[0].key
 }
 
