@@ -19,7 +19,7 @@
     <div class="image-dialogue__workflow-row">
       <DialogueWorkflowSelect
         :model-value="selectedWorkFlow || undefined"
-        :options="workflowOptions"
+        :groups="workflowOptionGroups"
         placeholder="选择工作流"
         :light="isLightTheme"
         @update:model-value="onWorkflowChange"
@@ -284,6 +284,7 @@ import {
   buildImageDialogueCountOptionsFromCapabilities,
   buildImageDialogueModelsFromCapabilities,
   buildImageDialogueResolutionsFromCapabilities,
+  buildImageWorkflowOptionGroups,
   buildImageWorkflowOptions,
   findImageDialogueSource,
   resolveImageDialogueModelKey,
@@ -294,7 +295,7 @@ import {
   type ImageSourceRef,
   type ImageMarkItem,
   type ImageStyleCard,
-  type WorkflowRecord,
+  type WorkflowCategoryGroup,
 } from './constants';
 
 const props = defineProps<{
@@ -308,7 +309,7 @@ const props = defineProps<{
   mentionInsertSerial?: number
   mentionInsertToken?: string
   chatTools?: ChatTools | null
-  workflows: WorkflowRecord[]
+  workflows: WorkflowCategoryGroup[]
 }>();
 
 const emit = defineEmits<{
@@ -457,7 +458,7 @@ function applySettingsToRefs(settings: ImageDialogueSettings) {
   genResolution.value = settings.resolution
   genImageCount.value = settings.imageCount
   selectedModelKey.value = resolveImageDialogueModelKey(settings.modelKey, props.chatTools)
-  selectedWorkFlow.value = settings.workflowId
+  selectedWorkFlow.value = settings.workflowId ?? ''
   nextTick(() => {
     skipSettingsWatch = false
   })
@@ -485,6 +486,7 @@ watch([genAspectRatio, genResolution, genImageCount, selectedModelKey, selectedW
 })
 
 const workflowOptions = computed(() => buildImageWorkflowOptions(props.workflows))
+const workflowOptionGroups = computed(() => buildImageWorkflowOptionGroups(props.workflows))
 
 const selectedWorkflowRecord = computed(() =>
   workflowOptions.value.find((workflow) => workflow.id === selectedWorkFlow.value),
@@ -568,8 +570,11 @@ watch(
       }
       return
     }
-    if (!options.some((workflow) => workflow.id === selectedWorkFlow.value)) {
-      selectedWorkFlow.value = options[0].id
+    if (
+      selectedWorkFlow.value &&
+      !options.some((workflow) => workflow.id === selectedWorkFlow.value)
+    ) {
+      selectedWorkFlow.value = ''
       emitSettings()
     }
   },

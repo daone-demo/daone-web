@@ -143,9 +143,9 @@
 .canvas__header-actions {
   padding: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
+  // background: rgba(255, 255, 255, 0.92);
+  // backdrop-filter: blur(10px);
+  // box-shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
 }
 
 .canvas__brand-magic {
@@ -400,7 +400,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 36px;
+  height: 52px;
   padding: 0 14px;
   border: 1px solid #e8eaed;
   border-radius: 999px;

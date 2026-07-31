@@ -60,8 +60,11 @@ import api, { type ProjectCanvasResponse } from '@/services/api'
 import { useModalStore } from '@stores/useModal'
 import { useUserInfo } from '@stores/useUserInfo';
 import {
+  groupWorkflowsByCategory,
   normalizeImageCapabilities,
   type ImageCapability,
+  type WorkflowCategoryGroup,
+  type WorkflowRecord,
 } from '@/components/Canvas/constants'
 
 const userInfoStore = useUserInfo();
@@ -76,7 +79,7 @@ const historySessions = ref<any[]>([]);
 const currentSessionId = ref('');
 const sessionName = ref('');
 const chatTools = ref<any>({});
-const workflows = ref<any[]>([]);
+const workflows = ref<WorkflowCategoryGroup[]>([]);
 // const ImageIcon = ref({
 //   IMAGE_REMOVE_BG: '', // 抠图
 //   quick: '', // 快速
@@ -237,7 +240,8 @@ const onRefreshProjects = () => {
 
 const onLoadWorkflows = async () => {
   const res = await api.getWorkflows({ page: 1, pageSize: 50 });
-  workflows.value = res.records as any[];
+  workflows.value = groupWorkflowsByCategory(res.records as WorkflowRecord[]);
+  console.log('workflows', workflows.value);
 }
 
 const onLoadChatModels = async () => {

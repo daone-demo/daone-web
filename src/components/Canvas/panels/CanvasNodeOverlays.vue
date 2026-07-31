@@ -27,7 +27,7 @@
       <DialogueWorkflowSelect
         v-if="isText2ImageTask"
         v-model="selectedText2ImageWorkFlow"
-        :options="imageWorkflowOptions"
+        :groups="imageWorkflowOptionGroups"
         placeholder="请选择工作流"
         :light="canvasBgTheme === 'light'"
       />
@@ -454,6 +454,7 @@ import {
   PROMPT_PLACEHOLDER,
   TEXT_PROMPT_MODEL_LABEL,
   TEXT_PROMPT_MODEL_MENU,
+  buildImageWorkflowOptionGroups,
   buildImageWorkflowOptions,
   type ImageSourceRef,
   type ImageMarkItem,
@@ -468,6 +469,7 @@ import {
   type NodeKind,
   type TextPromptModelItem,
   type VideoHdMagnification,
+  type WorkflowCategoryGroup,
   type WorkflowRecord,
 } from '../constants'
 import type { CanvasBgTheme } from '../canvasTheme'
@@ -489,7 +491,7 @@ const translating = ref(false)
 
 const props = defineProps<{
   chatTools: ChatTools | null
-  workflows: any[]
+  workflows: WorkflowCategoryGroup[]
   canvasBgTheme: CanvasBgTheme
   showPromptBar: boolean
   showImageGenPromptBar: boolean
@@ -663,6 +665,7 @@ const showPromptWorkFlow = ref(false)
 const selectedPromptWorkFlowKey = ref(TEXT_PROMPT_MODEL_MENU[0]?.key ?? '')
 const selectedText2ImageWorkFlow = ref<string | undefined>(undefined)
 const imageWorkflowOptions = computed(() => buildImageWorkflowOptions(props.workflows))
+const imageWorkflowOptionGroups = computed(() => buildImageWorkflowOptionGroups(props.workflows))
 const selectedText2ImageWorkflowRecord = computed(() =>
   imageWorkflowOptions.value.find((workflow) => workflow.id === selectedText2ImageWorkFlow.value),
 )

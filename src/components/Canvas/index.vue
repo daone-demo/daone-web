@@ -425,7 +425,7 @@ import api from '@/services/api'
 import type { AssetView, ProjectCanvasResponse } from '@/services/api'
 import { type ProjectTabKey } from '@/views/Project/projectData'
 import type { ElementGroupRecord, AssetCenterTabKey } from './assetCenterData'
-import type { ImageCapability } from './constants'
+import type { ImageCapability, WorkflowCategoryGroup } from './constants'
 
 const emit = defineEmits<{
   'focus-chat': []
@@ -443,7 +443,7 @@ defineProps<{
   videoCapabilities: ImageCapability[]
   textCapabilities: any[]
   chatTools: any
-  workflows: any[]
+  workflows: WorkflowCategoryGroup[]
 }>()
 
 const assetsList = ref<AssetView[]>([]);

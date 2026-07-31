@@ -16,26 +16,59 @@
     <div
       v-if="open"
       class="dialogue-workflow-select__menu"
+      :class="{ 'dialogue-workflow-select__menu--grouped': hasGroups }"
       @mousedown.stop
       @wheel.stop
     >
-      <button
-        v-for="item in options"
-        :key="item.id"
-        type="button"
-        class="dialogue-workflow-select__item"
-        :class="{ 'dialogue-workflow-select__item--active': item.id === modelValue }"
-        @click="select(item.id)"
-      >
-        {{ item.name }}
-      </button>
-      <p v-if="!options.length" class="dialogue-workflow-select__empty">暂无工作流</p>
+      <template v-if="hasGroups">
+        <div class="dialogue-workflow-select__categories">
+          <button
+            v-for="group in groups"
+            :key="group.categoryId"
+            type="button"
+            class="dialogue-workflow-select__category"
+            :class="{ 'dialogue-workflow-select__category--active': group.categoryId === activeCategoryId }"
+            @mouseenter="activeCategoryId = group.categoryId"
+            @click="activeCategoryId = group.categoryId"
+          >
+            <span class="dialogue-workflow-select__category-label">{{ group.categoryName }}</span>
+            <span class="dialogue-workflow-select__category-arrow" aria-hidden="true" />
+          </button>
+        </div>
+        <div class="dialogue-workflow-select__submenu">
+          <button
+            v-for="item in activeGroupChildren"
+            :key="item.id"
+            type="button"
+            class="dialogue-workflow-select__item"
+            :class="{ 'dialogue-workflow-select__item--active': item.id === modelValue }"
+            @click="select(item.id)"
+          >
+            {{ item.name }}
+          </button>
+          <p v-if="!activeGroupChildren.length" class="dialogue-workflow-select__empty">暂无工作流</p>
+        </div>
+      </template>
+      <template v-else>
+        <button
+          v-for="item in flatOptions"
+          :key="item.id"
+          type="button"
+          class="dialogue-workflow-select__item"
+          :class="{ 'dialogue-workflow-select__item--active': item.id === modelValue }"
+          @click="select(item.id)"
+        >
+          {{ item.name }}
+        </button>
+        <p v-if="!flatOptions.length" class="dialogue-workflow-select__empty">暂无工作流</p>
+      </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { ImageWorkflowOptionGroup } from './constants'
 
 export type DialogueWorkflowOption = {
   id: string
@@ -45,12 +78,15 @@ export type DialogueWorkflowOption = {
 const props = withDefaults(
   defineProps<{
     modelValue?: string
-    options: DialogueWorkflowOption[]
+    options?: DialogueWorkflowOption[]
+    groups?: ImageWorkflowOptionGroup[]
     placeholder?: string
     light?: boolean
   }>(),
   {
     modelValue: undefined,
+    options: () => [],
+    groups: () => [],
     placeholder: '选择工作流',
     light: true,
   },
@@ -61,14 +97,46 @@ const emit = defineEmits<{
 }>()
 
 const open = ref(false)
+const activeCategoryId = ref('')
+
+const hasGroups = computed(() => props.groups.length > 0)
+
+const flatOptions = computed(() => {
+  if (hasGroups.value) {
+    return props.groups.flatMap((group) => group.children)
+  }
+  return props.options
+})
+
+const activeGroupChildren = computed(() => {
+  if (!hasGroups.value) return []
+  const group =
+    props.groups.find((item) => item.categoryId === activeCategoryId.value) ?? props.groups[0]
+  return group?.children ?? []
+})
 
 const displayLabel = computed(() => {
-  const selected = props.options.find((item) => item.id === props.modelValue)
+  const selected = flatOptions.value.find((item) => item.id === props.modelValue)
   return selected?.name || props.placeholder
 })
 
+function syncActiveCategory() {
+  if (!hasGroups.value) {
+    activeCategoryId.value = ''
+    return
+  }
+
+  const selectedGroup = props.groups.find((group) =>
+    group.children.some((item) => item.id === props.modelValue),
+  )
+  activeCategoryId.value = selectedGroup?.categoryId ?? props.groups[0]?.categoryId ?? ''
+}
+
 function toggle() {
   open.value = !open.value
+  if (open.value) {
+    syncActiveCategory()
+  }
 }
 
 function close() {
@@ -87,8 +155,19 @@ function onDocumentMouseDown(event: MouseEvent) {
   close()
 }
 
+watch(
+  () => [props.groups, props.modelValue],
+  () => {
+    if (open.value) {
+      syncActiveCategory()
+    }
+  },
+  { deep: true },
+)
+
 onMounted(() => {
   document.addEventListener('mousedown', onDocumentMouseDown, true)
+  syncActiveCategory()
 })
 
 onBeforeUnmount(() => {
@@ -143,7 +222,7 @@ onBeforeUnmount(() => {
 .dialogue-workflow-select__menu {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  left: 0;
   z-index: 30;
   min-width: 160px;
   max-width: 280px;
@@ -156,6 +235,69 @@ onBeforeUnmount(() => {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.dialogue-workflow-select__menu--grouped {
+  display: flex;
+  min-width: 320px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 0;
+  overflow: hidden;
+}
+
+.dialogue-workflow-select__categories {
+  flex: 0 0 132px;
+  max-width: 132px;
+  padding: 6px;
+  border-right: 1px solid #e5e7eb;
+  overflow-y: auto;
+}
+
+.dialogue-workflow-select__category {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover,
+  &--active {
+    background: #f3f4f6;
+  }
+
+  &--active {
+    color: #2563eb;
+  }
+}
+
+.dialogue-workflow-select__category-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialogue-workflow-select__category-arrow {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' fill='none' viewBox='0 0 8 8'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.2' d='M3 1.5 5.5 4 3 6.5'/%3E%3C/svg%3E") center / 8px 8px no-repeat;
+}
+
+.dialogue-workflow-select__submenu {
+  flex: 1;
+  min-width: 0;
+  padding: 6px;
+  overflow-y: auto;
 }
 
 .dialogue-workflow-select__item {
@@ -208,6 +350,23 @@ onBeforeUnmount(() => {
     border-color: #4b4b55;
     background: #252528;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+
+  .dialogue-workflow-select__categories {
+    border-right-color: #4b4b55;
+  }
+
+  .dialogue-workflow-select__category {
+    color: #d1d5db;
+
+    &:hover,
+    &--active {
+      background: #35353d;
+    }
+
+    &--active {
+      color: #93c5fd;
+    }
   }
 
   .dialogue-workflow-select__item {

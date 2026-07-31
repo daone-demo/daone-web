@@ -738,8 +738,92 @@ export type WorkflowRecord = {
   name: string
   description?: string
   type?: string
+  categoryId?: string | number | null
+  categoryName?: string
+  category?: { id?: string | number; name?: string } | null
   workflowJson?: string
   [key: string]: unknown
+}
+
+export type WorkflowCategoryGroup = {
+  categoryId: string
+  categoryName: string
+  workflows: WorkflowRecord[]
+}
+
+export type ImageWorkflowOption = WorkflowRecord & { id: string; name: string }
+
+export type ImageWorkflowOptionGroup = {
+  categoryId: string
+  categoryName: string
+  children: ImageWorkflowOption[]
+}
+
+const UNCATEGORIZED_WORKFLOW_CATEGORY_ID = '__uncategorized__'
+
+function resolveWorkflowCategoryId(workflow: WorkflowRecord): string {
+  const raw = workflow.categoryId ?? workflow.category?.id
+  if (raw === undefined || raw === null || raw === '') {
+    return UNCATEGORIZED_WORKFLOW_CATEGORY_ID
+  }
+  return String(raw)
+}
+
+function resolveWorkflowCategoryName(workflow: WorkflowRecord, categoryId: string): string {
+  if (categoryId === UNCATEGORIZED_WORKFLOW_CATEGORY_ID) return '未分类'
+  const raw = workflow.categoryName ?? workflow.category?.name
+  if (raw !== undefined && raw !== null && String(raw).trim()) {
+    return String(raw)
+  }
+  return `分类 ${categoryId}`
+}
+
+function normalizeWorkflowOption(workflow: WorkflowRecord): ImageWorkflowOption {
+  return {
+    ...workflow,
+    id: String(workflow.id),
+    name: String(workflow.name || workflow.description || workflow.id),
+  }
+}
+
+export function isWorkflowCategoryGroup(
+  value: WorkflowRecord | WorkflowCategoryGroup,
+): value is WorkflowCategoryGroup {
+  return Array.isArray((value as WorkflowCategoryGroup).workflows)
+}
+
+/** 将工作流列表按 categoryId 聚合为二级菜单结构 */
+export function groupWorkflowsByCategory(
+  workflows: WorkflowRecord[] | null | undefined,
+): WorkflowCategoryGroup[] {
+  const groups = new Map<string, WorkflowCategoryGroup>()
+
+  for (const workflow of Array.isArray(workflows) ? workflows : []) {
+    if (workflow?.id === undefined || workflow?.id === null) continue
+    const categoryId = resolveWorkflowCategoryId(workflow)
+    let group = groups.get(categoryId)
+    if (!group) {
+      group = {
+        categoryId,
+        categoryName: resolveWorkflowCategoryName(workflow, categoryId),
+        workflows: [],
+      }
+      groups.set(categoryId, group)
+    }
+    group.workflows.push(workflow)
+  }
+
+  return Array.from(groups.values())
+}
+
+export function flattenWorkflowCategoryGroups(
+  workflows: WorkflowCategoryGroup[] | WorkflowRecord[] | null | undefined,
+): WorkflowRecord[] {
+  if (!Array.isArray(workflows) || !workflows.length) return []
+  if (isWorkflowCategoryGroup(workflows[0])) {
+    return (workflows as WorkflowCategoryGroup[]).flatMap((group) => group.workflows)
+  }
+  return workflows as WorkflowRecord[]
 }
 
 /** 仅保留 type 为 IMAGE 的工作流（兼容大小写与 TYPE 字段） */
@@ -751,16 +835,40 @@ export function isImageWorkflowRecord(workflow: WorkflowRecord | null | undefine
 
 /** 图片对话/文生图对话框共用：从 workflows 列表解析 IMAGE 类型选项 */
 export function buildImageWorkflowOptions(
-  workflows: WorkflowRecord[] | null | undefined,
-): Array<WorkflowRecord & { id: string; name: string }> {
-  return (Array.isArray(workflows) ? workflows : [])
+  workflows: WorkflowCategoryGroup[] | WorkflowRecord[] | null | undefined,
+): ImageWorkflowOption[] {
+  return flattenWorkflowCategoryGroups(workflows)
     .filter((workflow) => workflow?.id !== undefined && workflow?.id !== null)
     .filter(isImageWorkflowRecord)
-    .map((workflow) => ({
-      ...workflow,
-      id: String(workflow.id),
-      name: String(workflow.name || workflow.description || workflow.id),
+    .map(normalizeWorkflowOption)
+}
+
+/** 图片对话/文生图对话框共用：按 categoryId 输出二级菜单选项 */
+export function buildImageWorkflowOptionGroups(
+  workflows: WorkflowCategoryGroup[] | WorkflowRecord[] | null | undefined,
+): ImageWorkflowOptionGroup[] {
+  if (!Array.isArray(workflows) || !workflows.length) return []
+
+  if (isWorkflowCategoryGroup(workflows[0])) {
+    return (workflows as WorkflowCategoryGroup[])
+      .map((group) => ({
+        categoryId: group.categoryId,
+        categoryName: group.categoryName,
+        children: group.workflows
+          .filter((workflow) => workflow?.id !== undefined && workflow?.id !== null)
+          .filter(isImageWorkflowRecord)
+          .map(normalizeWorkflowOption),
+      }))
+      .filter((group) => group.children.length > 0)
+  }
+
+  return groupWorkflowsByCategory(buildImageWorkflowOptions(workflows))
+    .map((group) => ({
+      categoryId: group.categoryId,
+      categoryName: group.categoryName,
+      children: group.workflows.map(normalizeWorkflowOption),
     }))
+    .filter((group) => group.children.length > 0)
 }
 
 export type ChatTools = {
