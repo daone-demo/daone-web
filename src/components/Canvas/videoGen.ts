@@ -4,10 +4,13 @@ import { isVideoNodeGenerating, resolveVideoAssetId } from './constants'
 
 export type VideoSourceRef = {
   nodeId: string
+  kind?: 'image' | 'text'
   assetId?: string
   previewUrl: string
   fileName: string
   title: string
+  /** 文本节点引用时展示的纯文本摘要 */
+  textPreview?: string
   index: number
 }
 
@@ -165,11 +168,35 @@ export function disconnectImageFromVideo(
   return true
 }
 
+/** 由文本连线生成的文生图占位节点（展示 ImageGenPromptPanel） */
+export function isTextSourcedImageGenNode(
+  graph: Graph,
+  nodeId: string,
+  data: CanvasNodeData,
+): boolean {
+  if (data.kind !== 'image') return false
+  if (data.previewUrl?.trim()) return false
+  if (data.uploadState === 'uploading' || data.imageGenState === 'loading') return false
+  if (data.imageGenTask !== 'picker') return false
+  return findIncomingTextNodes(graph, nodeId).length > 0
+}
+
+export function shouldOpenImageGenPromptBar(
+  graph: Graph,
+  nodeId: string,
+  data: CanvasNodeData,
+): boolean {
+  if (data.kind !== 'image') return false
+  if (data.imageGenTask === 'img2img') return true
+  return isTextSourcedImageGenNode(graph, nodeId, data)
+}
+
 export function getVideoSourceRefs(graph: Graph, videoNodeId: string): VideoSourceRef[] {
   return findIncomingImageNodes(graph, videoNodeId).map((node, index) => {
     const data = node.getData() as CanvasNodeData
     return {
       nodeId: node.id,
+      kind: 'image',
       assetId: data.assetId,
       previewUrl: data.previewUrl,
       fileName: data.fileName,
@@ -177,6 +204,29 @@ export function getVideoSourceRefs(graph: Graph, videoNodeId: string): VideoSour
       index: index + 1,
     }
   })
+}
+
+export function getVideoTextSourceRefs(
+  graph: Graph,
+  videoNodeId: string,
+  resolvePlainText: (node: Node) => string,
+): VideoSourceRef[] {
+  return findIncomingTextNodes(graph, videoNodeId)
+    .map((node, index) => {
+      const data = node.getData() as CanvasNodeData
+      const textPreview = resolvePlainText(node) || data.title || ''
+      if (!textPreview) return null
+      return {
+        nodeId: node.id,
+        kind: 'text' as const,
+        previewUrl: '',
+        fileName: data.title || '文本节点',
+        title: data.title || '文本节点',
+        textPreview,
+        index: index + 1,
+      }
+    })
+    .filter((item): item is VideoSourceRef => Boolean(item))
 }
 
 export type VideoGenTabImageRule = {

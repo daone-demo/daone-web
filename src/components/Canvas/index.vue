@@ -222,6 +222,7 @@
       :image-gen-prompt-text="imageGenPromptText"
       :image-gen-seed="imageGenSeed"
       :image-gen-source-preview-url="imageGenSourcePreviewUrl"
+      :image-gen-source-text-preview="imageGenSourceTextPreview"
       :image-gen-submitting="imageGenSubmitting"
       :video-gen-prompt-text="videoGenPromptText"
       :video-gen-active-tab="videoGenActiveTab"
@@ -568,6 +569,7 @@ const {
   imageGenPromptText,
   imageGenSeed,
   imageGenSourcePreviewUrl,
+  imageGenSourceTextPreview,
   imageGenSubmitting,
   imagePreviewUrl,
   isCanvasFileDragOver,

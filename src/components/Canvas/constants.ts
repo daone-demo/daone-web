@@ -407,10 +407,10 @@ export const TEXT_PICKER_TRY_ACTIONS = TEXT_PICKER_ACTIONS.filter(
   (action) => action.key === 'text2video' || action.key === 'text2image',
 )
 
-export const VIDEO_PICKER_ACTIONS = [
-  // { key: 'frames', label: '首尾帧生成视频', icon: 'frames' },
-  // { key: 'first', label: '首帧生成视频', icon: 'spark' },
-]
+export const VIDEO_PICKER_TRY_ACTIONS = [
+  { key: 'frames', label: '首尾帧生成视频', icon: 'frames' },
+  { key: 'imageRef', label: '首帧生成视频', icon: 'spark' },
+] as const
 
 export const VIDEO_GEN_TABS: Array<{ key: string; label: string; disabled?: boolean; disabledHint?: string }> = [
   { key: 'text2video', label: '文生视频', disabled: true, disabledHint: '已接入媒体输入,无法使用纯文生视频' },

@@ -437,6 +437,7 @@ export type CanvasGraph = Graph & {
   __textEditorRegistry?: TextEditorRegistry
   __requestTextExpand?: (nodeId: string) => void
   __onTextPickerAction?: (key: string, nodeId: string) => void
+  __onVideoPickerAction?: (key: string, nodeId: string) => void
   __onTextNodeEdgeLinked?: (textNodeId: string) => void
   __onNodeEdgeLinked?: (targetNodeId: string, sourceNodeId?: string) => void
   __notifyTextNodeUpdated?: () => void

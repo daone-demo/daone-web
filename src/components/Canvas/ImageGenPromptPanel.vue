@@ -14,7 +14,10 @@
         >
           {{ tag }}
         </button>
-        <span v-if="sourcePreviewUrl" class="image-gen-prompt-panel__ref-thumb">
+        <span v-if="sourceTextPreview" class="image-gen-prompt-panel__text-ref">
+          {{ sourceTextPreview }}
+        </span>
+        <span v-else-if="sourcePreviewUrl" class="image-gen-prompt-panel__ref-thumb">
           <img :src="sourcePreviewUrl" alt="" />
         </span>
       </div>
@@ -72,6 +75,7 @@ defineProps<{
   prompt: string
   seed: number
   sourcePreviewUrl?: string
+  sourceTextPreview?: string
   submitting?: boolean
 }>()
 
@@ -146,6 +150,27 @@ function onSeedInput(event: Event) {
       background: #e5e7eb;
       color: #374151;
     }
+  }
+}
+
+.image-gen-prompt-panel__text-ref {
+  display: inline-flex;
+  align-items: center;
+  max-width: 160px;
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #252528;
+  color: #d1d5db;
+  font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  .image-gen-prompt-panel--light & {
+    background: #f3f4f6;
+    color: #374151;
   }
 }
 

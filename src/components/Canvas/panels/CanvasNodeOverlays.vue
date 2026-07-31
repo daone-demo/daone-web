@@ -151,6 +151,7 @@
       :prompt="imageGenPromptText"
       :seed="imageGenSeed"
       :source-preview-url="imageGenSourcePreviewUrl"
+      :source-text-preview="imageGenSourceTextPreview"
       :submitting="imageGenSubmitting"
       @update:prompt="emit('update:imageGenPromptText', $event)"
       @update:seed="emit('update:imageGenSeed', $event)"
@@ -568,6 +569,7 @@ const props = defineProps<{
   imageGenPromptText: string
   imageGenSeed: number
   imageGenSourcePreviewUrl: string
+  imageGenSourceTextPreview: string
   imageGenSubmitting: boolean
   videoGenPromptText: string
   videoNum: number

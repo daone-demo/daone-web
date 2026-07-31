@@ -17,7 +17,7 @@ export const BIND_KEYS = [
   'connectMenuPos', 'connectReleasePoint', 'addMenuPos', 'addMenuDropPoint',
   'connectSourceNodeId', 'showAssetsPanel', 'showHistoryPanel', 'assetsTab', 'assetsLoading',
   'promptText', 'activePickerNodeId', 'activeImageGenPromptNodeId', 'imageGenPromptText',
-  'imageGenSeed', 'imageGenSourcePreviewUrl', 'imageGenSubmitting', 'activeVideoGenPromptNodeId',
+  'imageGenSeed', 'imageGenSourcePreviewUrl', 'imageGenSourceTextPreview', 'imageGenSubmitting', 'activeVideoGenPromptNodeId',
   'videoGenPromptText', 'videoNum', 'videoGenActiveTab', 'videoGenAspectRatio', 'selectedNodeId', 'selectedNodeIds',
   'selectedEdgeId', 'hoveredEdgeId', 'edgeDeleteBtnPos', 'pendingUploadNodeId', 'fileInputAccept', 'fileInputMultiple',
   'isCanvasFileDragOver', 'canvasFileDragDepth', 'pendingUploadFilter', 'toolbarPos',

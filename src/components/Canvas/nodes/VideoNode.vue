@@ -47,6 +47,20 @@
       class="video-node__body video-node__body--picker"
     >
       <i class="iconfont icon-shipin" style="font-size: 36px; color: black;" />
+      <template v-if="VIDEO_PICKER_TRY_ACTIONS.length">
+        <p class="video-node__try">尝试：</p>
+        <button
+          v-for="action in VIDEO_PICKER_TRY_ACTIONS"
+          :key="action.key"
+          type="button"
+          class="video-node__action"
+          @mousedown.stop
+          @click="onPickerAction(action.key)"
+        >
+          <span class="video-node__action-icon" :data-icon="action.icon" aria-hidden="true" />
+          {{ action.label }}
+        </button>
+      </template>
     </div>
 
     <div
@@ -213,7 +227,7 @@
 import { computed, inject, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import type { Node } from '@antv/x6'
 import type { CanvasNodeData } from '../constants'
-import { isNodeFileUploading } from '../constants'
+import { VIDEO_PICKER_TRY_ACTIONS, isNodeFileUploading } from '../constants'
 import type { CanvasGraph } from '../graph'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
@@ -289,12 +303,16 @@ function syncData() {
   getNode().setData({ ...data })
 }
 
-function triggerUpload() {
-  requestCanvasUpload?.(getNode().id)
+function onPickerAction(key: string) {
+  canvasGraph()?.__onVideoPickerAction?.(key, getNode().id)
 }
 
 function canvasGraph() {
   return getNode().model?.graph as CanvasGraph | undefined
+}
+
+function triggerUpload() {
+  requestCanvasUpload?.(getNode().id)
 }
 
 /** 空状态/失败态：拖动移动节点，轻点触发上传或重试 */
@@ -402,9 +420,9 @@ onBeforeUnmount(() => {
 
 .video-node--picker-card {
   .video-node__body--picker {
-    align-items: center;
-    justify-content: center;
-    padding: 0;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 16px 12px 12px;
   }
 }
 
@@ -448,6 +466,52 @@ onBeforeUnmount(() => {
 
 .video-node__body--picker {
   padding: 16px 12px;
+  align-items: stretch;
+}
+
+.video-node__try {
+  margin: 10px 0 8px;
+  font-size: 12px;
+  color: #6b7280;
+  text-align: left;
+  width: 100%;
+}
+
+.video-node__action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #e5e7eb;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #2a2a30;
+  }
+}
+
+.video-node__action-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: #3d3d45;
+  flex-shrink: 0;
+
+  &[data-icon='frames']::after,
+  &[data-icon='spark']::after {
+    content: '▣';
+    font-size: 10px;
+    display: flex;
+    justify-content: center;
+  }
 }
 
 .video-node__body--media,

@@ -18,7 +18,7 @@ import {
   NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
   spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
-  getConnectMenuPosition, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
+  getConnectMenuPosition, resolveConnectSpawnPoint, getLinkedSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
@@ -30,7 +30,7 @@ import {
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
-  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
+  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, isTextSourcedImageGenNode, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
 import {
@@ -174,6 +174,7 @@ export function registerCore(bind: CanvasBindings) {
     imageGenPromptText,
     imageGenSeed,
     imageGenSourcePreviewUrl,
+    imageGenSourceTextPreview,
     imageGenSubmitting,
     activeVideoGenPromptNodeId,
     videoGenPromptText,
@@ -432,13 +433,20 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     const id = activeVideoGenPromptNodeId.value
     if (!g || !id) return []
-    const data = g.getCellById(id)?.getData() as CanvasNodeData | undefined
-    return resolveVideoSourceRefsForNode(
+
+    const cell = g.getCellById(id)
+    const data = cell?.isNode() ? (cell.getData() as CanvasNodeData) : undefined
+    const imageRefs = resolveVideoSourceRefsForNode(
       g,
       id,
       data?.videoSourceRefs,
       isVideoGenerationFailedNode(data),
     )
+    if (imageRefs.length) {
+      return imageRefs.map((ref) => ({ ...ref, kind: ref.kind ?? 'image' }))
+    }
+
+    return getVideoTextSourceRefs(g, id, getTextNodePlainContent)
   })
 
   const videoGenSavedSettings = computed(() => {
@@ -3664,15 +3672,27 @@ export function registerCore(bind: CanvasBindings) {
   provide('uploadFileToCanvasNode', uploadFileToCanvasNode)
   provide('updateImageMarkLabel', updateImageMarkLabel)
 
+  function resolveImageGenTextSourcePreview(nodeId: string): string {
+    const g = graph.value
+    if (!g) return ''
+    for (const textNode of findIncomingTextNodes(g, nodeId)) {
+      const text = getTextNodePlainContent(textNode)
+      if (text) return text
+    }
+    return ''
+  }
+
   function loadImageGenPromptFields(nodeId: string) {
     const g = graph.value
     if (!g) return
     const cell = g.getCellById(nodeId)
     if (!cell?.isNode()) return
     const data = cell.getData() as CanvasNodeData
+    const textPreview = resolveImageGenTextSourcePreview(nodeId)
+    imageGenSourceTextPreview.value = textPreview
+    imageGenSourcePreviewUrl.value = textPreview ? '' : (data.sourcePreviewUrl ?? '')
     imageGenPromptText.value = data.genPrompt ?? ''
     imageGenSeed.value = data.genSeed ?? 58
-    imageGenSourcePreviewUrl.value = data.sourcePreviewUrl ?? ''
   }
 
   function normalizeImageDialogueSettings(
@@ -3837,7 +3857,10 @@ export function registerCore(bind: CanvasBindings) {
     if (!prompt) {
       prompt = data.videoDialogueText?.trim() ?? ''
     }
-    if (!prompt) {
+    const hasTextSources = findIncomingTextNodes(g, nodeId).some(
+      (node) => Boolean(getTextNodePlainContent(node)),
+    )
+    if (!prompt && !hasTextSources) {
       prompt = resolveVideoUpstreamPrompt(nodeId)
     }
     videoGenPromptText.value = prompt
@@ -5584,12 +5607,17 @@ export function registerCore(bind: CanvasBindings) {
 
     finishConnectSpawn(spawned)
 
-    // 文生图目标节点：在其下方打开图片生成提示栏，发送后图片进入加载
-    if (data.kind === 'image' && data.imageGenState) {
-      openImageGenPromptBar(spawned.id)
-    } else if (data.kind === 'image') {
-      // 由节点拖拽生成的图片节点（图生图占位），默认展示对话框
-      openImageDialogue(spawned.id)
+    // 文生图 / 图生图目标节点：在其下方打开图片生成提示栏
+    if (data.kind === 'image') {
+      const sourceData = source.getData() as CanvasNodeData
+      if (
+        shouldOpenImageGenPromptBar(g, spawned.id, data) ||
+        sourceData.kind === 'text'
+      ) {
+        openImageGenPromptBar(spawned.id)
+      } else {
+        openImageDialogue(spawned.id)
+      }
     } else if (data.kind === 'video' && data.mode === 'picker') {
       const sourceData = source.getData() as CanvasNodeData
       const tab =
@@ -5721,22 +5749,41 @@ export function registerCore(bind: CanvasBindings) {
     scheduleHistoryPush()
   }
 
-  function onRemoveVideoSourceRef(imageNodeId: string) {
+  function onRemoveVideoSourceRef(sourceNodeId: string) {
     const g = graph.value
     const videoNodeId = getActiveVideoTargetNodeId()
-    if (!g || !videoNodeId || !imageNodeId) return
+    if (!g || !videoNodeId || !sourceNodeId) return
 
     const cell = g.getCellById(videoNodeId)
     if (!cell?.isNode()) return
     const data = { ...(cell.getData() as CanvasNodeData) }
 
-    disconnectImageFromVideo(g, imageNodeId, videoNodeId)
+    const sourceCell = g.getCellById(sourceNodeId)
+    const sourceData = sourceCell?.isNode()
+      ? (sourceCell.getData() as CanvasNodeData)
+      : undefined
 
-    const fromStored = Array.isArray(data.videoSourceRefs) ? data.videoSourceRefs : []
-    const live = getVideoSourceRefs(g, videoNodeId)
-    const base = fromStored.length ? fromStored : toPersistedVideoSourceRefs(live)
-    data.videoSourceRefs = base.filter((item) => item.nodeId !== imageNodeId)
-    cell.setData(data, { overwrite: true })
+    if (sourceData?.kind === 'text') {
+      g.getEdges().forEach((edge) => {
+        if (
+          edge.getSourceCellId() === sourceNodeId &&
+          edge.getTargetCellId() === videoNodeId
+        ) {
+          g.removeEdge(edge.id)
+        }
+      })
+    } else {
+      disconnectImageFromVideo(g, sourceNodeId, videoNodeId)
+      const fromStored = Array.isArray(data.videoSourceRefs) ? data.videoSourceRefs : []
+      const live = getVideoSourceRefs(g, videoNodeId)
+      const base = fromStored.length ? fromStored : toPersistedVideoSourceRefs(live)
+      data.videoSourceRefs = base.filter((item) => item.nodeId !== sourceNodeId)
+      cell.setData(data, { overwrite: true })
+    }
+
+    if (activeVideoGenPromptNodeId.value === videoNodeId) {
+      loadVideoGenPromptFields(videoNodeId)
+    }
     bumpToolbarRevision()
     updateNodeToolbar()
     scheduleHistoryPush()
@@ -5940,6 +5987,18 @@ export function registerCore(bind: CanvasBindings) {
     URL.revokeObjectURL(url)
   }
 
+  function handleVideoPickerAction(key: string, nodeId: string) {
+    const g = graph.value
+    if (!g) return
+
+    selectedNodeId.value = nodeId
+    selectedKind.value = 'video'
+    syncNodeSelectionHighlight(nodeId)
+    openVideoGenPromptBar(nodeId, key)
+    bumpToolbarRevision()
+    updateNodeToolbar()
+  }
+
   function handleTextPickerAction(key: string, nodeId: string) {
     const g = graph.value
     if (!g) return
@@ -5958,7 +6017,31 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
-    if (key === 'text2video' || key === 'text2image') {
+    if (key === 'text2image') {
+      const cell = g.getCellById(nodeId)
+      if (!cell?.isNode()) return
+
+      const spawned = createNodeFromConnectMenu(
+        g,
+        cell as Node,
+        getLinkedSpawnPoint(cell as Node, 'image', {
+          mode: 'editor',
+          imageGenTask: 'picker',
+          imageGenState: 'idle',
+        }),
+        'image',
+      )
+      if (spawned) {
+        finishConnectSpawn(spawned)
+        openImageGenPromptBar(spawned.id)
+      }
+      bumpToolbarRevision()
+      updateNodeToolbar()
+      scheduleHistoryPush()
+      return
+    }
+
+    if (key === 'text2video') {
       const cell = g.getCellById(nodeId)
       if (!cell?.isNode()) return
 
@@ -5968,7 +6051,7 @@ export function registerCore(bind: CanvasBindings) {
       data.textGenState = 'idle'
       cell.setData(data)
 
-      modelType.value = key === 'text2image' ? 'text2image' : 'text2video'
+      modelType.value = 'text2video'
 
       activePickerNodeId.value = nodeId
       loadPromptBarContext(nodeId)
@@ -6026,14 +6109,51 @@ export function registerCore(bind: CanvasBindings) {
       }
     } else if (data.kind === 'video') {
       syncVideoSourceRefsSnapshot(targetNodeId)
+      const source =
+        sourceNodeId && g.getCellById(sourceNodeId)?.isNode()
+          ? (g.getCellById(sourceNodeId) as Node)
+          : null
+      const sourceData = source?.getData() as CanvasNodeData | undefined
+      if (
+        sourceData?.kind === 'text' &&
+        data.mode === 'picker' &&
+        !data.previewUrl &&
+        data.uploadState !== 'uploading'
+      ) {
+        selectedNodeId.value = targetNodeId
+        selectedKind.value = 'video'
+        syncNodeSelectionHighlight(targetNodeId)
+        openVideoGenPromptBar(targetNodeId, 'text2video')
+      }
       if (activeVideoGenPromptNodeId.value === targetNodeId) {
         loadVideoGenPromptFields(targetNodeId)
       }
-    } else if (data.kind === 'image' && canImageNodeAcceptIncoming(data)) {
-      const source = sourceNodeId ? g.getCellById(sourceNodeId) : null
-      if (source?.isNode()) {
-        applyIncomingImageSource(cell as Node, source as Node)
+    } else if (data.kind === 'image') {
+      const source =
+        sourceNodeId && g.getCellById(sourceNodeId)?.isNode()
+          ? (g.getCellById(sourceNodeId) as Node)
+          : null
+      const sourceData = source?.getData() as CanvasNodeData | undefined
+
+      if (
+        sourceData?.kind === 'text' &&
+        shouldOpenImageGenPromptBar(g, targetNodeId, data)
+      ) {
+        selectedNodeId.value = targetNodeId
+        selectedKind.value = 'image'
+        syncNodeSelectionHighlight(targetNodeId)
+        openImageGenPromptBar(targetNodeId)
+      } else if (
+        canImageNodeAcceptIncoming(data) &&
+        source?.isNode() &&
+        sourceData?.kind === 'image'
+      ) {
+        applyIncomingImageSource(cell as Node, source)
         openImageDialogue(targetNodeId)
+      }
+
+      if (activeImageGenPromptNodeId.value === targetNodeId) {
+        loadImageGenPromptFields(targetNodeId)
       }
     }
 
@@ -7340,9 +7460,10 @@ export function registerCore(bind: CanvasBindings) {
     resetVideoFramesPanel()
     bumpToolbarRevision()
 
+    const g = graph.value
     const showImageGenPrompt =
-      data.kind === 'image' &&
-      data.imageGenTask === 'img2img'
+      Boolean(g) &&
+      shouldOpenImageGenPromptBar(g!, node.id, data)
 
     const showVideoGenPrompt =
       data.kind === 'video' &&
@@ -8266,6 +8387,7 @@ export function registerCore(bind: CanvasBindings) {
     instance.__uploadFileToCanvasNode = uploadFileToCanvasNode
     instance.__requestTextExpand = openTextExpand
     instance.__onTextPickerAction = handleTextPickerAction
+    instance.__onVideoPickerAction = handleVideoPickerAction
     instance.__onTextNodeEdgeLinked = handleNodeEdgeLinked
     instance.__onNodeEdgeLinked = handleNodeEdgeLinked
     instance.__notifyTextNodeUpdated = notifyTextNodeUpdated

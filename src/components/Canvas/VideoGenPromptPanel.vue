@@ -83,15 +83,58 @@
       class="video-gen-prompt-panel__refs"
     >
       <div
-        v-for="ref in displayRefs"
+        v-for="(ref, index) in displayRefs"
         :key="ref.nodeId"
         class="video-gen-prompt-panel__ref"
-        :class="{ 'video-gen-prompt-panel__ref--invalid': validationError }"
-        :title="`点击插入 @${getRefDisplayName(ref)}`"
+        :class="{
+          'video-gen-prompt-panel__ref--text': ref.kind === 'text',
+          'video-gen-prompt-panel__ref--invalid': validationError,
+        }"
+        :title="ref.kind === 'text' ? ref.textPreview : `点击插入 @${getRefDisplayName(ref)}`"
         @mousedown.stop
-        @click.stop="insertRefMention(ref)"
+        @click.stop="ref.kind === 'text' ? undefined : insertRefMention(ref)"
       >
-        <img :src="ref.previewUrl" alt="" />
+        <img v-if="ref.kind !== 'text'" :src="ref.previewUrl" alt="" />
+        <span class="inline-block" v-else>
+          <div class="group relative size-12 flex-none" :title="ref.textPreview">
+            <div 
+              class="border-hair size-full overflow-hidden rounded-xl border-canvas-controls-border bg-panel-background"
+            >
+              <div class="flex size-full items-center justify-center bg-neutral-200">
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg"
+                  xmlns:xlink="http://www.w3.org/1999/xlink"
+                  aria-hidden="true"
+                  role="img"
+                  class="iconify iconify--libtv pointer-events-none text-neutral-600"
+                  width="14"
+                  height="15"
+                  viewBox="0 0 16 16"
+                >
+                  <g transform="translate(1 0.5)">
+                    <path d="M9.33 14.62H0v-2.1h9.33zM14 10.44H0v-2.1h14zm0-4.17H0v-2.1h14zm0-4.17H0V0h14z" fill="currentColor"></path>
+                  </g>
+                </svg>
+              </div>
+            </div>
+            <span class="pointer-events-none absolute left-1 top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-lg bg-black/65 px-1 text-[9px] leading-none text-white backdrop-blur-sm transition-opacity group-hover:opacity-0">{{index+1}}</span>
+            <button type="button" class="absolute right-0.5 top-0.5 z-20 flex size-[15px] items-center justify-center rounded-full border opacity-0 transition-opacity group-hover:opacity-100 border-neutral-300/90 bg-white text-neutral-600 shadow-sm hover:bg-neutral-100">
+              <svg 
+                xmlns="http://www.w3.org/2000/svg"
+                xmlns:xlink="http://www.w3.org/1999/xlink"
+                aria-hidden="true"
+                role="img"
+                class="iconify iconify--libtv pointer-events-none size-[7px] text-neutral-600"
+                width="1em"
+                height="1em"
+                viewBox="0 0 17.19 17.19"
+              >
+                <path d="M15.8.12a.4.4 0 0 1 .56 0l.7.7a.4.4 0 0 1 0 .57l-7.2 7.2 7.2 7.2a.4.4 0 0 1 0 .57l-.7.7a.4.4 0 0 1-.56 0l-7.2-7.2-7.2 7.2a.4.4 0 0 1-.57 0l-.71-.7a.4.4 0 0 1 0-.57l7.2-7.2-7.2-7.2a.4.4 0 0 1 0-.57l.7-.7a.4.4 0 0 1 .57 0l7.2 7.2z" fill="currentColor"></path>
+              </svg>
+            </button>
+          </div>
+        </span>
+        <!-- <span v-else class="video-gen-prompt-panel__text-ref-preview">{{ ref.textPreview }}</span> -->
         <button
           type="button"
           class="video-gen-prompt-panel__ref-remove"
@@ -101,9 +144,10 @@
           ×
         </button>
         <span v-if="ref.badge" class="video-gen-prompt-panel__ref-badge">{{ ref.badge }}</span>
-        <span v-else class="video-gen-prompt-panel__ref-index">{{ ref.index }}</span>
+        <span v-else-if="ref.kind !== 'text'" class="video-gen-prompt-panel__ref-index">{{ ref.index }}</span>
       </div>
       <button
+        v-if="showImageUpload"
         type="button"
         class="image-dialogue__upload"
         title="添加图片"
@@ -381,7 +425,15 @@ function onVideoNumChange(value: unknown) {
   emit('update:videoNum', Number(value))
 }
 
-const sourceCount = computed(() => props.sourceRefs?.length ?? 0)
+const sourceCount = computed(() => imageSourceCount.value)
+
+const imageSourceCount = computed(
+  () => (props.sourceRefs ?? []).filter((ref) => ref.kind !== 'text' && ref.previewUrl).length,
+)
+
+const textSourceCount = computed(
+  () => (props.sourceRefs ?? []).filter((ref) => ref.kind === 'text').length,
+)
 
 const showVideoModelPicker = ref(false)
 const showVideoSettings = ref(false)
@@ -513,12 +565,19 @@ function dismissTopOverlay() {
 defineExpose({ dismissTopOverlay })
 
 function syncVideoGenTabsBySourceCount() {
-  const count = sourceCount.value
+  const imageCount = imageSourceCount.value
   videoGenTabs.value = videoGenTabs.value.map((item) => {
     const next = { ...item }
+    if (next.key === 'text2video') {
+      next.disabled = imageCount > 0
+      next.disabledHint = imageCount > 0 ? '已接入媒体输入,无法使用纯文生视频' : ''
+      if (imageCount > 0 && props.activeTab === 'text2video') {
+        emit('update:activeTab', 'reference')
+      }
+    }
     if (next.key === 'img2video') {
-      next.disabledHint = `当前图片数量 ${count} 个，需要1个`
-      if (count > 1) {
+      next.disabledHint = `当前图片数量 ${imageCount} 个，需要1个`
+      if (imageCount > 1) {
         if (props.activeTab === 'img2video') {
           emit('update:activeTab', 'reference')
         }
@@ -528,8 +587,8 @@ function syncVideoGenTabsBySourceCount() {
       }
     }
     if (next.key === 'frames') {
-      next.disabledHint = `当前图片数量 ${count} 个，需要1~2个`
-      if (count > 2) {
+      next.disabledHint = `当前图片数量 ${imageCount} 个，需要1~2个`
+      if (imageCount > 2) {
         if (props.activeTab === 'frames') {
           emit('update:activeTab', 'reference')
         }
@@ -542,25 +601,35 @@ function syncVideoGenTabsBySourceCount() {
   })
 }
 
-watch(sourceCount, syncVideoGenTabsBySourceCount, { immediate: true })
+watch([imageSourceCount, textSourceCount], syncVideoGenTabsBySourceCount, { immediate: true })
 
 const validationHint = computed(() =>
-  getVideoGenTabValidation(props.activeTab, sourceCount.value),
+  getVideoGenTabValidation(props.activeTab, imageSourceCount.value),
 )
 
 const validationError = computed(() => {
   const hint = validationHint.value
   if (!hint) return false
-  return sourceCount.value > 0
+  return imageSourceCount.value > 0
 })
 
-const showSourceRefs = computed(() => props.activeTab !== 'text2video')
+const showSourceRefs = computed(() => {
+  if (props.activeTab === 'text2video') {
+    return textSourceCount.value > 0
+  }
+  return true
+})
+
+const showImageUpload = computed(() => props.activeTab !== 'text2video')
 
 const isDragOver = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const displayRefs = computed(() => {
-  const refs = props.sourceRefs ?? []
+  const refs = (props.sourceRefs ?? []).filter((ref) => {
+    if (props.activeTab === 'text2video') return ref.kind === 'text'
+    return ref.kind !== 'text' && Boolean(ref.previewUrl)
+  })
   if (props.activeTab === 'frames') {
     return refs.slice(0, 2).map((ref, index) => ({
       ...ref,
@@ -585,6 +654,9 @@ const isPromptComposing = ref(false)
 const translating = ref(false)
 
 function getRefDisplayName(ref: VideoSourceRef) {
+  if (ref.kind === 'text') {
+    return ref.textPreview || ref.title || `文本${ref.index}`
+  }
   return `图片${ref.index}`
 }
 
@@ -1177,8 +1249,11 @@ onBeforeUnmount(() => {
   transition: border-color 0.15s ease, transform 0.15s ease;
 
   &:hover {
-    border-color: rgba(107, 124, 255, 0.55);
+    // border-color: rgba(107, 124, 255, 0.55);
     transform: translateY(-1px);
+    .video-gen-prompt-panel__ref-remove {
+      opacity: 1;
+    }
   }
 
   img {
@@ -1194,7 +1269,32 @@ onBeforeUnmount(() => {
   }
 
   .video-gen-prompt-panel--light & {
-    background: #f3f4f6;
+    background: transparent
+  }
+}
+
+.video-gen-prompt-panel__ref--text {
+  width: auto;
+  min-width: 72px;
+  max-width: 180px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  cursor: default;
+}
+
+.video-gen-prompt-panel__text-ref-preview {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 32px;
+  color: #d1d5db;
+
+  .video-gen-prompt-panel--light & {
+    color: #374151;
   }
 }
 
@@ -1219,9 +1319,9 @@ onBeforeUnmount(() => {
   opacity: 0;
   transition: opacity 0.15s, background 0.15s;
 
-  .video-gen-prompt-panel__ref:hover & {
-    opacity: 1;
-  }
+  // .video-gen-prompt-panel__ref:hover & {
+  //   opacity: 1;
+  // }
 
   &:hover {
     background: rgba(239, 68, 68, 0.9);
@@ -1624,5 +1724,101 @@ onBeforeUnmount(() => {
 
 .video-gen-prompt-panel--dragover {
   border-color: rgba(107, 124, 255, 0.55);
+}
+.inline-block {
+    display: inline-block;
+}
+.size-12 {
+    width: 48px;
+    height: 48px;
+}
+.relative {
+    position: relative;
+}
+.flex-none {
+    flex: 0 0 auto;
+}
+.bg-panel-background, .bg-panel-background\/92 {
+    background-color: #ffffff;
+}
+.border-canvas-controls-border, .border-canvas-controls-border\/60 {
+    border-color: #0000000f;
+}
+.border-hair {
+    border-width: 0.5px;
+}
+.rounded-xl {
+    border-radius: 12px;
+}
+.overflow-hidden {
+    overflow: hidden;
+}
+.size-full {
+    width: 100%;
+    height: 100%;
+}
+.bg-neutral-200 {
+    background-color: rgb(229, 230, 236);
+}
+.justify-center {
+    justify-content: center;
+}
+.items-center {
+    align-items: center;
+}
+.size-full {
+    width: 100%;
+    height: 100%;
+}
+.flex {
+    display: flex;
+}
+.transition-opacity {
+    transition-property: opacity;
+    transition-timing-function: cubic-bezier(0,0,.2,1), cubic-bezier(.4,0,.2,1);
+    transition-duration: 0.15s, 0.15s;
+}
+.backdrop-blur-sm {
+    --tw-backdrop-blur: blur(8px);
+}
+.text-white {
+    color: rgb(255, 255, 255);
+}
+.leading-none {
+    --tw-leading: 1;
+    line-height: 1;
+}
+.text-\[9px\] {
+    font-size: 9px;
+}
+.px-1 {
+    padding-inline: 4px;
+}
+.bg-black\/65 {
+    background-color: lab(0 0 0 / 0.65);
+}
+.rounded-lg {
+    border-radius: 8px;
+}
+.justify-center {
+    justify-content: center;
+}
+.items-center {
+    align-items: center;
+}
+.flex {
+    display: flex;
+}
+.left-1 {
+    left: 4px;
+}
+.top-1 {
+    top: 4px;
+}
+.absolute {
+    position: absolute;
+}
+.pointer-events-none {
+    pointer-events: none;
 }
 </style>
