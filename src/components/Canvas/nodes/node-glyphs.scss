@@ -30,10 +30,11 @@
 
   &::before,
   &::after {
-    content: '';
+    content: '55';
     position: absolute;
     top: 50%;
-    left: 50%;
+    // left: 50%;
+    right: 0;
     width: $size;
     height: $stroke;
     border-radius: 1px;
