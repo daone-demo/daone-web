@@ -350,6 +350,11 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 24px;
+
+  &--sub {
+    margin-top: -8px;
+    margin-bottom: 20px;
+  }
 }
 
 .home__filter-btn {
@@ -367,6 +372,12 @@
   &:hover {
     background: rgba(15, 23, 42, 0.05);
     color: #374151;
+  }
+
+  &--sub {
+    height: 30px;
+    padding: 0 14px;
+    font-size: 12px;
   }
 
   &--active {

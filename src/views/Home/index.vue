@@ -77,10 +77,26 @@
             :key="category.code"
             type="button"
             class="home__filter-btn"
-            :class="{ 'home__filter-btn--active': activeCategory === category.code }"
-            @click="activeCategory = category.code"
+            :class="{ 'home__filter-btn--active': activeCategoryCode === category.code }"
+            @click="selectPrimaryCategory(category)"
           >
             {{ category.name }}
+          </button>
+        </div>
+
+        <div
+          v-if="activeSubCategories.length > 0"
+          class="home__filters home__filters--sub"
+        >
+          <button
+            v-for="subCategory in activeSubCategories"
+            :key="subCategory.code"
+            type="button"
+            class="home__filter-btn home__filter-btn--sub"
+            :class="{ 'home__filter-btn--active': activeSubCategoryCode === subCategory.code }"
+            @click="selectSubCategory(subCategory.code)"
+          >
+            {{ subCategory.name }}
           </button>
         </div>
 
@@ -186,7 +202,7 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import api from '@/services/api';
 import {
-  type HomeInspirationCategory,
+  type HomeInspirationCategoryItem,
 } from './homeData'
 import dayjs from 'dayjs';
 import UpdateProjectName from '@components/UpdateProjectName/index.vue';
@@ -204,7 +220,8 @@ const { projects: recentProjects } = storeToRefs(projectStore);
 const router = useRouter()
 const projectId = ref('');
 const projectName = ref('');
-const activeCategory = ref<HomeInspirationCategory>('all')
+const activeCategoryCode = ref('all')
+const activeSubCategoryCode = ref<string | null>(null)
 type InspirationMediaType = 'image' | 'video' | 'unknown'
 type HomeInspiration = {
   id: string
@@ -333,7 +350,45 @@ const openDeleteProject = (id: string) => {
   })
 }
 
-const inspirationCategories = ref<any[]>([]);
+const inspirationCategories = ref<HomeInspirationCategoryItem[]>([]);
+
+const activeSubCategories = computed(() => {
+  const primary = inspirationCategories.value.find(
+    (category) => category.code === activeCategoryCode.value,
+  )
+  return primary?.children ?? []
+})
+
+function getEffectiveCategoryCode(): string | undefined {
+  if (activeSubCategoryCode.value) return activeSubCategoryCode.value
+  if (activeCategoryCode.value && activeCategoryCode.value !== 'all') {
+    return activeCategoryCode.value
+  }
+  return undefined
+}
+
+function selectPrimaryCategory(category: HomeInspirationCategoryItem) {
+  activeCategoryCode.value = category.code
+  if (category.children?.length) {
+    activeSubCategoryCode.value = category.children[0].code
+  } else {
+    activeSubCategoryCode.value = null
+  }
+}
+
+function selectSubCategory(code: string) {
+  activeSubCategoryCode.value = code
+}
+
+function applyInspirationsList(list: HomeInspiration[]) {
+  attachInspirationMediaTypes(list)
+  inspirations.value = list
+}
+
+async function loadInspirations(categoryCode?: string) {
+  const res = await api.getHome<any>(categoryCode)
+  applyInspirationsList((res.inspirations ?? []) as HomeInspiration[])
+}
 
 function guessMediaTypeFromUrl(url: string): InspirationMediaType {
   const lower = url.toLowerCase()
@@ -370,11 +425,13 @@ function attachInspirationMediaTypes(items: HomeInspiration[]) {
 
 const onLoadHomeData = async () => {
   const res = await api.getHome<any>()
-  inspirationCategories.value = res.inspirationCategories
-  const list = (res.inspirations ?? []) as HomeInspiration[]
-  attachInspirationMediaTypes(list)
-  inspirations.value = list
+  inspirationCategories.value = res.inspirationCategories ?? []
+  applyInspirationsList((res.inspirations ?? []) as HomeInspiration[])
 }
+
+watch([activeCategoryCode, activeSubCategoryCode], () => {
+  void loadInspirations(getEffectiveCategoryCode())
+})
 
 watch(needReloadStore.getNeedReload, (newVal) => {
   if (newVal) {

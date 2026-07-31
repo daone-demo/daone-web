@@ -14,6 +14,13 @@ export const HOME_INSPIRATION_CATEGORIES = [
 
 export type HomeInspirationCategory = (typeof HOME_INSPIRATION_CATEGORIES)[number]['key']
 
+/** 首页灵感分类（接口返回） */
+export type HomeInspirationCategoryItem = {
+  name: string
+  code: string
+  children?: HomeInspirationCategoryItem[]
+}
+
 export type HomeRecentProject = {
   id: string
   name: string
