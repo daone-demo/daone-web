@@ -9,6 +9,7 @@ type ScrollerPanApi = {
 type ScrollerImplPan = {
   container: HTMLElement
   startPanning: (e: MouseEvent) => void
+  stopPanning: (e?: Event) => void
   once: (name: string, handler: (...args: unknown[]) => void) => void
 }
 
@@ -75,7 +76,16 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
   let longPressTimer: ReturnType<typeof setTimeout> | null = null
   let pressStart: { x: number; y: number; event: MouseEvent } | null = null
   let longPressPanActive = false
+  /** 左键是否仍按下（用于避免松手后才触发长按进入抓取态） */
+  let pressButtonDown = false
+  let finishingLongPressPan = false
   let boundGraph: Graph | null = null
+  let longPressScrollerImpl: ScrollerImplPan | null = null
+
+  function getScrollerImpl(scroller: ScrollerPanApi | null): ScrollerImplPan | undefined {
+    if (!scroller) return undefined
+    return (scroller as unknown as { scrollerImpl?: ScrollerImplPan }).scrollerImpl
+  }
 
   function beginTempPan() {
     const scroller = deps.graph.value ? deps.getScroller(deps.graph.value) : null
@@ -91,6 +101,11 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
     tempPanActive.value = false
     scroller.togglePanning(deps.panMode.value)
     deps.setRubberbandEnabled(!deps.panMode.value)
+    // 退出临时拖拽后清掉 panning 标记，恢复默认箭头光标（图一）
+    const impl = getScrollerImpl(scroller)
+    if (impl && !deps.panMode.value) {
+      delete impl.container.dataset.panning
+    }
   }
 
   function clearLongPressTimer() {
@@ -107,30 +122,62 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
   function clearLongPressWatch() {
     clearLongPressTimer()
     pressStart = null
+    pressButtonDown = false
     removePressWindowListeners()
+  }
+
+  /** 松手后结束长按拖拽，恢复默认光标 */
+  function finishLongPressPan() {
+    if (finishingLongPressPan) return
+    if (!longPressPanActive && !tempPanActive.value) {
+      clearLongPressWatch()
+      return
+    }
+
+    finishingLongPressPan = true
+    try {
+      const impl = longPressScrollerImpl
+      longPressScrollerImpl = null
+      longPressPanActive = false
+
+      if (impl) {
+        try {
+          impl.stopPanning()
+        } catch {
+          // 已结束或未开始时忽略
+        }
+        if (!deps.panMode.value) {
+          delete impl.container.dataset.panning
+        } else {
+          impl.container.dataset.panning = 'false'
+        }
+      }
+
+      endTempPan()
+      clearLongPressWatch()
+    } finally {
+      finishingLongPressPan = false
+    }
   }
 
   function activateLongPressPan(event: MouseEvent) {
     const g = deps.graph.value
-    if (!g || longPressPanActive || deps.panMode.value) return
+    // 定时器触发时若已松手，不进入抓取态，保持默认箭头
+    if (!g || longPressPanActive || deps.panMode.value || !pressButtonDown) return
 
     const scroller = deps.getScroller(g)
-    const impl = scroller
-      ? (scroller as unknown as { scrollerImpl?: ScrollerImplPan }).scrollerImpl
-      : undefined
+    const impl = getScrollerImpl(scroller)
     if (!scroller || !impl) return
 
     longPressPanActive = true
+    longPressScrollerImpl = impl
     clearLongPressTimer()
     cancelActiveRubberband(g)
     beginTempPan()
     impl.container.dataset.panning = 'true'
     impl.startPanning(event)
     impl.once('pan:stop', () => {
-      impl.container.dataset.panning = 'false'
-      longPressPanActive = false
-      endTempPan()
-      clearLongPressWatch()
+      finishLongPressPan()
     })
   }
 
@@ -144,7 +191,12 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
   }
 
   function onPressUp() {
-    if (longPressPanActive) return
+    pressButtonDown = false
+    // 长按拖拽中松手：结束临时 panning，恢复图一默认箭头光标
+    if (longPressPanActive || tempPanActive.value) {
+      finishLongPressPan()
+      return
+    }
     clearLongPressWatch()
   }
 
@@ -153,11 +205,12 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
     if (deps.panMode.value || tempPanActive.value || longPressPanActive) return
 
+    pressButtonDown = true
     pressStart = { x: e.clientX, y: e.clientY, event: e }
     clearLongPressTimer()
     longPressTimer = setTimeout(() => {
       longPressTimer = null
-      if (!pressStart) return
+      if (!pressStart || !pressButtonDown) return
       activateLongPressPan(pressStart.event)
     }, LONG_PRESS_PAN_MS)
 
@@ -327,16 +380,12 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
       boundGraph.off('blank:mousedown', onBlankMouseDown)
       boundGraph = null
     }
-    clearLongPressWatch()
-    longPressPanActive = false
-    endTempPan()
+    finishLongPressPan()
   }
 
   /** 结束临时拖拽态（卸载或强制收尾） */
   function endSpacePan() {
-    clearLongPressWatch()
-    longPressPanActive = false
-    endTempPan()
+    finishLongPressPan()
   }
 
   return {

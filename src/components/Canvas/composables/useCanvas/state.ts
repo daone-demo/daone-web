@@ -16,6 +16,7 @@ import type { ImageEditTextEntry } from '../../editTextUtils'
 import { setSharedCanvasBgTheme } from '../../useCanvasBgTheme'
 import type { CanvasBgTheme } from '../../canvasTheme'
 import type { Project } from '@/stores/useProject'
+import type { ProjectTabKey } from '@/views/Project/projectData'
 import type { CanvasDomRefs, CanvasEmit } from './types'
 import {
   loadImageToolbarCustomizeSettings,
@@ -86,7 +87,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showAssetsPanel = ref(false)
   const showAssetCenterPanel = ref(false)
   const showHistoryPanel = ref(false)
-  const assetsTab = ref<'RECOMMENDED' | 'CENTER' | 'MINE' | 'FAVORITE' | 'FILES'>('RECOMMENDED')
+  const assetsTab = ref<ProjectTabKey>('CENTER')
   const assetsLoading = ref(false)
   const assetCenterTab = ref<'ALL' | '角色' | '场景' | '风格包' | '自定义'>('ALL')
   const assetCenterSearch = ref('')
