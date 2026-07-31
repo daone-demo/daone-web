@@ -239,17 +239,25 @@ onBeforeUnmount(() => {
 
 .dialogue-workflow-select__menu--grouped {
   display: flex;
+  align-items: flex-start;
+  gap: 0;
   min-width: 320px;
   max-width: min(420px, calc(100vw - 32px));
   padding: 0;
-  overflow: hidden;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
 }
 
 .dialogue-workflow-select__categories {
   flex: 0 0 132px;
   max-width: 132px;
   padding: 6px;
-  border-right: 1px solid #e5e7eb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
   overflow-y: auto;
 }
 
@@ -296,7 +304,13 @@ onBeforeUnmount(() => {
 .dialogue-workflow-select__submenu {
   flex: 1;
   min-width: 0;
+  align-self: flex-start;
+  margin-left: 8px;
   padding: 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
   overflow-y: auto;
 }
 
@@ -352,8 +366,22 @@ onBeforeUnmount(() => {
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   }
 
+  .dialogue-workflow-select__menu--grouped {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+  }
+
   .dialogue-workflow-select__categories {
-    border-right-color: #4b4b55;
+    border-color: #4b4b55;
+    background: #252528;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+
+  .dialogue-workflow-select__submenu {
+    border-color: #4b4b55;
+    background: #252528;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   }
 
   .dialogue-workflow-select__category {

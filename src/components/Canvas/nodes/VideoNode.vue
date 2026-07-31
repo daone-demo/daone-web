@@ -197,16 +197,14 @@
         </span>
       </div>
 
-      <button
+      <div
         v-else
-        type="button"
         class="video-node__empty"
-        @mousedown.stop
-        @click.stop="triggerUpload"
+        @mousedown="onEmptyMouseDown"
       >
         <span class="video-node__hero-play video-node__hero-play--lg">▶</span>
-        <span>点击上传视频</span>
-      </button>
+        <span>{{ emptyStateLabel }}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -276,6 +274,10 @@ const hasVideoPreview = computed(
 
 const isFileUploading = computed(() => isNodeFileUploading(data))
 
+const emptyStateLabel = computed(() =>
+  data.title === '生成失败' ? '生成失败，点击重试' : '点击上传视频',
+)
+
 const genProgressText = computed(() => {
   const progress = data.uploadProgress ?? 0
   if (progress <= 0) return '准备中...'
@@ -289,6 +291,49 @@ function syncData() {
 
 function triggerUpload() {
   requestCanvasUpload?.(getNode().id)
+}
+
+function canvasGraph() {
+  return getNode().model?.graph as CanvasGraph | undefined
+}
+
+/** 空状态/失败态：拖动移动节点，轻点触发上传或重试 */
+function onEmptyMouseDown(event: MouseEvent) {
+  if (event.button !== 0) return
+  event.stopPropagation()
+
+  const node = getNode()
+  const g = canvasGraph()
+  if (!g) return
+
+  const startClientX = event.clientX
+  const startClientY = event.clientY
+  const startLocal = g.clientToLocal(startClientX, startClientY)
+  const origin = node.getPosition()
+  let moved = false
+
+  const onMove = (moveEvent: MouseEvent) => {
+    if (!moved && Math.hypot(moveEvent.clientX - startClientX, moveEvent.clientY - startClientY) < 4) {
+      return
+    }
+    moved = true
+    const point = g.clientToLocal(moveEvent.clientX, moveEvent.clientY)
+    node.position(origin.x + (point.x - startLocal.x), origin.y + (point.y - startLocal.y))
+    g.__notifyNodeDragMove?.()
+  }
+
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+    if (moved) {
+      g.__notifyNodeDragEnd?.()
+      return
+    }
+    triggerUpload()
+  }
+
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
 }
 
 function onVideoNodeDblClick() {
@@ -567,14 +612,13 @@ onBeforeUnmount(() => {
   gap: 12px;
   width: 100%;
   padding: 16px 12px;
-  border: none;
-  background: transparent;
   color: #9ca3af;
   font-size: 14px;
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
 
-  &:hover {
-    color: #e5e7eb;
+  &:active {
+    cursor: grabbing;
   }
 }
 

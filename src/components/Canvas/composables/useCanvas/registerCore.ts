@@ -2169,6 +2169,7 @@ export function registerCore(bind: CanvasBindings) {
     if (sourceData.uploadState === 'uploading' || sourceData.imageGenState === 'loading') return
 
     persistImageDialogueFields(sourceNodeId)
+    resetImageDialogue()
 
     const referenceAssetIds = imageDialoguePreviews.value
       .map((item) => item.assetId)
@@ -4277,6 +4278,7 @@ export function registerCore(bind: CanvasBindings) {
           videoCount: text2videoSettings.videoCount,
           mode: text2videoSettings.mode,
         }, [])
+        closeTextPromptBar()
 
         const idempotencyKey =
           typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -4362,6 +4364,7 @@ export function registerCore(bind: CanvasBindings) {
           fileName: '文生图.png',
           centerPoint: imageCenterPoint,
         })
+        closeTextPromptBar()
 
         const imageParameters: Record<string, unknown> = {
           model: imagePayload?.model,
@@ -4558,6 +4561,7 @@ export function registerCore(bind: CanvasBindings) {
       imageGenProgress: 0,
       genPrompt: prompt,
     }, { overwrite: true })
+    closeImageGenPromptBar()
 
     const referenceAssetIds = resolvePromptReferenceAssetIds(currentData)
     const fileName = currentData.fileName || currentData.title || '文生图.png'
