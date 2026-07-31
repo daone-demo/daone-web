@@ -209,6 +209,26 @@ function isNodeOnGraph(node: Node) {
 
 const activePollingTaskIds = new Set<string>()
 
+let onGenerationTaskSucceeded: ((task: GenerationTaskDetail) => void) | null = null
+
+export function setGenerationTaskSucceededHandler(
+  handler: ((task: GenerationTaskDetail) => void) | null,
+) {
+  onGenerationTaskSucceeded = handler
+}
+
+function notifyGenerationTaskSucceeded(task: GenerationTaskDetail) {
+  if (task.status !== 'SUCCEEDED') return
+  onGenerationTaskSucceeded?.(task)
+}
+
+function buildSucceededImageGenerationResult(
+  task: GenerationTaskDetail,
+): ImageGenerationOnNodeResult {
+  notifyGenerationTaskSucceeded(task)
+  return buildImageGenerationSuccessResult(task)
+}
+
 /** 通过节点上绑定的 generationTaskId 查找对应节点 */
 export function findNodeByGenerationTaskId(graph: Graph, taskId: string): Node | null {
   const trimmed = taskId.trim()
@@ -666,7 +686,7 @@ async function pollAndApplyImageTaskOnNode(
   }
 
   const buildSuccessResult = (task: GenerationTaskDetail): ImageGenerationOnNodeResult =>
-    buildImageGenerationSuccessResult(task)
+    buildSucceededImageGenerationResult(task)
 
   try {
     const first =
@@ -822,6 +842,7 @@ export async function followTextGenerationTaskOnNode(
       title: options.title,
       toHtml: options.toHtml,
     })
+    notifyGenerationTaskSucceeded(finalTask)
     return true
   } catch (error) {
     const target = resolveNode()
@@ -893,6 +914,7 @@ export async function followModelGenerationTaskOnNode(
       title: options.title,
       fileName: resolved.previewUrl.split('/').pop()?.split('?')[0] || `${options.title || '3D 模型'}.glb`,
     })
+    notifyGenerationTaskSucceeded(finalTask)
     return true
   } catch (error) {
     const target = resolveNode()
@@ -963,6 +985,7 @@ export async function followVideoGenerationTaskOnNode(
       title: options.title,
       fileName: options.fileName || resolved.fileName || '文生视频.mp4',
     })
+    notifyGenerationTaskSucceeded(finalTask)
     return true
   } catch (error) {
     const target = resolveNode()

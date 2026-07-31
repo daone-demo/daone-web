@@ -29,7 +29,7 @@ import {
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, syncTextNodeImageSource,
-  createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, getCanvasSnapshot, saveCanvasSnapshotToStorage,
+  createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
@@ -65,6 +65,7 @@ import {
   resetResumedGenerationTaskCache,
   resumePendingGenerationTasks,
   runImageGenerationOnNode,
+  setGenerationTaskSucceededHandler,
   startImageGenerationOnNode,
   startVideoGenerationTaskFollow,
   resolveGenerationResultPreview,
@@ -269,7 +270,7 @@ export function registerCore(bind: CanvasBindings) {
   let historyPushTimer: ReturnType<typeof setTimeout> | null = null
   let activeImageDialogueNodeId = ''
   let activeVideoDialogueNodeId = ''
-  let autoSaveTimer: number | null = null
+  let autoSaveDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let autoSaveEnabled = true
   let canvasContentReady = false
   let saveInFlight = false
@@ -3651,7 +3652,7 @@ export function registerCore(bind: CanvasBindings) {
     selectedKind.value = data.kind
     runUploadSimulation(node, file)
     updateNodeToolbar()
-    scheduleHistoryPush()
+    scheduleHistoryPush({ autoSave: false })
   }
 
   provide('uploadFileToCanvasNode', uploadFileToCanvasNode)
@@ -5229,27 +5230,24 @@ export function registerCore(bind: CanvasBindings) {
   function stopAutoSave() {
     autoSaveEnabled = false
     canvasContentReady = false
-    if (autoSaveTimer) {
-      clearInterval(autoSaveTimer)
-      autoSaveTimer = null
+    if (autoSaveDebounceTimer) {
+      clearTimeout(autoSaveDebounceTimer)
+      autoSaveDebounceTimer = null
     }
     pendingRemoteSaveType = null
   }
 
-  function startAutoSave() {
+  function triggerAutoSaveIfReady() {
     if (!autoSaveEnabled || !canvasContentReady) return
-    if (autoSaveTimer) {
-      clearInterval(autoSaveTimer)
-      autoSaveTimer = null
-    }
-    autoSaveTimer = window.setInterval(() => {
+    if (autoSaveDebounceTimer) clearTimeout(autoSaveDebounceTimer)
+    autoSaveDebounceTimer = setTimeout(() => {
+      autoSaveDebounceTimer = null
       handleSaveCanvas('AUTO')
-    }, 8000)
+    }, 280)
   }
 
   function markCanvasContentReady() {
     canvasContentReady = true
-    startAutoSave()
   }
 
   function onPageUnload() {
@@ -5410,7 +5408,6 @@ export function registerCore(bind: CanvasBindings) {
 
   function persistGenerationTaskBinding() {
     scheduleHistoryPush()
-    handleSaveCanvas('AUTO')
   }
 
   function handleExportCanvas() {
@@ -6749,7 +6746,7 @@ export function registerCore(bind: CanvasBindings) {
     }
     syncNodeCount()
     updateNodeToolbar()
-    scheduleHistoryPush()
+    scheduleHistoryPush({ autoSave: false })
   }
 
   function onCanvasDragEnter(event: DragEvent) {
@@ -7206,7 +7203,37 @@ export function registerCore(bind: CanvasBindings) {
     scheduleHistoryPush()
   }
 
+  function resetCanvasPanCursorState() {
+    endSpacePan()
+    const g = graph.value
+    if (!g) return
+    const scroller = getScroller(g)
+    const impl = scroller
+      ? (
+          scroller as unknown as {
+            scrollerImpl?: { container?: HTMLElement; stopPanning?: () => void }
+          }
+        ).scrollerImpl
+      : null
+    if (!impl?.container) return
+
+    try {
+      impl.stopPanning?.()
+    } catch {
+      // 已结束或未开始时忽略
+    }
+
+    if (panMode.value) {
+      impl.container.dataset.panning = 'false'
+      return
+    }
+
+    delete impl.container.dataset.panning
+    scroller?.disablePanning()
+  }
+
   function handleBlankDblClick(event: { x: number; y: number }) {
+    resetCanvasPanCursorState()
     openAddMenuAtGraphPoint({ x: event.x, y: event.y })
   }
 
@@ -7570,7 +7597,8 @@ export function registerCore(bind: CanvasBindings) {
     canRedo.value = canvasHistory?.canRedo() ?? false
   }
 
-  function scheduleHistoryPush() {
+  function scheduleHistoryPush(options: { autoSave?: boolean } = {}) {
+    const shouldAutoSave = options.autoSave !== false
     const g = graph.value
     if (!g || !canvasHistory) return
     if (historyPushTimer) clearTimeout(historyPushTimer)
@@ -7578,7 +7606,15 @@ export function registerCore(bind: CanvasBindings) {
       canvasHistory?.push(g)
       syncHistoryState()
       historyPushTimer = null
+      if (shouldAutoSave) {
+        triggerAutoSaveIfReady()
+      }
     }, 280)
+  }
+
+  function notifyTextNodeUpdated() {
+    bumpToolbarRevision()
+    scheduleHistoryPush()
   }
 
   function handleUndo() {
@@ -7587,6 +7623,7 @@ export function registerCore(bind: CanvasBindings) {
     syncHistoryState()
     syncNodeCount()
     resetCanvasInteractionState()
+    triggerAutoSaveIfReady()
     nextTick(() => updateNodeToolbar())
   }
 
@@ -7596,6 +7633,7 @@ export function registerCore(bind: CanvasBindings) {
     syncHistoryState()
     syncNodeCount()
     resetCanvasInteractionState()
+    triggerAutoSaveIfReady()
     nextTick(() => updateNodeToolbar())
   }
 
@@ -8171,6 +8209,12 @@ export function registerCore(bind: CanvasBindings) {
     window.addEventListener('pagehide', onPageUnload)
 
     setCanvasUploadProjectId(() => activeProjectId.value || undefined)
+    setCanvasNodeMutationCompleteHandler(() => {
+      scheduleHistoryPush()
+    })
+    setGenerationTaskSucceededHandler(() => {
+      scheduleHistoryPush()
+    })
     void onLoadProjects()
 
     const routeProjectId = router.currentRoute.value.params.id
@@ -8202,7 +8246,7 @@ export function registerCore(bind: CanvasBindings) {
     instance.__onTextPickerAction = handleTextPickerAction
     instance.__onTextNodeEdgeLinked = handleNodeEdgeLinked
     instance.__onNodeEdgeLinked = handleNodeEdgeLinked
-    instance.__notifyTextNodeUpdated = bumpToolbarRevision
+    instance.__notifyTextNodeUpdated = notifyTextNodeUpdated
     instance.__focusCanvasNode = (nodeId: string) => {
       const g = graph.value
       if (!g) return
@@ -8246,6 +8290,10 @@ export function registerCore(bind: CanvasBindings) {
     applyCanvasBgTheme(instance, canvasBgTheme.value, gridVisible.value)
 
     instance.on('blank:dblclick', handleBlankDblClick)
+    instance.on('blank:mousedown', ({ e }: { e: MouseEvent }) => {
+      if (e.detail < 2) return
+      resetCanvasPanCursorState()
+    })
     instance.on('scale', ({ sx }) => {
       syncZoom(sx)
       updateEdgeDeleteButtonPosition()
@@ -8421,7 +8469,7 @@ export function registerCore(bind: CanvasBindings) {
       selectGraphNodes(node)
     }
     syncNodeCount()
-    scheduleHistoryPush()
+    scheduleHistoryPush({ autoSave: false })
 
     return waitForNodeUploadDone(node)
   }
@@ -8497,12 +8545,15 @@ export function registerCore(bind: CanvasBindings) {
     window.removeEventListener('beforeunload', onPageUnload)
     window.removeEventListener('pagehide', onPageUnload)
     stopAutoSave()
+    setCanvasNodeMutationCompleteHandler(null)
+    setGenerationTaskSucceededHandler(null)
     unbindKeyboard()
     unbindLongPressPan()
     unbindGraphDropListeners()
     setCanvasAssetDropHandler(null)
     clearCanvasAssetDrag()
     if (historyPushTimer) clearTimeout(historyPushTimer)
+    if (autoSaveDebounceTimer) clearTimeout(autoSaveDebounceTimer)
     if (edgeHoverLeaveTimer) window.clearTimeout(edgeHoverLeaveTimer)
     if (altVoiceTimer.value) clearTimeout(altVoiceTimer.value)
     canvasHistory = null

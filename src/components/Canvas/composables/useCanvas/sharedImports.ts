@@ -109,7 +109,13 @@ export {
   syncTextNodeImageSource,
 } from '../../textPrompt'
 export { createMinimap, destroyMinimap } from '../../minimap'
-export { applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId } from '../../upload'
+export {
+  applyRemoteImageToNode,
+  runUploadSimulation,
+  uploadAssetFile,
+  setCanvasUploadProjectId,
+  setCanvasNodeMutationCompleteHandler,
+} from '../../upload'
 export { getCanvasSnapshot, saveCanvasSnapshotToStorage, normalizeCanvasSnapshot, type CanvasSnapshot } from '../../canvasSnapshot'
 export {
   buildGroupSkillMarkdown,

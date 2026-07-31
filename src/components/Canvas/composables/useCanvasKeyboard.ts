@@ -203,6 +203,8 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
   function onBlankMouseDown({ e }: { e: MouseEvent }) {
     if (e.button !== 0) return
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
+    // 双击的第二下 mousedown 不进入长按拖拽，避免出现抓手光标
+    if (e.detail >= 2) return
     if (deps.panMode.value || tempPanActive.value || longPressPanActive) return
 
     pressButtonDown = true

@@ -35,6 +35,15 @@ export type CanvasUploader = (
 
 let resolveProjectId: (() => string | undefined) | null = null
 let canvasUploader: CanvasUploader | null = null
+let onCanvasNodeMutationComplete: (() => void) | null = null
+
+export function setCanvasNodeMutationCompleteHandler(handler: (() => void) | null) {
+  onCanvasNodeMutationComplete = handler
+}
+
+function notifyCanvasNodeMutationComplete() {
+  onCanvasNodeMutationComplete?.()
+}
 
 /** 文件读取阶段占用的进度上限 */
 const UPLOAD_READ_MAX_PERCENT = 20
@@ -379,10 +388,12 @@ async function finishUpload(
   if (file.type.startsWith('image/')) {
     await ensureImageMediaDimensions(data, file, previewUrl)
     applyNodeMedia(graphNode, data)
+    notifyCanvasNodeMutationComplete()
     return
   }
 
   applyNodeMedia(graphNode, data)
+  notifyCanvasNodeMutationComplete()
 
   if (result.width && result.height) return
 
@@ -398,6 +409,7 @@ async function finishUpload(
         current.durationSeconds = Math.round(video.duration * 10) / 10
       }
       applyNodeMedia(graphNode, current)
+      notifyCanvasNodeMutationComplete()
     }
     video.onerror = () => {
       const current = { ...(graphNode.getData() as CanvasNodeData) }
@@ -405,6 +417,7 @@ async function finishUpload(
       current.mediaWidth = 2560
       current.mediaHeight = 1440
       applyNodeMedia(graphNode, current)
+      notifyCanvasNodeMutationComplete()
     }
     video.src = previewUrl
     return
