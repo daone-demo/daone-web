@@ -30,10 +30,34 @@
       ×
     </button>
 
-    <div v-if="data.mode !== 'picker'" class="text-node__title canvas-node__meta">
+    <div
+      v-if="data.textGenState !== 'loading'"
+      class="text-node__title canvas-node__meta"
+      @mousedown.stop
+      @pointerdown.stop
+    >
       <span class="text-node__title-icon">T</span>
-      <span class="text-node__title-text">{{ data.title }}</span>
+      <input
+        v-if="isEditingTitle"
+        ref="titleInputRef"
+        v-model="titleDraft"
+        class="text-node__title-input"
+        type="text"
+        maxlength="64"
+        @keydown.enter.prevent="commitTitleEdit"
+        @keydown.esc.prevent="cancelTitleEdit"
+        @blur="commitTitleEdit"
+        @mousedown.stop
+        @pointerdown.stop
+      />
+      <span
+        v-else
+        class="text-node__title-text"
+        :title="data.title"
+        @click.stop="startTitleEdit"
+      >{{ data.title }}</span>
       <button
+        v-if="data.mode !== 'picker'"
         type="button"
         class="canvas-node__delete"
         title="删除节点"
@@ -57,21 +81,12 @@
       v-else-if="data.mode === 'picker'"
       class="text-node__body text-node__body--picker"
     >
-      <div class="text-node__hero-icon">
+      <!-- <div class="text-node__hero-icon">
         <span />
         <span />
         <span />
         <span />
-      </div>
-      <button
-        type="button"
-        class="text-node__action text-node__action--write"
-        @mousedown.stop
-        @click="onAction('write')"
-      >
-        <span class="text-node__action-icon" data-icon="doc" aria-hidden="true" />
-        自己编写内容
-      </button>
+      </div> -->
 
       <!-- <p class="text-node__try">尝试：</p> -->
       <button
@@ -84,6 +99,15 @@
       >
         <span class="text-node__action-icon" :data-icon="action.icon" />
         {{ action.label }}
+      </button>
+      <button
+        type="button"
+        class="text-node__action text-node__action--write"
+        @mousedown.stop
+        @click="onAction('write')"
+      >
+        <span class="text-node__action-icon" data-icon="doc" aria-hidden="true" />
+        自己编写内容
       </button>
     </div>
 
@@ -201,7 +225,10 @@ function removeSelf(event?: Event) {
 }
 
 const editorRef = ref<HTMLElement | null>(null)
+const titleInputRef = ref<HTMLInputElement | null>(null)
 const isEditorComposing = ref(false)
+const isEditingTitle = ref(false)
+const titleDraft = ref('')
 const data = reactive<CanvasNodeData>({
   ...createEmptyNodeData(),
   kind: 'text',
@@ -227,7 +254,7 @@ function shouldIgnoreNodeShellEvent(target: EventTarget | null) {
   if (!(target instanceof Element)) return true
   return Boolean(
     target.closest(
-      'button, [contenteditable="true"], .text-node__resize, .node-port-plus, .canvas-node__delete, .canvas-node__delete-float',
+      'button, [contenteditable="true"], input, .text-node__title, .text-node__resize, .node-port-plus, .canvas-node__delete, .canvas-node__delete-float',
     ),
   )
 }
@@ -243,6 +270,32 @@ function syncData(patch: Partial<CanvasNodeData> = {}) {
   Object.assign(data, patch)
   getNode().setData({ ...data })
   canvasGraph().__notifyTextNodeUpdated?.()
+}
+
+function startTitleEdit() {
+  if (isEditingTitle.value) return
+  titleDraft.value = data.title || '文本节点'
+  isEditingTitle.value = true
+  nextTick(() => {
+    const input = titleInputRef.value
+    if (!input) return
+    input.focus()
+    input.select()
+  })
+}
+
+function commitTitleEdit() {
+  if (!isEditingTitle.value) return
+  const next = titleDraft.value.trim() || '文本节点'
+  isEditingTitle.value = false
+  if (next !== data.title) {
+    syncData({ title: next })
+  }
+}
+
+function cancelTitleEdit() {
+  isEditingTitle.value = false
+  titleDraft.value = data.title || '文本节点'
 }
 
 function syncEditorHtml() {
@@ -881,7 +934,7 @@ onBeforeUnmount(() => {
   margin-bottom: 6px;
   font-size: 12px;
   color: #9ca3af;
-  cursor: move;
+  cursor: default;
 }
 
 .text-node__title-icon {
@@ -899,11 +952,40 @@ onBeforeUnmount(() => {
 }
 
 .text-node__title-text {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: text;
+  border-radius: 6px;
+  padding: 2px 6px;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+
+.text-node__title-input {
+  flex: 0 1 auto;
+  min-width: 48px;
+  max-width: 100%;
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid #6b7280;
+  border-radius: 6px;
+  background: #2a2a30;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #e5e7eb;
+  outline: none;
+
+  &:focus {
+    border-color: #6b7cff;
+  }
 }
 
 .text-node__body {

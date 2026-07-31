@@ -556,6 +556,14 @@ export function registerCore(bind: CanvasBindings) {
     if (selectedKind.value !== 'image' || !selectedNodeId.value) return false
     return canShowImageToolbar(getSelectedNodeData())
   })
+  const showElementSelectBar = computed(() => {
+    void toolbarRevision.value
+    if (!showElementSelectMode.value) return false
+    if (imageMarkRecognizing.value) return false
+    const g = graph.value
+    if (g && isImageMarkAnalyzing(g)) return false
+    return true
+  })
   const showTextFormatToolbar = computed(() => {
     void toolbarRevision.value
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
@@ -4641,10 +4649,23 @@ export function registerCore(bind: CanvasBindings) {
     bumpToolbarRevision()
   }
 
-  function exitElementSelectMode() {
+  function isImageMarkAnalysisInProgress() {
+    if (imageMarkRecognizing.value) return true
+    const g = graph.value
+    return Boolean(g && isImageMarkAnalyzing(g))
+  }
+
+  function exitElementSelectMode(options?: { force?: boolean }) {
     showElementSelectMode.value = false
     elementSelectContext.value = null
     elementSelectReturnNodeId.value = ''
+
+    if (!options?.force && isImageMarkAnalysisInProgress()) {
+      // 分析进行中：仅退出元素选择 UI，保留节点「分析中」状态直至任务结束
+      bumpToolbarRevision()
+      return
+    }
+
     imageMarkRecognizing.value = false
     const g = graph.value
     if (!g) return
@@ -4801,7 +4822,7 @@ export function registerCore(bind: CanvasBindings) {
 
   function toggleImageDialogueMarkMode() {
     if (showElementSelectMode.value && elementSelectContext.value === 'image-dialogue') {
-      exitElementSelectMode()
+      exitElementSelectMode({ force: true })
       return
     }
     if (!getActiveImageDialogueTargetNodeId()) return
@@ -4809,7 +4830,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function enterVideoGenCanvasPickMode() {
-    exitElementSelectMode()
+    exitElementSelectMode({ force: true })
     exitImageDialogueCanvasPickMode()
     showVideoGenCanvasPickMode.value = true
   }
@@ -4827,7 +4848,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function enterImageDialogueCanvasPickMode() {
-    exitElementSelectMode()
+    exitElementSelectMode({ force: true })
     exitVideoGenCanvasPickMode()
     const targetId = getActiveImageDialogueTargetNodeId()
     if (!targetId) return
@@ -4923,7 +4944,7 @@ export function registerCore(bind: CanvasBindings) {
   function returnFromElementSelect() {
     const returnId = elementSelectReturnNodeId.value
     const context = elementSelectContext.value
-    exitElementSelectMode()
+    exitElementSelectMode({ force: true })
     if (!returnId) return
     const g = graph.value
     const cell = g?.getCellById(returnId)
@@ -4945,7 +4966,7 @@ export function registerCore(bind: CanvasBindings) {
   function onVideoGenQuickAction(key: string) {
     if (key === 'mark') {
       if (showElementSelectMode.value && elementSelectContext.value === 'video-gen') {
-        exitElementSelectMode()
+        exitElementSelectMode({ force: true })
         return
       }
       enterElementSelectMode('video-gen')
@@ -7376,7 +7397,7 @@ export function registerCore(bind: CanvasBindings) {
     closeImageGenPromptBar()
     closeVideoGenPromptBar()
     closeTextExpand()
-    exitElementSelectMode()
+    exitElementSelectMode({ force: true })
     exitVideoGenCanvasPickMode()
     exitImageDialogueCanvasPickMode()
     syncNodeSelectionHighlight([])
@@ -8803,6 +8824,7 @@ export function registerCore(bind: CanvasBindings) {
     saveSkillItems,
     saveSkillSubmitting,
     showImageCreativeToolbar,
+    showElementSelectBar,
     showImageGenPromptBar,
     showImageToolbarCustomize,
     imageToolbarCustomizeSettings,

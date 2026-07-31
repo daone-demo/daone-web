@@ -397,9 +397,9 @@ export const ADD_NODE_GROUPS = [
 ]
 
 export const TEXT_PICKER_ACTIONS = [
-  { key: 'write', label: '自己编写内容', icon: 'doc' },
-  { key: 'text2video', label: '文生视频', icon: 'play' },
   { key: 'text2image', label: '文生图', icon: 'image' },
+  { key: 'text2video', label: '文生视频', icon: 'play' },
+  { key: 'write', label: '自己编写内容', icon: 'doc' },
   // { key: 'text2music', label: '文字生音乐', icon: 'audio' },
 ]
 

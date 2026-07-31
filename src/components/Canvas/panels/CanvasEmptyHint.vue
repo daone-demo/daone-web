@@ -10,7 +10,7 @@
         style="width: 16px; height: 16px;"
         alt="zoom"
       >
-      可以拖拽画布
+      或按住 Space + 拖拽可以移动画布
       <!-- <button type="button" class="canvas__hint-link" @click="emit('focus-chat')">chat</button>
       直接对话 -->
       &nbsp;

@@ -79,6 +79,7 @@ type GridSplitCanvasApi = Pick<
     | 'elementMarks'
     | 'toggleImageDialogueMarkMode'
     | 'updateImageMarkLabel'
+    | 'showElementSelectBar'
   >
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {

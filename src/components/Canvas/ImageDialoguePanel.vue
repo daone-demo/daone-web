@@ -24,9 +24,9 @@
         :light="isLightTheme"
         @update:model-value="onWorkflowChange"
       />
-      <button type="button" class="image-dialogue__expand" title="展开">
+      <!-- <button type="button" class="image-dialogue__expand" title="展开">
         <span class="image-dialogue__expand-icon" aria-hidden="true" />
-      </button>
+      </button> -->
     </div>
 
     <div class="image-dialogue__head">

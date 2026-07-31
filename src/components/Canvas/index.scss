@@ -729,6 +729,10 @@
     cursor: default;
   }
 
+  .x6-graph-scroller.x6-graph-scroller-pannable[data-panning='grab'] {
+    cursor: grab;
+  }
+
   .x6-graph-scroller.x6-graph-scroller-pannable[data-panning='true'] {
     cursor: grabbing;
     user-select: none;

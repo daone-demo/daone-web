@@ -49,7 +49,7 @@
     <CanvasEmptyHint v-if="nodeCount === 0" @focus-chat="emit('focus-chat')" />
 
     <CanvasElementSelectBar
-      v-if="showElementSelectMode"
+      v-if="showElementSelectBar"
       @return-node="returnFromElementSelect"
       @exit="exitElementSelectMode"
     />
@@ -638,6 +638,7 @@ const {
   showBackToNodesBanner,
   showConnectMenu,
   showEdgeDeleteButton,
+  showElementSelectBar,
   showElementSelectMode,
   showVideoGenCanvasPickMode,
   showImageDialogueCanvasPickMode,

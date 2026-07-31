@@ -10,6 +10,20 @@
     color: #374151;
   }
 
+  .text-node__title-text:hover {
+    background: #f3f4f6;
+  }
+
+  .text-node__title-input {
+    border-color: #d1d5db;
+    background: #fff;
+    color: #374151;
+
+    &:focus {
+      border-color: #6b7cff;
+    }
+  }
+
   .text-node__body {
     border-color: #e5e7eb;
     background: #fff;
