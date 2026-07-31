@@ -1,94 +1,34 @@
 import { resolveOriginalMediaDownloadUrl } from './cloudImageProcess'
-import { buildMediaProxyCandidates } from './mediaProxy'
 
-function buildFetchCandidates(url: string): string[] {
-  const source = url.trim()
-  if (!source) return []
-
-  if (source.startsWith('blob:') || source.startsWith('data:') || source.startsWith('/')) {
-    return [source]
-  }
-
-  const candidates = buildMediaProxyCandidates(source)
-  if (candidates.length) return [...new Set(candidates)]
-  return [source]
-}
-
-function extensionFromMime(mime: string): string {
-  const type = mime.toLowerCase().split(';')[0]?.trim() ?? ''
-  const map: Record<string, string> = {
-    'image/jpeg': '.jpg',
-    'image/jpg': '.jpg',
-    'image/png': '.png',
-    'image/webp': '.webp',
-    'image/gif': '.gif',
-    'image/bmp': '.bmp',
-    'image/svg+xml': '.svg',
-    'video/mp4': '.mp4',
-    'video/webm': '.webm',
-    'video/quicktime': '.mov',
-    'video/x-msvideo': '.avi',
-  }
-  return map[type] || ''
-}
-
-function extensionFromUrl(url: string): string {
+function fileNameFromUrl(url: string): string {
   try {
     const pathname = new URL(url, window.location.href).pathname
-    const match = pathname.match(/(\.[a-z0-9]{2,5})$/i)
-    return match?.[1]?.toLowerCase() ?? ''
+    const base = pathname.split('/').pop() || ''
+    return decodeURIComponent(base.split('?')[0] || '').trim()
   } catch {
     return ''
   }
 }
 
-function replaceFileExtension(name: string, extension: string) {
-  const base = name.replace(/\.[a-z0-9]{2,5}$/i, '')
-  return `${base}${extension}`
+function resolveDownloadFileName(
+  downloadUrl: string,
+  fileName: string | undefined,
+  fallbackName: string,
+): string {
+  return fileNameFromUrl(downloadUrl) || fileName?.trim() || fallbackName
 }
 
-function ensureFileName(fileName: string | undefined, fallback: string, blob: Blob, sourceUrl: string) {
-  const raw = (fileName || fallback).trim() || fallback
-  const urlExt = extensionFromUrl(sourceUrl)
-  const mimeExt = extensionFromMime(blob.type)
-  const preferredExt = urlExt || mimeExt || extensionFromUrl(fallback) || ''
-
-  if (!preferredExt) return raw
-
-  const existingExt = raw.match(/(\.[a-z0-9]{2,5})$/i)?.[1]?.toLowerCase() ?? ''
-  if (!existingExt) return `${raw}${preferredExt}`
-  if (existingExt !== preferredExt) return replaceFileExtension(raw, preferredExt)
-  return raw
-}
-
-function triggerBlobDownload(blob: Blob, fileName: string) {
-  const objectUrl = URL.createObjectURL(blob)
+function triggerLinkDownload(url: string, fileName: string) {
   const anchor = document.createElement('a')
-  anchor.href = objectUrl
+  anchor.href = url
   anchor.download = fileName
   anchor.rel = 'noopener'
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000)
 }
 
-async function fetchBlob(url: string): Promise<Blob> {
-  const response = await fetch(url, {
-    mode: 'cors',
-    credentials: 'omit',
-    cache: 'no-cache',
-  })
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
-  }
-  return response.blob()
-}
-
-/**
- * 下载画布图片/视频资源。
- * 跨域 OSS 优先走同源 /media-proxy，再回退直连；同域/blob/data 直接拉取。
- */
+/** 通过资源链接触发浏览器下载（<a download>） */
 export async function downloadCanvasMedia(options: {
   url: string
   fileName?: string
@@ -99,32 +39,7 @@ export async function downloadCanvasMedia(options: {
     throw new Error('无可下载资源')
   }
 
-  // data: 可直接触发，避免超大 dataURL 再走 fetch
-  if (sourceUrl.startsWith('data:')) {
-    const anchor = document.createElement('a')
-    anchor.href = sourceUrl
-    anchor.download = options.fileName || options.fallbackName
-    anchor.rel = 'noopener'
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    return
-  }
-
-  const originalUrl = resolveOriginalMediaDownloadUrl(sourceUrl)
-  const candidates = buildFetchCandidates(originalUrl)
-  let lastError: unknown
-
-  for (const candidate of candidates) {
-    try {
-      const blob = await fetchBlob(candidate)
-      const fileName = ensureFileName(options.fileName, options.fallbackName, blob, originalUrl)
-      triggerBlobDownload(blob, fileName)
-      return
-    } catch (error) {
-      lastError = error
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error('下载失败')
+  const downloadUrl = resolveOriginalMediaDownloadUrl(sourceUrl)
+  const fileName = resolveDownloadFileName(downloadUrl, options.fileName, options.fallbackName)
+  triggerLinkDownload(downloadUrl, fileName)
 }

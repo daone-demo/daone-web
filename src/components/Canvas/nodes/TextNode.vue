@@ -36,32 +36,35 @@
       @mousedown.stop
       @pointerdown.stop
     >
-      <span class="text-node__title-icon">T</span>
-      <input
-        v-if="isEditingTitle"
-        ref="titleInputRef"
-        v-model="titleDraft"
-        class="text-node__title-input"
-        type="text"
-        maxlength="64"
-        @keydown.enter.prevent="commitTitleEdit"
-        @keydown.esc.prevent="cancelTitleEdit"
-        @blur="commitTitleEdit"
-        @mousedown.stop
-        @pointerdown.stop
-      />
-      <span
-        v-else
-        class="text-node__title-text"
-        :title="data.title"
-        @click.stop="startTitleEdit"
-      >{{ data.title }}</span>
+      <span class="text-node__title-main">
+        <span class="text-node__title-icon">T</span>
+        <input
+          v-if="isEditingTitle"
+          ref="titleInputRef"
+          v-model="titleDraft"
+          class="text-node__title-input"
+          type="text"
+          maxlength="64"
+          @keydown.enter.prevent="commitTitleEdit"
+          @keydown.esc.prevent="cancelTitleEdit"
+          @blur="commitTitleEdit"
+          @mousedown.stop
+          @pointerdown.stop
+        />
+        <span
+          v-else
+          class="text-node__title-text"
+          :title="data.title"
+          @click.stop="startTitleEdit"
+        >{{ data.title }}</span>
+      </span>
       <button
         v-if="data.mode !== 'picker'"
         type="button"
-        class="canvas-node__delete"
+        class="canvas-node__delete text-node__delete"
         title="删除节点"
-        @pointerdown.stop.prevent="removeSelf"
+        @mousedown.stop
+        @click.stop="removeSelf"
       >
         ×
       </button>
@@ -905,6 +908,7 @@ onBeforeUnmount(() => {
   font-family: system-ui, -apple-system, sans-serif;
   color: #f3f4f6;
   pointer-events: auto;
+  overflow: visible;
 }
 
 .text-node--picker-card {
@@ -930,11 +934,27 @@ onBeforeUnmount(() => {
   right: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
   margin-bottom: 6px;
   font-size: 12px;
   color: #9ca3af;
   cursor: default;
+  box-sizing: border-box;
+}
+
+.text-node__title-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.text-node__delete {
+  flex-shrink: 0;
+  margin-left: 0;
 }
 
 .text-node__title-icon {
@@ -952,9 +972,8 @@ onBeforeUnmount(() => {
 }
 
 .text-node__title-text {
-  flex: 0 1 auto;
+  flex: 1;
   min-width: 0;
-  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -969,7 +988,7 @@ onBeforeUnmount(() => {
 }
 
 .text-node__title-input {
-  flex: 0 1 auto;
+  flex: 1;
   min-width: 48px;
   max-width: 100%;
   margin: 0;
