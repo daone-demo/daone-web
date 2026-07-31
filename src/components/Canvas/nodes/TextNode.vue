@@ -90,6 +90,15 @@
 
       <!-- <p class="text-node__try">尝试：</p> -->
       <button
+        type="button"
+        class="text-node__action text-node__action--write"
+        @mousedown.stop
+        @click="onAction('write')"
+      >
+        <span class="text-node__action-icon" data-icon="doc" aria-hidden="true" />
+        编写内容
+      </button>
+      <button
         v-for="action in TEXT_PICKER_TRY_ACTIONS"
         :key="action.key"
         type="button"
@@ -99,15 +108,6 @@
       >
         <span class="text-node__action-icon" :data-icon="action.icon" />
         {{ action.label }}
-      </button>
-      <button
-        type="button"
-        class="text-node__action text-node__action--write"
-        @mousedown.stop
-        @click="onAction('write')"
-      >
-        <span class="text-node__action-icon" data-icon="doc" aria-hidden="true" />
-        自己编写内容
       </button>
     </div>
 

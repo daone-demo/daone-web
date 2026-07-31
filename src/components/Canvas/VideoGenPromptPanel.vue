@@ -243,6 +243,7 @@
             v-model:aspect-ratio="videoAspectRatio"
             v-model:resolution="videoResolution"
             v-model:generate-audio="generateAudio"
+            :model-key="selectedModelKey"
             :chat-tools="chatTools"
             @close="showVideoSettings = false"
           />
@@ -349,13 +350,10 @@ import {
   VIDEO_GEN_PROMPT_PLACEHOLDER,
   VIDEO_GEN_TABS,
   VIDEO_DIALOGUE_MODEL_MENU,
-  buildVideoDialogueAspectRatiosFromCapabilities,
-  buildVideoDialogueClaritiesFromCapabilities,
   buildVideoDialogueCountOptionsFromCapabilities,
-  buildVideoDialogueDurationRangeFromCapabilities,
-  buildVideoDialogueGenerateAudioOptions,
   buildVideoDialogueModelsFromCapabilities,
   formatVideoGenSettings,
+  normalizeVideoDialogueSettingsForModel,
   type ChatTools,
   type VideoDialogueModelItem,
   type VideoDialogueSettings,
@@ -456,62 +454,42 @@ const selectedModelName = computed(
     VIDEO_DIALOGUE_MODEL_MENU[0].name,
 )
 const countOptions = computed(() =>
-  buildVideoDialogueCountOptionsFromCapabilities(props.chatTools),
+  buildVideoDialogueCountOptionsFromCapabilities(props.chatTools, selectedModelKey.value),
 )
-const aspectRatioOptions = computed(() =>
-  buildVideoDialogueAspectRatiosFromCapabilities(props.chatTools),
-)
-const clarityOptions = computed(() =>
-  buildVideoDialogueClaritiesFromCapabilities(props.chatTools),
-)
-const durationRange = computed(() =>
-  buildVideoDialogueDurationRangeFromCapabilities(props.chatTools),
-)
-const generateAudioOptions = computed(() =>
-  buildVideoDialogueGenerateAudioOptions(props.chatTools),
-)
+
+function applyNormalizedToolbarSettings(
+  partial: Partial<VideoDialogueSettings> = {},
+) {
+  const normalized = normalizeVideoDialogueSettingsForModel(
+    {
+      modelKey: selectedModelKey.value,
+      aspectRatio: videoAspectRatio.value,
+      resolution: videoResolution.value,
+      duration: videoDuration.value,
+      generateAudio: generateAudio.value,
+      videoCount: props.videoNum,
+      mode: resolveVideoGenApiMode(props.activeTab),
+      ...partial,
+    },
+    props.chatTools,
+  )
+  selectedModelKey.value = normalized.modelKey
+  videoAspectRatio.value = normalized.aspectRatio
+  videoResolution.value = normalized.resolution
+  videoDuration.value = normalized.duration
+  generateAudio.value = normalized.generateAudio
+  if (normalized.videoCount !== props.videoNum) {
+    emit('update:videoNum', normalized.videoCount)
+  }
+}
 
 function syncToolbarDefaultsFromChatTools() {
-  const models = modelMenu.value
-  if (models.length && !models.some((model) => model.key === selectedModelKey.value)) {
-    selectedModelKey.value = models[0].key
-  }
-
-  const ratios = aspectRatioOptions.value
-  if (ratios.length && !ratios.some((ratio) => ratio.key === videoAspectRatio.value)) {
-    videoAspectRatio.value = ratios[0].key as VideoGenAspectRatio
-  }
-
-  const clarities = clarityOptions.value
-  if (clarities.length && !clarities.includes(videoResolution.value)) {
-    videoResolution.value = clarities[0] as VideoGenResolution
-  }
-
-  const range = durationRange.value
-  const currentDuration = videoDuration.value
-  if (currentDuration < range.min || currentDuration > range.max) {
-    videoDuration.value = (range.defaultValue ?? range.min) as VideoGenDuration
-  }
-
-  const audioOptions = generateAudioOptions.value
-  if (audioOptions.length && !audioOptions.includes(generateAudio.value)) {
-    generateAudio.value = audioOptions[0]
-  }
-
-  const counts = countOptions.value
-  if (counts.length && !counts.includes(props.videoNum)) {
-    emit('update:videoNum', counts[0])
-  }
+  applyNormalizedToolbarSettings()
 }
 
 function applySavedSettings(saved?: Partial<VideoDialogueSettings> | null) {
   if (!saved) return
-  if (saved.modelKey) selectedModelKey.value = saved.modelKey
-  if (saved.aspectRatio) videoAspectRatio.value = saved.aspectRatio
-  if (saved.resolution) videoResolution.value = saved.resolution
-  if (saved.duration !== undefined) videoDuration.value = saved.duration
-  if (saved.generateAudio !== undefined) generateAudio.value = saved.generateAudio
-  if (saved.videoCount !== undefined) emit('update:videoNum', saved.videoCount)
+  applyNormalizedToolbarSettings(saved)
 }
 
 watch(
@@ -523,10 +501,16 @@ watch(
 )
 
 watch(
+  () => selectedModelKey.value,
+  () => {
+    applyNormalizedToolbarSettings()
+  },
+)
+
+watch(
   () => props.savedSettings,
   (saved) => {
     applySavedSettings(saved)
-    syncToolbarDefaultsFromChatTools()
   },
   { immediate: true, deep: true },
 )

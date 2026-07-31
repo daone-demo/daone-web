@@ -3746,7 +3746,7 @@ export function registerCore(bind: CanvasBindings) {
     const defaults = createDefaultVideoDialogueSettings()
     if (!saved) return defaults
     return {
-      modelKey: saved.modelKey ?? defaults.modelKey,
+      modelKey: saved.modelKey?.trim() ? saved.modelKey : defaults.modelKey,
       aspectRatio: saved.aspectRatio ?? defaults.aspectRatio,
       resolution: saved.resolution ?? defaults.resolution,
       duration: saved.duration ?? defaults.duration,

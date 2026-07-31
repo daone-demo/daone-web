@@ -165,6 +165,7 @@
             v-model:aspect-ratio="videoAspectRatio"
             v-model:resolution="videoResolution"
             v-model:generate-audio="generateAudio"
+            :model-key="selectedModelKey"
             :chat-tools="chatTools"
             @close="showVideoSettings = false"
           />
@@ -232,13 +233,10 @@ import {
   VIDEO_DIALOGUE_CREDITS,
   VIDEO_GEN_PROMPT_PLACEHOLDER,
   VIDEO_DIALOGUE_MODEL_MENU,
-  buildVideoDialogueAspectRatiosFromCapabilities,
-  buildVideoDialogueClaritiesFromCapabilities,
   buildVideoDialogueCountOptionsFromCapabilities,
-  buildVideoDialogueDurationRangeFromCapabilities,
-  buildVideoDialogueGenerateAudioOptions,
   buildVideoDialogueModelsFromCapabilities,
   formatVideoGenSettings,
+  normalizeVideoDialogueSettingsForModel,
   type ChatTools,
   type VideoDialogueModelItem,
   type VideoDialogueSettings,
@@ -299,12 +297,13 @@ function buildSettingsFromRefs(): VideoDialogueSettings {
 
 function applySettingsToRefs(settings: VideoDialogueSettings) {
   skipSettingsWatch = true
-  selectedModelKey.value = settings.modelKey
-  videoAspectRatio.value = settings.aspectRatio
-  videoResolution.value = settings.resolution
-  videoDuration.value = settings.duration
-  generateAudio.value = settings.generateAudio
-  videoCount.value = settings.videoCount
+  const normalized = normalizeVideoDialogueSettingsForModel(settings, props.chatTools)
+  selectedModelKey.value = normalized.modelKey
+  videoAspectRatio.value = normalized.aspectRatio
+  videoResolution.value = normalized.resolution
+  videoDuration.value = normalized.duration
+  generateAudio.value = normalized.generateAudio
+  videoCount.value = normalized.videoCount
   nextTick(() => {
     skipSettingsWatch = false
   })
@@ -340,52 +339,35 @@ const selectedModelName = computed(
     VIDEO_DIALOGUE_MODEL_MENU[0].name,
 )
 const countOptions = computed(() =>
-  buildVideoDialogueCountOptionsFromCapabilities(props.chatTools),
+  buildVideoDialogueCountOptionsFromCapabilities(props.chatTools, selectedModelKey.value),
 )
-const aspectRatioOptions = computed(() =>
-  buildVideoDialogueAspectRatiosFromCapabilities(props.chatTools),
-)
-const clarityOptions = computed(() =>
-  buildVideoDialogueClaritiesFromCapabilities(props.chatTools),
-)
-const durationRange = computed(() =>
-  buildVideoDialogueDurationRangeFromCapabilities(props.chatTools),
-)
-const generateAudioOptions = computed(() =>
-  buildVideoDialogueGenerateAudioOptions(props.chatTools),
-)
+
+function applyNormalizedToolbarSettings(
+  partial: Partial<VideoDialogueSettings> = {},
+) {
+  const normalized = normalizeVideoDialogueSettingsForModel(
+    {
+      modelKey: selectedModelKey.value,
+      aspectRatio: videoAspectRatio.value,
+      resolution: videoResolution.value,
+      duration: videoDuration.value,
+      generateAudio: generateAudio.value,
+      videoCount: videoCount.value,
+      mode: props.settings.mode,
+      ...partial,
+    },
+    props.chatTools,
+  )
+  selectedModelKey.value = normalized.modelKey
+  videoAspectRatio.value = normalized.aspectRatio
+  videoResolution.value = normalized.resolution
+  videoDuration.value = normalized.duration
+  generateAudio.value = normalized.generateAudio
+  videoCount.value = normalized.videoCount
+}
 
 function syncDialogueDefaultsFromChatTools() {
-  const models = modelMenu.value
-  if (models.length && !models.some((model) => model.key === selectedModelKey.value)) {
-    selectedModelKey.value = models[0].key
-  }
-
-  const ratios = aspectRatioOptions.value
-  if (ratios.length && !ratios.some((ratio) => ratio.key === videoAspectRatio.value)) {
-    videoAspectRatio.value = ratios[0].key as VideoGenAspectRatio
-  }
-
-  const clarities = clarityOptions.value
-  if (clarities.length && !clarities.includes(videoResolution.value)) {
-    videoResolution.value = clarities[0] as VideoGenResolution
-  }
-
-  const range = durationRange.value
-  const currentDuration = videoDuration.value
-  if (currentDuration < range.min || currentDuration > range.max) {
-    videoDuration.value = (range.defaultValue ?? range.min) as VideoGenDuration
-  }
-
-  const audioOptions = generateAudioOptions.value
-  if (audioOptions.length && !audioOptions.includes(generateAudio.value)) {
-    generateAudio.value = audioOptions[0]
-  }
-
-  const counts = countOptions.value
-  if (counts.length && !counts.includes(videoCount.value)) {
-    videoCount.value = counts[0]
-  }
+  applyNormalizedToolbarSettings()
 }
 
 watch(
@@ -394,6 +376,14 @@ watch(
     syncDialogueDefaultsFromChatTools()
   },
   { immediate: true, deep: true },
+)
+
+watch(
+  () => selectedModelKey.value,
+  () => {
+    if (skipSettingsWatch) return
+    applyNormalizedToolbarSettings()
+  },
 )
 
 const videoSettingsLabel = computed(() =>

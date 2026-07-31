@@ -397,9 +397,9 @@ export const ADD_NODE_GROUPS = [
 ]
 
 export const TEXT_PICKER_ACTIONS = [
+  { key: 'write', label: '自己编写内容', icon: 'doc' },
   { key: 'text2image', label: '文生图', icon: 'image' },
   { key: 'text2video', label: '文生视频', icon: 'play' },
-  { key: 'write', label: '自己编写内容', icon: 'doc' },
   // { key: 'text2music', label: '文字生音乐', icon: 'audio' },
 ]
 
@@ -1700,58 +1700,25 @@ export function findVideoDialogueSource(source: VideoDialogueSource): ImageCapab
   )
 }
 
-export function normalizeVideoClarityLabel(value: string): string {
-  const match = value.trim().match(/^(\d+)\s*p$/i)
-  if (match) return `${match[1]}P`
-  return value.trim().toUpperCase()
+export type VideoDialogueResolutionOption = {
+  label: string
+  key: string
+  apiValue: string
 }
 
-/** 接口文档要求 clarity 形如 1080p */
-export function toVideoApiClarity(value: string): string {
-  const match = value.trim().match(/^(\d+)\s*p$/i)
-  if (match) return `${match[1]}p`
-  return value.trim().toLowerCase()
+export type VideoDialogueModelEntry = {
+  key: string
+  label: string
+  duration: VideoDialogueDurationRange
+  ratios: string[]
+  resolutions: VideoDialogueResolutionOption[]
+  generateAudio: boolean[]
+  countOptions: number[]
 }
 
-export function buildVideoDialogueAspectRatiosFromCapabilities(
-  source: VideoDialogueSource,
-): ImageDialogueAspectRatioOption[] {
-  const capability = findVideoDialogueSource(source)
-  const ratios = parseCapabilityStringArray(capability?.parameters?.ratio)
-  if (!ratios.length) {
-    return VIDEO_GEN_ASPECT_RATIOS.map((item) => ({
-      key: item.key,
-      label: item.label,
-      preview: item.preview,
-    }))
-  }
-  return ratios.map((ratio) => ({
-    key: ratio,
-    label: ratio === 'auto' ? 'Auto' : ratio,
-    preview: resolveAspectRatioPreview(ratio),
-  }))
-}
-
-export function buildVideoDialogueClaritiesFromCapabilities(source: VideoDialogueSource): string[] {
-  const capability = findVideoDialogueSource(source)
-  const clarities = parseCapabilityStringArray(capability?.parameters?.clarity)
-  if (clarities.length) return clarities.map(normalizeVideoClarityLabel)
-  return [...VIDEO_GEN_RESOLUTIONS]
-}
-
-export type VideoDialogueDurationRange = {
-  min: number
-  max: number
-  defaultValue?: number
-}
-
-export function buildVideoDialogueDurationRangeFromCapabilities(
-  source: VideoDialogueSource,
-): VideoDialogueDurationRange {
-  const capability = findVideoDialogueSource(source)
-  const duration = capability?.parameters?.duration
-  if (duration && typeof duration === 'object' && !Array.isArray(duration)) {
-    const range = duration as { min?: number; max?: number; default?: number }
+function parseVideoModelDuration(value: unknown): VideoDialogueDurationRange {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const range = value as { min?: number; max?: number; default?: number }
     const min = Math.max(1, Math.floor(Number(range.min) || VIDEO_GEN_DURATIONS[0]))
     const max = Math.max(
       min,
@@ -1768,7 +1735,233 @@ export function buildVideoDialogueDurationRangeFromCapabilities(
   }
 }
 
-export function buildVideoDialogueGenerateAudioOptions(source: VideoDialogueSource): boolean[] {
+function parseVideoModelResolutions(value: unknown): VideoDialogueResolutionOption[] {
+  if (!Array.isArray(value)) return []
+
+  const result: VideoDialogueResolutionOption[] = []
+  for (const item of value) {
+    if (typeof item === 'string' && item.trim()) {
+      const key = normalizeVideoClarityLabel(item)
+      result.push({
+        label: key,
+        key,
+        apiValue: toVideoApiClarity(item),
+      })
+      continue
+    }
+    if (!item || typeof item !== 'object') continue
+    const row = item as Record<string, unknown>
+    const rawValue = row.value ?? row.key ?? row.label
+    const valueText = typeof rawValue === 'string' ? rawValue.trim() : ''
+    if (!valueText) continue
+    const rawLabel = row.label ?? valueText
+    const label = typeof rawLabel === 'string' && rawLabel.trim() ? rawLabel.trim() : valueText
+    const key = normalizeVideoClarityLabel(valueText)
+    result.push({
+      label,
+      key,
+      apiValue: toVideoApiClarity(valueText),
+    })
+  }
+  return result
+}
+
+function parseVideoCapabilityModelEntry(
+  item: unknown,
+  fallback: {
+    duration: VideoDialogueDurationRange
+    ratios: string[]
+    resolutions: VideoDialogueResolutionOption[]
+    generateAudio: boolean[]
+    countOptions: number[]
+  },
+): VideoDialogueModelEntry | null {
+  if (!item || typeof item !== 'object') return null
+  const row = item as Record<string, unknown>
+  const rawValue = row.value ?? row.key ?? row.id ?? row.model
+  const value = typeof rawValue === 'string' ? rawValue.trim() : ''
+  if (!value) return null
+  const rawLabel = row.label ?? row.name ?? row.title
+  const label = typeof rawLabel === 'string' && rawLabel.trim() ? rawLabel.trim() : value
+
+  const ratios = parseCapabilityStringArray(
+    row.ratio ?? row.ratios ?? row.aspectRatio ?? row.aspectRatios,
+  )
+  const resolutions = parseVideoModelResolutions(row.resolution ?? row.clarity)
+  const duration = parseVideoModelDuration(row.duration)
+  const generateAudio = Array.isArray(row.generateAudio)
+    ? row.generateAudio.filter((option): option is boolean => typeof option === 'boolean')
+    : fallback.generateAudio
+  const countOptions = parseCapabilityCountRange({
+    count: row.videoCount ?? row.count,
+  })
+
+  return {
+    key: value,
+    label,
+    duration: row.duration ? duration : fallback.duration,
+    ratios: ratios.length ? ratios : fallback.ratios,
+    resolutions: resolutions.length ? resolutions : fallback.resolutions,
+    generateAudio: generateAudio.length ? generateAudio : fallback.generateAudio,
+    countOptions: countOptions.length ? countOptions : fallback.countOptions,
+  }
+}
+
+function buildVideoCapabilityFallbackEntry(
+  capability: ImageCapability | null,
+): Omit<VideoDialogueModelEntry, 'key' | 'label'> {
+  const ratios = parseCapabilityStringArray(
+    capability?.parameters?.ratio ??
+      capability?.parameters?.ratios ??
+      capability?.parameters?.aspectRatio,
+  )
+  const resolutions = parseVideoModelResolutions(
+    capability?.parameters?.resolution ?? capability?.parameters?.clarity,
+  )
+  const generateAudio = Array.isArray(capability?.parameters?.generateAudio)
+    ? capability.parameters.generateAudio.filter(
+        (option): option is boolean => typeof option === 'boolean',
+      )
+    : [true, false]
+
+  return {
+    duration: parseVideoModelDuration(capability?.parameters?.duration),
+    ratios,
+    resolutions,
+    generateAudio: generateAudio.length ? generateAudio : [true, false],
+    countOptions: parseCapabilityCountRange(capability?.parameters),
+  }
+}
+
+/** 解析 chatTools.video.parameters.models */
+export function listVideoDialogueModelEntries(
+  source: VideoDialogueSource,
+): VideoDialogueModelEntry[] {
+  const capability = findVideoDialogueSource(source)
+  if (!capability?.parameters) return []
+
+  const fallback = buildVideoCapabilityFallbackEntry(capability)
+  const models = capability.parameters.models
+  if (Array.isArray(models) && models.length) {
+    return models
+      .map((item) => parseVideoCapabilityModelEntry(item, fallback))
+      .filter((item): item is VideoDialogueModelEntry => Boolean(item))
+  }
+
+  const modelOptions = parseCapabilityModelOptions(capability.parameters.modelOptions)
+  if (modelOptions.length) {
+    return modelOptions.map((item) => ({
+      key: item.value,
+      label: item.label,
+      ...fallback,
+    }))
+  }
+
+  const legacyModels = parseCapabilityStringArray(capability.parameters.model)
+  if (legacyModels.length) {
+    return legacyModels.map((key) => ({
+      key,
+      label: key,
+      ...fallback,
+    }))
+  }
+
+  return []
+}
+
+export function findVideoDialogueModelEntry(
+  source: VideoDialogueSource,
+  modelKey?: string | null,
+): VideoDialogueModelEntry | null {
+  const entries = listVideoDialogueModelEntries(source)
+  if (!entries.length) return null
+  const preferred = modelKey?.trim()
+  if (preferred) {
+    const matched = entries.find((entry) => entry.key === preferred)
+    if (matched) return matched
+  }
+  return entries[0] ?? null
+}
+
+export function normalizeVideoClarityLabel(value: string): string {
+  const match = value.trim().match(/^(\d+)\s*p$/i)
+  if (match) return `${match[1]}P`
+  return value.trim().toUpperCase()
+}
+
+/** 接口文档要求 clarity 形如 1080p */
+export function toVideoApiClarity(value: string): string {
+  const match = value.trim().match(/^(\d+)\s*p$/i)
+  if (match) return `${match[1]}p`
+  return value.trim().toLowerCase()
+}
+
+export function buildVideoDialogueAspectRatiosFromCapabilities(
+  source: VideoDialogueSource,
+  modelKey?: string | null,
+): ImageDialogueAspectRatioOption[] {
+  const entry = findVideoDialogueModelEntry(source, modelKey)
+  const ratios = entry?.ratios ?? []
+  if (!ratios.length) {
+    return VIDEO_GEN_ASPECT_RATIOS.map((item) => ({
+      key: item.key,
+      label: item.label,
+      preview: item.preview,
+    }))
+  }
+  return ratios.map((ratio) => ({
+    key: ratio,
+    label: ratio === 'auto' ? 'Auto' : ratio,
+    preview: resolveAspectRatioPreview(ratio),
+  }))
+}
+
+export function buildVideoDialogueResolutionOptionsFromCapabilities(
+  source: VideoDialogueSource,
+  modelKey?: string | null,
+): VideoDialogueResolutionOption[] {
+  const entry = findVideoDialogueModelEntry(source, modelKey)
+  if (entry?.resolutions.length) return entry.resolutions
+  return [...VIDEO_GEN_RESOLUTIONS].map((item) => ({
+    label: item,
+    key: item,
+    apiValue: toVideoApiClarity(item),
+  }))
+}
+
+export function buildVideoDialogueClaritiesFromCapabilities(
+  source: VideoDialogueSource,
+  modelKey?: string | null,
+): string[] {
+  const options = buildVideoDialogueResolutionOptionsFromCapabilities(source, modelKey)
+  if (options.length) return options.map((item) => item.key)
+  return [...VIDEO_GEN_RESOLUTIONS]
+}
+
+export type VideoDialogueDurationRange = {
+  min: number
+  max: number
+  defaultValue?: number
+}
+
+export function buildVideoDialogueDurationRangeFromCapabilities(
+  source: VideoDialogueSource,
+  modelKey?: string | null,
+): VideoDialogueDurationRange {
+  const entry = findVideoDialogueModelEntry(source, modelKey)
+  if (entry) return entry.duration
+
+  const capability = findVideoDialogueSource(source)
+  return parseVideoModelDuration(capability?.parameters?.duration)
+}
+
+export function buildVideoDialogueGenerateAudioOptions(
+  source: VideoDialogueSource,
+  modelKey?: string | null,
+): boolean[] {
+  const entry = findVideoDialogueModelEntry(source, modelKey)
+  if (entry?.generateAudio.length) return entry.generateAudio
+
   const capability = findVideoDialogueSource(source)
   const options = capability?.parameters?.generateAudio
   if (Array.isArray(options)) {
@@ -1791,8 +1984,35 @@ export const VIDEO_DIALOGUE_MODEL_MENU: VideoDialogueModelItem[] = [
   { key: 'kling-3.0', name: 'kling-3.0', icon: 'kling' },
 ]
 
-export function createDefaultVideoDialogueSettings(): VideoDialogueSettings {
-  return {
+export function createDefaultVideoDialogueSettings(
+  source?: VideoDialogueSource,
+): VideoDialogueSettings {
+  const entries = listVideoDialogueModelEntries(source)
+  const entry = entries[0] ?? null
+  const modelKey = entry?.key ?? VIDEO_DIALOGUE_MODEL_MENU[0].key
+  return normalizeVideoDialogueSettingsForModel({ modelKey }, source)
+}
+
+/** 将 modelKey 规范为可用值；无效时回退 models 第一项 */
+export function resolveVideoDialogueModelKey(
+  preferred: string | undefined | null,
+  source?: VideoDialogueSource,
+): string {
+  const entries = listVideoDialogueModelEntries(source)
+  if (!entries.length) {
+    return preferred?.trim() || VIDEO_DIALOGUE_MODEL_MENU[0].key
+  }
+  const key = preferred?.trim() ?? ''
+  if (key && entries.some((entry) => entry.key === key)) return key
+  return entries[0].key
+}
+
+/** 按当前模型收敛比例 / 清晰度 / 时长 / 音频 / 数量等参数 */
+export function normalizeVideoDialogueSettingsForModel(
+  partial: Partial<VideoDialogueSettings>,
+  source?: VideoDialogueSource,
+): VideoDialogueSettings {
+  const defaults: VideoDialogueSettings = {
     modelKey: VIDEO_DIALOGUE_MODEL_MENU[0].key,
     aspectRatio: '16:9',
     resolution: '720P',
@@ -1800,6 +2020,50 @@ export function createDefaultVideoDialogueSettings(): VideoDialogueSettings {
     generateAudio: true,
     videoCount: 1,
     mode: 'reference',
+  }
+
+  const modelKey = resolveVideoDialogueModelKey(partial.modelKey, source)
+  const ratios = buildVideoDialogueAspectRatiosFromCapabilities(source, modelKey)
+  const clarities = buildVideoDialogueClaritiesFromCapabilities(source, modelKey)
+  const durationRange = buildVideoDialogueDurationRangeFromCapabilities(source, modelKey)
+  const audioOptions = buildVideoDialogueGenerateAudioOptions(source, modelKey)
+  const counts = buildVideoDialogueCountOptionsFromCapabilities(source, modelKey)
+
+  let aspectRatio = partial.aspectRatio ?? defaults.aspectRatio
+  if (!ratios.some((ratio) => ratio.key === aspectRatio)) {
+    aspectRatio = (ratios[0]?.key ?? defaults.aspectRatio) as VideoGenAspectRatio
+  }
+
+  let resolution = partial.resolution ?? defaults.resolution
+  if (!clarities.includes(resolution)) {
+    resolution = (clarities[0] ?? defaults.resolution) as VideoGenResolution
+  }
+
+  let duration = partial.duration ?? durationRange.defaultValue ?? durationRange.min
+  const clampedDuration = Math.min(
+    durationRange.max,
+    Math.max(durationRange.min, Math.round(Number(duration) || durationRange.min)),
+  )
+  duration = clampedDuration as VideoGenDuration
+
+  let generateAudio = partial.generateAudio ?? defaults.generateAudio
+  if (audioOptions.length && !audioOptions.includes(generateAudio)) {
+    generateAudio = audioOptions[0]
+  }
+
+  let videoCount = partial.videoCount ?? defaults.videoCount
+  if (counts.length && !counts.includes(videoCount)) {
+    videoCount = counts[0]
+  }
+
+  return {
+    modelKey,
+    aspectRatio,
+    resolution,
+    duration: duration as VideoGenDuration,
+    generateAudio,
+    videoCount,
+    mode: partial.mode ?? defaults.mode,
   }
 }
 
@@ -1814,7 +2078,11 @@ function resolveVideoDialogueModelIcon(key: string, index: number): VideoDialogu
 
 export function buildVideoDialogueCountOptionsFromCapabilities(
   source: VideoDialogueSource,
+  modelKey?: string | null,
 ): number[] {
+  const entry = findVideoDialogueModelEntry(source, modelKey)
+  if (entry?.countOptions.length) return entry.countOptions
+
   const capability = findVideoDialogueSource(source)
   const fromApi = parseCapabilityCountRange(capability?.parameters)
   if (fromApi.length) return fromApi
@@ -1824,14 +2092,13 @@ export function buildVideoDialogueCountOptionsFromCapabilities(
 export function buildVideoDialogueModelsFromCapabilities(
   source: VideoDialogueSource,
 ): VideoDialogueModelItem[] {
-  const capability = findVideoDialogueSource(source)
-  const models = parseCapabilityStringArray(capability?.parameters?.model)
-  if (!models.length) return VIDEO_DIALOGUE_MODEL_MENU
+  const entries = listVideoDialogueModelEntries(source)
+  if (!entries.length) return VIDEO_DIALOGUE_MODEL_MENU
 
-  return models.map((key, index) => ({
-    key,
-    name: key,
-    icon: resolveVideoDialogueModelIcon(key, index),
+  return entries.map((entry, index) => ({
+    key: entry.key,
+    name: entry.label,
+    icon: resolveVideoDialogueModelIcon(entry.key || entry.label, index),
   }))
 }
 

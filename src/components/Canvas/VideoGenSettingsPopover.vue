@@ -43,13 +43,13 @@
       <div class="video-gen-settings__resolution-grid">
         <button
           v-for="item in resolutionOptions"
-          :key="item"
+          :key="item.key"
           type="button"
           class="video-gen-settings__chip"
-          :class="{ 'video-gen-settings__chip--active': resolution === item }"
-          @click="resolution = item"
+          :class="{ 'video-gen-settings__chip--active': resolution === item.key }"
+          @click="resolution = item.key"
         >
-          {{ item }}
+          {{ item.label }}
         </button>
       </div>
     </section>
@@ -123,9 +123,9 @@ import {
   VIDEO_GEN_RESOLUTION_LABEL,
   VIDEO_GEN_RESOLUTIONS,
   buildVideoDialogueAspectRatiosFromCapabilities,
-  buildVideoDialogueClaritiesFromCapabilities,
   buildVideoDialogueDurationRangeFromCapabilities,
   buildVideoDialogueGenerateAudioOptions,
+  buildVideoDialogueResolutionOptionsFromCapabilities,
   formatVideoGenSettings,
   type ChatTools,
   type VideoGenAspectRatio,
@@ -139,6 +139,7 @@ const props = withDefaults(
     aspectRatio?: string
     resolution?: string
     generateAudio?: boolean
+    modelKey?: string
     chatTools?: ChatTools | null
   }>(),
   {
@@ -146,6 +147,7 @@ const props = withDefaults(
     aspectRatio: '16:9',
     resolution: '720P',
     generateAudio: true,
+    modelKey: '',
     chatTools: null,
   },
 )
@@ -159,21 +161,28 @@ const emit = defineEmits<{
 }>()
 
 const aspectRatioOptions = computed(() =>
-  buildVideoDialogueAspectRatiosFromCapabilities(props.chatTools),
+  buildVideoDialogueAspectRatiosFromCapabilities(props.chatTools, props.modelKey),
 )
 
 const resolutionOptions = computed(() => {
-  const fromApi = buildVideoDialogueClaritiesFromCapabilities(props.chatTools)
+  const fromApi = buildVideoDialogueResolutionOptionsFromCapabilities(
+    props.chatTools,
+    props.modelKey,
+  )
   if (fromApi.length) return fromApi
-  return [...VIDEO_GEN_RESOLUTIONS]
+  return [...VIDEO_GEN_RESOLUTIONS].map((item) => ({
+    label: item,
+    key: item,
+    apiValue: item,
+  }))
 })
 
 const durationRange = computed(() =>
-  buildVideoDialogueDurationRangeFromCapabilities(props.chatTools),
+  buildVideoDialogueDurationRangeFromCapabilities(props.chatTools, props.modelKey),
 )
 
 const generateAudioOptions = computed(() =>
-  buildVideoDialogueGenerateAudioOptions(props.chatTools),
+  buildVideoDialogueGenerateAudioOptions(props.chatTools, props.modelKey),
 )
 
 const showGenerateAudio = computed(() => generateAudioOptions.value.length > 0)
