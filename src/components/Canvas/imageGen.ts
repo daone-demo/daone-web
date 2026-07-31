@@ -457,7 +457,12 @@ export function spawnCroppedImageNode(
     mediaWidth: payload.width,
     mediaHeight: payload.height,
     uploadState: 'done',
+    uploadProgress: 100,
     fileName: sourceData.fileName ? `裁剪-${sourceData.fileName}` : '裁剪结果.png',
+    sourceNodeId: sourceNode.id,
+    sourcePreviewUrl: sourceData.previewUrl ?? '',
+    sourceFileName: sourceData.fileName ?? '',
+    sourceAssetId: sourceData.assetId,
   }
   const size = getNodeSize('image', 'editor', overrides)
   const point = resolveOutgoingResultNodePoint(graph, sourceNode, size, {

@@ -3119,20 +3119,17 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     const sourceNode = cell as Node
-    const croppedNode = spawnCroppedImageNode(g, sourceNode, payload)
-    selectedNodeId.value = croppedNode.id
-    selectedKind.value = 'image'
-    syncNodeSelectionHighlight(croppedNode.id)
-    syncNodeCount()
+    const sourceData = sourceNode.getData() as CanvasNodeData
+    const fileName = sourceData.fileName ? `裁剪-${sourceData.fileName}` : '裁剪结果.png'
+    const localPreviewUrl = payload.dataUrl
+
     closeImageCrop()
 
-    nextTick(() => {
-      const scroller = getScroller(g)
-      const bbox = croppedNode.getBBox()
-      scroller?.transitionToPoint(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, {
-        duration: '280ms',
-      })
-      updateNodeToolbar()
+    const croppedNode = spawnCroppedImageNode(g, sourceNode, payload)
+    focusErasedResultNode(g, croppedNode)
+
+    void uploadLocalImageNodeInBackground(croppedNode, localPreviewUrl, fileName, payload).then(() => {
+      scheduleHistoryPush()
     })
   }
 
