@@ -111,15 +111,15 @@
             :key="columnIndex"
             class="home__inspiration-column"
           >
-            <button
+            <!-- <button
               v-if="columnIndex === 0 && showAssetUpload"
               type="button"
               class="project-panel__upload-card"
               @click="triggerUpload"
             >
               <span class="project-card__upload-icon" aria-hidden="true">+</span>
-              <span class="project-card__upload-label">上传图片</span>
-            </button>
+              <span class="project-card__upload-label">上传素材</span>
+            </button> -->
             <article
               v-for="item in column"
               :key="item.id"
