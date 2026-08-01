@@ -297,9 +297,24 @@
 
 .home__inspiration-grid {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: flex-start;
   width: 100%;
+  max-height: calc(100vh - 180px);
+  max-height: calc(100dvh - 180px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 8px;
+}
+
+.project-material__loading,
+.project-material__end,
+.project-material__empty {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  color: #9ca3af;
 }
 
 .home__inspiration-column {
@@ -394,4 +409,20 @@
 
 .home__inspiration-stat-icon--like {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z'/%3E%3C/svg%3E");
+}
+.home__inspiration-modal {
+  :deep(.ant-modal .ant-modal-content) {
+    padding: 0;
+  }
+}
+
+.home__inspiration-modal-player {
+  border-radius: 12px;
+  overflow: hidden;
+}
+.home__project-img {
+  width: 100%;
+  height: 150px;
+  border-radius: 12px;
+  object-fit: cover;
 }

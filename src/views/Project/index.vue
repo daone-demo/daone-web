@@ -51,9 +51,13 @@
         </button>
       </div>
 
-      <div class="home__inspiration-grid">
+      <div
+        ref="materialGridRef"
+        class="home__inspiration-grid"
+        @scroll.passive="onMaterialGridScroll"
+      >
         <div
-          v-for="(column, columnIndex) in inspirations"
+          v-for="(column, columnIndex) in materialColumns"
           :key="columnIndex"
           class="home__inspiration-column"
         >
@@ -71,17 +75,20 @@
                 v-if="item.type === 'IMAGE'"
                 class="home__inspiration-image"
                 :src="item.resourceUrl"
-                :alt="`${item.authorName} 的作品`"
+                :alt="item.title || '素材'"
                 loading="lazy"
               />
               <EmbeddedVideoPlayer
                 v-else-if="item.type === 'VIDEO'"
-                :src="item.coverUrl"
+                :src="item.resourceUrl"
               />
             </div>
           </article>
         </div>
       </div>
+      <p v-if="materialLoading" class="project-material__loading">加载中...</p>
+      <p v-else-if="!materialHasMore && materialList.length" class="project-material__end">没有更多了</p>
+      <p v-else-if="!materialLoading && !materialList.length" class="project-material__empty">暂无素材</p>
     </section>
     <section class="project-panel" v-else>
       <div class="project-panel__body">
@@ -130,14 +137,14 @@
     class="home__inspiration-modal"
   >
     <img
-      v-if="inspirationsInfo.mediaType === 'image'"
-      :src="inspirationsInfo.coverUrl"
+      v-if="inspirationsInfo.type === 'IMAGE'"
+      :src="inspirationsInfo.resourceUrl"
       :alt="inspirationsInfo.title"
       style="width: 100%; height: 100%;"
     />
     <EmbeddedVideoPlayer
-      v-if="inspirationsInfo.mediaType === 'video'"
-      :src="inspirationsInfo.coverUrl"
+      v-if="inspirationsInfo.type === 'VIDEO'"
+      :src="inspirationsInfo.resourceUrl"
       object-fit="contain"
       aspect-ratio="auto"
       min-height="360px"
@@ -149,17 +156,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { PROJECT_TABS, type ProjectFileItem } from './projectData';
 import EmbeddedVideoPlayer from '@components/EmbeddedVideoPlayer/index.vue';
-import { Modal } from 'ant-design-vue';
 import api from '@/services/api';
 
-function formatCount(value: number) {
-  return value.toLocaleString('en-US')
+const MATERIAL_COLUMN_COUNT = 6
+const MATERIAL_PAGE_SIZE = 30
+const SCROLL_LOAD_THRESHOLD = 120
+
+type MaterialItem = {
+  id: string
+  type: 'IMAGE' | 'VIDEO'
+  resourceUrl?: string
+  coverUrl?: string
+  title?: string
+  authorName?: string
 }
 
 const uploadInputRef = ref<HTMLInputElement | null>(null)
+const materialGridRef = ref<HTMLElement | null>(null)
 const uploadedFiles = ref<ProjectFileItem[]>([])
 const scope = ref('CENTER');
 const page = ref(1);
@@ -171,19 +187,29 @@ const materialSubCategories = ref<any[]>([]);
 const activeSubCategoryCode = ref('');
 const open = ref(false);
 const inspirationsInfo = ref<any>({});
-const inspirationColumnCount = ref(4);
-const inspirations = ref<any[]>([]);
+const materialList = ref<MaterialItem[]>([]);
+const materialPage = ref(1);
+const materialHasMore = ref(true);
+const materialLoading = ref(false);
 
-// const inspirationColumns = computed(() => {
-//   const count = Math.max(1, inspirationColumnCount.value);
-//   const columns: HomeInspiration[][] = Array.from({ length: count }, () => []);
-//   console.log('inspirations', inspirations.value);
-//   inspirations.value.forEach((item, index) => {
-//     columns[index % count]?.push(item);
-//   });
-//   console.log('columns', columns);
-//   return columns;
-// });
+const materialColumns = computed(() => {
+  const columns: MaterialItem[][] = Array.from(
+    { length: MATERIAL_COLUMN_COUNT },
+    () => [],
+  )
+
+  materialList.value.forEach((item, index) => {
+    columns[index % MATERIAL_COLUMN_COUNT]?.push(item)
+  })
+
+  return columns
+})
+
+function resetMaterialList() {
+  materialPage.value = 1
+  materialHasMore.value = true
+  materialList.value = []
+}
 
 function triggerUpload() {
   uploadInputRef.value?.click()
@@ -207,6 +233,7 @@ const onChangeScope = (key: string) => {
   scope.value = key;
   page.value = 1;
   if (scope.value === 'CENTER') {
+    resetMaterialList()
     onLoadMaterialCategories();
   }
   else {
@@ -226,11 +253,11 @@ const onLoadMaterialCategories = () => {
       })
       activeSubCategoryCode.value = 'all';
       materialCode.value = activeCategoryCode.value;
-      onLoadMaterials();
     } else {
       materialCode.value = activeCategoryCode.value;
-      onLoadMaterials();
     }
+    resetMaterialList()
+    onLoadMaterials();
   })
 }
 
@@ -255,39 +282,85 @@ const selectPrimaryCategory = (code: string) => {
     })
     activeSubCategoryCode.value = 'all';
     materialCode.value = activeCategoryCode.value;
-    onLoadMaterials();
   } else {
     materialCode.value = activeCategoryCode.value;
-    onLoadMaterials();
   }
+  resetMaterialList()
+  onLoadMaterials();
 }
 
-const onLoadMaterials = () => {
-  api.queryMaterials({
-    categoryCode: materialCode.value,
-    pageSize: 50,
-    page: 1,
-  }).then((res: any) => {
-    console.log('res', res);
-    inspirations.value = res;
-    console.log('inspirations', inspirations.value);
-  });
+const onLoadMaterials = async () => {
+  if (materialLoading.value || !materialHasMore.value || !materialCode.value) return
+  materialLoading.value = true
+  try {
+    const res: any = await api.queryMaterials({
+      categoryCode: materialCode.value,
+      pageSize: MATERIAL_PAGE_SIZE,
+      page: materialPage.value,
+    })
+    const records = (Array.isArray(res) ? res : res.records ?? []) as MaterialItem[]
+    const total = Array.isArray(res) ? records.length : Number(res.total ?? records.length)
+
+    if (materialPage.value === 1) {
+      materialList.value = records
+    } else {
+      materialList.value = [...materialList.value, ...records]
+    }
+
+    materialPage.value += 1
+    materialHasMore.value =
+      !Array.isArray(res)
+      && materialList.value.length < total
+      && records.length > 0
+  } finally {
+    materialLoading.value = false
+  }
 }
 
 const selectSubCategory = (code: string) => {
   activeSubCategoryCode.value = code;
-  onLoadAssets();
+  materialCode.value = code === 'all' ? activeCategoryCode.value : code;
+  resetMaterialList()
+  onLoadMaterials();
 }
 
-const openInspiration = (item: any) => {
-  console.log(item)
-  inspirationsInfo.value = item;
+function onMaterialGridScroll(event: Event) {
+  if (scope.value !== 'CENTER' || materialLoading.value || !materialHasMore.value) return
+  const el = event.target as HTMLElement
+  if (!el) return
+  const reachedBottom =
+    el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_LOAD_THRESHOLD
+  if (reachedBottom) {
+    void onLoadMaterials()
+  }
+}
+
+function onWindowScroll() {
+  if (scope.value !== 'CENTER' || materialLoading.value || !materialHasMore.value) return
+  const reachedBottom =
+    window.innerHeight + window.scrollY
+    >= document.documentElement.scrollHeight - SCROLL_LOAD_THRESHOLD
+  if (reachedBottom) {
+    void onLoadMaterials()
+  }
+}
+
+const openInspiration = (item: MaterialItem) => {
+  inspirationsInfo.value = {
+    ...item,
+    title: item.title || item.authorName || '素材',
+  };
   open.value = true;
 }
 
-onMounted(()=>{
+onMounted(() => {
   onLoadMaterialCategories();
   onLoadAssets();
+  window.addEventListener('scroll', onWindowScroll, { passive: true })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', onWindowScroll)
 })
 </script>
 
