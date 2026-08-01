@@ -150,12 +150,12 @@
     <ImageGenPromptPanel
       :prompt="imageGenPromptText"
       :seed="imageGenSeed"
-      :source-preview-url="imageGenSourcePreviewUrl"
-      :source-text-preview="imageGenSourceTextPreview"
+      :source-refs="imageGenSourceRefs"
       :submitting="imageGenSubmitting"
       @update:prompt="emit('update:imageGenPromptText', $event)"
       @update:seed="emit('update:imageGenSeed', $event)"
       @generate="emit('generate-image')"
+      @remove-source-ref="emit('remove-image-gen-source-ref', $event)"
     />
   </div>
 
@@ -568,8 +568,7 @@ const props = defineProps<{
   promptSubmitLabel: string
   imageGenPromptText: string
   imageGenSeed: number
-  imageGenSourcePreviewUrl: string
-  imageGenSourceTextPreview: string
+  imageGenSourceRefs: VideoSourceRef[]
   imageGenSubmitting: boolean
   videoGenPromptText: string
   videoNum: number
@@ -622,6 +621,7 @@ const emit = defineEmits<{
   'persist-prompt-bar-draft': []
   'submit-text-prompt': [payload?: VideoDialogueSubmitPayload | ImageDialogueSubmitPayload]
   'generate-image': []
+  'remove-image-gen-source-ref': [nodeId: string]
   'close-image-crop': []
   'image-crop-complete': [payload: { dataUrl: string; width: number; height: number }]
   'image-resize-start': [event: MouseEvent, corner: import('../graph').ImageResizeCorner]

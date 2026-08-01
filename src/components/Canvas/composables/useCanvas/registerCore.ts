@@ -450,6 +450,30 @@ export function registerCore(bind: CanvasBindings) {
     return getVideoTextSourceRefs(g, id, getTextNodePlainContent)
   })
 
+  const imageGenSourceRefs = computed(() => {
+    void toolbarRevision.value
+    const g = graph.value
+    const id = activeImageGenPromptNodeId.value
+    if (!g || !id) return []
+
+    const textRefs = getVideoTextSourceRefs(g, id, getTextNodePlainContent)
+    if (textRefs.length) return textRefs
+
+    const cell = g.getCellById(id)
+    const data = cell?.isNode() ? (cell.getData() as CanvasNodeData) : undefined
+    if (data?.sourcePreviewUrl) {
+      return [{
+        nodeId: data.sourceNodeId ?? '',
+        kind: 'image' as const,
+        previewUrl: data.sourcePreviewUrl,
+        fileName: data.sourceFileName ?? '',
+        title: data.title || '图片',
+        index: 1,
+      }]
+    }
+    return []
+  })
+
   const videoGenSavedSettings = computed(() => {
     void toolbarRevision.value
     const g = graph.value
@@ -5763,6 +5787,28 @@ export function registerCore(bind: CanvasBindings) {
     scheduleHistoryPush()
   }
 
+  function onRemoveImageGenSourceRef(sourceNodeId: string) {
+    const g = graph.value
+    const imageNodeId = activeImageGenPromptNodeId.value
+    if (!g || !imageNodeId || !sourceNodeId) return
+
+    g.getEdges().forEach((edge) => {
+      if (
+        edge.getSourceCellId() === sourceNodeId &&
+        edge.getTargetCellId() === imageNodeId
+      ) {
+        g.removeEdge(edge.id)
+      }
+    })
+
+    if (activeImageGenPromptNodeId.value === imageNodeId) {
+      loadImageGenPromptFields(imageNodeId)
+    }
+    bumpToolbarRevision()
+    updateNodeToolbar()
+    scheduleHistoryPush()
+  }
+
   function onRemoveVideoSourceRef(sourceNodeId: string) {
     const g = graph.value
     const videoNodeId = getActiveVideoTargetNodeId()
@@ -8891,6 +8937,7 @@ export function registerCore(bind: CanvasBindings) {
     onMenuItem,
     onPromptAddCanvasNode,
     onPromptUploadFiles,
+    onRemoveImageGenSourceRef,
     onRemoveVideoSourceRef,
     onScrollerScroll,
     onTextExpandInput,
@@ -9024,6 +9071,7 @@ export function registerCore(bind: CanvasBindings) {
     handleEdgeDeletePointerLeave,
     removeHoveredEdge,
     uploadFileToCanvasNode,
+    imageGenSourceRefs,
     videoGenSourceRefs,
     videoGenSavedSettings,
     videoDialogueSourceRefs,

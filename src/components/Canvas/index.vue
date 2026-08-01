@@ -221,8 +221,7 @@
       :prompt-submit-label="promptSubmitLabel"
       :image-gen-prompt-text="imageGenPromptText"
       :image-gen-seed="imageGenSeed"
-      :image-gen-source-preview-url="imageGenSourcePreviewUrl"
-      :image-gen-source-text-preview="imageGenSourceTextPreview"
+      :image-gen-source-refs="imageGenSourceRefs"
       :image-gen-submitting="imageGenSubmitting"
       :video-gen-prompt-text="videoGenPromptText"
       :video-gen-active-tab="videoGenActiveTab"
@@ -257,6 +256,7 @@
       @update:image-gen-prompt-text="imageGenPromptText = $event; persistImageGenPrompt()"
       @update:image-gen-seed="imageGenSeed = $event; persistImageGenPrompt()"
       @generate-image="generateImageFromPrompt"
+      @remove-image-gen-source-ref="onRemoveImageGenSourceRef"
       @submit-video-gen-prompt="handleVideoGenPromptSubmit"
       @update:video-gen-prompt-text="videoGenPromptText = $event; persistVideoGenPrompt()"
       @update:video-gen-active-tab="videoGenActiveTab = $event; persistVideoGenPrompt()"
@@ -568,8 +568,7 @@ const {
   imageGenPromptPos,
   imageGenPromptText,
   imageGenSeed,
-  imageGenSourcePreviewUrl,
-  imageGenSourceTextPreview,
+  imageGenSourceRefs,
   imageGenSubmitting,
   imagePreviewUrl,
   isCanvasFileDragOver,
@@ -606,6 +605,7 @@ const {
   onMenuItem,
   onPromptAddCanvasNode,
   onPromptUploadFiles,
+  onRemoveImageGenSourceRef,
   onRemoveVideoSourceRef,
   onTextExpandInput,
   onTextFormatAction,

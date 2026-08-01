@@ -21,7 +21,84 @@
           </button>
         </div> -->
     </header>
-    <section class="project-panel">
+    <section class="home__section home__section--inspiration" v-if="scope === 'CENTER'">
+      <div class="home__filters">
+        <button
+          v-for="category in materialCategories"
+          :key="category.code"
+          type="button"
+          class="home__filter-btn"
+          :class="{ 'home__filter-btn--active': activeCategoryCode === category.code }"
+          @click="selectPrimaryCategory(category)"
+        >
+          {{ category.name }}
+        </button>
+      </div>
+
+      <div
+        v-if="materialSubCategories.length > 0"
+        class="home__filters home__filters--sub"
+      >
+        <button
+          v-for="subCategory in materialSubCategories"
+          :key="subCategory.code"
+          type="button"
+          class="home__filter-btn home__filter-btn--sub"
+          :class="{ 'home__filter-btn--active': activeSubCategoryCode === subCategory.code }"
+          @click="selectSubCategory(subCategory.code)"
+        >
+          {{ subCategory.name }}
+        </button>
+      </div>
+
+      <!-- <div class="home__inspiration-grid">
+        <div
+          v-for="(column, columnIndex) in inspirationColumns"
+          :key="columnIndex"
+          class="home__inspiration-column"
+        >
+          <article
+            v-for="item in column"
+            :key="item.id"
+            class="home__inspiration-card"
+            @click="openInspiration(item)"
+          >
+            <div
+              class="home__inspiration-media"
+              :class="{ 'home__inspiration-media--video': item.mediaType === 'video' }"
+            >
+              <img
+                v-if="item.mediaType === 'image'"
+                class="home__inspiration-image"
+                :src="item.coverUrl"
+                :alt="`${item.authorName} 的作品`"
+                loading="lazy"
+              />
+              <EmbeddedVideoPlayer
+                v-else-if="item.mediaType === 'video'"
+                :src="item.coverUrl"
+              />
+            </div>
+            <div class="home__inspiration-footer">
+              <div class="home__inspiration-author">
+                <span class="home__inspiration-name">{{ item.authorName }}</span>
+              </div>
+              <div class="home__inspiration-stats">
+                <span class="home__inspiration-stat">
+                  <span class="home__inspiration-stat-icon home__inspiration-stat-icon--view" aria-hidden="true" />
+                  {{ formatCount(item.viewCount) }}
+                </span>
+                <span class="home__inspiration-stat">
+                  <span class="home__inspiration-stat-icon home__inspiration-stat-icon--like" aria-hidden="true" />
+                  {{ formatCount(item.likeCount) }}
+                </span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div> -->
+    </section>
+    <section class="project-panel" v-else>
       <div class="project-panel__body">
         <div v-if="list.length > 0" class="project-panel__grid">
           <button
@@ -74,6 +151,10 @@ const uploadedFiles = ref<ProjectFileItem[]>([])
 const scope = ref('CENTER');
 const page = ref(1);
 const list = ref<any[]>([]);
+const materialCategories = ref<any[]>([]);
+const activeCategoryCode = ref('');
+const materialSubCategories = ref<any[]>([]);
+const activeSubCategoryCode = ref('');
 
 function triggerUpload() {
   uploadInputRef.value?.click()
@@ -97,7 +178,7 @@ const onChangeScope = (key: string) => {
   scope.value = key;
   page.value = 1;
   if (scope.value === 'CENTER') {
-
+    
   }
   else {
     onLoadAssets();
@@ -119,6 +200,15 @@ const onLoadAssets = () => {
     // console.log('res', res);
     list.value = res.records;
   })
+}
+
+const selectPrimaryCategory = (code: string) => {
+  activeCategoryCode.value = code;
+}
+
+const selectSubCategory = (code: string) => {
+  activeSubCategoryCode.value = code;
+  onLoadAssets();
 }
 
 onMounted(()=>{
