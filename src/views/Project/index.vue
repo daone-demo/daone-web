@@ -53,7 +53,7 @@
 
       <div class="home__inspiration-grid">
         <div
-          v-for="(column, columnIndex) in inspirationColumns"
+          v-for="(column, columnIndex) in inspirations"
           :key="columnIndex"
           class="home__inspiration-column"
         >
@@ -65,34 +65,19 @@
           >
             <div
               class="home__inspiration-media"
-              :class="{ 'home__inspiration-media--video': item.mediaType === 'video' }"
+              :class="{ 'home__inspiration-media--video': item.type === 'VIDEO' }"
             >
               <img
-                v-if="item.mediaType === 'image'"
+                v-if="item.type === 'IMAGE'"
                 class="home__inspiration-image"
-                :src="item.coverUrl"
+                :src="item.resourceUrl"
                 :alt="`${item.authorName} 的作品`"
                 loading="lazy"
               />
               <EmbeddedVideoPlayer
-                v-else-if="item.mediaType === 'video'"
+                v-else-if="item.type === 'VIDEO'"
                 :src="item.coverUrl"
               />
-            </div>
-            <div class="home__inspiration-footer">
-              <div class="home__inspiration-author">
-                <span class="home__inspiration-name">{{ item.authorName }}</span>
-              </div>
-              <div class="home__inspiration-stats">
-                <span class="home__inspiration-stat">
-                  <span class="home__inspiration-stat-icon home__inspiration-stat-icon--view" aria-hidden="true" />
-                  {{ formatCount(item.viewCount) }}
-                </span>
-                <span class="home__inspiration-stat">
-                  <span class="home__inspiration-stat-icon home__inspiration-stat-icon--like" aria-hidden="true" />
-                  {{ formatCount(item.likeCount) }}
-                </span>
-              </div>
             </div>
           </article>
         </div>
@@ -180,6 +165,7 @@ const scope = ref('CENTER');
 const page = ref(1);
 const list = ref<any[]>([]);
 const materialCategories = ref<any[]>([]);
+const materialCode = ref('');
 const activeCategoryCode = ref('');
 const materialSubCategories = ref<any[]>([]);
 const activeSubCategoryCode = ref('');
@@ -188,15 +174,16 @@ const inspirationsInfo = ref<any>({});
 const inspirationColumnCount = ref(4);
 const inspirations = ref<any[]>([]);
 
-const inspirationColumns = computed(() => {
-  const count = Math.max(1, inspirationColumnCount.value);
-  const columns: HomeInspiration[][] = Array.from({ length: count }, () => []);
-
-  inspirations.value.forEach((item, index) => {
-    columns[index % count]?.push(item);
-  });
-  return columns;
-});
+// const inspirationColumns = computed(() => {
+//   const count = Math.max(1, inspirationColumnCount.value);
+//   const columns: HomeInspiration[][] = Array.from({ length: count }, () => []);
+//   console.log('inspirations', inspirations.value);
+//   inspirations.value.forEach((item, index) => {
+//     columns[index % count]?.push(item);
+//   });
+//   console.log('columns', columns);
+//   return columns;
+// });
 
 function triggerUpload() {
   uploadInputRef.value?.click()
@@ -211,16 +198,16 @@ function handleUploadChange(event: Event) {
     id: `upload-${file.name}-${index}-${Date.now()}`,
     type: 'image' as const,
     image: URL.createObjectURL(file),
-  }))
+  }));
 
-  input.value = ''
+  input.value = '';
 }
 
 const onChangeScope = (key: string) => {
   scope.value = key;
   page.value = 1;
   if (scope.value === 'CENTER') {
-    
+    onLoadMaterialCategories();
   }
   else {
     onLoadAssets();
@@ -230,7 +217,20 @@ const onChangeScope = (key: string) => {
 const onLoadMaterialCategories = () => {
   api.queryMaterialCategories().then((res: any) => {
     materialCategories.value = res;
-    console.log('res', res);
+    activeCategoryCode.value = res[0].code;
+    materialSubCategories.value = materialCategories.value.find((item: any) => item.code === res[0].code)?.children ?? [];
+    if (materialSubCategories.value.length > 0) {
+      materialSubCategories.value.unshift({
+        code: 'all',
+        name: '全部',
+      })
+      activeSubCategoryCode.value = 'all';
+      materialCode.value = activeCategoryCode.value;
+      onLoadMaterials();
+    } else {
+      materialCode.value = activeCategoryCode.value;
+      onLoadMaterials();
+    }
   })
 }
 
@@ -248,6 +248,30 @@ const onLoadAssets = () => {
 const selectPrimaryCategory = (code: string) => {
   activeCategoryCode.value = code;
   materialSubCategories.value = materialCategories.value.find((item: any) => item.code === code)?.children ?? [];
+  if (materialSubCategories.value.length > 0) {
+    materialSubCategories.value.unshift({
+      code: 'all',
+      name: '全部',
+    })
+    activeSubCategoryCode.value = 'all';
+    materialCode.value = activeCategoryCode.value;
+    onLoadMaterials();
+  } else {
+    materialCode.value = activeCategoryCode.value;
+    onLoadMaterials();
+  }
+}
+
+const onLoadMaterials = () => {
+  api.queryMaterials({
+    categoryCode: materialCode.value,
+    pageSize: 50,
+    page: 1,
+  }).then((res: any) => {
+    console.log('res', res);
+    inspirations.value = res;
+    console.log('inspirations', inspirations.value);
+  });
 }
 
 const selectSubCategory = (code: string) => {
