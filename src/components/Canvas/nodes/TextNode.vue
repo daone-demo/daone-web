@@ -1001,6 +1001,11 @@ onBeforeUnmount(() => {
   line-height: 1.4;
   color: #e5e7eb;
   outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    border-color: #9ca3af;
+  }
 
   &:focus {
     border-color: #6b7cff;
@@ -1013,6 +1018,7 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   background: #1e1e22;
   overflow: hidden;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .text-node__body--picker {
@@ -1158,6 +1164,17 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  cursor: text;
+
+  &:hover {
+    border-color: #6b7280;
+    background: #232328;
+  }
+
+  &:focus-within {
+    border-color: #6b7cff;
+    background: #1e1e22;
+  }
 }
 
 .text-node__editor {
