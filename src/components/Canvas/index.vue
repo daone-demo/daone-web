@@ -152,11 +152,8 @@
     <CanvasAssetsPanel
       v-if="showAssetsPanel"
       :tab="assetsTab"
-      :loading="assetsLoading"
       :is-light="canvasBgTheme === 'light'"
-      :list="assetsList"
       @update:tab="onChangeAssetsTab($event)"
-      @select="onAddAssetToCanvas"
       @close="showAssetsPanel = false"
     />
 
@@ -424,9 +421,9 @@ import CanvasTextFormatAnchor from './panels/CanvasTextFormatAnchor.vue'
 import CanvasShortcutsBackdrop from './panels/CanvasShortcutsBackdrop.vue'
 import CanvasHiddenFileInput from './panels/CanvasHiddenFileInput.vue'
 import { useCanvas } from './composables/useCanvas'
-import { ref, onMounted, watch } from 'vue'
+import { ref, watch } from 'vue'
 import api from '@/services/api'
-import type { AssetView, ProjectCanvasResponse } from '@/services/api'
+import type { ProjectCanvasResponse } from '@/services/api'
 import { type ProjectTabKey } from '@/views/Project/projectData'
 import type { ElementGroupRecord, AssetCenterTabKey } from './assetCenterData'
 import type { ImageCapability, WorkflowCategoryGroup } from './constants'
@@ -453,7 +450,6 @@ defineProps<{
   workflows: WorkflowCategoryGroup[]
 }>()
 
-const assetsList = ref<AssetView[]>([]);
 const skillList = ref<ElementGroupRecord[]>([]);
 const historyList = ref<any[]>([]);
 const historyPage = ref(1);
@@ -480,7 +476,6 @@ const {
   activeProjectId,
   addMenuDropPoint,
   addMenuPos,
-  assetsLoading,
   assetsTab,
   assetCenterLoading,
   assetCenterSearch,
@@ -730,7 +725,6 @@ const {
   zoomOut,
   zoomPercent,
   addElementGroupFromRecord,
-  addImageFromAsset,
   addImageFromFile,
   addImagesFromFiles,
   getNodeCount,
@@ -780,27 +774,6 @@ export type CanvasProjectItem = {
 
 const onChangeAssetsTab = (tab: ProjectTabKey) => {
   assetsTab.value = tab
-  onLoadAssets()
-}
-
-const onAddAssetToCanvas = (asset: AssetView) => {
-  addImageFromAsset({
-    assetId: asset.id,
-    previewUrl: asset.previewUrl,
-    fileName: asset.fileName,
-    width: asset.width,
-    height: asset.height,
-  })
-}
-
-const onLoadAssets = () => {
-  api.getAssets({
-    scope: assetsTab.value,
-    pageSize: 50,
-    page: 1,
-  }).then((res: any) => {
-    assetsList.value = res.records ?? [];
-  })
 }
 
 const onChangeAssetCenterTab = (tab: AssetCenterTabKey) => {
@@ -827,10 +800,6 @@ const onLoadHistory = () => {
       historyList.value = res.records ?? [];
     })
 }
-
-onMounted(()=>{
-  onLoadAssets();
-});
 
 watch(showAssetCenterPanel, (open) => {
   if (open && activeProjectId.value) {

@@ -30,7 +30,7 @@ import {
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, syncTextNodeImageSource,
-  createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, previewUrlToUploadFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
+  createMinimap, destroyMinimap, applyRemoteImageToNode, applyRemoteVideoToNode, runUploadSimulation, uploadAssetFile, previewUrlToUploadFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
@@ -3741,10 +3741,24 @@ export function registerCore(bind: CanvasBindings) {
     const textPreview = resolveImageGenTextSourcePreview(nodeId)
     imageGenSourceTextPreview.value = textPreview
     imageGenSourcePreviewUrl.value = textPreview ? '' : (data.sourcePreviewUrl ?? '')
-    imageGenPromptText.value = data.genPrompt ?? ''
     imageGenSeed.value = data.genSeed ?? 58
-    imageDialogueText.value = data.imageDialogueText ?? data.genPrompt ?? ''
+
+    let prompt = data.imageDialogueText?.trim() || data.genPrompt?.trim() || ''
+    if (!prompt && textPreview) {
+      prompt = textPreview
+    }
+
+    imageGenPromptText.value = prompt
+    imageDialogueText.value = prompt
     imageDialogueSettings.value = normalizeImageDialogueSettings(data.imageDialogueSettings)
+
+    if (prompt && (prompt !== data.genPrompt || (!data.imageDialogueText?.trim() && prompt !== data.imageDialogueText))) {
+      cell.setData({
+        ...data,
+        genPrompt: prompt,
+        imageDialogueText: data.imageDialogueText?.trim() ? data.imageDialogueText : prompt,
+      })
+    }
   }
 
   function normalizeImageDialogueSettings(
@@ -7032,6 +7046,11 @@ export function registerCore(bind: CanvasBindings) {
       ?? consumeCanvasAssetDragPayload()
     if (!asset) return
 
+    if (asset.mediaType === 'VIDEO') {
+      addVideoFromAsset(asset, point)
+      return
+    }
+
     addImageFromAsset(asset, point)
   }
 
@@ -7851,6 +7870,15 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function notifyTextNodeUpdated() {
+    const imageNodeId = activeImageGenPromptNodeId.value
+    if (imageNodeId) {
+      const upstream = resolveImageGenTextSourcePreview(imageNodeId)
+      imageGenSourceTextPreview.value = upstream
+      if (upstream && !imageDialogueText.value.trim()) {
+        imageDialogueText.value = upstream
+        imageGenPromptText.value = upstream
+      }
+    }
     bumpToolbarRevision()
     scheduleHistoryPush()
   }
@@ -8763,6 +8791,32 @@ export function registerCore(bind: CanvasBindings) {
     scheduleHistoryPush()
   }
 
+  function addVideoFromAsset(
+    asset: {
+      assetId?: string
+      previewUrl: string
+      fileName?: string
+      width?: number | null
+      height?: number | null
+    },
+    point?: { x: number; y: number },
+  ) {
+    const g = graph.value
+    if (!g || !asset.previewUrl) return
+
+    const position = point ?? getRandomViewportLocalPoint(g, { kind: 'video', mode: 'editor' })
+    const node = addCanvasNode(g, 'video', position, {
+      mode: 'editor',
+      title: asset.fileName || '视频',
+      fileName: asset.fileName || '视频',
+    })
+
+    void applyRemoteVideoToNode(node, asset)
+    selectGraphNodes(node)
+    syncNodeCount()
+    scheduleHistoryPush()
+  }
+
   async function addImagesFromFiles(files: File[]) {
     const imageFiles = files.filter((file) => file.type.startsWith('image/'))
     if (!imageFiles.length) return []
@@ -8813,6 +8867,7 @@ export function registerCore(bind: CanvasBindings) {
     addFromMenu,
     addImageDialogueSourceRef,
     addImageFromAsset,
+    addVideoFromAsset,
     addImageFromFile,
     addImagesFromFiles,
     addNode,

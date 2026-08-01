@@ -18,6 +18,7 @@ export interface CanvasAssetDragPayload {
   fileName?: string
   width?: number | null
   height?: number | null
+  mediaType?: 'IMAGE' | 'VIDEO'
 }
 
 /** Skill / 元素组拖入画布时 dataTransfer 的 MIME 类型 */

@@ -111,6 +111,7 @@ export {
 export { createMinimap, destroyMinimap } from '../../minimap'
 export {
   applyRemoteImageToNode,
+  applyRemoteVideoToNode,
   runUploadSimulation,
   uploadAssetFile,
   previewUrlToUploadFile,

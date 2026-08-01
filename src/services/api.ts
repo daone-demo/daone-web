@@ -852,5 +852,18 @@ const api = {
   queryMaterials<T = unknown>(params:any) {
     return http.get<T>('/materials', { params })
   },
+  queryMaterialFavorites<T = unknown>(params?: {
+    type?: 'IMAGE' | 'VIDEO' | string
+    page?: number
+    pageSize?: number
+  }) {
+    return http.get<T>('/materials/favorites', { params })
+  },
+  favoriteMaterial<T = unknown>(materialId: Id) {
+    return http.put<T>(`/materials/${pathId(materialId)}/favorite`)
+  },
+  unfavoriteMaterial(materialId: Id) {
+    return http.delete(`/materials/${pathId(materialId)}/favorite`)
+  },
 }
 export default api

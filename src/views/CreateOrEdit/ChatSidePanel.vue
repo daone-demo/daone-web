@@ -439,7 +439,12 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
 import { useCanvasBgTheme } from '@/components/Canvas/useCanvasBgTheme'
-import type { ImageCapability, ChatTools } from '@/components/Canvas/constants'
+import {
+  listImageDialogueModelEntries,
+  listVideoDialogueModelEntries,
+  type ImageCapability,
+  type ChatTools,
+} from '@/components/Canvas/constants'
 import type { ElementGroupRecord } from '@/components/Canvas/assetCenterData'
 import type { ChatAttachment, ChatSendPayload, ChatSession } from './chatTypes'
 import { CHAT_TIPS } from './chatTypes'
@@ -707,63 +712,62 @@ function parseModelsFromCapability(
   icon: string,
 ): ChatModelItem[] {
   if (!capability?.parameters) return []
-  const params = capability.parameters
-  const result: ChatModelItem[] = []
 
   if (category === 'image') {
-    const options = params.modelOptions
-    if (!Array.isArray(options)) return []
-    const resolution = Array.isArray(params.resolution)
-      ? String(params.resolution[params.resolution.length - 1] ?? '')
-      : ''
-    options.forEach((item) => {
-      if (typeof item === 'string') {
-        const value = item.trim()
-        if (!value) return
-        result.push({
-          key: `image:${value}`,
-          category,
-          value,
-          label: value,
-          subtitle: resolution || undefined,
-          icon,
-        })
-        return
-      }
+    return listImageDialogueModelEntries({ image: capability }).map((entry) => ({
+      key: `image:${entry.key}`,
+      category,
+      value: entry.key,
+      label: entry.label,
+      subtitle: entry.resolutions[entry.resolutions.length - 1] || undefined,
+      icon,
+    }))
+  }
+
+  if (category === 'video') {
+    return listVideoDialogueModelEntries({ video: capability }).map((entry) => ({
+      key: `video:${entry.key}`,
+      category,
+      value: entry.key,
+      label: entry.label,
+      subtitle: entry.resolutions[entry.resolutions.length - 1]?.label || undefined,
+      icon,
+    }))
+  }
+
+  const params = capability.parameters
+  const models = params.models
+  if (Array.isArray(models) && models.length) {
+    const result: ChatModelItem[] = []
+    models.forEach((item) => {
       if (!item || typeof item !== 'object') return
-      const value = String((item as { value?: string }).value ?? (item as { label?: string }).label ?? '').trim()
+      const row = item as Record<string, unknown>
+      const value = String(row.value ?? row.key ?? row.id ?? row.model ?? '').trim()
       if (!value) return
-      const label = String((item as { label?: string }).label ?? value).trim()
+      const label = String(row.label ?? row.name ?? row.title ?? value).trim()
       result.push({
-        key: `image:${value}`,
+        key: `${category}:${value}`,
         category,
         value,
         label,
-        subtitle: resolution || String((item as { duration?: string }).duration ?? '') || undefined,
         icon,
       })
     })
     return result
   }
 
-  const models = params.model
-  if (!Array.isArray(models)) return []
-  const clarity = Array.isArray(params.clarity)
-    ? String(params.clarity[params.clarity.length - 1] ?? '')
-    : ''
-  models.forEach((item) => {
-    const value = String(item ?? '').trim()
-    if (!value) return
-    result.push({
+  const legacyModels = params.model
+  if (!Array.isArray(legacyModels)) return []
+  return legacyModels
+    .map((item) => String(item ?? '').trim())
+    .filter(Boolean)
+    .map((value) => ({
       key: `${category}:${value}`,
       category,
       value,
       label: value,
-      subtitle: clarity || undefined,
       icon,
-    })
-  })
-  return result
+    }))
 }
 
 function detectSlashQuery(text: string) {

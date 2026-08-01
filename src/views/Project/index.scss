@@ -400,6 +400,51 @@
   object-fit: cover;
 }
 
+.home__inspiration-hover {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(15, 23, 42, 0.42);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.home__inspiration-media:hover .home__inspiration-hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.home__inspiration-hover-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    transform: scale(1.06);
+    background: #fff;
+  }
+}
+
+.home__inspiration-hover-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
 .home__inspiration-footer {
   display: flex;
   align-items: center;

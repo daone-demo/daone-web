@@ -277,21 +277,6 @@ async function ensureImageMediaDimensions(
   }
 }
 
-async function ensureRemoteImageMediaDimensions(
-  data: CanvasNodeData,
-  previewUrl: string,
-) {
-  if (data.mediaWidth! > 0 && data.mediaHeight! > 0) return
-
-  try {
-    const size = await resolveImageNaturalSizeCached(previewUrl)
-    data.mediaWidth = size.width
-    data.mediaHeight = size.height
-  } catch {
-    // ignore
-  }
-}
-
 /** 上传本地文件到 OSS，返回素材访问地址。 */
 export async function uploadAssetFile(
   file: File,
@@ -507,8 +492,73 @@ export async function applyRemoteImageToNode(
     return
   }
 
-  await ensureRemoteImageMediaDimensions(data, previewUrl)
   applyNodeMedia(graphNode, data)
+
+  try {
+    const size = await resolveImageNaturalSizeCached(previewUrl)
+    const current = { ...(graphNode.getData() as CanvasNodeData) }
+    if (current.previewUrl?.trim() !== previewUrl) return
+    if (current.mediaWidth && current.mediaHeight) return
+    current.mediaWidth = size.width
+    current.mediaHeight = size.height
+    applyNodeMedia(graphNode, current)
+  } catch {
+    // ImageNode 会在 <img> onload 时再次尝试补全尺寸
+  }
+}
+
+export async function applyRemoteVideoToNode(
+  graphNode: Node,
+  payload: {
+    assetId?: string
+    previewUrl: string
+    fileName?: string
+    width?: number | null
+    height?: number | null
+  },
+) {
+  const previewUrl = payload.previewUrl?.trim()
+  if (!previewUrl) return
+
+  const data = { ...(graphNode.getData() as CanvasNodeData) }
+  data.uploadState = 'done'
+  data.uploadProgress = 100
+  data.previewUrl = previewUrl
+  data.mode = 'editor'
+  data.fileName = payload.fileName || '视频'
+  data.title = data.fileName
+  if (payload.assetId) {
+    data.assetId = payload.assetId
+  }
+  delete data.generationTaskType
+  delete data.generationTaskId
+
+  if (payload.width && payload.height) {
+    data.mediaWidth = payload.width
+    data.mediaHeight = payload.height
+  }
+
+  applyNodeMedia(graphNode, data)
+
+  if (payload.width && payload.height) return
+
+  try {
+    const size = await resolveVideoNaturalSize(previewUrl)
+    const current = { ...(graphNode.getData() as CanvasNodeData) }
+    if (current.previewUrl !== previewUrl) return
+    current.mediaWidth = size.width
+    current.mediaHeight = size.height
+    if (size.durationSeconds) {
+      current.durationSeconds = size.durationSeconds
+    }
+    applyNodeMedia(graphNode, current)
+  } catch {
+    const current = { ...(graphNode.getData() as CanvasNodeData) }
+    if (current.previewUrl !== previewUrl) return
+    current.mediaWidth = current.mediaWidth || 2560
+    current.mediaHeight = current.mediaHeight || 1440
+    applyNodeMedia(graphNode, current)
+  }
 }
 
 function applyNodeMedia(graphNode: Node, data: CanvasNodeData) {

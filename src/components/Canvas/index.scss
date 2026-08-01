@@ -3005,7 +3005,9 @@
   top: 60px;
   left: 72px;
   z-index: 4;
-  width: 300px;
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100vw - 96px));
   max-height: calc(100% - 100px);
   border: 1px solid #3d3d45;
   border-radius: 14px;
@@ -3013,6 +3015,7 @@
   backdrop-filter: blur(12px);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
   overflow: hidden;
+  max-height: 50vh;
 }
 
 .canvas__assets-head {
@@ -3070,8 +3073,10 @@
 }
 
 .canvas__assets-body {
+  flex: 1;
   min-height: 200px;
-  padding: 24px;
+  padding: 12px 14px 16px;
+  overflow: hidden;
 }
 
 .canvas__assets-loading,

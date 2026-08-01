@@ -138,7 +138,7 @@
                     <span class="home__inspiration-stat-icon home__inspiration-stat-icon--view" aria-hidden="true" />
                     {{ formatCount(item.viewCount) }}
                   </span>
-                  <span class="home__inspiration-stat">
+                  <span class="home__inspiration-stat" @click.stop.prevent="onFavorite(item.id, Boolean(item.favorited))">
                     <span class="home__inspiration-stat-icon home__inspiration-stat-icon--like" aria-hidden="true" />
                     {{ formatCount(item.likeCount) }}
                   </span>
@@ -232,6 +232,7 @@ type HomeInspiration = {
   imageHeight?: number
   title?: string
   mediaType?: InspirationMediaType
+  favorited?: boolean
 }
 const inspirations = ref<HomeInspiration[]>([]);
 const open = ref(false);
@@ -348,6 +349,18 @@ const openDeleteProject = (id: string) => {
       })
     },
   })
+}
+
+const onFavorite = (id: string, favorited: boolean) => {
+  if (favorited) {
+    api.unfavoriteMaterial(id).then(() => {
+      void onLoadHomeData();
+    })
+  } else {
+    api.favoriteMaterial(id).then(() => {
+      void onLoadHomeData();
+    })
+  }
 }
 
 const inspirationCategories = ref<HomeInspirationCategoryItem[]>([]);

@@ -213,7 +213,7 @@
 import { computed, inject, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import type { Node } from '@antv/x6'
 import type { CanvasNodeData } from '../constants'
-import { VIDEO_PICKER_TRY_ACTIONS, isNodeFileUploading } from '../constants'
+import { isNodeFileUploading } from '../constants'
 import type { CanvasGraph } from '../graph'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
@@ -287,10 +287,6 @@ const genProgressText = computed(() => {
 
 function syncData() {
   getNode().setData({ ...data })
-}
-
-function onPickerAction(key: string) {
-  canvasGraph()?.__onVideoPickerAction?.(key, getNode().id)
 }
 
 function canvasGraph() {
