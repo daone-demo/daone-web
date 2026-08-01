@@ -116,6 +116,7 @@
             type="button"
             class="project-card"
             :class="`project-card--${file.type}`"
+            @click="openFile(file)"
           >
             <img
               class="project-card__image"
@@ -343,6 +344,15 @@ function onWindowScroll() {
   if (reachedBottom) {
     void onLoadMaterials()
   }
+}
+
+const openFile = (file: any) => {
+  inspirationsInfo.value = {
+    ...file,
+    resourceUrl: file.previewUrl,
+    title: file.name,
+  };
+  open.value = true;
 }
 
 const openInspiration = (item: MaterialItem) => {
