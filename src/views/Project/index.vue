@@ -29,7 +29,7 @@
           type="button"
           class="home__filter-btn"
           :class="{ 'home__filter-btn--active': activeCategoryCode === category.code }"
-          @click="selectPrimaryCategory(category)"
+          @click="selectPrimaryCategory(category.code)"
         >
           {{ category.name }}
         </button>
@@ -51,7 +51,7 @@
         </button>
       </div>
 
-      <!-- <div class="home__inspiration-grid">
+      <div class="home__inspiration-grid">
         <div
           v-for="(column, columnIndex) in inspirationColumns"
           :key="columnIndex"
@@ -96,7 +96,7 @@
             </div>
           </article>
         </div>
-      </div> -->
+      </div>
     </section>
     <section class="project-panel" v-else>
       <div class="project-panel__body">
@@ -139,12 +139,40 @@
       </div>
     </section>
   </div>
+  <a-modal 
+    v-model:open="open"
+    width="800px"
+    class="home__inspiration-modal"
+  >
+    <img
+      v-if="inspirationsInfo.mediaType === 'image'"
+      :src="inspirationsInfo.coverUrl"
+      :alt="inspirationsInfo.title"
+      style="width: 100%; height: 100%;"
+    />
+    <EmbeddedVideoPlayer
+      v-if="inspirationsInfo.mediaType === 'video'"
+      :src="inspirationsInfo.coverUrl"
+      object-fit="contain"
+      aspect-ratio="auto"
+      min-height="360px"
+      class="home__inspiration-modal-player"
+    />
+    <template #title></template>
+    <template #footer></template>
+  </a-modal>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { PROJECT_TABS, type ProjectFileItem } from './projectData'
+import { ref, onMounted, computed } from 'vue';
+import { PROJECT_TABS, type ProjectFileItem } from './projectData';
+import EmbeddedVideoPlayer from '@components/EmbeddedVideoPlayer/index.vue';
+import { Modal } from 'ant-design-vue';
 import api from '@/services/api';
+
+function formatCount(value: number) {
+  return value.toLocaleString('en-US')
+}
 
 const uploadInputRef = ref<HTMLInputElement | null>(null)
 const uploadedFiles = ref<ProjectFileItem[]>([])
@@ -155,6 +183,20 @@ const materialCategories = ref<any[]>([]);
 const activeCategoryCode = ref('');
 const materialSubCategories = ref<any[]>([]);
 const activeSubCategoryCode = ref('');
+const open = ref(false);
+const inspirationsInfo = ref<any>({});
+const inspirationColumnCount = ref(4);
+const inspirations = ref<any[]>([]);
+
+const inspirationColumns = computed(() => {
+  const count = Math.max(1, inspirationColumnCount.value);
+  const columns: HomeInspiration[][] = Array.from({ length: count }, () => []);
+
+  inspirations.value.forEach((item, index) => {
+    columns[index % count]?.push(item);
+  });
+  return columns;
+});
 
 function triggerUpload() {
   uploadInputRef.value?.click()
@@ -187,6 +229,7 @@ const onChangeScope = (key: string) => {
 
 const onLoadMaterialCategories = () => {
   api.queryMaterialCategories().then((res: any) => {
+    materialCategories.value = res;
     console.log('res', res);
   })
 }
@@ -204,11 +247,18 @@ const onLoadAssets = () => {
 
 const selectPrimaryCategory = (code: string) => {
   activeCategoryCode.value = code;
+  materialSubCategories.value = materialCategories.value.find((item: any) => item.code === code)?.children ?? [];
 }
 
 const selectSubCategory = (code: string) => {
   activeSubCategoryCode.value = code;
   onLoadAssets();
+}
+
+const openInspiration = (item: any) => {
+  console.log(item)
+  inspirationsInfo.value = item;
+  open.value = true;
 }
 
 onMounted(()=>{

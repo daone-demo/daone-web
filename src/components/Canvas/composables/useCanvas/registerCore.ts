@@ -30,7 +30,7 @@ import {
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, syncTextNodeImageSource,
-  createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
+  createMinimap, destroyMinimap, applyRemoteImageToNode, runUploadSimulation, uploadAssetFile, previewUrlToUploadFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
@@ -1683,13 +1683,14 @@ export function registerCore(bind: CanvasBindings) {
   async function uploadGridSplitImagesInBackground(nodes: Node[]) {
     const uploads = nodes.map(async (node) => {
       const data = node.getData() as CanvasNodeData
-      const localPreviewUrl = data.previewUrl
-      if (!localPreviewUrl || (!localPreviewUrl.startsWith('blob:') && !localPreviewUrl.startsWith('data:'))) {
-        return
-      }
-      await uploadLocalImageNodeInBackground(node, localPreviewUrl, data.fileName || '宫格.png', {
-        width: data.mediaWidth,
-        height: data.mediaHeight,
+      if (data.assetId) return
+
+      const previewUrl = data.previewUrl?.trim()
+      if (!previewUrl) return
+
+      await uploadLocalImageNodeInBackground(node, previewUrl, data.fileName || '宫格.png', {
+        width: data.mediaWidth ?? 0,
+        height: data.mediaHeight ?? 0,
         preserveTitle: true,
         silent: true,
       })
@@ -1933,9 +1934,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   async function dataUrlToFile(dataUrl: string, fileName: string) {
-    const response = await fetch(dataUrl)
-    const blob = await response.blob()
-    return new File([blob], fileName, { type: blob.type || 'image/png' })
+    return previewUrlToUploadFile(dataUrl, fileName)
   }
 
   async function onImageInpaintComplete(payload: {
@@ -2080,7 +2079,10 @@ export function registerCore(bind: CanvasBindings) {
     payload: { width: number; height: number; preserveTitle?: boolean; silent?: boolean },
   ) {
     try {
-      const file = await dataUrlToFile(localPreviewUrl, fileName)
+      const file = await previewUrlToUploadFile(localPreviewUrl, fileName, {
+        width: payload.width,
+        height: payload.height,
+      })
       const upload = await uploadAssetFile(file, { projectId: activeProjectId.value })
       if (!upload.url || !upload.assetId) return
 

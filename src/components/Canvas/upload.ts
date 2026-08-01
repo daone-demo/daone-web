@@ -5,6 +5,7 @@ import type { CanvasNodeData } from './constants'
 import { syncGenNodesFromSource } from './imageGen'
 import { syncTextNodesFromImageSource } from './textPrompt'
 import { getNodeSize, syncNodeShapeFromData } from './graph'
+import { loadDrawableImage } from './drawableImage'
 import { resolveImageNaturalSizeCached } from './imageDisplayUrl'
 
 export interface UploadAssetOptions {
@@ -105,6 +106,51 @@ function fileToBase64(file: File, onReadProgress?: (ratio: number) => void): Pro
     onReadProgress?.(0)
     reader.readAsDataURL(file)
   })
+}
+
+/** 将预览地址（blob / data / http）转为可上传的 File，fetch 失败时回退 canvas 绘制 */
+export async function previewUrlToUploadFile(
+  previewUrl: string,
+  fileName: string,
+  naturalSize?: { width?: number; height?: number },
+): Promise<File> {
+  try {
+    const response = await fetch(previewUrl)
+    if (response.ok) {
+      const blob = await response.blob()
+      if (blob.size > 0) {
+        return new File([blob], fileName, { type: blob.type || 'image/png' })
+      }
+    }
+  } catch {
+    // fall through to canvas
+  }
+
+  const { img, revoke } = await loadDrawableImage(previewUrl)
+  try {
+    const width = naturalSize?.width || img.naturalWidth || img.width
+    const height = naturalSize?.height || img.naturalHeight || img.height
+    if (!width || !height) {
+      throw new Error('图片尺寸无效')
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('当前浏览器不支持 Canvas')
+    ctx.drawImage(img, 0, 0, width, height)
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((result) => {
+        if (result) resolve(result)
+        else reject(new Error('图片编码失败'))
+      }, 'image/png')
+    })
+    return new File([blob], fileName, { type: 'image/png' })
+  } finally {
+    revoke?.()
+  }
 }
 
 function readVideoSizeFromFile(

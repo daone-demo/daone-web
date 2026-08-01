@@ -113,6 +113,7 @@ export {
   applyRemoteImageToNode,
   runUploadSimulation,
   uploadAssetFile,
+  previewUrlToUploadFile,
   setCanvasUploadProjectId,
   setCanvasNodeMutationCompleteHandler,
 } from '../../upload'
