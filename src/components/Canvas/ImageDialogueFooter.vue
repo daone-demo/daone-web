@@ -67,6 +67,7 @@
             v-model:resolution="genResolution"
             v-model:image-count="genImageCount"
             :chat-tools="chatTools"
+            :model-key="selectedModelKey"
             @close="showGenSettings = false"
           />
         </div>
@@ -111,14 +112,13 @@ import ImageGenSettingsPopover from './ImageGenSettingsPopover.vue'
 import {
   IMAGE_DIALOGUE_CREDITS,
   IMAGE_DIALOGUE_MODEL_MENU,
-  buildImageDialogueAspectRatiosFromCapabilities,
-  buildImageDialogueCountOptionsFromCapabilities,
   buildImageDialogueModelsFromCapabilities,
-  buildImageDialogueResolutionsFromCapabilities,
-  findImageDialogueSource,
+  normalizeImageDialogueSettingsForModel,
+  resolveImageDialogueModelApiValue,
   resolveImageDialogueModelKey,
   type ChatTools,
   type ImageDialogueModelItem,
+  type ImageDialogueSettings,
   type ImageDialogueSubmitPayload,
 } from './constants'
 
@@ -150,15 +150,6 @@ const selectedModelKey = ref(
 const modelMenu = computed(() =>
   buildImageDialogueModelsFromCapabilities(props.chatTools),
 )
-const countOptions = computed(() =>
-  buildImageDialogueCountOptionsFromCapabilities(props.chatTools),
-)
-const aspectRatioOptions = computed(() =>
-  buildImageDialogueAspectRatiosFromCapabilities(props.chatTools),
-)
-const resolutionOptions = computed(() =>
-  buildImageDialogueResolutionsFromCapabilities(props.chatTools),
-)
 
 const selectedModelName = computed(
   () =>
@@ -172,38 +163,26 @@ const qualityLabel = computed(() => {
   return `${aspectLabel} · ${genResolution.value} · x${genImageCount.value}`
 })
 
+function applyNormalizedToolbarSettings(partial: Partial<ImageDialogueSettings> = {}) {
+  const normalized = normalizeImageDialogueSettingsForModel(
+    {
+      modelKey: selectedModelKey.value,
+      aspectRatio: genAspectRatio.value,
+      resolution: genResolution.value,
+      imageCount: genImageCount.value,
+      workflowId: '',
+      ...partial,
+    },
+    props.chatTools,
+  )
+  selectedModelKey.value = normalized.modelKey
+  genAspectRatio.value = normalized.aspectRatio
+  genResolution.value = normalized.resolution
+  genImageCount.value = normalized.imageCount
+}
+
 function syncDialogueDefaultsFromChatTools() {
-  const models = modelMenu.value
-  if (models.length) {
-    const nextKey = resolveImageDialogueModelKey(selectedModelKey.value, props.chatTools)
-    if (nextKey !== selectedModelKey.value) {
-      selectedModelKey.value = nextKey
-    }
-  }
-
-  const ratios = aspectRatioOptions.value
-  if (ratios.length && !ratios.some((ratio) => ratio.key === genAspectRatio.value)) {
-    genAspectRatio.value = ratios[0].key
-  }
-
-  const resolutions = resolutionOptions.value
-  if (resolutions.length && !resolutions.includes(genResolution.value)) {
-    genResolution.value = resolutions[0]
-  }
-
-  const counts = countOptions.value
-  if (counts.length && !counts.includes(genImageCount.value)) {
-    genImageCount.value = counts[0]
-  }
-
-  const capability = findImageDialogueSource(props.chatTools)
-  const countParam = capability?.parameters?.count
-  if (countParam && typeof countParam === 'object' && !Array.isArray(countParam)) {
-    const defaultCount = Number((countParam as { default?: number }).default)
-    if (Number.isFinite(defaultCount) && counts.includes(defaultCount)) {
-      genImageCount.value = defaultCount
-    }
-  }
+  applyNormalizedToolbarSettings()
 }
 
 watch(
@@ -212,6 +191,13 @@ watch(
     syncDialogueDefaultsFromChatTools()
   },
   { immediate: true, deep: true },
+)
+
+watch(
+  () => selectedModelKey.value,
+  () => {
+    applyNormalizedToolbarSettings()
+  },
 )
 
 function toggleGenSettings() {
@@ -236,7 +222,7 @@ function selectModel(model: ImageDialogueModelItem) {
 function onSend() {
   if (props.disabled) return
   emit('submit', {
-    model: selectedModelKey.value,
+    model: resolveImageDialogueModelApiValue(selectedModelKey.value, props.chatTools),
     aspectRatio: genAspectRatio.value,
     count: genImageCount.value,
     resolution: genResolution.value,

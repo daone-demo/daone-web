@@ -1024,12 +1024,141 @@ export type ImageDialogueAspectRatioOption = {
   preview: { width: number; height: number }
 }
 
+export type ImageDialogueModelEntry = {
+  key: string
+  label: string
+  ratios: string[]
+  resolutions: string[]
+  countOptions: number[]
+}
+
+function parseImageModelResolutions(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+
+  const result: string[] = []
+  for (const item of value) {
+    if (typeof item === 'string' && item.trim()) {
+      result.push(item.trim())
+      continue
+    }
+    if (!item || typeof item !== 'object') continue
+    const row = item as Record<string, unknown>
+    const rawValue = row.value ?? row.key ?? row.label
+    const valueText = typeof rawValue === 'string' ? rawValue.trim() : ''
+    if (!valueText) continue
+    result.push(valueText)
+  }
+  return result
+}
+
+function buildImageCapabilityFallbackEntry(capability: ImageCapability | null) {
+  const ratios = parseCapabilityStringArray(
+    capability?.parameters?.ratio ??
+      capability?.parameters?.aspectRatio ??
+      capability?.parameters?.aspectRatios,
+  )
+  const resolutions = parseImageModelResolutions(capability?.parameters?.resolution)
+  const countOptions = parseCapabilityCountRange(capability?.parameters)
+  return { ratios, resolutions, countOptions }
+}
+
+function parseImageCapabilityModelEntry(
+  item: unknown,
+  fallback: {
+    ratios: string[]
+    resolutions: string[]
+    countOptions: number[]
+  },
+): ImageDialogueModelEntry | null {
+  if (!item || typeof item !== 'object') return null
+  const row = item as Record<string, unknown>
+  const rawValue = row.value ?? row.key ?? row.id ?? row.model
+  const value = typeof rawValue === 'string' ? rawValue.trim() : ''
+  if (!value) return null
+  const rawLabel = row.label ?? row.name ?? row.title
+  const label = typeof rawLabel === 'string' && rawLabel.trim() ? rawLabel.trim() : value
+
+  const ratios = parseCapabilityStringArray(
+    row.ratio ?? row.ratios ?? row.aspectRatio ?? row.aspectRatios,
+  )
+  const resolutions = parseImageModelResolutions(row.resolution)
+  const countOptions = parseCapabilityCountRange({ count: row.count })
+
+  return {
+    key: value,
+    label,
+    ratios: ratios.length ? ratios : fallback.ratios,
+    resolutions: resolutions.length ? resolutions : fallback.resolutions,
+    countOptions: countOptions.length ? countOptions : fallback.countOptions,
+  }
+}
+
+/** 解析 chatTools.image.parameters.models */
+export function listImageDialogueModelEntries(
+  source: ImageDialogueSource,
+): ImageDialogueModelEntry[] {
+  const capability = findImageDialogueSource(source)
+  if (!capability?.parameters) return []
+
+  const fallback = buildImageCapabilityFallbackEntry(capability)
+  const models = capability.parameters.models
+  if (Array.isArray(models) && models.length) {
+    return models
+      .map((item) => parseImageCapabilityModelEntry(item, fallback))
+      .filter((item): item is ImageDialogueModelEntry => Boolean(item))
+  }
+
+  const modelOptions = parseCapabilityModelOptions(capability.parameters.modelOptions)
+  if (modelOptions.length) {
+    return modelOptions.map((item) => ({
+      key: item.value,
+      label: item.label,
+      ...fallback,
+    }))
+  }
+
+  const legacyModels = parseCapabilityStringArray(capability.parameters.model)
+  if (legacyModels.length) {
+    return legacyModels.map((key) => ({
+      key,
+      label: key,
+      ...fallback,
+    }))
+  }
+
+  return []
+}
+
+export function findImageDialogueModelEntry(
+  source: ImageDialogueSource,
+  modelKey?: string | null,
+): ImageDialogueModelEntry | null {
+  const entries = listImageDialogueModelEntries(source)
+  if (!entries.length) return null
+  const preferred = modelKey?.trim()
+  if (preferred) {
+    const matched = entries.find((entry) => entry.key === preferred)
+    if (matched) return matched
+  }
+  return entries[0] ?? null
+}
+
 export function buildImageDialogueAspectRatiosFromCapabilities(
   source: ImageDialogueSource,
+  modelKey?: string | null,
 ): ImageDialogueAspectRatioOption[] {
-  const capability = findImageDialogueSource(source)
-  const ratios = parseCapabilityStringArray(capability?.parameters?.aspectRatio)
+  const entry = findImageDialogueModelEntry(source, modelKey)
+  const ratios = entry?.ratios ?? []
   if (!ratios.length) {
+    const capability = findImageDialogueSource(source)
+    const legacyRatios = parseCapabilityStringArray(capability?.parameters?.aspectRatio)
+    if (legacyRatios.length) {
+      return legacyRatios.map((ratio) => ({
+        key: ratio,
+        label: ratio,
+        preview: resolveAspectRatioPreview(ratio),
+      }))
+    }
     return IMAGE_GEN_ASPECT_RATIOS.map((item) => ({
       key: item.key,
       label: item.label,
@@ -1038,16 +1167,20 @@ export function buildImageDialogueAspectRatiosFromCapabilities(
   }
   return ratios.map((ratio) => ({
     key: ratio,
-    label: ratio,
+    label: ratio === 'auto' ? 'auto' : ratio,
     preview: resolveAspectRatioPreview(ratio),
   }))
 }
 
 export function buildImageDialogueResolutionsFromCapabilities(
   source: ImageDialogueSource,
+  modelKey?: string | null,
 ): string[] {
+  const entry = findImageDialogueModelEntry(source, modelKey)
+  if (entry?.resolutions.length) return entry.resolutions
+
   const capability = findImageDialogueSource(source)
-  const resolutions = parseCapabilityStringArray(capability?.parameters?.resolution)
+  const resolutions = parseImageModelResolutions(capability?.parameters?.resolution)
   if (resolutions.length) return resolutions
   return IMAGE_DESIGN_IPS_MENU.map((item) => item.label)
 }
@@ -1055,29 +1188,13 @@ export function buildImageDialogueResolutionsFromCapabilities(
 export function buildImageDialogueModelsFromCapabilities(
   source: ImageDialogueSource,
 ): ImageDialogueModelItem[] {
-  const capability = findImageDialogueSource(source)
-
-  // 优先 chatTools.image.parameters.modelOptions（图生图模型正式数据源）
-  const modelOptions = parseCapabilityModelOptions(capability?.parameters?.modelOptions)
-  if (modelOptions.length) {
-    return modelOptions.map((item, index) => ({
-      key: item.value,
+  const entries = listImageDialogueModelEntries(source)
+  if (entries.length) {
+    return entries.map((item, index) => ({
+      key: item.key,
       name: item.label,
-      duration: item.duration ?? '',
-      icon: resolveImageDialogueModelIcon(item.value || item.label, index),
-      desc: item.desc,
-      badge: item.badge,
-    }))
-  }
-
-  // 兼容旧字段 parameters.model: string[]
-  const models = parseCapabilityStringArray(capability?.parameters?.model)
-  if (models.length) {
-    return models.map((key, index) => ({
-      key,
-      name: key,
       duration: '',
-      icon: resolveImageDialogueModelIcon(key, index),
+      icon: resolveImageDialogueModelIcon(item.key || item.label, index),
     }))
   }
 
@@ -1086,7 +1203,11 @@ export function buildImageDialogueModelsFromCapabilities(
 
 export function buildImageDialogueCountOptionsFromCapabilities(
   source: ImageDialogueSource,
+  modelKey?: string | null,
 ): number[] {
+  const entry = findImageDialogueModelEntry(source, modelKey)
+  if (entry?.countOptions.length) return entry.countOptions
+
   const capability = findImageDialogueSource(source)
   const fromApi = parseCapabilityCountRange(capability?.parameters)
   if (fromApi.length) return fromApi
@@ -1415,29 +1536,88 @@ export const IMAGE_DIALOGUE_MODEL_MENU: ImageDialogueModelItem[] = [
 export function createDefaultImageDialogueSettings(
   source?: ImageDialogueSource,
 ): ImageDialogueSettings {
-  const models = buildImageDialogueModelsFromCapabilities(source)
-  return {
-    aspectRatio: 'auto',
-    resolution: '2K',
-    imageCount: 1,
-    // 默认模型 = chatTools.image.parameters.modelOptions 第一项
-    modelKey: models[0]?.key ?? IMAGE_DIALOGUE_MODEL_MENU[0].key,
-    workflowId: '',
-  }
+  return normalizeImageDialogueSettingsForModel({}, source)
 }
 
-/** 将 modelKey 规范为可用值；无效时回退 modelOptions 第一项 */
+/** 将 modelKey 规范为 models[].value；兼容误存 label 的场景 */
 export function resolveImageDialogueModelKey(
   preferred: string | undefined | null,
   source?: ImageDialogueSource,
 ): string {
-  const models = buildImageDialogueModelsFromCapabilities(source)
-  if (!models.length) {
+  return resolveImageDialogueModelApiValue(preferred, source)
+}
+
+/** 提交图片生成任务时使用的模型值（models[].value） */
+export function resolveImageDialogueModelApiValue(
+  preferred: string | undefined | null,
+  source?: ImageDialogueSource,
+): string {
+  const entries = listImageDialogueModelEntries(source)
+  if (!entries.length) {
     return preferred?.trim() || IMAGE_DIALOGUE_MODEL_MENU[0].key
   }
-  const key = preferred?.trim() ?? ''
-  if (key && models.some((model) => model.key === key)) return key
-  return models[0].key
+  const text = preferred?.trim() ?? ''
+  if (text) {
+    const byValue = entries.find((entry) => entry.key === text)
+    if (byValue) return byValue.key
+    const lower = text.toLowerCase()
+    const byLabel = entries.find(
+      (entry) => entry.label === text || entry.label.toLowerCase() === lower,
+    )
+    if (byLabel) return byLabel.key
+  }
+  return entries[0].key
+}
+
+/** 按当前模型收敛宽高比 / 分辨率 / 张数等参数 */
+export function normalizeImageDialogueSettingsForModel(
+  partial: Partial<ImageDialogueSettings>,
+  source?: ImageDialogueSource,
+): ImageDialogueSettings {
+  const defaults: ImageDialogueSettings = {
+    aspectRatio: 'auto',
+    resolution: '2K',
+    imageCount: 1,
+    modelKey: IMAGE_DIALOGUE_MODEL_MENU[0].key,
+    workflowId: '',
+  }
+
+  const modelKey = resolveImageDialogueModelKey(partial.modelKey, source)
+  const ratios = buildImageDialogueAspectRatiosFromCapabilities(source, modelKey)
+  const resolutions = buildImageDialogueResolutionsFromCapabilities(source, modelKey)
+  const counts = buildImageDialogueCountOptionsFromCapabilities(source, modelKey)
+
+  let aspectRatio = partial.aspectRatio ?? defaults.aspectRatio
+  if (!ratios.some((ratio) => ratio.key === aspectRatio)) {
+    aspectRatio = ratios[0]?.key ?? defaults.aspectRatio
+  }
+
+  let resolution = partial.resolution ?? defaults.resolution
+  if (!resolutions.includes(resolution)) {
+    resolution = resolutions[0] ?? defaults.resolution
+  }
+
+  let imageCount = partial.imageCount ?? defaults.imageCount
+  if (counts.length && !counts.includes(imageCount)) {
+    imageCount = counts[0]
+  }
+
+  const entry = findImageDialogueModelEntry(source, modelKey)
+  const countParam = entry ? null : findImageDialogueSource(source)?.parameters?.count
+  if (countParam && typeof countParam === 'object' && !Array.isArray(countParam)) {
+    const defaultCount = Number((countParam as { default?: number }).default)
+    if (Number.isFinite(defaultCount) && counts.includes(defaultCount)) {
+      imageCount = defaultCount
+    }
+  }
+
+  return {
+    modelKey,
+    aspectRatio,
+    resolution,
+    imageCount,
+    workflowId: partial.workflowId ?? defaults.workflowId,
+  }
 }
 
 export const IMAGE_COLOR_DEFAULT = '#0E316A'
