@@ -64,6 +64,7 @@ import {
   pollGenerationTask,
   applyGenerationResultToNode,
   resetResumedGenerationTaskCache,
+  recoverOrphanedGenerationTasks,
   resumePendingGenerationTasks,
   runImageGenerationOnNode,
   setGenerationTaskSucceededHandler,
@@ -5235,15 +5236,25 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     if (!g) return
 
-    resumePendingGenerationTasks(g, {
+    const resumeOptions = {
       toHtml: plainTextToEditorHtml,
-      onError: (reason) => message.error(reason),
+      onError: (reason: string) => message.error(reason),
       onTaskBound: () => persistGenerationTaskBinding(),
       onTaskComplete: () => persistGenerationTaskBinding(),
-      onVideoGenerationComplete: (nodeId, success) => {
+      onVideoGenerationComplete: (nodeId: string, success: boolean) => {
         if (!success) revealVideoDialogueAfterGenerationFailure(nodeId)
       },
-    })
+    }
+
+    void (async () => {
+      const projectId = activeProjectId.value
+      if (projectId) {
+        await recoverOrphanedGenerationTasks(g, projectId, {
+          onTaskBound: resumeOptions.onTaskBound,
+        })
+      }
+      await resumePendingGenerationTasks(g, resumeOptions)
+    })()
   }
 
   function applyProjectCanvasPayload(payload: ProjectCanvasResponse) {

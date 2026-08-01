@@ -3,7 +3,7 @@ import api from '@/services/api'
 import type { CanvasNodeData } from './constants'
 import { parseVideoAspectRatioValue } from './constants'
 import { resolveImageNaturalSizeCached } from './imageDisplayUrl'
-import { syncNodeShapeFromData, getNodeSize } from './graph'
+import { syncNodeShapeFromData, getNodeSize, refreshCanvasNodeView } from './graph'
 import { resolveVideoNaturalSize } from './upload'
 import { useUserInfo } from '@stores/useUserInfo';
 
@@ -110,12 +110,36 @@ function normalizeGenerationTaskResult(raw: unknown): GenerationTaskResult | nul
   }
 }
 
+function unwrapGenerationTaskRecord(raw: Record<string, unknown>) {
+  const nestedData = raw.data
+  if (!nestedData || typeof nestedData !== 'object' || Array.isArray(nestedData)) {
+    return raw
+  }
+
+  const nested = nestedData as Record<string, unknown>
+  if (readResultField<unknown>(raw, 'status', 'id', 'progress') != null) {
+    return raw
+  }
+  if (readResultField<unknown>(nested, 'status', 'id', 'progress') == null) {
+    return raw
+  }
+
+  return nested
+}
+
+function parseGenerationTaskProgress(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined
+  const progressNum = Number(raw)
+  if (!Number.isFinite(progressNum)) return undefined
+  return Math.max(0, Math.min(100, Math.round(progressNum)))
+}
+
 export function normalizeGenerationTaskDetail(raw: unknown): GenerationTaskDetail {
   if (!raw || typeof raw !== 'object') {
     return { id: '', status: 'FAILED' }
   }
 
-  const task = raw as Record<string, unknown>
+  const task = unwrapGenerationTaskRecord(raw as Record<string, unknown>)
   const resultsRaw = Array.isArray(task.results)
     ? task.results
     : Array.isArray(task.resultThumbnails)
@@ -127,8 +151,8 @@ export function normalizeGenerationTaskDetail(raw: unknown): GenerationTaskDetai
 
   return {
     id: String(readResultField<unknown>(task, 'id') ?? ''),
-    status: String(readResultField<unknown>(task, 'status') ?? ''),
-    progress: Number(readResultField<unknown>(task, 'progress') ?? 0) || undefined,
+    status: String(readResultField<unknown>(task, 'status', 'taskStatus') ?? '').toUpperCase(),
+    progress: parseGenerationTaskProgress(readResultField<unknown>(task, 'progress', 'taskProgress')),
     results,
     error: (task.error as GenerationTaskDetail['error']) ?? null,
   }
@@ -343,11 +367,16 @@ export function bindGenerationTaskId(
   setNodeData(node, data)
 }
 
-export function updateTextGenerationNodeProgress(node: Node, progress: number) {
+export function updateTextGenerationNodeProgress(
+  node: Node,
+  progress: number,
+  options: GenerationProgressSyncOptions = {},
+) {
   const data = { ...(node.getData() as CanvasNodeData) }
   if (data.textGenState !== 'loading') return
   data.textGenProgress = Math.max(0, Math.min(100, Math.round(progress)))
   setNodeData(node, data)
+  refreshGenerationNodeView(node, options.forceRefreshView)
 }
 
 export function applyTextGenerationResultToNode(
@@ -381,11 +410,16 @@ export function markTextGenerationNodeFailed(node: Node, errorMessage?: string) 
   setNodeData(node, data)
 }
 
-export function updateVideoGenerationNodeProgress(node: Node, progress: number) {
+export function updateVideoGenerationNodeProgress(
+  node: Node,
+  progress: number,
+  options: GenerationProgressSyncOptions = {},
+) {
   const data = { ...(node.getData() as CanvasNodeData) }
   if (data.uploadState !== 'uploading') return
   data.uploadProgress = Math.max(0, Math.min(100, Math.round(progress)))
   setNodeData(node, data)
+  refreshGenerationNodeView(node, options.forceRefreshView)
 }
 
 export async function applyVideoGenerationResultToNode(
@@ -485,12 +519,27 @@ export function applyModelGenerationResultToNode(
   return true
 }
 
-export function updateGenerationNodeProgress(node: Node, progress: number) {
+type GenerationProgressSyncOptions = {
+  forceRefreshView?: boolean
+}
+
+function refreshGenerationNodeView(node: Node, forceRefreshView?: boolean) {
+  if (!forceRefreshView) return
+  const graph = getNodeGraph(node)
+  if (graph) refreshCanvasNodeView(graph, node)
+}
+
+export function updateGenerationNodeProgress(
+  node: Node,
+  progress: number,
+  options: GenerationProgressSyncOptions = {},
+) {
   if (!isNodeOnGraph(node)) return
   const data = { ...(node.getData() as CanvasNodeData) }
   if (data.imageGenState !== 'loading') return
   data.imageGenProgress = Math.max(0, Math.min(100, Math.round(progress)))
   setNodeData(node, data)
+  refreshGenerationNodeView(node, options.forceRefreshView)
 }
 
 export async function applyGenerationResultToNode(
@@ -1014,17 +1063,171 @@ function shouldResumeNode(data: CanvasNodeData) {
   return false
 }
 
-/** 画布加载后，恢复所有带 taskId 且仍在生成中的节点 */
-export function resumePendingGenerationTasks(
+function isNodeAwaitingGenerationResume(data: CanvasNodeData) {
+  const imageLoading = data.imageGenState === 'loading' && !data.previewUrl
+  const textLoading = data.textGenState === 'loading' && !String(data.content || '').trim()
+  const videoLoading =
+    data.kind === 'video' && data.uploadState === 'uploading' && !data.previewUrl
+  return imageLoading || textLoading || videoLoading
+}
+
+function inferGenerationTaskType(
+  raw: unknown,
+  data: CanvasNodeData,
+): GenerationTaskType | undefined {
+  const record = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
+  const type = String(record?.taskType ?? record?.task_type ?? '')
+    .trim()
+    .toUpperCase()
+  if (type === 'IMAGE' || type === 'TEXT' || type === 'VIDEO' || type === 'MODEL') {
+    return type
+  }
+  if (data.kind === 'video') return 'VIDEO'
+  if (data.kind === 'text') return 'TEXT'
+  if (data.kind === 'model3d') return 'MODEL'
+  if (data.kind === 'image') return 'IMAGE'
+  return undefined
+}
+
+function applyTaskProgressFromDetail(
+  node: Node,
+  task: GenerationTaskDetail,
+  options: GenerationProgressSyncOptions = {},
+) {
+  if (isGenerationTaskTerminal(task.status)) return
+
+  const progress = task.progress ?? 0
+  const data = node.getData() as CanvasNodeData
+
+  if (data.imageGenState === 'loading') {
+    updateGenerationNodeProgress(node, progress, options)
+    return
+  }
+  if (data.textGenState === 'loading') {
+    updateTextGenerationNodeProgress(node, progress, options)
+    return
+  }
+  if (data.kind === 'video' && data.uploadState === 'uploading') {
+    updateVideoGenerationNodeProgress(node, progress, options)
+  }
+}
+
+/** 为缺少 taskId 的进行中节点，从服务端 RUNNING 任务恢复绑定并同步进度 */
+export async function recoverOrphanedGenerationTasks(
   graph: Graph,
+  projectId: string,
   options: {
-    toHtml?: (text: string) => string
-    onError?: (message: string) => void
     onTaskBound?: () => void
-    onTaskComplete?: () => void
-    onVideoGenerationComplete?: (nodeId: string, success: boolean) => void
   } = {},
 ) {
+  const trimmedProjectId = projectId.trim()
+  if (!trimmedProjectId) return
+
+  let records: unknown[] = []
+  try {
+    const res = await api.getGenerationTasks({ projectId: trimmedProjectId, status: 'RUNNING', pageSize: 100 })
+    records = res.records ?? []
+  } catch {
+    return
+  }
+
+  for (const raw of records) {
+    const task = normalizeGenerationTaskDetail(raw)
+    const taskId = task.id.trim()
+    if (!taskId || isGenerationTaskTerminal(task.status)) continue
+
+    const nodeId = String(
+      readResultField<unknown>(raw as Record<string, unknown>, 'nodeId', 'node_id') ?? '',
+    ).trim()
+    if (!nodeId) continue
+
+    const cell = graph.getCellById(nodeId)
+    if (!cell?.isNode()) continue
+
+    const node = cell as Node
+    const data = node.getData() as CanvasNodeData
+    if (!isNodeAwaitingGenerationResume(data)) continue
+
+    const existingTaskId = String(data.generationTaskId ?? '').trim()
+    if (!existingTaskId) {
+      bindGenerationTaskId(node, taskId, inferGenerationTaskType(raw, data))
+      options.onTaskBound?.()
+    }
+
+    applyTaskProgressFromDetail(node, task, { forceRefreshView: true })
+  }
+}
+
+type ResumePendingGenerationTasksOptions = {
+  toHtml?: (text: string) => string
+  onError?: (message: string) => void
+  onTaskBound?: () => void
+  onTaskComplete?: () => void
+  onVideoGenerationComplete?: (nodeId: string, success: boolean) => void
+}
+
+function resumeGenerationTaskFollow(
+  node: Node,
+  data: CanvasNodeData,
+  taskId: string,
+  options: ResumePendingGenerationTasksOptions,
+  initialTask?: GenerationTaskDetail,
+) {
+  const notifyComplete = (succeeded: boolean) => {
+    if (succeeded) options.onTaskComplete?.()
+  }
+
+  if (data.kind === 'image' && data.imageGenState === 'loading') {
+    startImageGenerationTaskFollow(node, taskId, {
+      title: data.title || '生成结果',
+      fileName: data.fileName || data.title || '生成结果.png',
+      onError: options.onError,
+      initialTask,
+      onComplete: (result) => notifyComplete(result.success),
+    })
+    return
+  }
+
+  if (data.kind === 'text' && data.textGenState === 'loading') {
+    startTextGenerationTaskFollow(node, taskId, {
+      title: data.title,
+      toHtml: options.toHtml,
+      onError: options.onError,
+      onComplete: notifyComplete,
+    })
+    return
+  }
+
+  if (data.kind === 'model3d' && data.imageGenState === 'loading') {
+    scheduleGenerationTaskFollow(taskId, () =>
+      followModelGenerationTaskOnNode(node, taskId, {
+        title: data.title || '3D 模型',
+        onError: options.onError,
+      }).then(notifyComplete),
+    )
+    return
+  }
+
+  if (data.kind === 'video' && data.uploadState === 'uploading') {
+    startVideoGenerationTaskFollow(node, taskId, {
+      title: data.title || '文生视频',
+      fileName: data.fileName || '文生视频.mp4',
+      onError: options.onError,
+      onComplete: (success) => {
+        notifyComplete(success)
+        options.onVideoGenerationComplete?.(node.id, success)
+      },
+    })
+  }
+}
+
+/** 画布加载后，恢复所有带 taskId 且仍在生成中的节点 */
+export async function resumePendingGenerationTasks(
+  graph: Graph,
+  options: ResumePendingGenerationTasksOptions = {},
+) {
+  const nodesToResume: Array<{ node: Node; data: CanvasNodeData; taskId: string }> = []
+
   graph.getNodes().forEach((node) => {
     const data = node.getData() as CanvasNodeData
     if (!shouldResumeNode(data)) return
@@ -1032,53 +1235,24 @@ export function resumePendingGenerationTasks(
     const taskId = String(data.generationTaskId).trim()
     resumedTaskIds.add(taskId)
     options.onTaskBound?.()
-
-    const notifyComplete = (succeeded: boolean) => {
-      if (succeeded) options.onTaskComplete?.()
-    }
-
-    if (data.kind === 'image' && data.imageGenState === 'loading') {
-      startImageGenerationTaskFollow(node, taskId, {
-        title: data.title || '生成结果',
-        fileName: data.fileName || data.title || '生成结果.png',
-        onError: options.onError,
-        onComplete: (result) => notifyComplete(result.success),
-      })
-      return
-    }
-
-    if (data.kind === 'text' && data.textGenState === 'loading') {
-      startTextGenerationTaskFollow(node, taskId, {
-        title: data.title,
-        toHtml: options.toHtml,
-        onError: options.onError,
-        onComplete: notifyComplete,
-      })
-      return
-    }
-
-    if (data.kind === 'model3d' && data.imageGenState === 'loading') {
-      scheduleGenerationTaskFollow(taskId, () =>
-        followModelGenerationTaskOnNode(node, taskId, {
-          title: data.title || '3D 模型',
-          onError: options.onError,
-        }).then(notifyComplete),
-      )
-      return
-    }
-
-    if (data.kind === 'video' && data.uploadState === 'uploading') {
-      startVideoGenerationTaskFollow(node, taskId, {
-        title: data.title || '文生视频',
-        fileName: data.fileName || '文生视频.mp4',
-        onError: options.onError,
-        onComplete: (success) => {
-          notifyComplete(success)
-          options.onVideoGenerationComplete?.(node.id, success)
-        },
-      })
-    }
+    nodesToResume.push({ node, data, taskId })
   })
+
+  await Promise.all(
+    nodesToResume.map(async ({ node, data, taskId }) => {
+      let initialTask: GenerationTaskDetail | undefined
+      try {
+        initialTask = normalizeGenerationTaskDetail(
+          await getGenerationTaskDetail<GenerationTaskDetail>(taskId),
+        )
+        applyTaskProgressFromDetail(node, initialTask, { forceRefreshView: true })
+      } catch {
+        // ignore prime failure and continue following
+      }
+
+      resumeGenerationTaskFollow(node, data, taskId, options, initialTask)
+    }),
+  )
 }
 
 export function resetResumedGenerationTaskCache() {

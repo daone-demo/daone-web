@@ -14,56 +14,17 @@
         >
           {{ tag }}
         </button>
+        <span v-if="sourceTextPreview" class="image-gen-prompt-panel__text-ref">
+          {{ sourceTextPreview }}
+        </span>
+        <span v-else-if="sourcePreviewUrl" class="image-gen-prompt-panel__ref-thumb">
+          <img :src="sourcePreviewUrl" alt="" />
+        </span>
       </div>
       <button type="button" class="image-gen-prompt-panel__expand" title="展开">⤢</button>
     </div>
-
-    <div
-      v-if="props.sourceRefs.length"
-      class="image-gen-prompt-panel__refs"
-    >
-      <div
-        v-for="ref in props.sourceRefs"
-        :key="ref.nodeId"
-        class="image-gen-prompt-panel__ref"
-        :class="{ 'image-gen-prompt-panel__ref--text': ref.kind === 'text' }"
-        :title="ref.kind === 'text' ? ref.textPreview : ref.title"
-        @mousedown.stop
-      >
-        <img v-if="ref.kind !== 'text'" :src="ref.previewUrl" alt="" />
-        <div v-else class="image-gen-prompt-panel__text-card">
-          <div class="image-gen-prompt-panel__text-card-inner">
-            <svg
-              class="image-gen-prompt-panel__text-icon"
-              width="14"
-              height="15"
-              viewBox="0 0 16 16"
-              aria-hidden="true"
-            >
-              <g transform="translate(1 0.5)">
-                <path
-                  d="M9.33 14.62H0v-2.1h9.33zM14 10.44H0v-2.1h14zm0-4.17H0v-2.1h14zm0-4.17H0V0h14z"
-                  fill="currentColor"
-                />
-              </g>
-            </svg>
-          </div>
-          <span class="image-gen-prompt-panel__ref-index">{{ ref.index }}</span>
-        </div>
-        <button
-          type="button"
-          class="image-gen-prompt-panel__ref-remove"
-          title="删除"
-          @click.stop="emit('remove-source-ref', ref.nodeId)"
-        >
-          ×
-        </button>
-        <span v-if="ref.kind !== 'text'" class="image-gen-prompt-panel__ref-badge">{{ ref.index }}</span>
-      </div>
-    </div>
-
     <textarea
-      :value="props.prompt"
+      :value="prompt"
       class="image-gen-prompt-panel__input"
       :placeholder="IMG2IMG_PROMPT_PLACEHOLDER"
       rows="2"
@@ -82,7 +43,7 @@
       <span class="image-gen-prompt-panel__count">1张</span>
       <span class="image-gen-prompt-panel__credits">⚡ 14</span>
       <input
-        :value="props.seed"
+        :value="seed"
         type="number"
         class="image-gen-prompt-panel__seed"
         min="0"
@@ -93,12 +54,12 @@
       <button
         type="button"
         class="image-gen-prompt-panel__send"
-        :class="{ 'image-gen-prompt-panel__send--disabled': props.submitting }"
-        :disabled="props.submitting"
+        :class="{ 'image-gen-prompt-panel__send--disabled': submitting }"
+        :disabled="submitting"
         title="生成"
         @click="emit('generate')"
       >
-        {{ props.submitting ? '…' : '↑' }}
+        {{ submitting ? '…' : '↑' }}
       </button>
     </div>
   </div>
@@ -107,28 +68,21 @@
 <script setup lang="ts">
 import { IMG2IMG_PROMPT_PLACEHOLDER, IMG2IMG_QUICK_TAGS } from './constants'
 import { useCanvasBgTheme } from './useCanvasBgTheme'
-import type { VideoSourceRef } from './videoGen'
 
 const { isLightTheme } = useCanvasBgTheme()
 
-const props = withDefaults(
-  defineProps<{
-    prompt: string
-    seed: number
-    sourceRefs?: VideoSourceRef[]
-    submitting?: boolean
-  }>(),
-  {
-    sourceRefs: () => [],
-    submitting: false,
-  },
-)
+defineProps<{
+  prompt: string
+  seed: number
+  sourcePreviewUrl?: string
+  sourceTextPreview?: string
+  submitting?: boolean
+}>()
 
 const emit = defineEmits<{
   'update:prompt': [value: string]
   'update:seed': [value: number]
   generate: []
-  'remove-source-ref': [nodeId: string]
 }>()
 
 function onPromptInput(event: Event) {
@@ -199,129 +153,40 @@ function onSeedInput(event: Event) {
   }
 }
 
-.image-gen-prompt-panel__refs {
-  display: flex;
+.image-gen-prompt-panel__text-ref {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
+  max-width: 160px;
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #252528;
+  color: #d1d5db;
+  font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  .image-gen-prompt-panel--light & {
+    background: #f3f4f6;
+    color: #374151;
+  }
 }
 
-.image-gen-prompt-panel__ref {
-  position: relative;
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+.image-gen-prompt-panel__ref-thumb {
+  display: block;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border-radius: 6px;
   overflow: hidden;
   border: 1px solid #4b4b55;
-  background: #2a2a30;
-  flex-shrink: 0;
-
-  &:hover .image-gen-prompt-panel__ref-remove {
-    opacity: 1;
-  }
 
   img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    display: block;
-  }
-
-  &--text {
-    width: 48px;
-    height: 48px;
-    border-color: #e5e7eb;
-    background: transparent;
-    cursor: default;
-  }
-
-  .image-gen-prompt-panel--light & {
-    border-color: #e5e7eb;
-    background: transparent;
-  }
-}
-
-.image-gen-prompt-panel__text-card {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.image-gen-prompt-panel__text-card-inner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  border-radius: 12px;
-  background: #e5e7eb;
-}
-
-.image-gen-prompt-panel__text-icon {
-  color: #525252;
-  pointer-events: none;
-}
-
-.image-gen-prompt-panel__ref-index {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
-  font-size: 9px;
-  line-height: 1;
-  pointer-events: none;
-}
-
-.image-gen-prompt-panel__ref-badge {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
-  font-size: 9px;
-  line-height: 1;
-  pointer-events: none;
-}
-
-.image-gen-prompt-panel__ref-remove {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s, background 0.15s;
-
-  &:hover {
-    background: rgba(239, 68, 68, 0.9);
   }
 }
 

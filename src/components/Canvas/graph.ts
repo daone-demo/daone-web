@@ -1184,9 +1184,14 @@ export function syncAllNodeSizes(graph: Graph) {
 /** vue-shape 节点在独立 Vue 实例中，主题切换后强制重渲染 */
 export function refreshCanvasNodeViews(graph: Graph) {
   graph.getNodes().forEach((node) => {
-    const view = graph.findViewByCell(node) as VueShapeViewLike | null
-    view?.renderVueComponent?.()
+    refreshCanvasNodeView(graph, node)
   })
+}
+
+/** 强制重渲染单个 vue-shape 节点视图 */
+export function refreshCanvasNodeView(graph: Graph, node: Node) {
+  const view = graph.findViewByCell(node) as VueShapeViewLike | null
+  view?.renderVueComponent?.()
 }
 
 function needsImageDimensionHydration(data: CanvasNodeData) {
