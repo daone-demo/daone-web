@@ -47,20 +47,6 @@
       class="video-node__body video-node__body--picker"
     >
       <i class="iconfont icon-shipin" style="font-size: 36px; color: black;" />
-      <template v-if="VIDEO_PICKER_TRY_ACTIONS.length">
-        <p class="video-node__try">尝试：</p>
-        <button
-          v-for="action in VIDEO_PICKER_TRY_ACTIONS"
-          :key="action.key"
-          type="button"
-          class="video-node__action"
-          @mousedown.stop
-          @click="onPickerAction(action.key)"
-        >
-          <span class="video-node__action-icon" :data-icon="action.icon" aria-hidden="true" />
-          {{ action.label }}
-        </button>
-      </template>
     </div>
 
     <div
@@ -420,8 +406,8 @@ onBeforeUnmount(() => {
 
 .video-node--picker-card {
   .video-node__body--picker {
-    align-items: stretch;
-    justify-content: flex-start;
+    align-items: center;
+    justify-content: center;
     padding: 16px 12px 12px;
   }
 }
