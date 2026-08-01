@@ -735,14 +735,9 @@ export function registerCore(bind: CanvasBindings) {
     }
   })
 
-  const imageDialoguePreviews = computed<ImageSourceRef[]>(() => {
-    void toolbarRevision.value
-    const id = showImageDialogue.value
-      ? (activeImageDialogueNodeId || (selectedKind.value === 'image' ? selectedNodeId.value : ''))
-      : selectedNodeId.value
-    if (!id) return []
+  function getImageDialoguePreviewsForNode(nodeId: string): ImageSourceRef[] {
     const g = graph.value
-    const cell = g?.getCellById(id)
+    const cell = g?.getCellById(nodeId)
     if (!cell?.isNode()) return []
     const data = cell.getData() as CanvasNodeData
     const refs = Array.isArray(data.imageSourceRefs)
@@ -766,13 +761,24 @@ export function registerCore(bind: CanvasBindings) {
       }]
     }
     return []
+  }
+
+  const imageDialoguePreviews = computed<ImageSourceRef[]>(() => {
+    void toolbarRevision.value
+    const id = activeImageGenPromptNodeId.value
+      || (showImageDialogue.value
+        ? (activeImageDialogueNodeId || (selectedKind.value === 'image' ? selectedNodeId.value : ''))
+        : selectedNodeId.value)
+    if (!id) return []
+    return getImageDialoguePreviewsForNode(id)
   })
 
   const imageDialoguePreviewUrl = computed(() => {
     void toolbarRevision.value
-    const id = showImageDialogue.value
-      ? (activeImageDialogueNodeId || (selectedKind.value === 'image' ? selectedNodeId.value : ''))
-      : selectedNodeId.value
+    const id = activeImageGenPromptNodeId.value
+      || (showImageDialogue.value
+        ? (activeImageDialogueNodeId || (selectedKind.value === 'image' ? selectedNodeId.value : ''))
+        : selectedNodeId.value)
     if (!id) return ''
     const data = graph.value?.getCellById(id)?.getData() as CanvasNodeData | undefined
     return data?.sourcePreviewUrl || data?.previewUrl || ''
@@ -781,6 +787,7 @@ export function registerCore(bind: CanvasBindings) {
   const elementMarks = computed(() => {
     void toolbarRevision.value
     const returnId = elementSelectReturnNodeId.value
+      || activeImageGenPromptNodeId.value
       || (showImageDialogue.value ? getActiveImageDialogueTargetNodeId() : '')
       || (showVideoGenPromptBar.value ? activeVideoGenPromptNodeId.value : '')
     if (!returnId) return []
@@ -2189,7 +2196,9 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     const g = graph.value
-    const sourceNodeId = selectedNodeId.value
+    const fromImageGenPrompt = Boolean(activeImageGenPromptNodeId.value)
+    const sourceNodeId =
+      getActiveImageDialogueTargetNodeId() || selectedNodeId.value
     if (!g || !sourceNodeId) return
 
     const cell = g.getCellById(sourceNodeId)
@@ -2199,10 +2208,16 @@ export function registerCore(bind: CanvasBindings) {
     const sourceData = sourceNode.getData() as CanvasNodeData
     if (sourceData.uploadState === 'uploading' || sourceData.imageGenState === 'loading') return
 
+    const dialoguePreviews = getImageDialoguePreviewsForNode(sourceNodeId)
     persistImageDialogueFields(sourceNodeId)
-    resetImageDialogue()
+    if (fromImageGenPrompt) {
+      closeImageGenPromptBar()
+      exitImageDialogueCanvasPickMode()
+    } else {
+      resetImageDialogue()
+    }
 
-    const referenceAssetIds = imageDialoguePreviews.value
+    const referenceAssetIds = dialoguePreviews
       .map((item) => item.assetId)
       .filter((id): id is string => Boolean(id))
     const assetId = referenceAssetIds[0] || resolveImageAssetId(sourceData) || ''
@@ -3344,6 +3359,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function getActiveImageDialogueTargetNodeId() {
+    if (activeImageGenPromptNodeId.value) return activeImageGenPromptNodeId.value
     if (activeImageDialogueNodeId) return activeImageDialogueNodeId
     if (showImageDialogue.value && selectedNodeId.value && selectedKind.value === 'image') {
       return selectedNodeId.value
@@ -3535,7 +3551,7 @@ export function registerCore(bind: CanvasBindings) {
 
   async function onImageDialogueUploadFiles(files: File[]) {
     const g = graph.value
-    const targetNodeId = selectedNodeId.value
+    const targetNodeId = getActiveImageDialogueTargetNodeId() || selectedNodeId.value
     if (!g || !targetNodeId) return
 
     const targetCell = g.getCellById(targetNodeId)
@@ -3571,7 +3587,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function onImageDialogueAddCanvasNode(sourceNodeId: string) {
-    const targetNodeId = selectedNodeId.value
+    const targetNodeId = getActiveImageDialogueTargetNodeId() || selectedNodeId.value
     const wasDialogueOpen = showImageDialogue.value
     void linkImageNodeToImageDialogue(sourceNodeId, targetNodeId).then((linked) => {
       if (!linked) return
@@ -3590,7 +3606,7 @@ export function registerCore(bind: CanvasBindings) {
 
   function clearImageDialoguePreview(sourceNodeId?: string) {
     const g = graph.value
-    const id = selectedNodeId.value
+    const id = getActiveImageDialogueTargetNodeId() || selectedNodeId.value
     if (!g || !id) return
     const cell = g.getCellById(id)
     if (!cell?.isNode()) return
@@ -3727,6 +3743,8 @@ export function registerCore(bind: CanvasBindings) {
     imageGenSourcePreviewUrl.value = textPreview ? '' : (data.sourcePreviewUrl ?? '')
     imageGenPromptText.value = data.genPrompt ?? ''
     imageGenSeed.value = data.genSeed ?? 58
+    imageDialogueText.value = data.imageDialogueText ?? data.genPrompt ?? ''
+    imageDialogueSettings.value = normalizeImageDialogueSettings(data.imageDialogueSettings)
   }
 
   function normalizeImageDialogueSettings(
@@ -3761,6 +3779,7 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     const id =
       nodeId ||
+      activeImageGenPromptNodeId.value ||
       activeImageDialogueNodeId ||
       (showImageDialogue.value ? selectedNodeId.value : '')
     if (!g || !id) return
@@ -3771,6 +3790,9 @@ export function registerCore(bind: CanvasBindings) {
 
     data.imageDialogueText = imageDialogueText.value
     data.imageDialogueSettings = { ...imageDialogueSettings.value }
+    if (imageDialogueText.value.trim()) {
+      data.genPrompt = imageDialogueText.value
+    }
     cell.setData(data, { overwrite: true })
   }
 

@@ -23,6 +23,8 @@
       :show-project-menu="showProjectMenu"
       :show-user-menu="showUserMenu"
       :projects="projectsList"
+      :projects-loading="projectsLoading"
+      :projects-has-more="projectsHasMore"
       :active-project-id="activeProjectId"
       :user-name="userMenuName"
       :user-role="userMenuRole"
@@ -42,6 +44,7 @@
       @new-project="emit('new-project')"
       @rename-project="(projectId, name) => emit('rename-project', projectId, name)"
       @delete-project="emit('delete-project', $event)"
+      @load-more-projects="emit('load-more-projects')"
     />
 
     <div ref="graphRef" class="canvas__graph" />
@@ -435,11 +438,14 @@ const emit = defineEmits<{
   'new-project': []
   'rename-project': [projectId: string, name: string],
   'delete-project': [projectId: string],
+  'load-more-projects': [],
   'toolbar-preferences-saved': [payload: { nodeType: 'IMAGE' | 'VIDEO' | 'TEXT' }],
 }>();
 
 defineProps<{
   projectsList: CanvasProjectItem[]
+  projectsLoading?: boolean
+  projectsHasMore?: boolean
   imageCapabilities: ImageCapability[]
   videoCapabilities: ImageCapability[]
   textCapabilities: any[]

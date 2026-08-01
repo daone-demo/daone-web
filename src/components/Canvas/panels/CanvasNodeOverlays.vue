@@ -140,22 +140,36 @@
 
   <div
     v-if="showImageGenPromptBar"
-    class="canvas__img2img-prompt"
+    class="canvas__node-dialogue"
     :style="{
       left: `${imageGenPromptPos.left}px`,
       top: `${imageGenPromptPos.top}px`,
       width: `${imageGenPromptPos.width}px`,
     }"
+    @mousedown.stop
   >
-    <ImageGenPromptPanel
-      :prompt="imageGenPromptText"
-      :seed="imageGenSeed"
-      :source-refs="imageGenSourceRefs"
-      :submitting="imageGenSubmitting"
-      @update:prompt="emit('update:imageGenPromptText', $event)"
-      @update:seed="emit('update:imageGenSeed', $event)"
-      @generate="emit('generate-image')"
-      @remove-source-ref="emit('remove-image-gen-source-ref', $event)"
+    <ImageDialoguePanel
+      :model-value="imageDialogueText"
+      :settings="imageDialogueSettings"
+      :preview-url="imageDialoguePreviewUrl"
+      :previews="imageDialoguePreviews"
+      :canvas-pick-mode="imageDialogueCanvasPickMode"
+      :element-select-mode="elementSelectMode"
+      :element-marks="elementMarks"
+      :mention-insert-serial="mentionInsertSerial"
+      :mention-insert-token="mentionInsertToken"
+      :chat-tools="chatTools"
+      :workflows="workflows"
+      @update:model-value="emit('update:imageDialogueText', $event)"
+      @update:settings="emit('update:imageDialogueSettings', $event)"
+      @remove="emit('remove-image-dialogue-preview', $event)"
+      @upload-images="emit('upload-image-dialogue-images', $event)"
+      @add-canvas-node="emit('add-image-dialogue-canvas-node', $event)"
+      @toggle-canvas-pick="emit('toggle-image-dialogue-canvas-pick')"
+      @toggle-mark="emit('toggle-image-dialogue-mark')"
+      @mention-inserted="emit('mention-inserted')"
+      @select-mark-label="(markId, index) => emit('select-mark-label', markId, index)"
+      @submit="emit('submit-image-dialogue', $event)"
     />
   </div>
 
@@ -429,7 +443,6 @@
 </template>
 
 <script setup lang="ts">
-import ImageGenPromptPanel from '../ImageGenPromptPanel.vue'
 import VideoGenPromptPanel from '../VideoGenPromptPanel.vue'
 import ImageDialoguePanel from '../ImageDialoguePanel.vue'
 import DialogueWorkflowSelect from '../DialogueWorkflowSelect.vue'

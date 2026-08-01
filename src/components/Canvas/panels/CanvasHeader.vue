@@ -34,40 +34,47 @@
               </span>
             </div>
           </div>
-          <button
-            v-for="project in projects"
-            :key="project.id"
-            type="button"
-            class="canvas__project-item"
-            :class="{ 'canvas__project-item--active': project.id === activeProjectId }"
-            @click="emit('select-project', project.id)"
+          <div
+            ref="projectMenuListRef"
+            class="canvas__project-menu-list"
+            @scroll="onProjectMenuScroll"
           >
-            <span
-              class="canvas__project-doc"
-              :class="{ 'canvas__project-doc--active': project.id === activeProjectId }"
-              aria-hidden="true"
-            />
-            <!-- <i
-              class="canvas__project-status"
-              :class="project.saved ? 'canvas__project-status--saved' : 'canvas__project-status--unsaved'"
-              aria-hidden="true"
-            /> -->
-            <span class="canvas__project-name">{{ project.title }}</span>
-            <i
-              class="iconfont icon-zhongmingming"
-              @click.stop="emit('rename-project', project.id, project.title)"
-            />
-            <i
-              class="iconfont icon-shanchu1"
-              v-if="project.id !== activeProjectId"
-              @click.stop="emit('delete-project', project.id)"
-            />
-            <span
-              v-if="project.id === activeProjectId"
-              class="canvas__project-check"
-              aria-hidden="true"
-            />
-          </button>
+            <button
+              v-for="project in projects"
+              :key="project.id"
+              type="button"
+              class="canvas__project-item"
+              :class="{ 'canvas__project-item--active': project.id === activeProjectId }"
+              @click="emit('select-project', project.id)"
+            >
+              <span
+                class="canvas__project-doc"
+                :class="{ 'canvas__project-doc--active': project.id === activeProjectId }"
+                aria-hidden="true"
+              />
+              <!-- <i
+                class="canvas__project-status"
+                :class="project.saved ? 'canvas__project-status--saved' : 'canvas__project-status--unsaved'"
+                aria-hidden="true"
+              /> -->
+              <span class="canvas__project-name">{{ project.title }}</span>
+              <i
+                class="iconfont icon-zhongmingming"
+                @click.stop="emit('rename-project', project.id, project.title)"
+              />
+              <i
+                class="iconfont icon-shanchu1"
+                v-if="project.id !== activeProjectId"
+                @click.stop="emit('delete-project', project.id)"
+              />
+              <span
+                v-if="project.id === activeProjectId"
+                class="canvas__project-check"
+                aria-hidden="true"
+              />
+            </button>
+            <p v-if="projectsLoading" class="canvas__project-menu-loading">加载中...</p>
+          </div>
         </div>
       </div>
       <button
@@ -235,6 +242,8 @@ const props = defineProps<{
   showProjectMenu: boolean
   showUserMenu: boolean
   projects: CanvasProjectItem[]
+  projectsLoading?: boolean
+  projectsHasMore?: boolean
   activeProjectId: string
   userName: string
   userRole: string
@@ -269,6 +278,20 @@ const emit = defineEmits<{
   'new-project': [],
   'rename-project': [projectId: string, name: string],
   'delete-project': [projectId: string],
-}>();
+  'load-more-projects': [],
+}>()
+
+const SCROLL_LOAD_THRESHOLD = 48
+
+function onProjectMenuScroll(event: Event) {
+  if (props.projectsLoading || props.projectsHasMore === false) return
+  const el = event.target as HTMLElement
+  if (!el) return
+  const reachedBottom =
+    el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_LOAD_THRESHOLD
+  if (reachedBottom) {
+    emit('load-more-projects')
+  }
+}
 
 </script>

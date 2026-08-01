@@ -9,6 +9,8 @@
       <Canvas
         ref="canvasRef"
         :projects-list="projectsList"
+        :projects-loading="projectsLoading"
+        :projects-has-more="projectsHasMore"
         :image-capabilities="ImageCapabilities"
         :video-capabilities="VideoCapabilities"
         :text-capabilities="TextCapabilities"
@@ -20,6 +22,7 @@
         @new-project="onNewProject"
         @rename-project="onRenameProject"
         @delete-project="onDeleteProject"
+        @load-more-projects="onLoadProjects"
         @toolbar-preferences-saved="onToolbarPreferencesSaved"
       />
       <ChatSidePanel
@@ -52,7 +55,7 @@ import { computed, createVNode, nextTick, onMounted, onUnmounted, ref, watch } f
 import type { Node } from '@antv/x6'
 import { Modal } from 'ant-design-vue'
 import { ExclamationCircleFilled } from '@ant-design/icons-vue'
-import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import Canvas from '@/components/Canvas/index.vue'
 import ChatSidePanel from './ChatSidePanel.vue'
 import type { ChatSendPayload } from './chatTypes'
@@ -80,6 +83,7 @@ const currentSessionId = ref('');
 const sessionName = ref('');
 const chatTools = ref<any>({});
 const workflows = ref<WorkflowCategoryGroup[]>([]);
+const page = ref(1);
 // const ImageIcon = ref({
 //   IMAGE_REMOVE_BG: '', // 抠图
 //   quick: '', // 快速
@@ -119,7 +123,10 @@ type CanvasProjectItem = {
 }
 
 const route = useRoute();
+const router = useRouter();
 const projectsList = ref<CanvasProjectItem[]>([]);
+const projectsLoading = ref(false)
+const projectsHasMore = ref(true)
 const chatPanelCollapsed = ref(true)
 const currentProjectId = computed(() => {
   const id = route.params.id
@@ -187,8 +194,21 @@ const onLoadProjectCanvas = async (id?: string) => {
 }
 
 const onLoadProjects = async () => {
-  const res = await api.getProjects({ page: 1, pageSize: 10 });
-  projectsList.value = res.records as CanvasProjectItem[];
+  if (projectsLoading.value || !projectsHasMore.value) return
+  projectsLoading.value = true
+  try {
+    const res = await api.getProjects({ page: page.value, pageSize: 10 })
+    const records = res.records as CanvasProjectItem[]
+    if (page.value === 1) {
+      projectsList.value = records
+    } else {
+      projectsList.value = [...projectsList.value, ...records]
+    }
+    page.value += 1
+    projectsHasMore.value = projectsList.value.length < res.total
+  } finally {
+    projectsLoading.value = false
+  }
 }
 
 function getNextUntitledProjectTitle() {
@@ -211,20 +231,27 @@ function getNextUntitledProjectTitle() {
 }
 
 const onNewProject = async () => {
-  const res = await api.createProject({ title: getNextUntitledProjectTitle() });
-  projectsList.value.push(res as CanvasProjectItem);
+  const res = await api.createProject({ title: getNextUntitledProjectTitle() })
+  await onRefreshProjects()
+  const newProjectId = (res as CanvasProjectItem).id
+  if (!newProjectId) return
+  leaveConfirmed = true
+  await router.push({
+    name: route.name ?? 'projectDetail',
+    params: { id: newProjectId },
+  })
 }
 
 const onRenameProject = async (projectId: string, name: string) => {
   project_Id.value = projectId;
   projectName.value = name;
   modalStore.openModal('updateProjectName');
-  onLoadProjects();
+  await onRefreshProjects();
 }
 
 const onDeleteProject = async (projectId: string) => {
   await api.deleteProject(projectId);
-  onLoadProjects();
+  await onRefreshProjects();
 }
 
 const onCloseChat = () => {
@@ -234,8 +261,10 @@ const onCloseChat = () => {
 /**
  * Refresh projects list
  */
-const onRefreshProjects = () => {
-  onLoadProjects();
+const onRefreshProjects = async () => {
+  page.value = 1
+  projectsHasMore.value = true
+  await onLoadProjects()
 }
 
 const onLoadWorkflows = async () => {
