@@ -3,10 +3,11 @@
     class="embedded-video-player"
     :class="{
       'embedded-video-player--contain': objectFit === 'contain',
+      'embedded-video-player--preview': preview,
     }"
     :style="rootStyle"
-    @mousedown.stop
-    @click.stop
+    @mousedown="onRootMouseDown"
+    @click="onRootClick"
   >
     <video
       ref="videoRef"
@@ -15,6 +16,7 @@
       :src="src"
       playsinline
       preload="metadata"
+      :muted="preview"
       @loadedmetadata="onLoadedMetadata"
       @timeupdate="onTimeUpdate"
       @play="onPlay"
@@ -22,7 +24,9 @@
       @ended="onEnded"
     />
 
-    <div class="video-controls-bar">
+    <span v-if="preview" class="embedded-video-player__preview-play" aria-hidden="true" />
+
+    <div v-if="!preview" class="video-controls-bar">
       <button
         type="button"
         class="video-ctrl-btn"
@@ -128,10 +132,13 @@ const props = withDefaults(defineProps<{
   objectFit?: 'cover' | 'contain'
   aspectRatio?: string
   minHeight?: string
+  /** 列表缩略图模式：无控件，点击事件交给父级 */
+  preview?: boolean
 }>(), {
   objectFit: 'cover',
   aspectRatio: '16 / 9',
   minHeight: '0px',
+  preview: false,
 })
 
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -164,6 +171,14 @@ function onProgressInput(event: Event) {
   if (!Number.isFinite(value)) return
   seek(value)
 }
+
+function onRootMouseDown(event: MouseEvent) {
+  if (!props.preview) event.stopPropagation()
+}
+
+function onRootClick(event: MouseEvent) {
+  if (!props.preview) event.stopPropagation()
+}
 </script>
 
 <style scoped lang="scss">
@@ -178,6 +193,29 @@ function onProgressInput(event: Event) {
 .embedded-video-player--contain {
   .embedded-video-player__video {
     object-fit: contain;
+  }
+}
+
+.embedded-video-player--preview {
+  pointer-events: none;
+}
+
+.embedded-video-player__preview-play {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.22);
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 1.2 10.5 6 2.5 10.8Z' fill='white'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+    transform: translate(-50%, -50%);
   }
 }
 

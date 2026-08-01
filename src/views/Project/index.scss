@@ -111,8 +111,29 @@
 
 .project-panel__body {
   flex: 1;
-  overflow: auto;
+  overflow: visible;
   padding: 20px 24px 28px;
+}
+
+.project-panel__upload-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  aspect-ratio: 1 / 1.18;
+  padding: 0;
+  border: 1px solid #eceef1;
+  border-radius: 12px;
+  background: #fafbfc;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+  }
 }
 
 .project-panel__grid {
@@ -327,9 +348,11 @@
 
 .home__inspiration-card {
   width: 100%;
+  cursor: pointer;
 }
 
 .home__inspiration-media {
+  position: relative;
   overflow: hidden;
   border-radius: 12px;
   background: #e5e7eb;
@@ -337,6 +360,35 @@
   &--video {
     border-radius: 12px;
     background: #111;
+  }
+}
+
+.home__inspiration-video-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  object-fit: cover;
+  background: #111;
+}
+
+.home__inspiration-video-play {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.22);
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 1.2 10.5 6 2.5 10.8Z' fill='white'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+    transform: translate(-50%, -50%);
   }
 }
 
