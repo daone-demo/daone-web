@@ -31,6 +31,13 @@
         placeholder="请选择工作流"
         :light="canvasBgTheme === 'light'"
       />
+      <DialogueWorkflowSelect
+        v-else-if="isText2VideoTask"
+        v-model="selectedTextWorkFlow"
+        :groups="textWorkflowOptionGroups"
+        placeholder="请选择工作流"
+        :light="canvasBgTheme === 'light'"
+      />
       <div v-else class="canvas__prompt-model-wrap">
         <button
           type="button"
@@ -480,6 +487,8 @@ import {
   TEXT_PROMPT_MODEL_MENU,
   buildImageWorkflowOptionGroups,
   buildImageWorkflowOptions,
+  buildTextWorkflowOptionGroups,
+  buildTextWorkflowOptions,
   type ImageSourceRef,
   type ImageMarkItem,
   type ChatTools,
@@ -692,8 +701,11 @@ const emit = defineEmits<{
 const showPromptWorkFlow = ref(false)
 const selectedPromptWorkFlowKey = ref(TEXT_PROMPT_MODEL_MENU[0]?.key ?? '')
 const selectedText2ImageWorkFlow = ref<string | undefined>(undefined)
+const selectedTextWorkFlow = ref<string | undefined>(undefined)
 const imageWorkflowOptions = computed(() => buildImageWorkflowOptions(props.workflows))
 const imageWorkflowOptionGroups = computed(() => buildImageWorkflowOptionGroups(props.workflows))
+const textWorkflowOptions = computed(() => buildTextWorkflowOptions(props.workflows))
+const textWorkflowOptionGroups = computed(() => buildTextWorkflowOptionGroups(props.workflows))
 const selectedText2ImageWorkflowRecord = computed(() =>
   imageWorkflowOptions.value.find((workflow) => workflow.id === selectedText2ImageWorkFlow.value),
 )
@@ -902,6 +914,24 @@ watch(
       !options.some((workflow) => workflow.id === selectedText2ImageWorkFlow.value)
     ) {
       selectedText2ImageWorkFlow.value = undefined
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  textWorkflowOptions,
+  (options) => {
+    if (!props.isText2VideoTask) return
+    if (!options.length) {
+      selectedTextWorkFlow.value = undefined
+      return
+    }
+    if (
+      selectedTextWorkFlow.value &&
+      !options.some((workflow) => workflow.id === selectedTextWorkFlow.value)
+    ) {
+      selectedTextWorkFlow.value = undefined
     }
   },
   { immediate: true },

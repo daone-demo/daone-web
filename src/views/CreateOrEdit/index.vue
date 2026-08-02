@@ -33,6 +33,7 @@
         :current-session-id="currentSessionId"
         :session-name="sessionName"
         :chat-tools="chatTools"
+        :ai-skills="aiSkills"
         @load-history-sessions="onLoadHistorySessions"
         @set-current-session-id="onSetCurrentSessionId"
         @send="onChatSend"
@@ -135,7 +136,8 @@ const currentProjectId = computed(() => {
 const canvasRef = ref<InstanceType<typeof Canvas> & CanvasExpose | null>(null)
 const chatPanelRef = ref<InstanceType<typeof ChatSidePanel> | null>(null)
 const pageLoading = ref(true)
-const pendingCanvasPayload = ref<ProjectCanvasResponse | null>(null)
+const pendingCanvasPayload = ref<ProjectCanvasResponse | null>(null);
+const aiSkills = ref<any[]>([]);
 /** 用户已确认离开时跳过二次弹窗 */
 let leaveConfirmed = false
 
@@ -344,6 +346,12 @@ const onLoadChatTools = async () => {
   chatTools.value = res?.data ?? res ?? {}
 }
 
+const onLoadAiSkills = async () => {
+  const res: any = await api.queryAiSkills()
+  console.log('aiSkills', res);
+  aiSkills.value = res.items ?? [];
+}
+
 async function initializePage() {
   pageLoading.value = true
   pendingCanvasPayload.value = null
@@ -373,6 +381,7 @@ async function initializePage() {
     onLoadAiCapabilities('IMAGE'),
     onLoadAiCapabilities('VIDEO'),
     onLoadHistorySessions(),
+    onLoadAiSkills()
   ]).catch((error) => {
     console.error('[CreateOrEdit] background init failed', error)
   })

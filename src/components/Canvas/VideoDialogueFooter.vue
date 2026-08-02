@@ -35,20 +35,20 @@
           </button>
         </div>
       </div>
-      <div class="video-dialogue-footer__tools">
+      <!-- <div class="video-dialogue-footer__tools">
         <button type="button" class="video-dialogue-footer__tool" title="图片">
           <span class="video-dialogue-footer__tool-icon" data-icon="image" aria-hidden="true" />
         </button>
         <button type="button" class="video-dialogue-footer__tool" title="选择">
           <span class="video-dialogue-footer__tool-icon" data-icon="cursor" aria-hidden="true" />
         </button>
-      </div>
+      </div> -->
     </div>
     <div class="video-dialogue-footer__actions">
-      <button type="button" class="video-dialogue-footer__auto">
+      <!-- <button type="button" class="video-dialogue-footer__auto">
         全能参考
         <span class="video-dialogue-footer__select-arrow" aria-hidden="true" />
-      </button>
+      </button> -->
       <div class="video-dialogue-footer__gen-settings-wrap">
         <button
           type="button"

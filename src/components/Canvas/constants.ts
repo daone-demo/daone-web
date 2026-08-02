@@ -845,6 +845,13 @@ export function isVideoWorkflowRecord(workflow: WorkflowRecord | null | undefine
   return type === 'VIDEO'
 }
 
+/** 仅保留 type 为 TEXT 的工作流（兼容大小写与 TYPE 字段） */
+export function isTextWorkflowRecord(workflow: WorkflowRecord | null | undefined): boolean {
+  if (!workflow) return false
+  const type = String(workflow.type ?? workflow.TYPE ?? '').trim().toUpperCase()
+  return type === 'TEXT'
+}
+
 /** 图片对话/文生图对话框共用：从 workflows 列表解析 IMAGE 类型选项 */
 export function buildImageWorkflowOptions(
   workflows: WorkflowCategoryGroup[] | WorkflowRecord[] | null | undefined,
@@ -913,6 +920,44 @@ export function buildVideoWorkflowOptionGroups(
   }
 
   return groupWorkflowsByCategory(buildVideoWorkflowOptions(workflows))
+    .map((group) => ({
+      categoryId: group.categoryId,
+      categoryName: group.categoryName,
+      children: group.workflows.map(normalizeWorkflowOption),
+    }))
+    .filter((group) => group.children.length > 0)
+}
+
+/** 文本节点提示栏：从 workflows 列表解析 TEXT 类型选项 */
+export function buildTextWorkflowOptions(
+  workflows: WorkflowCategoryGroup[] | WorkflowRecord[] | null | undefined,
+): ImageWorkflowOption[] {
+  return flattenWorkflowCategoryGroups(workflows)
+    .filter((workflow) => workflow?.id !== undefined && workflow?.id !== null)
+    .filter(isTextWorkflowRecord)
+    .map(normalizeWorkflowOption)
+}
+
+/** 文本节点提示栏：按 categoryId 输出二级菜单选项（仅 TEXT） */
+export function buildTextWorkflowOptionGroups(
+  workflows: WorkflowCategoryGroup[] | WorkflowRecord[] | null | undefined,
+): ImageWorkflowOptionGroup[] {
+  if (!Array.isArray(workflows) || !workflows.length) return []
+
+  if (isWorkflowCategoryGroup(workflows[0])) {
+    return (workflows as WorkflowCategoryGroup[])
+      .map((group) => ({
+        categoryId: group.categoryId,
+        categoryName: group.categoryName,
+        children: group.workflows
+          .filter((workflow) => workflow?.id !== undefined && workflow?.id !== null)
+          .filter(isTextWorkflowRecord)
+          .map(normalizeWorkflowOption),
+      }))
+      .filter((group) => group.children.length > 0)
+  }
+
+  return groupWorkflowsByCategory(buildTextWorkflowOptions(workflows))
     .map((group) => ({
       categoryId: group.categoryId,
       categoryName: group.categoryName,
