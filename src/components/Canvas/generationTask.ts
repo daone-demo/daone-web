@@ -234,6 +234,7 @@ function isNodeOnGraph(node: Node) {
 const activePollingTaskIds = new Set<string>()
 
 let onGenerationTaskSucceeded: ((task: GenerationTaskDetail) => void) | null = null
+let onGenerationTaskSettled: (() => void) | null = null
 
 export function setGenerationTaskSucceededHandler(
   handler: ((task: GenerationTaskDetail) => void) | null,
@@ -241,9 +242,18 @@ export function setGenerationTaskSucceededHandler(
   onGenerationTaskSucceeded = handler
 }
 
+export function setGenerationTaskSettledHandler(handler: (() => void) | null) {
+  onGenerationTaskSettled = handler
+}
+
+function notifyGenerationTaskSettled() {
+  onGenerationTaskSettled?.()
+}
+
 function notifyGenerationTaskSucceeded(task: GenerationTaskDetail) {
   if (task.status !== 'SUCCEEDED') return
   onGenerationTaskSucceeded?.(task)
+  notifyGenerationTaskSettled()
 }
 
 function buildSucceededImageGenerationResult(
@@ -307,6 +317,7 @@ export function startVideoGenerationTaskFollow(
   const { onComplete, ...followOptions } = options
   scheduleGenerationTaskFollow(taskId, () =>
     followVideoGenerationTaskOnNode(node, taskId, followOptions).then((success) => {
+      if (!success) notifyGenerationTaskSettled()
       onComplete?.(success)
       return success
     }),
@@ -326,6 +337,7 @@ export function startTextGenerationTaskFollow(
   const { onComplete, ...followOptions } = options
   scheduleGenerationTaskFollow(taskId, () =>
     followTextGenerationTaskOnNode(node, taskId, followOptions).then((success) => {
+      if (!success) notifyGenerationTaskSettled()
       onComplete?.(success)
       return success
     }),
@@ -347,6 +359,7 @@ export function startImageGenerationTaskFollow(
   options.onTaskBound?.(taskId)
   scheduleGenerationTaskFollow(taskId, () =>
     pollAndApplyImageTaskOnNode(node, taskId, options).then((result) => {
+      if (!result.success) notifyGenerationTaskSettled()
       options.onComplete?.(result)
       return result
     }),
@@ -876,6 +889,7 @@ export async function followTextGenerationTaskOnNode(
       const reason = finalTask.error?.message || '文本生成任务失败'
       markTextGenerationNodeFailed(finalTarget, reason)
       options.onError?.(reason)
+      notifyGenerationTaskSettled()
       return false
     }
 
@@ -884,6 +898,7 @@ export async function followTextGenerationTaskOnNode(
     if (!content) {
       markTextGenerationNodeFailed(finalTarget, '未返回文本')
       options.onError?.('生成完成，但未返回文本内容')
+      notifyGenerationTaskSettled()
       return false
     }
 
@@ -899,6 +914,7 @@ export async function followTextGenerationTaskOnNode(
       markTextGenerationNodeFailed(target)
     }
     options.onError?.(error instanceof Error ? error.message : '文本生成失败，请稍后重试')
+    notifyGenerationTaskSettled()
     return false
   }
 }
@@ -948,6 +964,7 @@ export async function followModelGenerationTaskOnNode(
       const reason = finalTask.error?.message || '3D 生成任务失败'
       markGenerationNodeFailed(finalTarget, reason)
       options.onError?.(reason)
+      notifyGenerationTaskSettled()
       return false
     }
 
@@ -956,6 +973,7 @@ export async function followModelGenerationTaskOnNode(
     if (!resolved?.previewUrl) {
       markGenerationNodeFailed(finalTarget, '未返回 3D 模型')
       options.onError?.('生成完成，但未返回 GLB 模型')
+      notifyGenerationTaskSettled()
       return false
     }
 
@@ -969,6 +987,7 @@ export async function followModelGenerationTaskOnNode(
     const target = resolveNode()
     if (target) markGenerationNodeFailed(target)
     options.onError?.(error instanceof Error ? error.message : '3D 生成失败，请稍后重试')
+    notifyGenerationTaskSettled()
     return false
   }
 }
@@ -1173,8 +1192,9 @@ function resumeGenerationTaskFollow(
   options: ResumePendingGenerationTasksOptions,
   initialTask?: GenerationTaskDetail,
 ) {
-  const notifyComplete = (succeeded: boolean) => {
-    if (succeeded) options.onTaskComplete?.()
+  const notifyComplete = () => {
+    notifyGenerationTaskSettled()
+    options.onTaskComplete?.()
   }
 
   if (data.kind === 'image' && data.imageGenState === 'loading') {
@@ -1183,7 +1203,7 @@ function resumeGenerationTaskFollow(
       fileName: data.fileName || data.title || '生成结果.png',
       onError: options.onError,
       initialTask,
-      onComplete: (result) => notifyComplete(result.success),
+      onComplete: () => notifyComplete(),
     })
     return
   }
@@ -1203,7 +1223,7 @@ function resumeGenerationTaskFollow(
       followModelGenerationTaskOnNode(node, taskId, {
         title: data.title || '3D 模型',
         onError: options.onError,
-      }).then(notifyComplete),
+      }).finally(() => notifyComplete()),
     )
     return
   }
@@ -1214,7 +1234,7 @@ function resumeGenerationTaskFollow(
       fileName: data.fileName || '文生视频.mp4',
       onError: options.onError,
       onComplete: (success) => {
-        notifyComplete(success)
+        notifyComplete()
         options.onVideoGenerationComplete?.(node.id, success)
       },
     })
@@ -1281,6 +1301,7 @@ export async function startImageGenerationOnNode(
   } catch (error) {
     markGenerationNodeFailed(node)
     options.onError?.(error instanceof Error ? error.message : '创建生成任务失败')
+    notifyGenerationTaskSettled()
     return { started: false }
   }
 
@@ -1290,6 +1311,7 @@ export async function startImageGenerationOnNode(
   if (!taskId) {
     markGenerationNodeFailed(node, '创建生成任务失败')
     options.onError?.('创建生成任务失败')
+    notifyGenerationTaskSettled()
     return { started: false }
   }
 
@@ -1326,6 +1348,7 @@ export async function runImageGenerationOnNode(
   } catch (error) {
     markGenerationNodeFailed(node)
     options.onError?.(error instanceof Error ? error.message : '创建生成任务失败')
+    notifyGenerationTaskSettled()
     return { success: false }
   }
 
@@ -1333,14 +1356,17 @@ export async function runImageGenerationOnNode(
   if (!taskId) {
     markGenerationNodeFailed(node, '创建生成任务失败')
     options.onError?.('创建生成任务失败')
+    notifyGenerationTaskSettled()
     return { success: false }
   }
 
-  return pollAndApplyImageTaskOnNode(node, taskId, {
+  const result = await pollAndApplyImageTaskOnNode(node, taskId, {
     title: options.title,
     fileName: options.fileName,
     onError: options.onError,
     onTaskBound: options.onTaskBound,
     initialTask: created,
   })
+  if (!result.success) notifyGenerationTaskSettled()
+  return result
 }

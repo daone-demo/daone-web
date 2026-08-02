@@ -78,6 +78,7 @@ import {
   recoverOrphanedGenerationTasks,
   resumePendingGenerationTasks,
   runImageGenerationOnNode,
+  setGenerationTaskSettledHandler,
   setGenerationTaskSucceededHandler,
   startImageGenerationOnNode,
   startVideoGenerationTaskFollow,
@@ -1455,6 +1456,7 @@ export function registerCore(bind: CanvasBindings) {
       (event.assetId ? [event.assetId] : [])
 
     const prompt = config.prompt?.trim() ?? ''
+    recordCanvasDescription(prompt, config.title)
     const liveSourceRefs = getVideoSourceRefs(g, sourceNodeId)
     syncVideoSourceRefsSnapshot(sourceNodeId)
 
@@ -1574,7 +1576,7 @@ export function registerCore(bind: CanvasBindings) {
           }
           userInfoStore.queryPointAccount()
           bindGenerationTaskId(resultNode, taskId, 'VIDEO')
-          persistGenerationTaskBinding()
+          persistGenerationTaskBinding(resultNode, { detail: prompt, taskType: config.title })
 
           startVideoGenerationTaskFollow(resultNode, taskId, {
             title: config.title,
@@ -1771,6 +1773,8 @@ export function registerCore(bind: CanvasBindings) {
     // }
 
     const title = buildImageActionResultTitle(event.label || '图片反推提示词')
+    const reverseDetail = promptText.value.trim() || sourceData.fileName || sourceData.title || '图片反推'
+    recordCanvasDescription(reverseDetail, '反推提示词')
     const resultNode = spawnTextPromptResultNode(g, sourceNode, { title })
 
     selectedNodeId.value = resultNode.id
@@ -1811,7 +1815,7 @@ export function registerCore(bind: CanvasBindings) {
       }
       userInfoStore.queryPointAccount();
       bindGenerationTaskId(resultNode, taskId, 'TEXT')
-      persistGenerationTaskBinding()
+      persistGenerationTaskBinding(resultNode, { detail: reverseDetail, taskType: '反推提示词' })
 
       const succeeded = await followTextGenerationTaskOnNode(resultNode, taskId, {
         title,
@@ -1864,6 +1868,8 @@ export function registerCore(bind: CanvasBindings) {
     // }
 
     const title = buildImageActionResultTitle(event.label || '图片转3D')
+    const modelDetail = sourceData.fileName || sourceData.title || event.label || '图片转3D'
+    recordCanvasDescription(modelDetail, '图生3D')
     const resultNode = spawnModel3DResultNode(g, sourceNode, {
       title,
       fileName: `${event.label?.trim() || '图片转3D'}.glb`,
@@ -1906,7 +1912,7 @@ export function registerCore(bind: CanvasBindings) {
       }
       userInfoStore.queryPointAccount();
       bindGenerationTaskId(resultNode, taskId, 'MODEL')
-      persistGenerationTaskBinding()
+      persistGenerationTaskBinding(resultNode, { detail: modelDetail, taskType: '图生3D' })
 
       const succeeded = await followModelGenerationTaskOnNode(resultNode, taskId, {
         title,
@@ -2272,7 +2278,8 @@ export function registerCore(bind: CanvasBindings) {
         provenanceRefs.some((item) => item.previewUrl?.trim()),
     )
     const isImg2Img = hasReferenceImages
-    recordCanvasDescription(prompt, isImg2Img ? '图生图' : '文生图')
+    const imageDialogueTaskType = isImg2Img ? '图生图' : '文生图'
+    recordCanvasDescription(prompt, imageDialogueTaskType)
 
     const title = buildImageActionResultTitle(isImg2Img ? '图生图' : '文生图')
     const sourceFileName = sourceData.fileName || sourceData.title || ''
@@ -2403,7 +2410,10 @@ export function registerCore(bind: CanvasBindings) {
           userInfoStore.queryPointAccount()
           return created; 
         },
-        onTaskBound: () => persistGenerationTaskBinding(),
+        onTaskBound: () => persistGenerationTaskBinding(resultNode, {
+          detail: prompt,
+          taskType: imageDialogueTaskType,
+        }),
         onError: (reason) => message.error(reason),
         onComplete: async (result) => {
           if (!result.success || index !== 0) return
@@ -2595,6 +2605,7 @@ export function registerCore(bind: CanvasBindings) {
     syncVideoNodeAspectRatio(sourceNodeId, payload.ratio as VideoGenAspectRatio)
 
     const title = buildVideoActionResultTitle('视频生成')
+    const videoGenTaskType = resolveVideoTaskTypeLabel(payload.mode)
     const sourceFileName = sourceData.fileName || sourceData.title || ''
     const buildFileName = (name: string) => (name ? `视频生成-${name}` : '视频生成.mp4')
     const requestedCount = Math.max(1, Math.floor(Number(payload.videoCount)) || 1)
@@ -2689,7 +2700,7 @@ export function registerCore(bind: CanvasBindings) {
             }
             userInfoStore.queryPointAccount()
             bindGenerationTaskId(resultNode, taskId, 'VIDEO')
-            persistGenerationTaskBinding()
+            persistGenerationTaskBinding(resultNode, { detail: prompt, taskType: videoGenTaskType })
 
             startVideoGenerationTaskFollow(resultNode, taskId, {
               title,
@@ -2772,7 +2783,7 @@ export function registerCore(bind: CanvasBindings) {
         }
         userInfoStore.queryPointAccount();
         bindGenerationTaskId(targetNode, taskId, 'VIDEO')
-        persistGenerationTaskBinding()
+        persistGenerationTaskBinding(targetNode, { detail: prompt, taskType: videoGenTaskType })
 
         startVideoGenerationTaskFollow(targetNode, taskId, {
           title,
@@ -3067,6 +3078,7 @@ export function registerCore(bind: CanvasBindings) {
       sourceData.genPrompt?.trim() ||
       config.prompt?.trim() ||
       ''
+    recordCanvasDescription(provenancePrompt, config.title)
     const provenanceSettings = normalizeImageDialogueSettings(sourceData.imageDialogueSettings)
     resultNodes.forEach((resultNode) => {
       applyImageDialogueProvenance(resultNode, {
@@ -3148,7 +3160,10 @@ export function registerCore(bind: CanvasBindings) {
           bumpToolbarRevision()
           updateNodeToolbar()
         },
-        onTaskBound: () => persistGenerationTaskBinding(),
+        onTaskBound: () => persistGenerationTaskBinding(resultNode, {
+          detail: provenancePrompt,
+          taskType: config.title,
+        }),
         onError: (reason) => message.error(reason),
         onComplete: async (result) => {
           if (!result.success || index !== 0) return
@@ -3345,13 +3360,18 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function handleVideoGenerationTaskComplete(nodeId: string, success: boolean) {
-    if (success) {
-      bumpToolbarRevision()
-      updateNodeToolbar()
-      scheduleHistoryPush()
-      return
+    if (!success) {
+      revealVideoDialogueAfterGenerationFailure(nodeId)
     }
-    revealVideoDialogueAfterGenerationFailure(nodeId)
+    bumpToolbarRevision()
+    updateNodeToolbar()
+    const g = graph.value
+    const cell = g?.getCellById(nodeId)
+    if (cell?.isNode()) {
+      persistGenerationTaskBinding(cell as Node)
+    } else {
+      persistGenerationTaskBinding()
+    }
   }
 
   function openVideoDialogue(nodeId?: string) {
@@ -4457,7 +4477,8 @@ export function registerCore(bind: CanvasBindings) {
       if (modelType.value === 'text2image' || isText2ImageTask.value) return '文生图'
       return '自由创作'
     })()
-    recordCanvasDescription(promptFromPayload || promptText.value, promptTaskType)
+    const promptDetail = promptFromPayload || promptText.value
+    recordCanvasDescription(promptDetail, promptTaskType)
 
     try {
       if (modelType.value === 'img2prompt' || isImg2PromptTask.value) {
@@ -4508,7 +4529,10 @@ export function registerCore(bind: CanvasBindings) {
           }
           userInfoStore.queryPointAccount();
           bindGenerationTaskId(cell as Node, taskId, 'TEXT')
-          persistGenerationTaskBinding()
+          persistGenerationTaskBinding(cell as Node, {
+            detail: promptDetail,
+            taskType: promptTaskType,
+          })
 
           const succeeded = await followTextGenerationTaskOnNode(cell as Node, taskId, {
             toHtml: plainTextToEditorHtml,
@@ -4629,7 +4653,10 @@ export function registerCore(bind: CanvasBindings) {
           }
           userInfoStore.queryPointAccount();
           bindGenerationTaskId(resultNode, taskId, 'VIDEO')
-          persistGenerationTaskBinding()
+          persistGenerationTaskBinding(resultNode, {
+            detail: trimmedPrompt,
+            taskType: promptTaskType,
+          })
 
           startVideoGenerationTaskFollow(resultNode, taskId, {
             title: '文生视频',
@@ -4711,7 +4738,10 @@ export function registerCore(bind: CanvasBindings) {
               userInfoStore.queryPointAccount()
               return created
             },
-            onTaskBound: () => persistGenerationTaskBinding(),
+            onTaskBound: () => persistGenerationTaskBinding(resultNode, {
+              detail: trimmedPrompt,
+              taskType: promptTaskType,
+            }),
             onError: (reason) => message.error(reason),
             onComplete: async (result) => {
               if (!result.success) return
@@ -4811,7 +4841,10 @@ export function registerCore(bind: CanvasBindings) {
           }
           userInfoStore.queryPointAccount();
           bindGenerationTaskId(cell as Node, taskId, 'TEXT')
-          persistGenerationTaskBinding()
+          persistGenerationTaskBinding(cell as Node, {
+            detail: promptDetail,
+            taskType: promptTaskType,
+          })
 
           const succeeded = await followTextGenerationTaskOnNode(cell as Node, taskId, {
             toHtml: plainTextToEditorHtml,
@@ -4901,7 +4934,7 @@ export function registerCore(bind: CanvasBindings) {
           userInfoStore.queryPointAccount()
           return created; 
         },
-        onTaskBound: () => persistGenerationTaskBinding(),
+        onTaskBound: () => persistGenerationTaskBinding(node, { detail: prompt, taskType: '文生图' }),
         onError: (reason) => message.error(reason),
       })
 
@@ -5118,6 +5151,9 @@ export function registerCore(bind: CanvasBindings) {
       appendElementMarkToNode(returnCell as Node, pendingMark)
     }
 
+    const markDetail = `标记${markIndex}`
+    recordCanvasDescription(markDetail, '标记识别')
+
     imageMarkRecognizing.value = true
     bumpToolbarRevision()
 
@@ -5155,6 +5191,7 @@ export function registerCore(bind: CanvasBindings) {
       }
 
       userInfoStore.queryPointAccount()
+      persistGenerationTaskBinding(sourceNode, { detail: markDetail, taskType: '标记识别' })
 
       const finalTask = isGenerationTaskTerminal(created.status)
         ? created
@@ -5185,6 +5222,7 @@ export function registerCore(bind: CanvasBindings) {
 
       replaceImageMarkOnGraph(g, pendingMark.id, completedMark)
 
+      recordCanvasDescription(completedMark.label, '标记识别')
       message.success(`已识别：${completedMark.label}`)
       exitElementSelectMode({ force: true })
     } catch (error) {
@@ -5193,7 +5231,7 @@ export function registerCore(bind: CanvasBindings) {
     } finally {
       imageMarkRecognizing.value = false
       bumpToolbarRevision()
-      scheduleHistoryPush()
+      persistGenerationTaskBinding(sourceNode, { detail: markDetail, taskType: '标记识别' })
     }
   }
 
@@ -6295,8 +6333,45 @@ export function registerCore(bind: CanvasBindings) {
     }
   }
 
-  function persistGenerationTaskBinding() {
+  function inferGenerationTaskDescriptionFromNode(node: Node) {
+    const data = node.getData() as CanvasNodeData
+    const detail =
+      data.imageDialogueText?.trim() ||
+      data.videoDialogueText?.trim() ||
+      data.genPrompt?.trim() ||
+      data.title?.trim() ||
+      ''
+    if (!detail) return null
+
+    let taskType = '生成'
+    if (data.generationTaskType === 'VIDEO') {
+      taskType = resolveVideoTaskTypeLabel(data.videoGenTab)
+    } else if (data.generationTaskType === 'IMAGE') {
+      const hasRefs = Boolean(data.imageSourceRefs?.length || data.sourcePreviewUrl)
+      taskType = hasRefs ? '图生图' : '文生图'
+    } else if (data.generationTaskType === 'TEXT') {
+      taskType = '文本生成'
+    } else if (data.generationTaskType === 'MODEL') {
+      taskType = '图生3D'
+    }
+
+    return { detail, taskType }
+  }
+
+  function persistGenerationTaskBinding(
+    node?: Node,
+    options?: { detail?: string; taskType?: string },
+  ) {
+    if (options?.detail !== undefined || options?.taskType !== undefined) {
+      recordCanvasDescription(options?.detail ?? '', options?.taskType ?? '')
+    } else if (node) {
+      const inferred = inferGenerationTaskDescriptionFromNode(node)
+      if (inferred) {
+        recordCanvasDescription(inferred.detail, inferred.taskType)
+      }
+    }
     scheduleHistoryPush()
+    triggerAutoSaveIfReady()
   }
 
   function handleExportCanvas() {
@@ -8567,16 +8642,19 @@ export function registerCore(bind: CanvasBindings) {
   function scheduleHistoryPush(options: { autoSave?: boolean } = {}) {
     const shouldAutoSave = options.autoSave !== false
     const g = graph.value
-    if (!g || !canvasHistory) return
-    if (historyPushTimer) clearTimeout(historyPushTimer)
-    historyPushTimer = setTimeout(() => {
-      canvasHistory?.push(g)
-      syncHistoryState()
-      historyPushTimer = null
-      if (shouldAutoSave) {
-        triggerAutoSaveIfReady()
-      }
-    }, 280)
+    if (g && canvasHistory) {
+      if (historyPushTimer) clearTimeout(historyPushTimer)
+      historyPushTimer = setTimeout(() => {
+        canvasHistory?.push(g)
+        syncHistoryState()
+        historyPushTimer = null
+        if (shouldAutoSave) {
+          triggerAutoSaveIfReady()
+        }
+      }, 280)
+    } else if (shouldAutoSave) {
+      triggerAutoSaveIfReady()
+    }
   }
 
   function notifyTextNodeUpdated() {
@@ -9210,6 +9288,9 @@ export function registerCore(bind: CanvasBindings) {
     setGenerationTaskSucceededHandler(() => {
       scheduleHistoryPush()
     })
+    setGenerationTaskSettledHandler(() => {
+      persistGenerationTaskBinding()
+    })
     void onLoadProjects()
 
     const routeProjectId = router.currentRoute.value.params.id
@@ -9586,6 +9667,7 @@ export function registerCore(bind: CanvasBindings) {
     setCanvasNodeMutationCompleteHandler(null)
     setCanvasUploadCompleteHandler(null)
     setGenerationTaskSucceededHandler(null)
+    setGenerationTaskSettledHandler(null)
     unbindKeyboard()
     unbindLongPressPan()
     unbindGraphDropListeners()
