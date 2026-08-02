@@ -1034,7 +1034,7 @@ function onDocumentMouseDown(event: MouseEvent) {
   flex-wrap: wrap;
 }
 
-.video-gen-prompt-panel__tool--active {
+.video-gen-prompt-panel__tool {
   background: transparent;
   color: #2563eb;
   border: none;

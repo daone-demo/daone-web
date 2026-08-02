@@ -4988,6 +4988,7 @@ export function registerCore(bind: CanvasBindings) {
       replaceImageMarkOnGraph(g, pendingMark.id, completedMark)
 
       message.success(`已识别：${completedMark.label}`)
+      exitElementSelectMode({ force: true })
     } catch (error) {
       removeImageMarkFromGraph(g, pendingMark.id)
       message.error(error instanceof Error ? error.message : '标记识别失败，请稍后重试')
