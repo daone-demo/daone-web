@@ -81,6 +81,7 @@ export {
   getImageExpandOverlayLayout,
   type ImageExpandOverlayLayout,
   syncImageNodeSizeToMediaAspect,
+  resizeNodeKeepBottomCenter,
   startImageNodeCornerResize,
   canResizeImageNode,
   getImageNodeDisplayDimensions,

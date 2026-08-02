@@ -142,6 +142,15 @@ export function getImageNodeMediaScreenBox(graph: Graph, node: Node, container: 
   }
 }
 
+export function resizeNodeKeepBottomCenter(node: Node, width: number, height: number) {
+  const pos = node.position()
+  const oldSize = node.getSize()
+  const bottomY = pos.y + oldSize.height
+  const centerX = pos.x + oldSize.width / 2
+  node.resize(width, height)
+  node.position(centerX - width / 2, bottomY - height)
+}
+
 export function syncImageNodeSizeToMediaAspect(node: Node) {
   const data = node.getData() as CanvasNodeData
   if (!data.mediaWidth || !data.mediaHeight) return
@@ -516,7 +525,7 @@ export function getBaseNodeSize(
       (data?.generationTaskType === 'VIDEO' || Boolean(data?.generationTaskId))
     const ratio = data?.videoGenAspectRatio
 
-    if ((!hasPreview || isGenerating) && ratio && ratio !== 'auto') {
+    if (ratio && ratio !== 'auto' && (!hasPreview || isGenerating || data.videoGenAspectRatio)) {
       return computeVideoNodeSizeByAspectRatio(ratio)
     }
     if (data && shouldAdaptVideoNodeHeight(data)) {
@@ -888,6 +897,15 @@ export function bindGraphInteraction(graph: Graph) {
       Math.abs(current.width - size.width) <= 1 &&
       Math.abs(current.height - size.height) <= 1
     ) {
+      return
+    }
+    const ratio = data.videoGenAspectRatio
+    if (
+      data.kind === 'video' &&
+      ratio &&
+      ratio !== 'auto'
+    ) {
+      resizeNodeKeepBottomCenter(node, size.width, size.height)
       return
     }
     node.resize(size.width, size.height)

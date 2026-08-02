@@ -279,6 +279,10 @@ export function registerCore(bind: CanvasBindings) {
   let historyPushTimer: ReturnType<typeof setTimeout> | null = null
   let activeImageDialogueNodeId = ''
   let activeVideoDialogueNodeId = ''
+  /** 视频比例同步期间保持对话框屏幕位置不变 */
+  let suppressVideoDialogueRepos = false
+  /** 视频对话框打开后固定屏幕位置，切换比例时不跟随节点底边重算 */
+  let pinnedVideoDialoguePos: { left: number; top: number; width: number } | null = null
   let autoSaveDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let autoSaveEnabled = true
   let canvasContentReady = false
@@ -3270,6 +3274,11 @@ export function registerCore(bind: CanvasBindings) {
     closeVideoGenPromptBar()
     syncNodeSelectionHighlight(id)
     updateNodeToolbar()
+    pinnedVideoDialoguePos = { ...dialoguePos.value }
+  }
+
+  function clearVideoDialoguePin() {
+    pinnedVideoDialoguePos = null
   }
 
   function toggleVideoDialogue() {
@@ -3277,6 +3286,7 @@ export function registerCore(bind: CanvasBindings) {
       persistVideoDialogueFields()
       showVideoDialogue.value = false
       activeVideoDialogueNodeId = ''
+      clearVideoDialoguePin()
       updateNodeToolbar()
       return
     }
@@ -3655,6 +3665,7 @@ export function registerCore(bind: CanvasBindings) {
     persistVideoDialogueFields()
     showVideoDialogue.value = false
     activeVideoDialogueNodeId = ''
+    clearVideoDialoguePin()
   }
 
   /** 关闭图片/视频节点底部对话框（打开连线菜单等互斥浮层时调用） */
@@ -3852,6 +3863,11 @@ export function registerCore(bind: CanvasBindings) {
     if (liveRefs.length && !(data.videoSourceRefs?.length)) {
       syncVideoSourceRefsSnapshot(nodeId)
     }
+
+    const ratio = videoDialogueSettings.value.aspectRatio
+    if (ratio && ratio !== 'auto') {
+      syncVideoNodeAspectRatio(nodeId, ratio as VideoGenAspectRatio)
+    }
   }
 
   function persistVideoDialogueFields(nodeId?: string) {
@@ -3874,6 +3890,11 @@ export function registerCore(bind: CanvasBindings) {
     }
     cell.setData(data, { overwrite: true })
     syncVideoSourceRefsSnapshot(id)
+
+    const ratio = videoDialogueSettings.value.aspectRatio
+    if (ratio && ratio !== 'auto') {
+      syncVideoNodeAspectRatio(id, ratio as VideoGenAspectRatio)
+    }
   }
 
   function persistImageGenPrompt() {
@@ -3897,22 +3918,49 @@ export function registerCore(bind: CanvasBindings) {
     const data = { ...(cell.getData() as CanvasNodeData) }
     if (data.kind !== 'video') return
 
-    data.videoGenAspectRatio = ratio
-    cell.setData(data)
-    syncNodeShapeFromData(cell as Node)
-
-    const size = getNodeSize(data.kind, data.mode, data)
     const node = cell as Node
-    const center = {
-      x: node.position().x + node.getSize().width / 2,
-      y: node.position().y + node.getSize().height / 2,
-    }
-    node.resize(size.width, size.height)
-    node.position(center.x - size.width / 2, center.y - size.height / 2)
+    const pos = node.position()
+    const oldSize = node.getSize()
+    const anchorBottomY = pos.y + oldSize.height
+    const anchorCenterX = pos.x + oldSize.width / 2
 
-    updateVideoGenPromptBarPosition()
-    bumpToolbarRevision()
-    updateNodeToolbar()
+    const shouldFreezeDialogue =
+      showVideoDialogue.value &&
+      selectedNodeId.value === nodeId &&
+      selectedKind.value === 'video'
+    const frozenDialoguePos =
+      shouldFreezeDialogue && pinnedVideoDialoguePos
+        ? { ...pinnedVideoDialoguePos }
+        : shouldFreezeDialogue
+          ? { ...dialoguePos.value }
+          : null
+
+    suppressVideoDialogueRepos = shouldFreezeDialogue
+    try {
+      data.videoGenAspectRatio = ratio
+      cell.setData(data)
+      syncNodeShapeFromData(node)
+
+      const size = getNodeSize(data.kind, data.mode, data)
+      node.resize(size.width, size.height)
+      node.position(anchorCenterX - size.width / 2, anchorBottomY - size.height)
+
+      updateVideoGenPromptBarPosition()
+      bumpToolbarRevision()
+      updateNodeToolbar({ skipDialoguePos: shouldFreezeDialogue })
+      if (frozenDialoguePos) {
+        dialoguePos.value = frozenDialoguePos
+        pinnedVideoDialoguePos = { ...frozenDialoguePos }
+      }
+    } finally {
+      void nextTick(() => {
+        if (frozenDialoguePos) {
+          dialoguePos.value = frozenDialoguePos
+          pinnedVideoDialoguePos = { ...frozenDialoguePos }
+        }
+        suppressVideoDialogueRepos = false
+      })
+    }
   }
 
   function onVideoGenAspectRatioChange(ratio: VideoGenAspectRatio) {
@@ -6963,7 +7011,7 @@ export function registerCore(bind: CanvasBindings) {
     }
   }
 
-  function updateNodeToolbar(options?: { skipImageResizeOverlay?: boolean }) {
+  function updateNodeToolbar(options?: { skipImageResizeOverlay?: boolean; skipDialoguePos?: boolean }) {
     updatePromptBarPosition()
     updateTextFormatToolbarPosition()
     updateImageGenPromptBarPosition()
@@ -6995,7 +7043,15 @@ export function registerCore(bind: CanvasBindings) {
     selectedKind.value = data.kind
     const node = cell as Node
     toolbarPos.value = getNodeToolbarPosition(g, node, overlayRoot)
-    dialoguePos.value = getNodeDialoguePosition(g, node, overlayRoot)
+    if (
+      pinnedVideoDialoguePos &&
+      showVideoDialogue.value &&
+      selectedKind.value === 'video'
+    ) {
+      dialoguePos.value = pinnedVideoDialoguePos
+    } else if (!options?.skipDialoguePos && !suppressVideoDialogueRepos) {
+      dialoguePos.value = getNodeDialoguePosition(g, node, overlayRoot)
+    }
     if (showImageCrop.value) {
       imageCropPos.value = getNodeCropOverlayPosition(g, node, overlayRoot)
     }
@@ -8081,7 +8137,7 @@ export function registerCore(bind: CanvasBindings) {
     if (selectedNodeId.value === node.id) {
       selectedKind.value = data.kind
       bumpToolbarRevision()
-      updateNodeToolbar()
+      updateNodeToolbar({ skipDialoguePos: suppressVideoDialogueRepos })
     }
   }
 
@@ -8838,7 +8894,21 @@ export function registerCore(bind: CanvasBindings) {
     instance.on('node:moved', ({ node }) => {
       snapGridSplitNodePosition(instance, node)
       groupMoveState.anchorId = ''
-      updateNodeToolbar()
+      if (
+        !suppressVideoDialogueRepos &&
+        showVideoDialogue.value &&
+        selectedNodeId.value === node.id
+      ) {
+        clearVideoDialoguePin()
+      }
+      updateNodeToolbar({ skipDialoguePos: suppressVideoDialogueRepos })
+      if (
+        !suppressVideoDialogueRepos &&
+        showVideoDialogue.value &&
+        selectedNodeId.value === node.id
+      ) {
+        pinnedVideoDialoguePos = { ...dialoguePos.value }
+      }
       syncViewportNodeVisibility()
       scheduleHistoryPush()
     })
