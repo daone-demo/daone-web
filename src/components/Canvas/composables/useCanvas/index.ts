@@ -39,6 +39,9 @@ type GridSplitCanvasApi = Pick<
     | 'imageToolbarCustomizeSettings'
     | 'mentionInsertSerial'
     | 'mentionInsertToken'
+    | 'showImageContextMenu'
+    | 'imageContextMenuPos'
+    | 'imageContextMenuNodeId'
 > &
   Pick<
     CanvasBindings,
@@ -79,6 +82,8 @@ type GridSplitCanvasApi = Pick<
     | 'elementMarks'
     | 'toggleImageDialogueMarkMode'
     | 'updateImageMarkLabel'
+    | 'onImageContextMenuAction'
+    | 'imageContextMenuLocked'
     | 'showElementSelectBar'
   >
 

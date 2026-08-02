@@ -865,5 +865,11 @@ const api = {
   unfavoriteMaterial(materialId: Id) {
     return http.delete(`/materials/${pathId(materialId)}/favorite`)
   },
+  favoriteInspiration<T = unknown>(materialId: Id) {
+    return http.put<T>(`/inspirations/${pathId(materialId)}/favorite`)
+  },
+  unfavoriteInspiration(materialId: Id) {
+    return http.delete(`/inspirations/${pathId(materialId)}/favorite`)
+  },
 }
 export default api

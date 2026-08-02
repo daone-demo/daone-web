@@ -431,6 +431,7 @@ export type CanvasGraph = Graph & {
   __scroller?: Scroller
   __openConnectMenu?: ConnectMenuOpener
   __openImageDialogue?: (nodeId: string) => void
+  __openImageContextMenu?: (nodeId: string, clientX: number, clientY: number) => void
   __openVideoDialogue?: (nodeId: string) => void
   __deleteCanvasNode?: (nodeId: string) => void
   __uploadFileToCanvasNode?: (nodeId: string, file: File) => void
@@ -878,6 +879,7 @@ export function bindGraphInteraction(graph: Graph) {
 
   graph.on('node:change:data', ({ node }) => {
     const data = node.getData() as CanvasNodeData
+    node.prop('movable', !data.nodeLocked)
     syncNodeShapeFromData(node)
     const size = getNodeSize(data.kind, data.mode, data)
     const current = node.getSize()

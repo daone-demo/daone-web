@@ -149,6 +149,8 @@ export interface CanvasNodeData {
   imageMarkAnalyzing?: { x: number; y: number } | null
   /** 对话面板中的元素标记列表 */
   elementMarks?: ImageMarkItem[]
+  /** 锁定后节点不可拖动 */
+  nodeLocked?: boolean
 }
 
 /** 图片反推提示词默认示例图文件名 */
@@ -1432,6 +1434,44 @@ export const IMAGE_NODE_TOOLBAR_MORE_MENU = [
   { key: 'svg', label: '矢量SVG', icon: 'svg', hasSubmenu: true },
   { key: 'customize', label: '自定义', icon: 'customize' },
 ] satisfies ImageToolbarMenuItem[]
+
+export type ImageContextMenuIcon =
+  | 'layer-top'
+  | 'layer-bottom'
+  | 'data-advisor'
+  | 'parse'
+  | 'chat'
+  | 'send-agent'
+  | 'preview'
+  | 'download'
+  | 'lock'
+  | 'copy-image'
+  | 'save'
+  | 'delete'
+
+export type ImageContextMenuItem = {
+  key: string
+  label: string
+  icon: ImageContextMenuIcon
+  danger?: boolean
+}
+
+/** 图片节点右键菜单分组 */
+export const IMAGE_CONTEXT_MENU_SECTIONS: ImageContextMenuItem[][] = [
+  [
+    { key: 'chat', label: '对话', icon: 'chat' },
+    { key: 'send-agent', label: '添加到智能体', icon: 'send-agent' },
+  ],
+  [
+    { key: 'preview', label: '预览', icon: 'preview' },
+    { key: 'download', label: '下载', icon: 'download' },
+    { key: 'copy-image', label: '复制图片', icon: 'copy-image' },
+  ],
+  [
+    { key: 'save', label: '保存', icon: 'save' },
+    { key: 'delete', label: '删除', icon: 'delete', danger: true },
+  ],
+]
 
 export const IMAGE_DIALOGUE_GREETING = 'Hi, 我是你的AI设计助理'
 export const IMAGE_DIALOGUE_PLACEHOLDER =

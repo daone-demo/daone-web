@@ -100,6 +100,7 @@
         @dragover.prevent="onDragOver"
         @dragleave="onDragLeave"
         @drop.prevent.stop="onDrop"
+        @contextmenu.prevent="onPreviewContextMenu"
       >
         <template v-if="data.uploadState === 'uploading'">
           <div class="image-node__uploading">
@@ -127,6 +128,7 @@
             @load="onPreviewImageLoad"
             @error="onImageError"
             @dragstart.stop="onPreviewDragStart"
+            @contextmenu.prevent.stop="onPreviewContextMenu"
           />
           <div
             v-if="(data.imageElementMarks?.length || 0) > 0 || data.imageMarkAnalyzing"
@@ -393,6 +395,14 @@ function onPreviewDblClick() {
   const node = getNode()
   const g = node.model?.graph as CanvasGraph | undefined
   g?.__openImageDialogue?.(node.id)
+}
+
+function onPreviewContextMenu(event: MouseEvent) {
+  if (!data.previewUrl || data.uploadState === 'uploading' || isGridSplitNode.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  const g = getGraph() as CanvasGraph
+  g.__openImageContextMenu?.(getNode().id, event.clientX, event.clientY)
 }
 
 function onUploadInputChange(event: Event) {

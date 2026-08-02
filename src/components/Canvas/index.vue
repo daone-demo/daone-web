@@ -330,6 +330,14 @@
       @select="onConnectMenuItem"
     />
 
+    <CanvasImageContextMenu
+      v-if="showImageContextMenu"
+      :position="imageContextMenuPos"
+      :is-light="canvasBgTheme === 'light'"
+      :node-locked="imageContextMenuLocked"
+      @select="onImageContextMenuAction"
+    />
+
     <CanvasAddMenu
       v-if="showAddMenu"
       :canvas-bg-theme="canvasBgTheme"
@@ -398,6 +406,7 @@
 import CanvasHeader from './panels/CanvasHeader.vue'
 import CanvasLeftToolbar from './panels/CanvasLeftToolbar.vue'
 import CanvasConnectMenu from './panels/CanvasConnectMenu.vue'
+import CanvasImageContextMenu from './panels/CanvasImageContextMenu.vue'
 import CanvasAddMenu from './panels/CanvasAddMenu.vue'
 import CanvasAssetsPanel from './panels/CanvasAssetsPanel.vue'
 import CanvasAssetCenterPanel from './panels/CanvasAssetCenterPanel.vue'
@@ -640,6 +649,10 @@ const {
   showAssetCenterPanel,
   showBackToNodesBanner,
   showConnectMenu,
+  showImageContextMenu,
+  imageContextMenuPos,
+  imageContextMenuLocked,
+  onImageContextMenuAction,
   showEdgeDeleteButton,
   showElementSelectBar,
   showElementSelectMode,

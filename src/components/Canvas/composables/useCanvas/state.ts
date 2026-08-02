@@ -79,6 +79,9 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const canvasRevision = ref(0)
   const showAddMenu = ref(false)
   const showConnectMenu = ref(false)
+  const showImageContextMenu = ref(false)
+  const imageContextMenuPos = ref({ left: 0, top: 0 })
+  const imageContextMenuNodeId = ref('')
   const connectMenuPos = ref({ left: 0, top: 0 })
   const connectReleasePoint = ref<{ x: number; y: number } | null>(null)
   const addMenuPos = ref({ left: 0, top: 0 })
@@ -259,6 +262,9 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     canvasRevision,
     showAddMenu,
     showConnectMenu,
+    showImageContextMenu,
+    imageContextMenuPos,
+    imageContextMenuNodeId,
     connectMenuPos,
     connectReleasePoint,
     addMenuPos,

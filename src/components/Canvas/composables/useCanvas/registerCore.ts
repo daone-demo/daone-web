@@ -159,6 +159,9 @@ export function registerCore(bind: CanvasBindings) {
     canvasRevision,
     showAddMenu,
     showConnectMenu,
+    showImageContextMenu,
+    imageContextMenuPos,
+    imageContextMenuNodeId,
     connectMenuPos,
     connectReleasePoint,
     addMenuPos,
@@ -5159,6 +5162,194 @@ export function registerCore(bind: CanvasBindings) {
     connectReleasePoint.value = null
   }
 
+  function closeImageContextMenu() {
+    showImageContextMenu.value = false
+    imageContextMenuNodeId.value = ''
+  }
+
+  function canOpenImageContextMenu(data: CanvasNodeData) {
+    return (
+      data.kind === 'image' &&
+      Boolean(data.previewUrl?.trim()) &&
+      data.uploadState !== 'uploading' &&
+      !data.compactPreview &&
+      !data.gridSplitTile
+    )
+  }
+
+  function findImageNodeAtClientPoint(clientX: number, clientY: number) {
+    const g = graph.value
+    if (!g) return null
+
+    const local = clientPointToGraphLocal(g, clientX, clientY)
+    const candidates = g
+      .getNodes()
+      .filter((node) => canOpenImageContextMenu(node.getData() as CanvasNodeData))
+      .sort((a, b) => (b.getZIndex() ?? 0) - (a.getZIndex() ?? 0))
+
+    return (
+      candidates.find((node) => {
+        const bbox = node.getBBox()
+        return (
+          local.x >= bbox.x &&
+          local.x <= bbox.x + bbox.width &&
+          local.y >= bbox.y &&
+          local.y <= bbox.y + bbox.height
+        )
+      }) ?? null
+    )
+  }
+
+  function handleImageNodeContextMenu(nodeId: string, clientX: number, clientY: number, event?: MouseEvent) {
+    event?.preventDefault()
+    event?.stopPropagation()
+    openImageContextMenu(nodeId, clientX, clientY)
+  }
+
+  function onCanvasImageContextMenuCapture(event: MouseEvent) {
+    const target = event.target
+    if (target instanceof Element && target.closest('.canvas__image-context-menu')) return
+    const node = findImageNodeAtClientPoint(event.clientX, event.clientY)
+    if (!node) return
+    handleImageNodeContextMenu(node.id, event.clientX, event.clientY, event)
+  }
+
+  function positionImageContextMenu(clientX: number, clientY: number) {
+    const overlayRoot = canvasRef.value
+    if (!overlayRoot) return { left: 0, top: 0 }
+    const rect = overlayRoot.getBoundingClientRect()
+    const menuWidth = 188
+    const menuHeight = 420
+    return {
+      left: Math.max(12, Math.min(clientX - rect.left, rect.width - menuWidth - 12)),
+      top: Math.max(60, Math.min(clientY - rect.top, rect.height - menuHeight - 12)),
+    }
+  }
+
+  function openImageContextMenu(nodeId: string, clientX: number, clientY: number) {
+    const g = graph.value
+    const overlayRoot = canvasRef.value
+    if (!g || !overlayRoot) return
+
+    const cell = g.getCellById(nodeId)
+    if (!cell?.isNode()) return
+
+    const data = cell.getData() as CanvasNodeData
+    if (!canOpenImageContextMenu(data)) return
+
+    closeConnectMenu()
+    closeAddMenu()
+    closeImageContextMenu()
+    selectGraphNodes(cell as Node)
+    imageContextMenuNodeId.value = nodeId
+    imageContextMenuPos.value = positionImageContextMenu(clientX, clientY)
+    showImageContextMenu.value = true
+    ;(g as CanvasGraph).__suppressBlankCloseForConnect = true
+    window.setTimeout(() => {
+      ;(g as CanvasGraph).__suppressBlankCloseForConnect = false
+    }, 100)
+  }
+
+  const imageContextMenuLocked = computed(() => {
+    const g = graph.value
+    const id = imageContextMenuNodeId.value
+    if (!g || !id) return false
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return false
+    return Boolean((cell.getData() as CanvasNodeData).nodeLocked)
+  })
+
+  function toggleImageNodeLock(nodeId: string) {
+    const g = graph.value
+    if (!g) return
+    const cell = g.getCellById(nodeId)
+    if (!cell?.isNode()) return
+    const data = cell.getData() as CanvasNodeData
+    const nextLocked = !data.nodeLocked
+    cell.setData({ ...data, nodeLocked: nextLocked })
+    cell.prop('movable', !nextLocked)
+    message.success(nextLocked ? '已锁定节点' : '已解锁节点')
+    scheduleHistoryPush()
+  }
+
+  async function copyImageNodeToClipboard(nodeId: string) {
+    const g = graph.value
+    if (!g) return
+    const cell = g.getCellById(nodeId)
+    if (!cell?.isNode()) return
+    const data = cell.getData() as CanvasNodeData
+    const url = data.previewUrl?.trim()
+    if (!url) {
+      message.warning('暂无可复制的图片')
+      return
+    }
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const type = blob.type?.startsWith('image/') ? blob.type : 'image/png'
+      await navigator.clipboard.write([new ClipboardItem({ [type]: blob })])
+      message.success('已复制图片')
+    } catch {
+      message.error('复制图片失败')
+    }
+  }
+
+  function onImageContextMenuAction(key: string) {
+    const nodeId = imageContextMenuNodeId.value
+    closeImageContextMenu()
+    if (!nodeId) return
+
+    const g = graph.value
+    if (!g) return
+    const cell = g.getCellById(nodeId)
+    if (!cell?.isNode()) return
+
+    if (selectedNodeId.value !== nodeId) {
+      selectGraphNodes(cell as Node)
+    }
+
+    switch (key) {
+      case 'layer-front':
+        moveNodeLayer('front')
+        return
+      case 'layer-back':
+        moveNodeLayer('back')
+        return
+      case 'data-advisor':
+        openImageDialogue(nodeId)
+        return
+      case 'parse':
+        onImageToolbarAction({ key: 'IMAGE_PROMPT_REVERSE', label: '解析' })
+        return
+      case 'chat':
+        openImageDialogue(nodeId)
+        return
+      case 'send-agent':
+        toggleImageAddToDialogMenu()
+        return
+      case 'preview':
+        openImagePreview()
+        return
+      case 'download':
+        onImageToolbarAction({ key: 'download', label: '下载' })
+        return
+      case 'lock':
+        toggleImageNodeLock(nodeId)
+        return
+      case 'copy-image':
+        void copyImageNodeToClipboard(nodeId)
+        return
+      case 'save':
+        showAssetsPanel.value = true
+        return
+      case 'delete':
+        removeNodeById(nodeId)
+        return
+      default:
+        break
+    }
+  }
+
   function closeAddMenu() {
     showAddMenu.value = false
     addMenuDropPoint.value = null
@@ -7614,6 +7805,7 @@ export function registerCore(bind: CanvasBindings) {
     closeShortcutsPanel()
     closeHistoryPanel()
     closeConnectMenu()
+    closeImageContextMenu()
     setTextEditorToolbarActive(false)
     activePickerNodeId.value = ''
     graph.value?.cleanSelection()
@@ -7698,6 +7890,14 @@ export function registerCore(bind: CanvasBindings) {
       return true
     }
     const g = graph.value as CanvasGraph | null
+    if (showImageContextMenu.value) {
+      if (g?.__suppressBlankCloseForConnect) {
+        g.__suppressBlankCloseForConnect = false
+        return true
+      }
+      closeImageContextMenu()
+      return true
+    }
     if (showConnectMenu.value) {
       // 打开菜单当次 mouseup 可能同步触发 blank:click，用 flag 跳过这一次
       if (g?.__suppressBlankCloseForConnect) {
@@ -8492,6 +8692,7 @@ export function registerCore(bind: CanvasBindings) {
     const instance = createGraph(graphRef.value) as CanvasGraph
     instance.__openConnectMenu = openConnectMenuByNodeId
     instance.__openImageDialogue = openImageDialogue
+    instance.__openImageContextMenu = openImageContextMenu
     instance.__openVideoDialogue = openVideoDialogue
     instance.__primarySelectedNodeId = () => selectedNodeId.value
     instance.__startImageNodeCornerResize = (event, corner) => {
@@ -8655,6 +8856,17 @@ export function registerCore(bind: CanvasBindings) {
         bumpToolbarRevision()
       }
     })
+    instance.on('node:contextmenu', ({ node, e }: { node: Node; e: MouseEvent }) => {
+      const data = node.getData() as CanvasNodeData
+      if (!canOpenImageContextMenu(data)) return
+      handleImageNodeContextMenu(node.id, e.clientX, e.clientY, e)
+    })
+    instance.on('blank:contextmenu', ({ e }: { e: MouseEvent }) => {
+      const node = findImageNodeAtClientPoint(e.clientX, e.clientY)
+      if (!node) return
+      handleImageNodeContextMenu(node.id, e.clientX, e.clientY, e)
+    })
+    canvasRef.value?.addEventListener('contextmenu', onCanvasImageContextMenuCapture, true)
     instance.on('blank:click', () => {
       dismissOneCanvasLayer()
     })
@@ -8842,6 +9054,7 @@ export function registerCore(bind: CanvasBindings) {
     unbindKeyboard()
     unbindLongPressPan()
     unbindGraphDropListeners()
+    canvasRef.value?.removeEventListener('contextmenu', onCanvasImageContextMenuCapture, true)
     setCanvasAssetDropHandler(null)
     clearCanvasAssetDrag()
     if (historyPushTimer) clearTimeout(historyPushTimer)
@@ -8888,6 +9101,7 @@ export function registerCore(bind: CanvasBindings) {
     clearImageDialoguePreview,
     closeAddMenu,
     closeConnectMenu,
+    closeImageContextMenu,
     closeHistoryPanel,
     closeImageCrop,
     closeImageErase,
@@ -9021,7 +9235,9 @@ export function registerCore(bind: CanvasBindings) {
     onImageResizePointerDown,
     onImageDialogueAddCanvasNode,
     onImageDialogueUploadFiles,
+    onImageContextMenuAction,
     onImageToolbarAction,
+    imageContextMenuLocked,
     onVideoToolbarAction,
     onLoadProjects,
     onMenuItem,

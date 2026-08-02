@@ -131,6 +131,8 @@ export type CanvasBindings = CanvasState & {
   persistVideoDialogueFields: (nodeId?: string) => void
   toggleImageDialogueMarkMode: () => void
   updateImageMarkLabel: (markId: string, selectedLabelIndex: number) => void
+  onImageContextMenuAction: (key: string) => void
+  imageContextMenuLocked: ComputedRef<boolean>
   graph: ShallowRef<Graph | null>
   [key: string]: unknown
 }

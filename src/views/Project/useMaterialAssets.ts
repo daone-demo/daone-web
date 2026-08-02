@@ -1,4 +1,5 @@
 import { computed, ref, watch, type Ref } from 'vue'
+import { message } from 'ant-design-vue'
 import api from '@/services/api'
 import type { ProjectTabKey } from './projectData'
 import {
@@ -204,9 +205,11 @@ export function useMaterialAssets(scope: Ref<ProjectTabKey>, columnCount: Ref<nu
       if (favorited) {
         await api.unfavoriteMaterial(item.id)
         setMaterialFavorited(item.id, false)
+        message.success('已取消收藏')
       } else {
         await api.favoriteMaterial(item.id)
         setMaterialFavorited(item.id, true)
+        message.success('收藏成功')
       }
     } catch (error) {
       console.error('[MaterialAssets] toggle material favorite failed', error)
@@ -219,9 +222,11 @@ export function useMaterialAssets(scope: Ref<ProjectTabKey>, columnCount: Ref<nu
       if (favorited) {
         await api.unfavoriteAsset(item.id)
         setAssetFavorited(item.id, false)
+        message.success('已取消收藏')
       } else {
         await api.favoriteAsset(item.id)
         setAssetFavorited(item.id, true)
+        message.success('收藏成功')
       }
     } catch (error) {
       console.error('[MaterialAssets] toggle asset favorite failed', error)

@@ -14,6 +14,7 @@ export const BIND_KEYS = [
   'panMode', 'showShortcutsPanel', 'imagePreviewUrl', 'canUndo', 'canRedo', 'nodeClipboard',
   'showMinimap', 'showBackToNodesBanner', 'isRecenteringToNodes', 'showProjectMenu',
   'showUserMenu', 'canvasProjects', 'activeProjectId', 'showAddMenu', 'showConnectMenu',
+  'showImageContextMenu', 'imageContextMenuPos', 'imageContextMenuNodeId',
   'connectMenuPos', 'connectReleasePoint', 'addMenuPos', 'addMenuDropPoint',
   'connectSourceNodeId', 'showAssetsPanel', 'showHistoryPanel', 'assetsTab', 'assetsLoading',
   'promptText', 'activePickerNodeId', 'activeImageGenPromptNodeId', 'imageGenPromptText',

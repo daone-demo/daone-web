@@ -139,7 +139,12 @@
                     {{ formatCount(item.viewCount) }}
                   </span>
                   <span class="home__inspiration-stat" @click.stop.prevent="onFavorite(item.id, Boolean(item.favorited))">
-                    <span class="home__inspiration-stat-icon home__inspiration-stat-icon--like" aria-hidden="true" />
+                    <!-- <span class="home__inspiration-stat-icon home__inspiration-stat-icon--like" aria-hidden="true" /> -->
+                    <img
+                      :src="item.favorited ? collectIcon : uncollectIcon"
+                      alt="收藏"
+                      style="width: 16px; height: 16px;"
+                    />
                     {{ formatCount(item.likeCount) }}
                   </span>
                 </div>
@@ -196,6 +201,8 @@
 </template>
 
 <script setup lang="ts">
+import collectIcon from '@assets/images/collect.png'
+import uncollectIcon from '@assets/images/uncollect.png'
 import { ExclamationCircleFilled, MoreOutlined } from '@ant-design/icons-vue'
 import { computed, createVNode, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -207,7 +214,7 @@ import {
 import dayjs from 'dayjs';
 import UpdateProjectName from '@components/UpdateProjectName/index.vue';
 import EmbeddedVideoPlayer from '@components/EmbeddedVideoPlayer/index.vue';
-import { Modal } from 'ant-design-vue';
+import { Modal, message } from 'ant-design-vue';
 
 import { useModalStore } from '@stores/useModal';
 import { useProject } from '@stores/useProject';
@@ -353,11 +360,13 @@ const openDeleteProject = (id: string) => {
 
 const onFavorite = (id: string, favorited: boolean) => {
   if (favorited) {
-    api.unfavoriteMaterial(id).then(() => {
+    api.unfavoriteInspiration(id).then(() => {
+      message.success('已取消收藏')
       void onLoadHomeData();
     })
   } else {
-    api.favoriteMaterial(id).then(() => {
+    api.favoriteInspiration(id).then(() => {
+      message.success('收藏成功')
       void onLoadHomeData();
     })
   }
