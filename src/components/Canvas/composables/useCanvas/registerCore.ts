@@ -38,6 +38,7 @@ import {
   normalizeOcrRecognizeResult,
   type ImageEditTextChange,
 } from '../../editTextUtils'
+import { formatCanvasDescription, resolveVideoTaskTypeLabel } from '../../canvasDescription'
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import { downloadCanvasMedia } from '../../mediaDownload'
 import {
@@ -167,6 +168,7 @@ export function registerCore(bind: CanvasBindings) {
     canvasProjects,
     activeProjectId,
     canvasRevision,
+    lastCanvasDescription,
     showAddMenu,
     showConnectMenu,
     showImageContextMenu,
@@ -2223,7 +2225,12 @@ export function registerCore(bind: CanvasBindings) {
 
     const sourceNode = cell as Node
     const sourceData = sourceNode.getData() as CanvasNodeData
-    if (sourceData.uploadState === 'uploading' || sourceData.imageGenState === 'loading') return
+    if (
+      sourceData.kind === 'image' &&
+      (sourceData.uploadState === 'uploading' || sourceData.imageGenState === 'loading')
+    ) {
+      return
+    }
 
     const prompt = payload.prompt.trim()
     if (!canSubmitImageDialogueTask(prompt, sourceData.elementMarks)) {
@@ -2254,6 +2261,7 @@ export function registerCore(bind: CanvasBindings) {
         provenanceRefs.some((item) => item.previewUrl?.trim()),
     )
     const isImg2Img = hasReferenceImages
+    recordCanvasDescription(prompt, isImg2Img ? '图生图' : '文生图')
 
     const title = buildImageActionResultTitle(isImg2Img ? '图生图' : '文生图')
     const sourceFileName = sourceData.fileName || sourceData.title || ''
@@ -2459,6 +2467,7 @@ export function registerCore(bind: CanvasBindings) {
       message.warning('请输入提示词')
       return
     }
+    recordCanvasDescription(prompt, resolveVideoTaskTypeLabel(payload.mode))
 
     const g = graph.value
     const sourceNodeId = selectedNodeId.value
@@ -2521,6 +2530,7 @@ export function registerCore(bind: CanvasBindings) {
       message.warning('请输入提示词')
       return
     }
+    recordCanvasDescription(prompt, resolveVideoTaskTypeLabel(payload.mode))
 
     const g = graph.value
     const sourceNodeId = activeVideoGenPromptNodeId.value
@@ -3460,6 +3470,11 @@ export function registerCore(bind: CanvasBindings) {
     return ''
   }
 
+  function canNodeHostImageDialogue(data: CanvasNodeData, nodeId: string) {
+    if (data.kind === 'image') return true
+    return data.kind === 'text' && activeImageGenPromptNodeId.value === nodeId
+  }
+
   function restoreCanvasPickTargetSelection() {
     const g = graph.value
     if (!g) return
@@ -3606,7 +3621,7 @@ export function registerCore(bind: CanvasBindings) {
     if (!cell?.isNode()) return
 
     const data = { ...(cell.getData() as CanvasNodeData) }
-    if (data.kind !== 'image') return
+    if (!canNodeHostImageDialogue(data, id)) return
     if (payload.nodeId && payload.nodeId === id) return
 
     const ref: ImageSourceRef = {
@@ -3656,7 +3671,7 @@ export function registerCore(bind: CanvasBindings) {
     const targetData = target.getData() as CanvasNodeData
     if (
       sourceData.kind !== 'image' ||
-      targetData.kind !== 'image' ||
+      !canNodeHostImageDialogue(targetData, targetNodeId) ||
       !sourceData.previewUrl ||
       sourceData.uploadState === 'uploading' ||
       sourceData.imageGenTask === 'picker'
@@ -3692,7 +3707,7 @@ export function registerCore(bind: CanvasBindings) {
     if (!targetCell?.isNode()) return
 
     const targetData = targetCell.getData() as CanvasNodeData
-    if (targetData.kind !== 'image') return
+    if (!canNodeHostImageDialogue(targetData, targetNodeId)) return
 
     const imageFiles = files.filter((file) => file.type.startsWith('image/'))
     if (!imageFiles.length) return
@@ -3859,6 +3874,13 @@ export function registerCore(bind: CanvasBindings) {
   function resolveImageGenTextSourcePreview(nodeId: string): string {
     const g = graph.value
     if (!g) return ''
+    const cell = g.getCellById(nodeId)
+    if (cell?.isNode()) {
+      const data = cell.getData() as CanvasNodeData
+      if (data.kind === 'text') {
+        return getTextNodePlainContent(cell as Node)
+      }
+    }
     for (const textNode of findIncomingTextNodes(g, nodeId)) {
       const text = getTextNodePlainContent(textNode)
       if (text) return text
@@ -3877,14 +3899,33 @@ export function registerCore(bind: CanvasBindings) {
     imageGenSourcePreviewUrl.value = textPreview ? '' : (data.sourcePreviewUrl ?? '')
     imageGenSeed.value = data.genSeed ?? 58
 
-    let prompt = data.imageDialogueText?.trim() || data.genPrompt?.trim() || ''
-    if (!prompt && textPreview) {
-      prompt = textPreview
+    let prompt = ''
+    if (data.kind === 'text') {
+      if (data.imageDialogueText != null) {
+        prompt = data.imageDialogueText.trim()
+      } else if (textPreview) {
+        prompt = textPreview
+      }
+    } else {
+      prompt = data.imageDialogueText?.trim() || data.genPrompt?.trim() || ''
+      if (!prompt && textPreview) {
+        prompt = textPreview
+      }
     }
 
     imageGenPromptText.value = prompt
     imageDialogueText.value = prompt
     imageDialogueSettings.value = normalizeImageDialogueSettings(data.imageDialogueSettings)
+
+    if (data.kind === 'text') {
+      if (data.imageDialogueText == null && prompt) {
+        cell.setData({
+          ...data,
+          imageDialogueText: prompt,
+        })
+      }
+      return
+    }
 
     if (prompt && (prompt !== data.genPrompt || (!data.imageDialogueText?.trim() && prompt !== data.imageDialogueText))) {
       cell.setData({
@@ -3933,11 +3974,11 @@ export function registerCore(bind: CanvasBindings) {
     const cell = g.getCellById(id)
     if (!cell?.isNode()) return
     const data = { ...(cell.getData() as CanvasNodeData) }
-    if (data.kind !== 'image') return
+    if (!canNodeHostImageDialogue(data, id)) return
 
     data.imageDialogueText = imageDialogueText.value
     data.imageDialogueSettings = { ...imageDialogueSettings.value }
-    if (imageDialogueText.value.trim()) {
+    if (imageDialogueText.value.trim() && data.kind !== 'text') {
       data.genPrompt = imageDialogueText.value
     }
     cell.setData(data, { overwrite: true })
@@ -4020,8 +4061,14 @@ export function registerCore(bind: CanvasBindings) {
     const cell = g.getCellById(nodeId)
     if (!cell?.isNode()) return
     const data = { ...(cell.getData() as CanvasNodeData) }
-    data.genPrompt = imageGenPromptText.value
+    if (!canNodeHostImageDialogue(data, nodeId)) return
     data.genSeed = imageGenSeed.value
+    if (data.kind === 'text') {
+      data.imageDialogueText = imageDialogueText.value
+      data.imageDialogueSettings = { ...imageDialogueSettings.value }
+    } else {
+      data.genPrompt = imageGenPromptText.value
+    }
     cell.setData(data)
   }
 
@@ -4326,13 +4373,13 @@ export function registerCore(bind: CanvasBindings) {
 
     if (synced.textPickerTask === 'text2video') {
       modelType.value = 'text2video'
-      promptText.value = synced.genPrompt ?? ''
+      promptText.value = synced.videoDialogueText ?? ''
       return
     }
 
     if (synced.textPickerTask === 'text2image') {
       modelType.value = 'text2image'
-      promptText.value = synced.genPrompt ?? ''
+      promptText.value = synced.imageDialogueText ?? ''
       return
     }
 
@@ -4347,7 +4394,14 @@ export function registerCore(bind: CanvasBindings) {
     const cell = g.getCellById(nodeId)
     if (!cell?.isNode()) return
     const data = { ...(cell.getData() as CanvasNodeData) }
-    data.genPrompt = promptText.value
+    const task = data.textPickerTask
+    if (task === 'text2video') {
+      data.videoDialogueText = promptText.value
+    } else if (task === 'img2prompt') {
+      data.genPrompt = promptText.value
+    } else {
+      data.genPrompt = promptText.value
+    }
     cell.setData(data)
   }
 
@@ -4380,6 +4434,19 @@ export function registerCore(bind: CanvasBindings) {
 
     if (!isSpawnResultTask) promptSubmitting.value = true
     persistPromptBarDraft()
+
+    const promptFromPayload = (
+      payload && typeof payload === 'object' && 'prompt' in payload
+        ? String((payload as { prompt?: string }).prompt ?? '')
+        : ''
+    ).trim()
+    const promptTaskType = (() => {
+      if (modelType.value === 'img2prompt' || isImg2PromptTask.value) return '反推提示词'
+      if (modelType.value === 'text2video' || isText2VideoTask.value) return '文生视频'
+      if (modelType.value === 'text2image' || isText2ImageTask.value) return '文生图'
+      return '自由创作'
+    })()
+    recordCanvasDescription(promptFromPayload || promptText.value, promptTaskType)
 
     try {
       if (modelType.value === 'img2prompt' || isImg2PromptTask.value) {
@@ -4779,6 +4846,7 @@ export function registerCore(bind: CanvasBindings) {
       message.warning('请输入提示词')
       return
     }
+    recordCanvasDescription(prompt, '文生图')
 
     const currentData = node.getData() as CanvasNodeData
     if (currentData.imageGenState === 'loading') return
@@ -4840,6 +4908,11 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function openVideoGenPromptBar(nodeId: string, tab = 'text2video') {
+    closeTextPromptBar()
+    if (activeImageGenPromptNodeId.value) {
+      persistImageGenPrompt()
+      persistImageDialogueFields(activeImageGenPromptNodeId.value)
+    }
     closeImageGenPromptBar()
 
     const g = graph.value
@@ -4856,7 +4929,6 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     activeVideoGenPromptNodeId.value = nodeId
-    activePickerNodeId.value = ''
     videoGenActiveTab.value = tab
     loadVideoGenPromptFields(nodeId)
     updateVideoGenPromptBarPosition()
@@ -4865,6 +4937,20 @@ export function registerCore(bind: CanvasBindings) {
   function closeVideoGenPromptBar() {
     activeVideoGenPromptNodeId.value = ''
     exitVideoGenCanvasPickMode()
+  }
+
+  /** 关闭文本节点 picker 下所有互斥底栏/对话框，切换文生图/文生视频等时只保留一个 */
+  function dismissTextPickerPanels() {
+    closeTextPromptBar()
+    if (activeImageGenPromptNodeId.value) {
+      persistImageGenPrompt()
+      persistImageDialogueFields(activeImageGenPromptNodeId.value)
+    }
+    closeImageGenPromptBar()
+    if (activeVideoGenPromptNodeId.value) {
+      persistVideoGenPrompt()
+    }
+    closeVideoGenPromptBar()
   }
 
   function enterElementSelectMode(context: 'image-dialogue' | 'video-gen' = 'video-gen') {
@@ -5378,6 +5464,11 @@ export function registerCore(bind: CanvasBindings) {
 
   function openImageGenPromptBar(nodeId: string) {
     closeVideoGenPromptBar()
+    closeTextPromptBar()
+    if (activeImageGenPromptNodeId.value && activeImageGenPromptNodeId.value !== nodeId) {
+      persistImageGenPrompt()
+      persistImageDialogueFields(activeImageGenPromptNodeId.value)
+    }
 
     const g = graph.value
     if (g) {
@@ -5393,7 +5484,6 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     activeImageGenPromptNodeId.value = nodeId
-    activePickerNodeId.value = ''
     loadImageGenPromptFields(nodeId)
     updateImageGenPromptBarPosition()
   }
@@ -5836,6 +5926,20 @@ export function registerCore(bind: CanvasBindings) {
     })()
   }
 
+  function recordCanvasDescription(description: string, taskType?: string) {
+    const formatted = formatCanvasDescription(taskType ?? '', description)
+    if (formatted) {
+      lastCanvasDescription.value = formatted
+    }
+  }
+
+  function setCanvasDescription(description: string, taskType = '对话') {
+    const formatted = formatCanvasDescription(taskType, description)
+    if (formatted) {
+      lastCanvasDescription.value = formatted
+    }
+  }
+
   function applyProjectCanvasPayload(payload: ProjectCanvasResponse) {
     const g = graph.value
     if (!g) return false
@@ -5847,6 +5951,7 @@ export function registerCore(bind: CanvasBindings) {
 
     activeProjectId.value = payload.projectId
     canvasRevision.value = payload.revision
+    lastCanvasDescription.value = payload.description?.trim() || ''
 
     const snapshot = normalizeCanvasSnapshot(canvasData as Partial<CanvasSnapshot>, {
       projectId: payload.projectId,
@@ -5974,15 +6079,16 @@ export function registerCore(bind: CanvasBindings) {
     saveType: 'MANUAL' | 'AUTO',
     project?: (typeof canvasProjects.value)[number],
   ) {
-    const sendSave = (revision: number) =>
+    const sendSave = (revision: number, canvasSnapshot: CanvasSnapshot) =>
       api.saveProjectCanvas(projectId, {
         revision,
         saveType,
-        canvasData: snapshot,
+        canvasData: canvasSnapshot,
+        description: lastCanvasDescription.value || undefined,
       })
 
     try {
-      const res = await sendSave(canvasRevision.value)
+      const res = await sendSave(canvasRevision.value, snapshot)
       if (typeof res.revision === 'number') {
         canvasRevision.value = res.revision
       }
@@ -5997,11 +6103,7 @@ export function registerCore(bind: CanvasBindings) {
 
       canvasRevision.value = latestRevision
       const freshSnapshot = buildCanvasSnapshot() ?? snapshot
-      const res = await api.saveProjectCanvas(projectId, {
-        revision: canvasRevision.value,
-        saveType,
-        canvasData: freshSnapshot,
-      })
+      const res = await sendSave(canvasRevision.value, freshSnapshot)
       if (typeof res.revision === 'number') {
         canvasRevision.value = res.revision
       }
@@ -6699,6 +6801,8 @@ export function registerCore(bind: CanvasBindings) {
     selectedKind.value = 'text'
     syncNodeSelectionHighlight(nodeId)
 
+    dismissTextPickerPanels()
+
     if (key === 'write') {
       activePickerNodeId.value = ''
       modelType.value = 'free'
@@ -6710,19 +6814,17 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     if (key === 'text2image') {
-      const cell = g.getCellById(nodeId)
-      if (!cell?.isNode()) return
+      const source = g.getCellById(nodeId)
+      if (!source?.isNode()) return
 
-      const data = { ...(cell.getData() as CanvasNodeData) }
+      const textNode = source as Node
+      const data = { ...(textNode.getData() as CanvasNodeData) }
       data.mode = 'picker'
       data.textPickerTask = key
       data.textGenState = 'idle'
-      cell.setData(data)
+      textNode.setData(data)
 
-      modelType.value = 'text2image'
-
-      activePickerNodeId.value = nodeId
-      loadPromptBarContext(nodeId)
+      openImageGenPromptBar(nodeId)
       bumpToolbarRevision()
       updateNodeToolbar()
       scheduleHistoryPush()
@@ -6740,7 +6842,6 @@ export function registerCore(bind: CanvasBindings) {
       cell.setData(data)
 
       modelType.value = 'text2video'
-
       activePickerNodeId.value = nodeId
       loadPromptBarContext(nodeId)
       bumpToolbarRevision()
@@ -9546,6 +9647,7 @@ export function registerCore(bind: CanvasBindings) {
     handleSaveCanvas,
     hasUnsavedChanges,
     saveCanvasAndWait,
+    setCanvasDescription,
     loadProjectCanvas,
     handleTextPickerAction,
     handleTidyCanvas,

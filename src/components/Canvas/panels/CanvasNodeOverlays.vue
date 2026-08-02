@@ -23,58 +23,6 @@
         <p class="canvas__prompt-drop-text">点击或拖拽图片到此处上传</p>
       </div>
     </div>
-    <div class="canvas__prompt-workflow-row">
-      <DialogueWorkflowSelect
-        v-if="isText2ImageTask"
-        v-model="selectedText2ImageWorkFlow"
-        :groups="imageWorkflowOptionGroups"
-        placeholder="请选择工作流"
-        :light="canvasBgTheme === 'light'"
-      />
-      <DialogueWorkflowSelect
-        v-else-if="isText2VideoTask"
-        v-model="selectedTextWorkFlow"
-        :groups="textWorkflowOptionGroups"
-        placeholder="请选择工作流"
-        :light="canvasBgTheme === 'light'"
-      />
-      <div v-else class="canvas__prompt-model-wrap">
-        <button
-          type="button"
-          class="canvas__prompt-model-chip"
-          :class="{
-            'canvas__prompt-model-chip--active': showPromptWorkFlow,
-            'canvas__prompt-model-chip--light': canvasBgTheme === 'light',
-          }"
-          @mousedown.stop
-          @click.stop="togglePromptWorkFlow"
-        >
-          {{ promptSubmitLabel || selectedPromptWorkFlowName }}
-          <span class="canvas__prompt-model-arrow" aria-hidden="true" />
-        </button>
-        <div
-          v-if="showPromptWorkFlow"
-          class="canvas__prompt-model-menu"
-          @mousedown.stop
-        >
-          <button
-            v-for="model in TEXT_PROMPT_MODEL_MENU"
-            :key="model.key"
-            type="button"
-            class="canvas__prompt-model-item"
-            :class="{ 'canvas__prompt-model-item--active': model.key === selectedPromptWorkFlowKey }"
-            @click="selectPromptWorkFlow(model)"
-          >
-            <span class="canvas__prompt-model-item-mark" aria-hidden="true" />
-            <span class="canvas__prompt-model-item-main">
-              <span class="canvas__prompt-model-item-name">{{ model.name }}</span>
-              <span v-if="model.desc" class="canvas__prompt-model-item-desc">{{ model.desc }}</span>
-            </span>
-            <span class="canvas__prompt-model-item-time">{{ model.duration }}</span>
-          </button>
-        </div>
-      </div>
-    </div>
     <div
       class="canvas__prompt-body"
       :class="{
@@ -142,7 +90,6 @@
               viewBox="0 0 19.71 18"
             ><path d="M15.52 7.2c.16 0 .31.1.37.26l3.8 10a.4.4 0 0 1-.38.54h-1.03a.4.4 0 0 1-.37-.27l-.88-2.48h-4.36l-.88 2.48a.4.4 0 0 1-.37.27h-1.03a.4.4 0 0 1-.37-.54l3.79-10a.4.4 0 0 1 .37-.26zM7.7 0c.22 0 .4.18.4.4v1.4H14c.22 0 .4.18.4.4v1a.4.4 0 0 1-.4.4h-2.21a16 16 0 0 1-1.42 3.33A11 11 0 0 1 8.5 9.54l1.99 2.02c.1.11.14.28.09.42l-.43 1.16a.3.3 0 0 1-.5.1l-2.4-2.46-4.27 4.24a.4.4 0 0 1-.56 0l-.7-.7a.4.4 0 0 1 0-.56L6 9.5q-.79-.8-1.43-1.8-.55-.85-1-1.89a.3.3 0 0 1 .27-.41h1.2a.4.4 0 0 1 .35.22q.39.74.79 1.31.45.65 1.08 1.3.73-.73 1.54-2.08.8-1.33 1.2-2.55H.4a.4.4 0 0 1-.4-.4v-1c0-.22.18-.4.4-.4h5.9V.4c0-.22.18-.4.4-.4zm5.53 13.68h3.24l-1.62-4.59z" fill="currentColor"></path></svg>
           </button>
-          <span class="canvas__prompt-credits">⚡ 12</span>
           <button
             type="button"
             class="canvas__prompt-send"
@@ -474,7 +421,6 @@
 <script setup lang="ts">
 import VideoGenPromptPanel from '../VideoGenPromptPanel.vue'
 import ImageDialoguePanel from '../ImageDialoguePanel.vue'
-import DialogueWorkflowSelect from '../DialogueWorkflowSelect.vue'
 import ImageDialogueFooter from '../ImageDialogueFooter.vue'
 import type { ImageDialogueFooterParams } from '../ImageDialogueFooter.vue'
 import CanvasImageResizeOverlay, {
@@ -495,12 +441,7 @@ import VideoFramesPanel from '../VideoFramesPanel.vue'
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
   PROMPT_PLACEHOLDER,
-  TEXT_PROMPT_MODEL_LABEL,
-  TEXT_PROMPT_MODEL_MENU,
-  buildImageWorkflowOptionGroups,
   buildImageWorkflowOptions,
-  buildTextWorkflowOptionGroups,
-  buildTextWorkflowOptions,
   type ImageSourceRef,
   type ImageMarkItem,
   type ChatTools,
@@ -512,14 +453,13 @@ import {
   type VideoGenPromptSubmitPayload,
   type VideoGenAspectRatio,
   type NodeKind,
-  type TextPromptModelItem,
   type VideoHdMagnification,
   type WorkflowCategoryGroup,
   type WorkflowRecord,
 } from '../constants'
 import type { CanvasBgTheme } from '../canvasTheme'
 import { createPromptMentionApi, isInputComposing } from '../promptMention'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import api, { type PromptTranslationData } from '@/services/api'
 import { isRequestError } from '@/utils/request'
@@ -707,26 +647,11 @@ const emit = defineEmits<{
   'clear-marks': []
 }>()
 
-const showPromptWorkFlow = ref(false)
-const selectedPromptWorkFlowKey = ref(TEXT_PROMPT_MODEL_MENU[0]?.key ?? '')
 const selectedText2ImageWorkFlow = ref<string | undefined>(undefined)
-const selectedTextWorkFlow = ref<string | undefined>(undefined)
 const imageWorkflowOptions = computed(() => buildImageWorkflowOptions(props.workflows))
-const imageWorkflowOptionGroups = computed(() => buildImageWorkflowOptionGroups(props.workflows))
-const textWorkflowOptions = computed(() => buildTextWorkflowOptions(props.workflows))
-const textWorkflowOptionGroups = computed(() => buildTextWorkflowOptionGroups(props.workflows))
 const selectedText2ImageWorkflowRecord = computed(() =>
   imageWorkflowOptions.value.find((workflow) => workflow.id === selectedText2ImageWorkFlow.value),
 )
-const selectedPromptWorkFlowName = computed(
-  () =>
-    TEXT_PROMPT_MODEL_MENU.find((model) => model.key === selectedPromptWorkFlowKey.value)?.name ??
-    TEXT_PROMPT_MODEL_LABEL,
-)
-
-function togglePromptWorkFlow() {
-  showPromptWorkFlow.value = !showPromptWorkFlow.value
-}
 
 function onSubmitText2Video(params: VideoDialogueFooterParams) {
   const prompt = props.promptText.trim()
@@ -747,19 +672,6 @@ function onSubmitText2Image(params: ImageDialogueFooterParams) {
     workflowId: workflow?.id,
     workflow: workflow as WorkflowRecord | undefined,
   })
-}
-
-function selectPromptWorkFlow(model: TextPromptModelItem) {
-  // console.log(model)
-  selectedPromptWorkFlowKey.value = model.key
-  showPromptWorkFlow.value = false
-}
-
-function onPromptModelDocMouseDown(event: MouseEvent) {
-  if (!showPromptWorkFlow.value) return
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.canvas__prompt-model-wrap')) return
-  showPromptWorkFlow.value = false
 }
 
 function emitPrompt(text: string) {
@@ -929,24 +841,6 @@ watch(
 )
 
 watch(
-  textWorkflowOptions,
-  (options) => {
-    if (!props.isText2VideoTask) return
-    if (!options.length) {
-      selectedTextWorkFlow.value = undefined
-      return
-    }
-    if (
-      selectedTextWorkFlow.value &&
-      !options.some((workflow) => workflow.id === selectedTextWorkFlow.value)
-    ) {
-      selectedTextWorkFlow.value = undefined
-    }
-  },
-  { immediate: true },
-)
-
-watch(
   () => props.showPromptBar,
   (visible) => {
     if (!visible) return
@@ -955,12 +849,7 @@ watch(
 )
 
 onMounted(() => {
-  document.addEventListener('mousedown', onPromptModelDocMouseDown, true)
   nextTick(() => syncPromptView())
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onPromptModelDocMouseDown, true)
 })
 
 function dismissVideoGenPromptOverlay() {

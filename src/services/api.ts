@@ -251,6 +251,8 @@ export interface CanvasSaveRequest {
   saveType?: 'MANUAL' | 'AUTO' | string
   /** 画布快照 JSON 数据。 */
   canvasData: CanvasData
+  /** 画布最后一次提交的描述。 */
+  description?: string
 }
 
 /** GET /projects/{projectId}/canvas 响应 data。 */
@@ -260,6 +262,7 @@ export interface ProjectCanvasResponse {
   canvasData: CanvasData
   canvas: CanvasData
   updatedAt: string
+  description?: string
 }
 
 /** PUT /projects/{projectId}/canvas 响应 data。 */

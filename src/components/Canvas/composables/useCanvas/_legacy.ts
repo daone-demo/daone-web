@@ -211,6 +211,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const canvasProjects = ref([] as any[])
 
   const activeProjectId = ref('draft-2')
+  const lastCanvasDescription = ref('')
   const showAddMenu = ref(false)
   const showConnectMenu = ref(false)
   const connectMenuPos = ref({ left: 0, top: 0 })
@@ -1630,6 +1631,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
       revision: 1,
       saveType: 'MANUAL',
       canvasData: snapshot,
+      description: lastCanvasDescription.value || undefined,
     }).then((res) => {
       console.info('[Canvas] saved to server', res)
     }).catch((error) => {

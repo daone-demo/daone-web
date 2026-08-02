@@ -77,6 +77,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const canvasProjects = ref<CanvasProjectListItem[]>([])
   const activeProjectId = ref('')
   const canvasRevision = ref(0)
+  /** 画布最后一次提交的描述（提示词/对话文案），保存时传给服务端 */
+  const lastCanvasDescription = ref('')
   const showAddMenu = ref(false)
   const showConnectMenu = ref(false)
   const showImageContextMenu = ref(false)
@@ -266,6 +268,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     canvasProjects,
     activeProjectId,
     canvasRevision,
+    lastCanvasDescription,
     showAddMenu,
     showConnectMenu,
     showImageContextMenu,

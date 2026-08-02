@@ -61,6 +61,7 @@ import Canvas from '@/components/Canvas/index.vue'
 import ChatSidePanel from './ChatSidePanel.vue'
 import type { ChatSendPayload } from './chatTypes'
 import api, { type ProjectCanvasResponse } from '@/services/api'
+import { isLeaveConfirmSuppressed } from '@/utils/leaveGuard'
 import { useModalStore } from '@stores/useModal'
 import { useUserInfo } from '@stores/useUserInfo';
 import {
@@ -111,6 +112,7 @@ type CanvasExpose = {
   hasUnsavedChanges: () => boolean
   saveCanvas: (saveType?: 'MANUAL' | 'AUTO') => void
   saveCanvasAndWait: (saveType?: 'MANUAL' | 'AUTO') => Promise<boolean>
+  setCanvasDescription: (description: string, taskType?: string) => void
   loadProjectCanvas: (payload: ProjectCanvasResponse) => boolean
 }
 
@@ -180,7 +182,11 @@ function onAddAssetToChat(payload: { id: string; role: string; name: string }) {
 }
 
 async function onChatSend(payload: ChatSendPayload) {
-  console.log('onChatSend', payload);
+  const text = payload.text.trim()
+  if (text) {
+    canvasRef.value?.setCanvasDescription?.(text, '对话')
+  }
+
   const canvas = canvasRef.value
   if (!canvas) return
 
@@ -413,6 +419,7 @@ async function initializePage() {
 function needsLeaveConfirm() {
   if (pageLoading.value) return false
   if (leaveConfirmed) return false
+  if (isLeaveConfirmSuppressed()) return false
   // 离开创作页 / 切换项目前均提示保存
   return true
 }

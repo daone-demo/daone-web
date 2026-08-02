@@ -793,6 +793,12 @@ defineExpose({
     }).saveCanvasAndWait
     return (await fn?.(saveType)) ?? true
   },
+  setCanvasDescription(description: string, taskType?: string) {
+    const fn = (canvasRuntime as {
+      setCanvasDescription?: (description: string, taskType?: string) => void
+    }).setCanvasDescription
+    fn?.(description, taskType)
+  },
   loadProjectCanvas(payload: ProjectCanvasResponse) {
     const load = (canvasRuntime as {
       loadProjectCanvas?: (payload: ProjectCanvasResponse) => boolean
