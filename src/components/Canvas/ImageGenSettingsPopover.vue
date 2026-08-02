@@ -101,8 +101,8 @@ const props = withDefaults(
     imageCounts?: number[]
   }>(),
   {
-    aspectRatio: 'auto',
-    resolution: '2K',
+    aspectRatio: '1:1',
+    resolution: '1K',
     imageCount: 1,
     chatTools: null,
     modelKey: '',

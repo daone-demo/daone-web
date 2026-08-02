@@ -216,16 +216,16 @@
         </a-tooltip>
         <a-tooltip>
           <template #title>从画布选图</template>
-        <button
-          type="button"
-          class="canvas-dialogue-tool"
-          :class="{ 'canvas-dialogue-tool--active': canvasPickMode }"
-          title="从画布选图"
-          @mousedown.stop
-          @click.stop="emit('toggle-canvas-pick')"
-        >
-          <i class="iconfont icon-shubiaojiantou" />
-        </button>
+          <button
+            type="button"
+            class="canvas-dialogue-tool"
+            :class="{ 'canvas-dialogue-tool--active': canvasPickMode }"
+            title="从画布选图"
+            @mousedown.stop
+            @click.stop="emit('toggle-canvas-pick')"
+          >
+            <i class="iconfont icon-shubiaojiantou" />
+          </button>
         </a-tooltip>
         <button
           type="button"
@@ -468,8 +468,8 @@ const showStyleModal = ref(false)
 const showGenSettings = ref(false)
 const showModelMenu = ref(false)
 const showCountMenu = ref(false)
-const genAspectRatio = ref('auto')
-const genResolution = ref('2K')
+const genAspectRatio = ref('')
+const genResolution = ref('')
 const genImageCount = ref(1)
 const selectedModelKey = ref(
   resolveImageDialogueModelKey(IMAGE_DIALOGUE_MODEL_MENU[0].key, null),
@@ -836,7 +836,7 @@ async function onTranslatePrompt() {
 function onSend() {
   const prompt = props.modelValue.trim()
   if (!prompt) {
-    message.warning('请输入提示词')
+    message.warning('请输入提示词或标记需要识别的商品位置')
     return
   }
 
@@ -1035,9 +1035,16 @@ function onDocumentMouseDown(event: MouseEvent) {
 }
 
 .video-gen-prompt-panel__tool--active {
-  background: rgba(37, 99, 235, 0.12);
+  background: transparent;
   color: #2563eb;
+  border: none;
 }
+
+.video-gen-prompt-panel__tool:hover {
+  background: #f3f4f6;
+  cursor: pointer;
+}
+
 
 .image-dialogue__thumb {
   position: relative;

@@ -122,6 +122,7 @@ import {
   VIDEO_GEN_DURATION_LABEL,
   VIDEO_GEN_RESOLUTION_LABEL,
   VIDEO_GEN_RESOLUTIONS,
+  VIDEO_GEN_DURATIONS,
   buildVideoDialogueAspectRatiosFromCapabilities,
   buildVideoDialogueDurationRangeFromCapabilities,
   buildVideoDialogueGenerateAudioOptions,
@@ -143,9 +144,9 @@ const props = withDefaults(
     chatTools?: ChatTools | null
   }>(),
   {
-    duration: 5,
+    duration: VIDEO_GEN_DURATIONS[0],
     aspectRatio: '16:9',
-    resolution: '720P',
+    resolution: '480P',
     generateAudio: true,
     modelKey: '',
     chatTools: null,

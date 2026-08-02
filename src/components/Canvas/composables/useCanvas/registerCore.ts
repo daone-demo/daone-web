@@ -2210,7 +2210,7 @@ export function registerCore(bind: CanvasBindings) {
   async function handleImageDialogueSubmit(payload: ImageDialogueSubmitPayload) {
     const prompt = payload.prompt.trim()
     if (!prompt) {
-      message.warning('请输入提示词')
+      message.warning('请输入提示词或标记需要识别的商品位置')
       return
     }
 
@@ -6609,20 +6609,16 @@ export function registerCore(bind: CanvasBindings) {
       const cell = g.getCellById(nodeId)
       if (!cell?.isNode()) return
 
-      const spawned = createNodeFromConnectMenu(
-        g,
-        cell as Node,
-        getLinkedSpawnPoint(cell as Node, 'image', {
-          mode: 'editor',
-          imageGenTask: 'picker',
-          imageGenState: 'idle',
-        }),
-        'image',
-      )
-      if (spawned) {
-        finishConnectSpawn(spawned)
-        openImageGenPromptBar(spawned.id)
-      }
+      const data = { ...(cell.getData() as CanvasNodeData) }
+      data.mode = 'picker'
+      data.textPickerTask = key
+      data.textGenState = 'idle'
+      cell.setData(data)
+
+      modelType.value = 'text2image'
+
+      activePickerNodeId.value = nodeId
+      loadPromptBarContext(nodeId)
       bumpToolbarRevision()
       updateNodeToolbar()
       scheduleHistoryPush()

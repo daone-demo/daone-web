@@ -142,14 +142,59 @@
                 class="image-node__mark-box"
                 :style="markBoxStyle(mark)"
               />
-              <div
+              <div 
+                data-v-243dd551=""
+                style="width: 18px;position: absolute;"
+                class="w-full h-full flex items-center justify-center relative overflow-visible filter drop-shadow-sm transition-transform hover:scale-110 cursor-pointer"
+                :class="{ 'image-node__mark-pin--analyzing': mark.pending }"
+                :style="markPinStyle(mark)"
+                :title="mark.label"
+              >
+                <svg 
+                  data-v-243dd551=""
+                  viewBox="0 0 24 24"
+                  class="w-full h-full"
+                  fill="none"
+                  aria-hidden="true"
+                  style="transform-origin: 50% 100%; transform: scale(1.5);"
+                >
+                  <path
+                    data-v-243dd551=""
+                    d="M12 23.4C7.6 19.8 4.6 16.9 4.6 11.8C4.6 7.2 8.1 3.9 12 3.9C15.9 3.9 19.4 7.2 19.4 11.8C19.4 16.9 16.4 19.8 12 23.4Z"
+                    fill="#5aa3ff"
+                    stroke="none"
+                  ></path>
+                  <path 
+                    data-v-243dd551=""
+                    d="M12 23.4C7.6 19.8 4.6 16.9 4.6 11.8C4.6 7.2 8.1 3.9 12 3.9C15.9 3.9 19.4 7.2 19.4 11.8C19.4 16.9 16.4 19.8 12 23.4Z"
+                    fill="none"
+                    stroke="#ffffff"
+                    stroke-width="1.2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  ></path>
+                  <text
+                    data-v-243dd551=""
+                    x="12"
+                    y="13"
+                    text-anchor="middle"
+                    dominant-baseline="middle"
+                    font-size="8"
+                    font-weight="500"
+                    fill="#ffffff"
+                  >
+                    {{ index + 1 }}
+                  </text>
+                </svg>
+              </div>
+              <!-- <div
                 class="image-node__mark-pin"
                 :class="{ 'image-node__mark-pin--analyzing': mark.pending }"
                 :style="markPinStyle(mark)"
                 :title="mark.label"
               >
                 <span class="image-node__mark-pin-badge">{{ index + 1 }}</span>
-              </div>
+              </div> -->
             </template>
           </div>
           <div

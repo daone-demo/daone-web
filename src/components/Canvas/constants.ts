@@ -1732,41 +1732,28 @@ export function normalizeImageDialogueSettingsForModel(
   partial: Partial<ImageDialogueSettings>,
   source?: ImageDialogueSource,
 ): ImageDialogueSettings {
-  const defaults: ImageDialogueSettings = {
-    aspectRatio: 'auto',
-    resolution: '2K',
-    imageCount: 1,
-    modelKey: IMAGE_DIALOGUE_MODEL_MENU[0].key,
-    workflowId: '',
-  }
-
   const modelKey = resolveImageDialogueModelKey(partial.modelKey, source)
   const ratios = buildImageDialogueAspectRatiosFromCapabilities(source, modelKey)
   const resolutions = buildImageDialogueResolutionsFromCapabilities(source, modelKey)
   const counts = buildImageDialogueCountOptionsFromCapabilities(source, modelKey)
 
-  let aspectRatio = partial.aspectRatio ?? defaults.aspectRatio
+  const defaultAspectRatio = ratios[0]?.key ?? 'auto'
+  const defaultResolution = resolutions[0] ?? '1K'
+  const defaultImageCount = counts[0] ?? 1
+
+  let aspectRatio = partial.aspectRatio?.trim() ? partial.aspectRatio : defaultAspectRatio
   if (!ratios.some((ratio) => ratio.key === aspectRatio)) {
-    aspectRatio = ratios[0]?.key ?? defaults.aspectRatio
+    aspectRatio = defaultAspectRatio
   }
 
-  let resolution = partial.resolution ?? defaults.resolution
+  let resolution = partial.resolution?.trim() ? partial.resolution : defaultResolution
   if (!resolutions.includes(resolution)) {
-    resolution = resolutions[0] ?? defaults.resolution
+    resolution = defaultResolution
   }
 
-  let imageCount = partial.imageCount ?? defaults.imageCount
+  let imageCount = partial.imageCount ?? defaultImageCount
   if (counts.length && !counts.includes(imageCount)) {
-    imageCount = counts[0]
-  }
-
-  const entry = findImageDialogueModelEntry(source, modelKey)
-  const countParam = entry ? null : findImageDialogueSource(source)?.parameters?.count
-  if (countParam && typeof countParam === 'object' && !Array.isArray(countParam)) {
-    const defaultCount = Number((countParam as { default?: number }).default)
-    if (Number.isFinite(defaultCount) && counts.includes(defaultCount)) {
-      imageCount = defaultCount
-    }
+    imageCount = defaultImageCount
   }
 
   return {
@@ -1774,7 +1761,7 @@ export function normalizeImageDialogueSettingsForModel(
     aspectRatio,
     resolution,
     imageCount,
-    workflowId: partial.workflowId ?? defaults.workflowId,
+    workflowId: partial.workflowId ?? '',
   }
 }
 
@@ -2366,16 +2353,6 @@ export function normalizeVideoDialogueSettingsForModel(
   partial: Partial<VideoDialogueSettings>,
   source?: VideoDialogueSource,
 ): VideoDialogueSettings {
-  const defaults: VideoDialogueSettings = {
-    modelKey: VIDEO_DIALOGUE_MODEL_MENU[0].key,
-    aspectRatio: '16:9',
-    resolution: '720P',
-    duration: 5,
-    generateAudio: true,
-    videoCount: 1,
-    mode: 'reference',
-  }
-
   const modelKey = resolveVideoDialogueModelKey(partial.modelKey, source)
   const ratios = buildVideoDialogueAspectRatiosFromCapabilities(source, modelKey)
   const clarities = buildVideoDialogueClaritiesFromCapabilities(source, modelKey)
@@ -2383,31 +2360,37 @@ export function normalizeVideoDialogueSettingsForModel(
   const audioOptions = buildVideoDialogueGenerateAudioOptions(source, modelKey)
   const counts = buildVideoDialogueCountOptionsFromCapabilities(source, modelKey)
 
-  let aspectRatio = partial.aspectRatio ?? defaults.aspectRatio
+  const defaultAspectRatio = (ratios[0]?.key ?? '16:9') as VideoGenAspectRatio
+  const defaultResolution = (clarities[0] ?? '480P') as VideoGenResolution
+  const defaultDuration = durationRange.min as VideoGenDuration
+  const defaultGenerateAudio = audioOptions[0] ?? true
+  const defaultVideoCount = counts[0] ?? 1
+
+  let aspectRatio = partial.aspectRatio ?? defaultAspectRatio
   if (!ratios.some((ratio) => ratio.key === aspectRatio)) {
-    aspectRatio = (ratios[0]?.key ?? defaults.aspectRatio) as VideoGenAspectRatio
+    aspectRatio = defaultAspectRatio
   }
 
-  let resolution = partial.resolution ?? defaults.resolution
+  let resolution = partial.resolution ?? defaultResolution
   if (!clarities.includes(resolution)) {
-    resolution = (clarities[0] ?? defaults.resolution) as VideoGenResolution
+    resolution = defaultResolution
   }
 
-  let duration = partial.duration ?? durationRange.defaultValue ?? durationRange.min
+  let duration = partial.duration ?? defaultDuration
   const clampedDuration = Math.min(
     durationRange.max,
     Math.max(durationRange.min, Math.round(Number(duration) || durationRange.min)),
   )
   duration = clampedDuration as VideoGenDuration
 
-  let generateAudio = partial.generateAudio ?? defaults.generateAudio
+  let generateAudio = partial.generateAudio ?? defaultGenerateAudio
   if (audioOptions.length && !audioOptions.includes(generateAudio)) {
     generateAudio = audioOptions[0]
   }
 
-  let videoCount = partial.videoCount ?? defaults.videoCount
+  let videoCount = partial.videoCount ?? defaultVideoCount
   if (counts.length && !counts.includes(videoCount)) {
-    videoCount = counts[0]
+    videoCount = defaultVideoCount
   }
 
   return {
@@ -2417,7 +2400,7 @@ export function normalizeVideoDialogueSettingsForModel(
     duration: duration as VideoGenDuration,
     generateAudio,
     videoCount,
-    mode: partial.mode ?? defaults.mode,
+    mode: partial.mode ?? 'reference',
   }
 }
 

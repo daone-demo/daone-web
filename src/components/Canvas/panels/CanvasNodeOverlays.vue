@@ -104,7 +104,9 @@
         v-if="isText2VideoTask"
         :chat-tools="chatTools"
         :disabled="!canSubmitTextPrompt || promptSubmitting"
+        :translating="translating"
         default-mode="text-to-video"
+        @translate="onTranslatePrompt"
         @submit="onSubmitText2Video"
       />
       <ImageDialogueFooter

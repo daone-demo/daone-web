@@ -247,6 +247,7 @@ import {
   VIDEO_DIALOGUE_CREDITS,
   VIDEO_GEN_PROMPT_PLACEHOLDER,
   VIDEO_DIALOGUE_MODEL_MENU,
+  VIDEO_GEN_DURATIONS,
   buildVideoDialogueCountOptionsFromCapabilities,
   buildVideoDialogueModelsFromCapabilities,
   buildVideoWorkflowOptionGroups,
@@ -294,9 +295,9 @@ const advisorButtonLabel = computed(() => {
   }
   return '视频参谋'
 })
-const videoDuration = ref<VideoGenDuration>(5)
+const videoDuration = ref<VideoGenDuration>(VIDEO_GEN_DURATIONS[0])
 const videoAspectRatio = ref<VideoGenAspectRatio>('16:9')
-const videoResolution = ref<VideoGenResolution>('720P')
+const videoResolution = ref<VideoGenResolution>('480P')
 const generateAudio = ref(true)
 const videoCount = ref(1)
 const selectedModelKey = ref(VIDEO_DIALOGUE_MODEL_MENU[0].key)

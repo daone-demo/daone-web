@@ -141,8 +141,8 @@ const emit = defineEmits<{
 
 const showGenSettings = ref(false)
 const showModelMenu = ref(false)
-const genAspectRatio = ref('auto')
-const genResolution = ref('2K')
+const genAspectRatio = ref('')
+const genResolution = ref('')
 const genImageCount = ref(1)
 const selectedModelKey = ref(
   resolveImageDialogueModelKey(IMAGE_DIALOGUE_MODEL_MENU[0].key, null),
@@ -168,8 +168,8 @@ function applyNormalizedToolbarSettings(partial: Partial<ImageDialogueSettings> 
   const normalized = normalizeImageDialogueSettingsForModel(
     {
       modelKey: selectedModelKey.value,
-      aspectRatio: genAspectRatio.value,
-      resolution: genResolution.value,
+      ...(genAspectRatio.value ? { aspectRatio: genAspectRatio.value } : {}),
+      ...(genResolution.value ? { resolution: genResolution.value } : {}),
       imageCount: genImageCount.value,
       workflowId: '',
       ...partial,

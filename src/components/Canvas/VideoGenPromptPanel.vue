@@ -373,6 +373,7 @@ import {
   VIDEO_GEN_PROMPT_PLACEHOLDER,
   VIDEO_GEN_TABS,
   VIDEO_DIALOGUE_MODEL_MENU,
+  VIDEO_GEN_DURATIONS,
   buildVideoDialogueCountOptionsFromCapabilities,
   buildVideoDialogueModelsFromCapabilities,
   formatVideoGenSettings,
@@ -450,12 +451,12 @@ const textSourceCount = computed(
 const showVideoModelPicker = ref(false)
 const showVideoSettings = ref(false)
 const selectedModelKey = ref(VIDEO_DIALOGUE_MODEL_MENU[0].key)
-const videoDuration = ref<VideoGenDuration>(5)
+const videoDuration = ref<VideoGenDuration>(VIDEO_GEN_DURATIONS[0])
 const videoAspectRatio = computed({
   get: () => props.aspectRatio ?? '16:9',
   set: (value: VideoGenAspectRatio) => emit('update:aspectRatio', value),
 })
-const videoResolution = ref<VideoGenResolution>('720P')
+const videoResolution = ref<VideoGenResolution>('480P')
 const generateAudio = ref(true)
 
 const modelMenu = computed(() =>

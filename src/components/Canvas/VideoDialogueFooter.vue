@@ -76,6 +76,28 @@
           />
         </div>
       </div>
+      <button
+        type="button"
+        class="video-dialogue__tool"
+        :class="{ 'video-dialogue__tool--loading': translating }"
+        :title="translating ? '翻译中' : '翻译'"
+        :disabled="translating"
+        @mousedown.stop
+        @click.stop="onTranslatePrompt"
+      >
+        <span v-if="translating" class="video-dialogue__translate-label">翻译中...</span>
+        <svg
+          v-else
+          xmlns="http://www.w3.org/2000/svg"
+          xmlns:xlink="http://www.w3.org/1999/xlink"
+          aria-hidden="true"
+          role="img"
+          class="iconify iconify--libtv pointer-events-none text-fg-default size-4"
+          width="1.1em"
+          height="1em"
+          viewBox="0 0 19.71 18"
+        ><path d="M15.52 7.2c.16 0 .31.1.37.26l3.8 10a.4.4 0 0 1-.38.54h-1.03a.4.4 0 0 1-.37-.27l-.88-2.48h-4.36l-.88 2.48a.4.4 0 0 1-.37.27h-1.03a.4.4 0 0 1-.37-.54l3.79-10a.4.4 0 0 1 .37-.26zM7.7 0c.22 0 .4.18.4.4v1.4H14c.22 0 .4.18.4.4v1a.4.4 0 0 1-.4.4h-2.21a16 16 0 0 1-1.42 3.33A11 11 0 0 1 8.5 9.54l1.99 2.02c.1.11.14.28.09.42l-.43 1.16a.3.3 0 0 1-.5.1l-2.4-2.46-4.27 4.24a.4.4 0 0 1-.56 0l-.7-.7a.4.4 0 0 1 0-.56L6 9.5q-.79-.8-1.43-1.8-.55-.85-1-1.89a.3.3 0 0 1 .27-.41h1.2a.4.4 0 0 1 .35.22q.39.74.79 1.31.45.65 1.08 1.3.73-.73 1.54-2.08.8-1.33 1.2-2.55H.4a.4.4 0 0 1-.4-.4v-1c0-.22.18-.4.4-.4h5.9V.4c0-.22.18-.4.4-.4zm5.53 13.68h3.24l-1.62-4.59z" fill="currentColor"></path></svg>
+      </button>
       <span class="video-dialogue-footer__credits">
         <span class="video-dialogue-footer__credits-icon" aria-hidden="true" />
         {{ VIDEO_DIALOGUE_CREDITS }}
@@ -101,6 +123,7 @@ import VideoGenSettingsPopover from './VideoGenSettingsPopover.vue'
 import {
   VIDEO_DIALOGUE_CREDITS,
   VIDEO_DIALOGUE_MODEL_MENU,
+  VIDEO_GEN_DURATIONS,
   buildVideoDialogueModelsFromCapabilities,
   formatVideoGenSettings,
   normalizeVideoDialogueSettingsForModel,
@@ -119,19 +142,21 @@ export type VideoDialogueFooterParams = Omit<VideoDialogueSubmitPayload, 'prompt
 const props = defineProps<{
   chatTools?: ChatTools | null
   disabled?: boolean
+  translating?: boolean
   /** 文本节点文生视频固定 text-to-video；视频对话保持 reference */
   defaultMode?: VideoDialogueSubmitPayload['mode']
 }>()
 
 const emit = defineEmits<{
   submit: [payload: VideoDialogueFooterParams]
+  translate: []
 }>()
 
 const showVideoSettings = ref(false)
 const showModelMenu = ref(false)
-const videoDuration = ref<VideoGenDuration>(5)
+const videoDuration = ref<VideoGenDuration>(VIDEO_GEN_DURATIONS[0])
 const videoAspectRatio = ref<VideoGenAspectRatio>('16:9')
-const videoResolution = ref<VideoGenResolution>('720P')
+const videoResolution = ref<VideoGenResolution>('480P')
 const generateAudio = ref(true)
 const selectedModelKey = ref(VIDEO_DIALOGUE_MODEL_MENU[0].key)
 
@@ -208,6 +233,10 @@ function toggleModelMenu() {
 function selectModel(model: VideoDialogueModelItem) {
   selectedModelKey.value = model.key
   showModelMenu.value = false
+}
+
+function onTranslatePrompt() {
+  emit('translate')
 }
 
 function onSend() {
@@ -444,6 +473,40 @@ onBeforeUnmount(() => {
   right: 0;
   bottom: calc(100% + 8px);
   z-index: 5;
+}
+
+.video-dialogue__tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: #f3f4f6;
+    color: #374151;
+  }
+
+  &:disabled,
+  &--loading {
+    opacity: 0.55;
+    cursor: not-allowed;
+    width: auto;
+    min-width: 28px;
+    padding: 0 6px;
+  }
+}
+
+.video-dialogue__translate-label {
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  color: #6b7280;
 }
 
 .video-dialogue-footer__credits {
