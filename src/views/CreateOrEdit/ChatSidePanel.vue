@@ -98,10 +98,10 @@
         <div class="chat-panel__skills">
           <button
             v-for="skill in skills"
-            :key="skill"
+            :key="skill.id"
             type="button"
             class="chat-panel__skill-btn"
-            @click="selectSkill(skill)"
+            @click="selectWelcomeSkill(skill)"
           >
             {{ skill.displayName }}
           </button>
@@ -178,9 +178,9 @@
           >
             <div class="chat-panel__skill-picker-head">
               <span class="chat-panel__skill-picker-title">已启用 Skill</span>
-              <button type="button" class="chat-panel__skill-picker-create" @click="onCreateSkill">
+              <!-- <button type="button" class="chat-panel__skill-picker-create" @click="onCreateSkill">
                 + 创建
-              </button>
+              </button> -->
             </div>
             <ul class="chat-panel__skill-picker-list">
               <li
@@ -199,7 +199,7 @@
               </li>
               <li v-if="!filteredChatSkills.length" class="chat-panel__skill-picker-empty">暂无可用 Skill</li>
             </ul>
-            <div class="chat-panel__skill-picker-foot">
+            <!-- <div class="chat-panel__skill-picker-foot">
               <button type="button" class="chat-panel__skill-picker-foot-item" @click="onAddSkill">
                 <span class="chat-panel__skill-picker-foot-icon" data-icon="plus" aria-hidden="true" />
                 添加技能
@@ -209,7 +209,7 @@
                 <span class="chat-panel__skill-picker-foot-icon" data-icon="settings" aria-hidden="true" />
                 管理 Skill
               </button>
-            </div>
+            </div> -->
           </div>
 
           <Teleport to="body">
@@ -223,7 +223,16 @@
           </Teleport>
 
           <div v-if="selectedSkill" class="chat-panel__skill-chip-row">
-            <span class="chat-panel__skill-chip">/{{ selectedSkill.displayName }}</span>
+            <span
+              class="chat-panel__skill-chip"
+              :class="{ 'chat-panel__skill-chip--selected': skillChipSelected }"
+              role="button"
+              tabindex="0"
+              title="点击选中，按 Delete 删除"
+              @click.stop="selectSkillChip"
+              @keydown.enter.prevent="selectSkillChip"
+              @keydown.space.prevent="selectSkillChip"
+            >/{{ selectedSkill.displayName }}</span>
             <span v-if="!message.trim()" class="chat-panel__skill-tab-hint">Tab</span>
           </div>
 
@@ -462,7 +471,7 @@ const props = defineProps<{
   aiSkills?: any[]
 }>()
 
-const API_BASE = 'https://api.dev.daoneai.com/daone_dev/api/v1';
+const API_BASE = 'https://api.dev.daoneai.com/api/v1';
 
 const { loading, connected, connect, close } = useSSE()
 const isStreaming = computed(() => loading.value || connected.value)
@@ -588,8 +597,9 @@ const showSkillMenu = ref(false)
 const skillMenuFromButton = ref(false)
 const activeModelCategory = ref<ChatModelCategory>('image')
 const selectedModelKeys = ref<Set<string>>(new Set())
-const selectedSkill = ref<ChatSkillItem | null>(null)
-const hoveredSkill = ref<ChatSkillItem | null>(null)
+const selectedSkill = ref<any>(null)
+const skillChipSelected = ref(false)
+const hoveredSkill = ref<any>(null)
 const skillTooltipStyle = ref<Record<string, string>>({})
 const historySearch = ref('')
 const isProcessing = ref(false)
@@ -614,9 +624,18 @@ const isActive = computed(() => messages.value.length > 0)
 
 const autoModeLabel = computed(() => AUTO_MODE_LABELS[autoMode.value] ?? '自动')
 
-const inputPlaceholder = computed(() =>
-  isActive.value ? '可继续输入，将排队发送...' : '输入消息...',
-)
+function getSelectedSkillDescription(): string {
+  const skill = selectedSkill.value
+  if (!skill) return ''
+  return String(skill.description ?? skill.detail ?? '').trim()
+}
+
+const inputPlaceholder = computed(() => {
+  if (isActive.value) return '可继续输入，将排队发送...'
+  const description = getSelectedSkillDescription()
+  if (description) return description
+  return '输入消息...'
+})
 
 const canSend = computed(() =>
   Boolean(message.value.trim() || attachments.value.length || assetMentions.value.length || selectedSkill.value),
@@ -811,11 +830,33 @@ function toggleSelectAllModelsInTab() {
   selectedModelKeys.value = next
 }
 
-function selectChatSkill(skill: ChatSkillItem) {
+function resolveEnabledSkill(skill: any) {
+  const name = String(skill?.name ?? skill?.skillName ?? '').trim()
+  if (!name) return skill
+  return filteredChatSkills.value.find((item: any) => item.name === name) ?? skill
+}
+
+function selectChatSkill(skill: ChatSkillItem | Record<string, any>) {
   selectedSkill.value = skill
+  skillChipSelected.value = false
   message.value = message.value.replace(/(^|\s)\/[a-zA-Z0-9-]*$/, '').trimStart()
   closeSkillMenu()
   focusInput()
+}
+
+function selectWelcomeSkill(skill: Record<string, any>) {
+  ensureActiveSession()
+  selectChatSkill(resolveEnabledSkill(skill))
+}
+
+function selectSkillChip() {
+  skillChipSelected.value = true
+  focusInput()
+}
+
+function clearSelectedSkill() {
+  selectedSkill.value = null
+  skillChipSelected.value = false
 }
 
 function onSkillItemEnter(event: MouseEvent, skill: ChatSkillItem) {
@@ -852,6 +893,7 @@ function onManageSkill() {
 }
 
 function onMessageInput() {
+  skillChipSelected.value = false
   const slashQuery = detectSlashQuery(message.value)
   if (slashQuery !== null || message.value === '/') {
     showSkillMenu.value = true
@@ -865,10 +907,34 @@ function onMessageInput() {
 }
 
 function onComposerKeydown(event: KeyboardEvent) {
+  if (event.key === 'Backspace' || event.key === 'Delete') {
+    if (selectedSkill.value && skillChipSelected.value) {
+      event.preventDefault()
+      clearSelectedSkill()
+      return
+    }
+
+    const input = inputRef.value
+    if (
+      selectedSkill.value
+      && input
+      && input.selectionStart === 0
+      && input.selectionEnd === 0
+      && !message.value.trim()
+    ) {
+      event.preventDefault()
+      clearSelectedSkill()
+      return
+    }
+  }
+
   if (event.key === 'Tab' && selectedSkill.value && !message.value.trim()) {
-    event.preventDefault()
-    message.value = ' '
-    focusInput()
+    const description = getSelectedSkillDescription()
+    if (description) {
+      event.preventDefault()
+      message.value = description
+      focusInput()
+    }
     return
   }
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
@@ -1122,7 +1188,9 @@ function buildMessageText() {
   const mentionText = assetMentions.value
     .map((item) => `@${item.role} ${item.name}`)
     .join(' ')
-  const skillPrefix = selectedSkill.value ? `/${selectedSkill.value.command}` : ''
+  const skillPrefix = selectedSkill.value
+    ? `/${selectedSkill.value.command || selectedSkill.value.name || selectedSkill.value.displayName}`
+    : ''
   const body = message.value.trim()
   return [mentionText, skillPrefix, body].filter(Boolean).join(' ')
 }
@@ -1190,17 +1258,6 @@ function clearAttachments() {
     if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
   })
   attachments.value = []
-}
-
-function selectSkill(skill: string) {
-  ensureActiveSession()
-  const matched = chatSkills.value.find((item) => item.name === skill)
-  if (matched) {
-    selectChatSkill(matched)
-    return
-  }
-  message.value = skill
-  focusInput()
 }
 
 function selectAutoMode(mode: string) {
@@ -1593,7 +1650,7 @@ async function onSendMessage(
     message.value = ''
     clearAttachments()
     clearAssetMentions()
-    selectedSkill.value = null
+    clearSelectedSkill()
     saveActiveDraft()
     scrollMessagesToBottom()
     if (text) {
@@ -1635,7 +1692,7 @@ function startNewChat() {
   close()
   isProcessing.value = false
   saveActiveDraft()
-  selectedSkill.value = null
+  clearSelectedSkill()
   closeModelMenu()
   closeSkillMenu()
 
@@ -2754,6 +2811,14 @@ defineExpose({
   color: #2563eb;
   font-size: 13px;
   font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &--selected {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35);
+  }
 }
 
 .chat-panel__skill-tab-hint {

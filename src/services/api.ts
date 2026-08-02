@@ -874,5 +874,9 @@ const api = {
   queryAiSkills<T = unknown>() {
     return http.get<T>('/agent-skills')
   },
+  /** 保存画布元素组 */
+  notifyFpapi<T = unknown>(data: any) {
+    return http.post<T>(`/invoices/fpapi/notify`, data)
+  },
 }
 export default api
