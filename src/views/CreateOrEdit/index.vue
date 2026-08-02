@@ -54,7 +54,7 @@
 <script setup lang="ts">
 import { computed, createVNode, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Node } from '@antv/x6'
-import { Modal } from 'ant-design-vue'
+import { Modal, message } from 'ant-design-vue'
 import { ExclamationCircleFilled } from '@ant-design/icons-vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import Canvas from '@/components/Canvas/index.vue'
@@ -110,6 +110,7 @@ type CanvasExpose = {
   getNodeCount: () => number
   hasUnsavedChanges: () => boolean
   saveCanvas: (saveType?: 'MANUAL' | 'AUTO') => void
+  saveCanvasAndWait: (saveType?: 'MANUAL' | 'AUTO') => Promise<boolean>
   loadProjectCanvas: (payload: ProjectCanvasResponse) => boolean
 }
 
@@ -140,6 +141,28 @@ const pendingCanvasPayload = ref<ProjectCanvasResponse | null>(null);
 const aiSkills = ref<any[]>([]);
 /** 用户已确认离开时跳过二次弹窗 */
 let leaveConfirmed = false
+/** 避免同时弹出多个离开确认框 */
+let pendingLeaveConfirm: Promise<boolean> | null = null
+
+type BrowserNavigateEvent = Event & {
+  navigationType: 'reload' | 'push' | 'replace' | 'traverse'
+  destination: { url: string }
+  canIntercept: boolean
+  cancelable: boolean
+  hashChange: boolean
+  preventDefault: () => void
+}
+
+type BrowserNavigation = EventTarget & {
+  addEventListener: (type: 'navigate', listener: (event: BrowserNavigateEvent) => void) => void
+  removeEventListener: (type: 'navigate', listener: (event: BrowserNavigateEvent) => void) => void
+  reload: () => void
+}
+
+function getBrowserNavigation(): BrowserNavigation | null {
+  const navigation = (window as Window & { navigation?: BrowserNavigation }).navigation
+  return navigation ?? null
+}
 
 function focusChatPanel() {
   chatPanelCollapsed.value = false
@@ -394,31 +417,46 @@ function needsLeaveConfirm() {
   return true
 }
 
+function saveCanvasBeforeLeave(): Promise<boolean> {
+  return canvasRef.value?.saveCanvasAndWait?.('MANUAL') ?? Promise.resolve(true)
+}
+
 function confirmLeaveBeforeRouteChange(): Promise<boolean> {
   if (!needsLeaveConfirm()) return Promise.resolve(true)
+  if (pendingLeaveConfirm) return pendingLeaveConfirm
 
   const hasUnsaved = canvasRef.value?.hasUnsavedChanges?.() ?? false
   const content = hasUnsaved
     ? '当前项目有未保存的更改，离开后可能会丢失。请先点击保存，确认后再离开。'
     : '离开页面前请确认已保存当前项目，未保存的更改可能会丢失。'
 
-  return new Promise((resolve) => {
+  pendingLeaveConfirm = new Promise((resolve) => {
     Modal.confirm({
       title: '离开前请先保存',
       icon: createVNode(ExclamationCircleFilled),
       content,
-      okText: '仍要离开',
+      okText: '保存并离开',
       cancelText: '取消',
       centered: true,
-      onOk: () => {
+      onOk: async () => {
+        const saved = await saveCanvasBeforeLeave()
+        if (!saved) {
+          message.error('保存失败，请重试')
+          return Promise.reject(new Error('save failed'))
+        }
         leaveConfirmed = true
         resolve(true)
       },
       onCancel: () => {
         resolve(false)
       },
+      afterClose: () => {
+        pendingLeaveConfirm = null
+      },
     })
   })
+
+  return pendingLeaveConfirm
 }
 
 onBeforeRouteLeave(async () => {
@@ -435,12 +473,39 @@ onBeforeRouteUpdate(async () => {
   return true
 })
 
+function onBrowserNavigationNavigate(event: BrowserNavigateEvent) {
+  if (!needsLeaveConfirm()) return
+  if (!event.cancelable || event.navigationType !== 'reload') return
+
+  event.preventDefault()
+
+  void confirmLeaveBeforeRouteChange().then((ok) => {
+    if (!ok) return
+    getBrowserNavigation()?.reload()
+  })
+}
+
 function onBrowserBeforeUnload(event: BeforeUnloadEvent) {
-  // 浏览器关闭/刷新：仅在确实有未保存更改时拦截
-  if (pageLoading.value) return
-  if (!(canvasRef.value?.hasUnsavedChanges?.() ?? false)) return
+  // Navigation API 已拦截刷新；此处仅兜底关闭标签页/窗口（浏览器限制，只能使用原生确认框）
+  if (!needsLeaveConfirm()) return
   event.preventDefault()
   event.returnValue = ''
+}
+
+function isRefreshShortcut(event: KeyboardEvent) {
+  const key = event.key.toLowerCase()
+  return key === 'f5' || ((event.ctrlKey || event.metaKey) && key === 'r')
+}
+
+function onRefreshKeydown(event: KeyboardEvent) {
+  if (!isRefreshShortcut(event) || !needsLeaveConfirm()) return
+
+  event.preventDefault()
+  event.stopPropagation()
+
+  void confirmLeaveBeforeRouteChange().then((ok) => {
+    if (ok) window.location.reload()
+  })
 }
 
 watch(
@@ -456,12 +521,24 @@ watch(
 )
 
 onMounted(() => {
+  const navigation = getBrowserNavigation()
+  if (navigation) {
+    navigation.addEventListener('navigate', onBrowserNavigationNavigate)
+  } else {
+    window.addEventListener('keydown', onRefreshKeydown, { capture: true })
+  }
   window.addEventListener('beforeunload', onBrowserBeforeUnload)
   void initializePage()
   void userInfoStore.queryPointAccount()
 })
 
 onUnmounted(() => {
+  const navigation = getBrowserNavigation()
+  if (navigation) {
+    navigation.removeEventListener('navigate', onBrowserNavigationNavigate)
+  } else {
+    window.removeEventListener('keydown', onRefreshKeydown, { capture: true })
+  }
   window.removeEventListener('beforeunload', onBrowserBeforeUnload)
 })
 

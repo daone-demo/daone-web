@@ -5975,6 +5975,38 @@ export function registerCore(bind: CanvasBindings) {
     return project?.saved === false
   }
 
+  function waitForSaveSettled(maxWaitMs = 30000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const start = Date.now()
+      const tick = () => {
+        if (!saveInFlight && !pendingRemoteSaveType) {
+          resolve()
+          return
+        }
+        if (Date.now() - start > maxWaitMs) {
+          reject(new Error('Canvas save timeout'))
+          return
+        }
+        setTimeout(tick, 50)
+      }
+      tick()
+    })
+  }
+
+  /** 触发保存并等待远端落库完成 */
+  async function saveCanvasAndWait(saveType: 'MANUAL' | 'AUTO' = 'MANUAL'): Promise<boolean> {
+    if (!hasUnsavedChanges()) return true
+
+    try {
+      handleSaveCanvas(saveType)
+      await waitForSaveSettled()
+      return !hasUnsavedChanges()
+    } catch (error) {
+      console.error('[Canvas] saveCanvasAndWait failed', error)
+      return false
+    }
+  }
+
   function persistGenerationTaskBinding() {
     scheduleHistoryPush()
   }
@@ -9405,6 +9437,7 @@ export function registerCore(bind: CanvasBindings) {
     handleRedo,
     handleSaveCanvas,
     hasUnsavedChanges,
+    saveCanvasAndWait,
     loadProjectCanvas,
     handleTextPickerAction,
     handleTidyCanvas,

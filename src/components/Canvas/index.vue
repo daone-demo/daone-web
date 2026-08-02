@@ -787,6 +787,12 @@ defineExpose({
     }).handleSaveCanvas
     fn?.(saveType)
   },
+  async saveCanvasAndWait(saveType: 'MANUAL' | 'AUTO' = 'MANUAL'): Promise<boolean> {
+    const fn = (canvasRuntime as {
+      saveCanvasAndWait?: (saveType?: 'MANUAL' | 'AUTO') => Promise<boolean>
+    }).saveCanvasAndWait
+    return (await fn?.(saveType)) ?? true
+  },
   loadProjectCanvas(payload: ProjectCanvasResponse) {
     const load = (canvasRuntime as {
       loadProjectCanvas?: (payload: ProjectCanvasResponse) => boolean
