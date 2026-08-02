@@ -103,7 +103,6 @@ import {
   type VideoGenResolution,
   type VideoGenDuration,
   type ImageMarkItem,
-  createDefaultImageDialogueSettings,
   normalizeImageDialogueSettingsForModel,
   pickImageDialogueSettingsInput,
   createDefaultVideoDialogueSettings,

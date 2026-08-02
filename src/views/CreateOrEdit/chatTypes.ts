@@ -5,6 +5,24 @@ export interface ChatAttachment {
   fileName: string
   /** 媒体资源对应的素材库资源 ID（画布加入对话框时透传） */
   assetId?: string
+  /** 是否正在上传到 OSS */
+  uploading?: boolean
+  /** 上传失败时的错误信息 */
+  uploadError?: string
+}
+
+export interface QuestionnaireOption {
+  label: string
+  value: string
+  description?: string
+}
+
+export interface Questionnaire {
+  question: string
+  step: number
+  totalSteps: number
+  allowCustom: boolean
+  options: QuestionnaireOption[]
 }
 
 export interface ChatMessage {
@@ -14,6 +32,8 @@ export interface ChatMessage {
   kind?: 'text' | 'balance_error'
   attachments?: ChatAttachment[]
   tip?: string
+  questionnaire?: Questionnaire
+  questionnaireAnswered?: boolean
 }
 
 export interface ChatDraft {

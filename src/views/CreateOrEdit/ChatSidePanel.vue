@@ -150,6 +150,25 @@
                 />
               </p>
             </div>
+            <div
+              v-if="item.questionnaire && !item.questionnaireAnswered"
+              class="chat-panel__questionnaire"
+            >
+              <button
+                v-for="option in item.questionnaire.options"
+                :key="option.value"
+                type="button"
+                class="chat-panel__questionnaire-option"
+                :disabled="isStreaming || isSending"
+                @click="onQuestionnaireSelect(item, option)"
+              >
+                <span class="chat-panel__questionnaire-option-label">{{ option.label }}</span>
+                <span
+                  v-if="option.description"
+                  class="chat-panel__questionnaire-option-desc"
+                >{{ option.description }}</span>
+              </button>
+            </div>
             <button
               v-if="item.role === 'user' && item.text"
               type="button"
@@ -264,6 +283,17 @@
               class="chat-panel__attachment"
             >
               <img :src="attachment.previewUrl" :alt="attachment.fileName" class="chat-panel__attachment-img" />
+              <span
+                v-if="attachment.uploading"
+                class="chat-panel__attachment-uploading"
+                aria-label="上传中"
+              />
+              <span
+                v-else-if="attachment.uploadError"
+                class="chat-panel__attachment-error"
+                :title="attachment.uploadError"
+                aria-label="上传失败"
+              />
               <button
                 type="button"
                 class="chat-panel__attachment-remove"
@@ -375,7 +405,7 @@
             </div>
 
             <div class="chat-panel__auto-wrap">
-              <button type="button" class="chat-panel__auto-btn" @click="showAutoMenu = !showAutoMenu">
+              <!-- <button type="button" class="chat-panel__auto-btn" @click="showAutoMenu = !showAutoMenu">
                 {{ autoModeLabel }}
                 <span class="chat-panel__caret" aria-hidden="true" />
               </button>
@@ -390,7 +420,7 @@
                 >
                   {{ mode.label }}
                 </button>
-              </div>
+              </div> -->
             </div>
 
             <button
@@ -454,12 +484,12 @@ import {
   type ImageCapability,
   type ChatTools,
 } from '@/components/Canvas/constants'
-import type { ElementGroupRecord } from '@/components/Canvas/assetCenterData'
-import type { ChatAttachment, ChatSendPayload, ChatSession } from './chatTypes'
+import type { ChatAttachment, ChatMessage, ChatSendPayload, ChatSession, Questionnaire, QuestionnaireOption } from './chatTypes'
 import { CHAT_TIPS } from './chatTypes'
 import { useSSE } from '@/hooks/useSSE'
 import { getToken } from '@/utils/request'
 import api from '@/services/api';
+import { uploadAssetFile } from '@/components/Canvas/upload'
 import dayjs from 'dayjs'
 
 const props = defineProps<{
@@ -482,17 +512,9 @@ const AUTO_MODE_MODELS: Record<string, string> = {
   Quality: 'Codex',
 }
 
-const AUTO_MODE_LABELS: Record<string, string> = {
-  Auto: '自动',
-  Fast: '快速',
-  Quality: '质量',
-}
+const skills = computed(() => (props.aiSkills ?? []).filter((item: any) => item.category == "CUSTOM"))
 
-const skills = computed(() => props.aiSkills.filter((item: any) => item.category == "CUSTOM") ?? [])
-
-
-
-const filteredChatSkills = computed(() => props.aiSkills.filter((item: any) => item.category == "ecommerce") ?? [])
+const filteredChatSkills = computed(() => (props.aiSkills ?? []).filter((item: any) => item.category == "ecommerce"))
 
 type ChatModelCategory = 'image' | 'video' | 'audio'
 
@@ -513,56 +535,10 @@ interface ChatSkillItem {
   detail?: string
 }
 
-const BUILTIN_CHAT_SKILLS: ChatSkillItem[] = [
-  {
-    id: 'builtin-audiobook',
-    name: '有声书',
-    command: 'audiobook',
-    description: '把书籍转化为多角色有声书',
-    detail: '把书籍转化为多角色有声书，支持角色配音与章节拆分。',
-  },
-  {
-    id: 'builtin-clip-export',
-    name: '剪映导出',
-    command: 'clip-export',
-    description: '把视频推送到剪映或CapCut草稿',
-    detail: '把视频推送到剪映或 CapCut 草稿，便于后续剪辑与导出。',
-  },
-  {
-    id: 'builtin-ecommerce-image',
-    name: '电商商品图',
-    command: 'ecommerce-image',
-    description: '从实拍图生成平台合规的电商组图',
-    detail: '适用于已有商品实拍图、需要批量上架或制作详情页的电商场景，适配 Amazon、Shopify、TikTok Shop、淘宝、天猫等主流电商平台规格。',
-  },
-  {
-    id: 'builtin-image-remix',
-    name: '图片重混',
-    command: 'image-remix',
-    description: '复刻参考图氛围生成新图',
-    detail: '复刻参考图氛围与构图逻辑，生成风格一致的新图像。',
-  },
-  {
-    id: 'builtin-short-drama',
-    name: '微短剧剧本',
-    command: 'short-drama',
-    description: '按选题撰写完整短剧剧本',
-    detail: '按选题撰写完整短剧剧本，包含分场、对白与镜头提示。',
-  },
-]
-
 const MODEL_CATEGORY_TABS: { key: ChatModelCategory; label: string }[] = [
   { key: 'image', label: '图片' },
   { key: 'video', label: '视频' },
   // { key: 'audio', label: '音频' },
-]
-
-const skillList = ref<ElementGroupRecord[]>([])
-
-const autoModes = [
-  { value: 'Auto', label: '自动' },
-  { value: 'Fast', label: '快速' },
-  { value: 'Quality', label: '质量' },
 ]
 
 const emit = defineEmits<{
@@ -576,14 +552,6 @@ const emit = defineEmits<{
 
 const onTargetCollapse = () => {
   collapsed.value = false
-  onLoadSkill()
-}
-
-const onLoadSkill = () => {
-  if (!props.projectId) return
-  api.queryElementGroups(props.projectId, { pageSize: 50, page: 1 }).then((res: any) => {
-    skillList.value = res.records ?? []
-  })
 }
 
 const collapsed = defineModel<boolean>('collapsed', { required: true })
@@ -622,8 +590,6 @@ const messages = computed(() => activeSession.value?.messages ?? [])
 
 const isActive = computed(() => messages.value.length > 0)
 
-const autoModeLabel = computed(() => AUTO_MODE_LABELS[autoMode.value] ?? '自动')
-
 function getSelectedSkillDescription(): string {
   const skill = selectedSkill.value
   if (!skill) return ''
@@ -637,9 +603,17 @@ const inputPlaceholder = computed(() => {
   return '输入消息...'
 })
 
-const canSend = computed(() =>
-  Boolean(message.value.trim() || attachments.value.length || assetMentions.value.length || selectedSkill.value),
-)
+const canSend = computed(() => {
+  const hasContent = Boolean(
+    message.value.trim() || attachments.value.length || assetMentions.value.length || selectedSkill.value,
+  )
+  const attachmentsReady = attachments.value.every((item) => {
+    if (!item.file.type.startsWith('image/')) return true
+    if (item.assetId) return true
+    return !item.uploading && !item.uploadError
+  })
+  return hasContent && attachmentsReady
+})
 
 const chatToolsData = computed(() => (props.chatTools ?? {}) as ChatTools)
 
@@ -668,48 +642,12 @@ const isAllModelsSelectedInTab = computed(() => {
   return models.every((item) => selectedModelKeys.value.has(item.key))
 })
 
-const chatSkills = computed<ChatSkillItem[]>(() => {
-  const byCommand = new Map<string, ChatSkillItem>()
-  BUILTIN_CHAT_SKILLS.forEach((item) => byCommand.set(item.command, item))
-  skillList.value.forEach((record) => {
-    const mapped = mapElementGroupToSkill(record)
-    if (mapped) byCommand.set(mapped.command, mapped)
-  })
-  return Array.from(byCommand.values())
-})
-
 const { isLightTheme } = useCanvasBgTheme()
 const isDarkTheme = computed(() => !isLightTheme.value)
 const logoSrc = computed(() => (isLightTheme.value ? logoBlack : logoWhite))
 
 function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function slugifySkillCommand(name: string, id?: string | number) {
-  const builtin = BUILTIN_CHAT_SKILLS.find((item) => item.name === name)
-  if (builtin) return builtin.command
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^\w-]/g, '')
-  if (slug) return slug
-  return `skill-${id ?? Date.now()}`
-}
-
-function mapElementGroupToSkill(record: ElementGroupRecord): ChatSkillItem | null {
-  const name = String(record.projectName ?? record.name ?? '').trim()
-  if (!name) return null
-  const description = String(record.projectDescription ?? record.description ?? '').trim()
-  const id = String(record.id ?? name)
-  return {
-    id,
-    name,
-    command: slugifySkillCommand(name, id),
-    description: description || '自定义画布元素组 Skill',
-    detail: description || '来自画布保存的元素组工作流。',
-  }
 }
 
 function parseModelsFromCapability(
@@ -875,23 +813,6 @@ function onSkillItemLeave() {
   hoveredSkill.value = null
 }
 
-function onCreateSkill() {
-  closeSkillMenu()
-  message.value = '/'
-  onMessageInput()
-  focusInput()
-}
-
-function onAddSkill() {
-  closeSkillMenu()
-  openFilePicker()
-}
-
-function onManageSkill() {
-  closeSkillMenu()
-  focusInput()
-}
-
 function onMessageInput() {
   skillChipSelected.value = false
   const slashQuery = detectSlashQuery(message.value)
@@ -998,6 +919,8 @@ async function loadSessionMessages(session: ChatSession) {
       role: string
       content: string
       createdAt?: string
+      agentActions?: StreamEvent['agentActions']
+      agentStatus?: string
     }>(chatId, { page: 1, pageSize: 100 })
 
     // 过期请求 / 正在发送或流式中，禁止覆盖本地消息
@@ -1016,13 +939,25 @@ async function loadSessionMessages(session: ChatSession) {
     if (hasLocalPending) return
 
     const records = res.records ?? []
-    live.messages = records.map((item) => {
+    live.messages = records.map((item, index) => {
       const role = String(item.role || '').toUpperCase() === 'USER' ? 'user' : 'assistant'
+      const questionnaire = role === 'assistant'
+        ? extractQuestionnaireFromHistoryItem(item)
+        : undefined
+      const questionnaireAnswered = Boolean(
+        questionnaire
+        && records.slice(index + 1).some(
+          (next) => String(next.role || '').toUpperCase() === 'USER',
+        ),
+      )
+
       return {
         id: item.id || `msg-${item.createdAt || Date.now()}`,
         role,
         text: item.content || '',
         kind: 'text' as const,
+        questionnaire,
+        questionnaireAnswered,
       }
     })
     scrollMessagesToBottom()
@@ -1157,12 +1092,46 @@ function toggleHistoryMenu() {
 }
 
 function createAttachment(file: File, assetId?: string): ChatAttachment {
+  const isImage = file.type.startsWith('image/')
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     file,
-    previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : '',
+    previewUrl: isImage ? URL.createObjectURL(file) : '',
     fileName: file.name,
     assetId,
+    uploading: isImage && !assetId ? true : undefined,
+  }
+}
+
+function patchAttachment(id: string, patch: Partial<ChatAttachment>) {
+  attachments.value = attachments.value.map((item) =>
+    (item.id === id ? { ...item, ...patch } : item),
+  )
+}
+
+async function uploadAttachmentToOss(attachmentId: string) {
+  const attachment = attachments.value.find((item) => item.id === attachmentId)
+  if (!attachment) return
+
+  patchAttachment(attachmentId, { uploading: true, uploadError: undefined })
+
+  try {
+    const result = await uploadAssetFile(attachment.file, { projectId: props.projectId })
+    const nextPreviewUrl = result.url || attachment.previewUrl
+    if (result.url && attachment.previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(attachment.previewUrl)
+    }
+    patchAttachment(attachmentId, {
+      assetId: result.assetId,
+      previewUrl: nextPreviewUrl,
+      uploading: false,
+      uploadError: undefined,
+    })
+  } catch (error) {
+    patchAttachment(attachmentId, {
+      uploading: false,
+      uploadError: error instanceof Error ? error.message : '上传失败',
+    })
   }
 }
 
@@ -1199,7 +1168,11 @@ function addAttachments(files: File[], assetId?: string) {
   ensureActiveSession()
   files.forEach((file) => {
     if (!file.type.startsWith('image/') && !file.name.endsWith('.md')) return
-    attachments.value.push(createAttachment(file, assetId))
+    const attachment = createAttachment(file, assetId)
+    attachments.value.push(attachment)
+    if (file.type.startsWith('image/') && !assetId) {
+      void uploadAttachmentToOss(attachment.id)
+    }
   })
 }
 
@@ -1260,11 +1233,6 @@ function clearAttachments() {
   attachments.value = []
 }
 
-function selectAutoMode(mode: string) {
-  autoMode.value = mode
-  showAutoMenu.value = false
-}
-
 function openFilePicker() {
   fileInputRef.value?.click()
 }
@@ -1307,14 +1275,95 @@ type StreamEvent = {
     question?: string
     content?: string
     text?: string
+    questionnaire?: {
+      step?: number
+      totalSteps?: number
+      allowCustom?: boolean
+      options?: Array<{ label?: string; value?: string; description?: string }>
+    }
     [key: string]: unknown
   }
+  agentActions?: Array<{
+    tool?: string
+    type?: string
+    status?: string
+    summary?: string
+    data?: {
+      question?: string
+      step?: number
+      totalSteps?: number
+      allowCustom?: boolean
+      options?: Array<{ label?: string; value?: string; description?: string }>
+    }
+  }>
+  agentStatus?: string
   success?: boolean
   summary?: string
   choices?: Array<{ delta?: { content?: string } }>
   delta?: { content?: string }
   message?: string
   text?: string
+}
+
+type QuestionnaireSource = {
+  question?: string
+  step?: number
+  totalSteps?: number
+  allowCustom?: boolean
+  options?: Array<{ label?: string; value?: string; description?: string }>
+}
+
+function normalizeQuestionnaire(
+  data: QuestionnaireSource | undefined,
+  fallbackQuestion?: string,
+): Questionnaire | undefined {
+  if (!data?.options?.length) return undefined
+
+  const options = data.options
+    .filter((item): item is QuestionnaireOption => Boolean(item.label && item.value))
+    .map((item) => ({
+      label: item.label,
+      value: item.value,
+      description: item.description,
+    }))
+
+  if (!options.length) return undefined
+
+  return {
+    question: data.question || fallbackQuestion || '',
+    step: data.step ?? 1,
+    totalSteps: data.totalSteps ?? 1,
+    allowCustom: data.allowCustom ?? false,
+    options,
+  }
+}
+
+function extractQuestionnaireFromStreamPayload(payload: StreamEvent): Questionnaire | undefined {
+  if (payload.tool === 'ask_user' && payload.arguments?.questionnaire) {
+    return normalizeQuestionnaire(payload.arguments.questionnaire, payload.arguments.question)
+  }
+
+  const action = payload.agentActions?.find(
+    (item) => item.type === 'QUESTIONNAIRE' || item.tool === 'ask_user',
+  )
+  if (action?.data) {
+    return normalizeQuestionnaire(action.data, action.summary || action.data.question)
+  }
+
+  return undefined
+}
+
+function extractQuestionnaireFromHistoryItem(item: {
+  content?: string
+  agentActions?: StreamEvent['agentActions']
+}): Questionnaire | undefined {
+  const action = item.agentActions?.find(
+    (entry) => entry.type === 'QUESTIONNAIRE' || entry.tool === 'ask_user',
+  )
+  if (action?.data) {
+    return normalizeQuestionnaire(action.data, action.summary || action.data.question)
+  }
+  return undefined
 }
 
 function parseStreamEvent(data: string): StreamEvent | null {
@@ -1436,7 +1485,6 @@ function streamAssistantText(
 }
 
 function startChatStream(session: ChatSession, text: string, assetIds: string[] = []) {
-  console.log('startChatStream', session, text, assetIds);
   const chatId = session.chatId || props.currentSessionId
   if (!chatId) return
 
@@ -1507,6 +1555,36 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
         return
       }
 
+      if (eventName === 'tool_call' && payload.tool === 'ask_user') {
+        const questionnaire = extractQuestionnaireFromStreamPayload(payload)
+        if (questionnaire) {
+          assistant.questionnaire = questionnaire
+          void streamAssistantText(assistant, questionnaire.question, 'replace')
+        }
+        return
+      }
+
+      if (eventName === 'ai_message') {
+        if (payload.id) {
+          assistant.id = String(payload.id)
+        }
+
+        const questionnaire = extractQuestionnaireFromStreamPayload(payload)
+        if (questionnaire) {
+          assistant.questionnaire = questionnaire
+          if (!assistant.text.trim()) {
+            assistant.text = questionnaire.question
+          }
+        } else if (payload.content && !assistant.text.trim()) {
+          assistant.text = payload.content
+        }
+
+        cancelTypewriter(assistant.id)
+        assistant.tip = undefined
+        scrollMessagesToBottom()
+        return
+      }
+
       const chunk = pickStreamText(payload)
       if (!chunk) return
 
@@ -1532,7 +1610,7 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
       if (assistant?.tip?.startsWith('思考中')) {
         assistant.tip = undefined
       }
-      if (assistant && !assistant.text.trim()) {
+      if (assistant && !assistant.text.trim() && !assistant.questionnaire) {
         assistant.text = '暂无回复，请稍后重试。'
       }
       scrollMessagesToBottom()
@@ -1672,6 +1750,14 @@ async function copyMessage(text: string) {
   }
 }
 
+function onQuestionnaireSelect(message: ChatMessage, option: QuestionnaireOption) {
+  if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
+
+  message.questionnaireAnswered = true
+  const session = ensureActiveSession()
+  void onSendMessage(session, [], option.label, [])
+}
+
 function stopProcessing() {
   close()
   isProcessing.value = false
@@ -1749,15 +1835,7 @@ onMounted(() => {
   sessions.value = [initial]
   activeSessionId.value = initial.id
   document.addEventListener('mousedown', onDocumentMouseDown, true)
-  onLoadSkill()
 })
-
-watch(
-  () => props.projectId,
-  (projectId) => {
-    if (projectId) onLoadSkill()
-  },
-)
 
 watch(
   () => [props.historySessions, props.currentSessionId] as const,
@@ -2192,6 +2270,53 @@ defineExpose({
   white-space: pre-wrap;
 }
 
+.chat-panel__questionnaire {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 85%;
+  margin-top: 10px;
+}
+
+.chat-panel__questionnaire-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  color: #111827;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+
+  &:hover:not(:disabled) {
+    border-color: #d1d5db;
+    background: #f9fafb;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.chat-panel__questionnaire-option-label {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.chat-panel__questionnaire-option-desc {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .chat-panel__stream-caret {
   display: inline-block;
   width: 2px;
@@ -2409,6 +2534,63 @@ defineExpose({
   object-fit: cover;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
+}
+
+.chat-panel__attachment-uploading {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: rgb(17 24 39 / 45%);
+  animation: chat-panel-attachment-pulse 1.2s ease-in-out infinite;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border: 2px solid rgb(255 255 255 / 35%);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: chat-panel-attachment-spin 0.8s linear infinite;
+  }
+}
+
+.chat-panel__attachment-error {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: rgb(220 38 38 / 55%);
+
+  &::after {
+    content: '!';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes chat-panel-attachment-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+@keyframes chat-panel-attachment-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .chat-panel__attachment-remove {
@@ -3122,6 +3304,21 @@ defineExpose({
 
   .chat-panel__message-text {
     color: #e5e7eb;
+  }
+
+  .chat-panel__questionnaire-option {
+    border-color: #3d3d45;
+    background: #252528;
+    color: #e5e7eb;
+
+    &:hover:not(:disabled) {
+      border-color: #4b4b55;
+      background: #2a2a30;
+    }
+  }
+
+  .chat-panel__questionnaire-option-desc {
+    color: #9ca3af;
   }
 
   .chat-panel__message-tip {
