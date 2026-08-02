@@ -5272,28 +5272,6 @@ export function registerCore(bind: CanvasBindings) {
     scheduleHistoryPush()
   }
 
-  async function copyImageNodeToClipboard(nodeId: string) {
-    const g = graph.value
-    if (!g) return
-    const cell = g.getCellById(nodeId)
-    if (!cell?.isNode()) return
-    const data = cell.getData() as CanvasNodeData
-    const url = data.previewUrl?.trim()
-    if (!url) {
-      message.warning('暂无可复制的图片')
-      return
-    }
-    try {
-      const response = await fetch(url)
-      const blob = await response.blob()
-      const type = blob.type?.startsWith('image/') ? blob.type : 'image/png'
-      await navigator.clipboard.write([new ClipboardItem({ [type]: blob })])
-      message.success('已复制图片')
-    } catch {
-      message.error('复制图片失败')
-    }
-  }
-
   function onImageContextMenuAction(key: string) {
     const nodeId = imageContextMenuNodeId.value
     closeImageContextMenu()
@@ -5337,7 +5315,7 @@ export function registerCore(bind: CanvasBindings) {
         toggleImageNodeLock(nodeId)
         return
       case 'copy-image':
-        void copyImageNodeToClipboard(nodeId)
+        duplicateSelectedNodes()
         return
       case 'save':
         showAssetsPanel.value = true
