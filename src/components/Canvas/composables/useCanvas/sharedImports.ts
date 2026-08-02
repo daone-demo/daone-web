@@ -124,6 +124,7 @@ export {
   previewUrlToUploadFile,
   setCanvasUploadProjectId,
   setCanvasNodeMutationCompleteHandler,
+  setCanvasUploadCompleteHandler,
 } from '../../upload'
 export { getCanvasSnapshot, saveCanvasSnapshotToStorage, normalizeCanvasSnapshot, type CanvasSnapshot } from '../../canvasSnapshot'
 export {

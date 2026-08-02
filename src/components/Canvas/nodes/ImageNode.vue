@@ -11,6 +11,7 @@
       'image-node--uploading': data.uploadState === 'uploading',
       'image-node--generating': data.imageGenState === 'loading',
       'image-node--adaptive': hasAdaptivePreview,
+      'image-node--mark-target': data.imageMarkTarget,
     }"
   >
     <button

@@ -37,13 +37,29 @@ export type CanvasUploader = (
 let resolveProjectId: (() => string | undefined) | null = null
 let canvasUploader: CanvasUploader | null = null
 let onCanvasNodeMutationComplete: (() => void) | null = null
+let onCanvasUploadComplete: ((payload: CanvasUploadCompletePayload) => void) | null = null
+
+export interface CanvasUploadCompletePayload {
+  fileName: string
+  kind?: CanvasNodeData['kind']
+}
 
 export function setCanvasNodeMutationCompleteHandler(handler: (() => void) | null) {
   onCanvasNodeMutationComplete = handler
 }
 
+export function setCanvasUploadCompleteHandler(
+  handler: ((payload: CanvasUploadCompletePayload) => void) | null,
+) {
+  onCanvasUploadComplete = handler
+}
+
 function notifyCanvasNodeMutationComplete() {
   onCanvasNodeMutationComplete?.()
+}
+
+function notifyCanvasUploadComplete(payload: CanvasUploadCompletePayload) {
+  onCanvasUploadComplete?.(payload)
 }
 
 /** 文件读取阶段占用的进度上限 */
@@ -404,6 +420,10 @@ async function finishUpload(
   data.uploadProgress = 100
   data.previewUrl = previewUrl
   data.mode = 'editor'
+  notifyCanvasUploadComplete({
+    fileName: file.name || data.fileName || data.title || '文件',
+    kind: data.kind,
+  })
   if (result.assetId) {
     data.assetId = result.assetId
   }

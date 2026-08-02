@@ -119,7 +119,8 @@ import {
   saveCanvasSkill,
   type SavedCanvasSkill,
 } from '../../skillStorage'
-import { applyRemoteImageToNode, runUploadSimulation } from '../../upload'
+import { applyRemoteImageToNode, runUploadSimulation, setCanvasUploadCompleteHandler } from '../../upload'
+import { formatUploadCanvasDescription } from '../../canvasDescription'
 import {
   clearCanvasAssetDrag,
   consumeCanvasAssetDragPayload,
@@ -212,6 +213,14 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
 
   const activeProjectId = ref('draft-2')
   const lastCanvasDescription = ref('')
+
+  function recordUploadCanvasDescription(resourceName: string) {
+    const formatted = formatUploadCanvasDescription(resourceName)
+    if (formatted) {
+      lastCanvasDescription.value = formatted
+    }
+  }
+
   const showAddMenu = ref(false)
   const showConnectMenu = ref(false)
   const connectMenuPos = ref({ left: 0, top: 0 })
@@ -3809,6 +3818,9 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   }
 
   onMounted(() => {
+    setCanvasUploadCompleteHandler(({ fileName }) => {
+      recordUploadCanvasDescription(fileName)
+    })
     void onLoadProjects()
 
     if (!graphRef.value) return

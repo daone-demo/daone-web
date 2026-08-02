@@ -1158,6 +1158,11 @@
   cursor: crosshair;
 }
 
+.canvas--element-select .image-node--mark-target .image-node__preview,
+.canvas--element-select .image-node--mark-target .image-node__preview img {
+  cursor: default !important;
+}
+
 .canvas:not(.canvas--bg-light) .canvas__element-select {
   border-color: #3d3d45;
   background: rgba(30, 30, 34, 0.98);

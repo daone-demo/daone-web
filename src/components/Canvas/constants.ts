@@ -151,6 +151,8 @@ export interface CanvasNodeData {
   selectedImageElementMarkId?: string
   /** 当前是否正在分析标记点 */
   imageMarkAnalyzing?: { x: number; y: number } | null
+  /** 元素标记模式下可作为标记目标的图片节点 */
+  imageMarkTarget?: boolean
   /** 对话面板中的元素标记列表 */
   elementMarks?: ImageMarkItem[]
   /** 锁定后节点不可拖动 */

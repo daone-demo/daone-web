@@ -30,7 +30,7 @@ import {
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, syncTextNodeImageSource,
-  createMinimap, destroyMinimap, applyRemoteImageToNode, applyRemoteVideoToNode, runUploadSimulation, uploadAssetFile, previewUrlToUploadFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
+  createMinimap, destroyMinimap, applyRemoteImageToNode, applyRemoteVideoToNode, runUploadSimulation, uploadAssetFile, previewUrlToUploadFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, setCanvasUploadCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
@@ -38,7 +38,11 @@ import {
   normalizeOcrRecognizeResult,
   type ImageEditTextChange,
 } from '../../editTextUtils'
-import { formatCanvasDescription, resolveVideoTaskTypeLabel } from '../../canvasDescription'
+import {
+  formatCanvasDescription,
+  formatUploadCanvasDescription,
+  resolveVideoTaskTypeLabel,
+} from '../../canvasDescription'
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import { downloadCanvasMedia } from '../../mediaDownload'
 import {
@@ -1164,6 +1168,13 @@ export function registerCore(bind: CanvasBindings) {
       message.warning('请修改文字后再应用')
       return
     }
+
+    const editSummary = changes
+      .map((change) => change.text.trim() || change.originalText.trim())
+      .filter(Boolean)
+      .slice(0, 3)
+      .join('、')
+    recordCanvasDescription(editSummary || '编辑图片文字', '编辑文字')
 
     closeImageEditText()
     selectedNodeId.value = sourceNodeId
@@ -4953,6 +4964,68 @@ export function registerCore(bind: CanvasBindings) {
     closeVideoGenPromptBar()
   }
 
+  function resolveMarkableImageNodeIds(): string[] {
+    const g = graph.value
+    const returnId = elementSelectReturnNodeId.value
+    if (!g || !returnId) return []
+
+    const returnCell = g.getCellById(returnId)
+    const returnData = returnCell?.isNode() ? (returnCell.getData() as CanvasNodeData) : undefined
+    const ids = new Set<string>()
+
+    if (elementSelectContext.value === 'image-dialogue') {
+      const previews = getImageDialoguePreviewsForNode(returnId)
+      for (const item of previews) {
+        if (item.nodeId) ids.add(item.nodeId)
+      }
+      if (!ids.size && returnData?.kind === 'image' && returnData.previewUrl?.trim()) {
+        ids.add(returnId)
+      }
+      if (!ids.size) {
+        for (const item of previews) {
+          const previewUrl = item.previewUrl?.trim()
+          if (!previewUrl) continue
+          g.getNodes().forEach((cell) => {
+            const data = cell.getData() as CanvasNodeData
+            if (data.kind === 'image' && data.previewUrl === previewUrl) {
+              ids.add(cell.id)
+            }
+          })
+        }
+      }
+    } else if (elementSelectContext.value === 'video-gen' && returnData) {
+      const refs = resolveVideoSourceRefsForNode(g, returnId, returnData.videoSourceRefs, true)
+      for (const item of refs) {
+        if (item.nodeId) ids.add(item.nodeId)
+      }
+    }
+
+    if (!ids.size) {
+      g.getNodes().forEach((cell) => {
+        const data = cell.getData() as CanvasNodeData
+        if (data.kind === 'image' && data.previewUrl?.trim()) {
+          ids.add(cell.id)
+        }
+      })
+    }
+
+    return [...ids]
+  }
+
+  function syncImageMarkTargets(active: boolean) {
+    const g = graph.value
+    if (!g) return
+    const markableIds = active ? new Set(resolveMarkableImageNodeIds()) : new Set<string>()
+    g.getNodes().forEach((cell) => {
+      if (!cell.isNode()) return
+      const data = cell.getData() as CanvasNodeData
+      if (data.kind !== 'image') return
+      const isTarget = active && markableIds.has(cell.id)
+      if (Boolean(data.imageMarkTarget) === isTarget) return
+      cell.setData({ ...data, imageMarkTarget: isTarget })
+    })
+  }
+
   function enterElementSelectMode(context: 'image-dialogue' | 'video-gen' = 'video-gen') {
     const returnId = context === 'image-dialogue'
       ? getActiveImageDialogueTargetNodeId()
@@ -4963,6 +5036,7 @@ export function registerCore(bind: CanvasBindings) {
     exitVideoGenCanvasPickMode()
     exitImageDialogueCanvasPickMode()
     showElementSelectMode.value = true
+    syncImageMarkTargets(true)
     bumpToolbarRevision()
   }
 
@@ -4973,6 +5047,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function exitElementSelectMode(options?: { force?: boolean }) {
+    syncImageMarkTargets(false)
     showElementSelectMode.value = false
     elementSelectContext.value = null
     elementSelectReturnNodeId.value = ''
@@ -5928,6 +6003,13 @@ export function registerCore(bind: CanvasBindings) {
 
   function recordCanvasDescription(description: string, taskType?: string) {
     const formatted = formatCanvasDescription(taskType ?? '', description)
+    if (formatted) {
+      lastCanvasDescription.value = formatted
+    }
+  }
+
+  function recordUploadCanvasDescription(resourceName: string) {
+    const formatted = formatUploadCanvasDescription(resourceName)
     if (formatted) {
       lastCanvasDescription.value = formatted
     }
@@ -9122,6 +9204,9 @@ export function registerCore(bind: CanvasBindings) {
     setCanvasNodeMutationCompleteHandler(() => {
       scheduleHistoryPush()
     })
+    setCanvasUploadCompleteHandler(({ fileName }) => {
+      recordUploadCanvasDescription(fileName)
+    })
     setGenerationTaskSucceededHandler(() => {
       scheduleHistoryPush()
     })
@@ -9499,6 +9584,7 @@ export function registerCore(bind: CanvasBindings) {
     window.removeEventListener('pagehide', onPageUnload)
     stopAutoSave()
     setCanvasNodeMutationCompleteHandler(null)
+    setCanvasUploadCompleteHandler(null)
     setGenerationTaskSucceededHandler(null)
     unbindKeyboard()
     unbindLongPressPan()

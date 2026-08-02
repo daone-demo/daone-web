@@ -46,31 +46,57 @@ function toBBox(raw: Record<string, unknown>): ImageEditTextBBox | undefined {
 
   const position = raw.position ?? raw.points
   if (Array.isArray(position) && position.length >= 4) {
-    const xs: number[] = []
-    const ys: number[] = []
-    for (let index = 0; index < position.length; index += 2) {
-      const px = Number(position[index])
-      const py = Number(position[index + 1])
-      if (Number.isFinite(px) && Number.isFinite(py)) {
-        xs.push(px)
-        ys.push(py)
+    const nums = position.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+    if (nums.length >= 4) {
+      // [x1, y1, x2, y2] 矩形坐标
+      if (nums.length === 4) {
+        const [x1, y1, x2, y2] = nums
+        const minX = Math.min(x1, x2)
+        const maxX = Math.max(x1, x2)
+        const minY = Math.min(y1, y2)
+        const maxY = Math.max(y1, y2)
+        return {
+          x: minX,
+          y: minY,
+          width: Math.max(1, maxX - minX),
+          height: Math.max(1, maxY - minY),
+        }
       }
-    }
-    if (xs.length && ys.length) {
-      const minX = Math.min(...xs)
-      const maxX = Math.max(...xs)
-      const minY = Math.min(...ys)
-      const maxY = Math.max(...ys)
-      return {
-        x: minX,
-        y: minY,
-        width: Math.max(1, maxX - minX),
-        height: Math.max(1, maxY - minY),
+
+      const xs: number[] = []
+      const ys: number[] = []
+      for (let index = 0; index < nums.length; index += 2) {
+        const px = nums[index]
+        const py = nums[index + 1]
+        if (px != null && py != null) {
+          xs.push(px)
+          ys.push(py)
+        }
+      }
+      if (xs.length && ys.length) {
+        const minX = Math.min(...xs)
+        const maxX = Math.max(...xs)
+        const minY = Math.min(...ys)
+        const maxY = Math.max(...ys)
+        return {
+          x: minX,
+          y: minY,
+          width: Math.max(1, maxX - minX),
+          height: Math.max(1, maxY - minY),
+        }
       }
     }
   }
 
   return undefined
+}
+
+function pickOcrText(record: Record<string, unknown>): string {
+  const candidate = record.text ?? record.texts ?? record.content ?? record.value ?? record.word
+  if (Array.isArray(candidate)) {
+    return candidate.map((item) => String(item ?? '').trim()).filter(Boolean).join('')
+  }
+  return String(candidate ?? '').trim()
 }
 
 function normalizeOcrItem(raw: unknown): ImageEditTextEntry | null {
@@ -86,7 +112,7 @@ function normalizeOcrItem(raw: unknown): ImageEditTextEntry | null {
 
   if (!raw || typeof raw !== 'object') return null
   const record = raw as Record<string, unknown>
-  const text = String(record.text ?? record.content ?? record.value ?? record.word ?? '').trim()
+  const text = pickOcrText(record)
   if (!text) return null
 
   return {
@@ -128,6 +154,25 @@ export function normalizeOcrRecognizeResult(payload: unknown): ImageEditTextEntr
     const dedupeKey = `${entry.text}::${entry.bbox?.x ?? ''}:${entry.bbox?.y ?? ''}`
     if (seen.has(dedupeKey)) return
     seen.add(dedupeKey)
+    entries.push(entry)
+  })
+
+  if (entries.length) return entries
+
+  const record =
+    payload && typeof payload === 'object'
+      ? (payload as Record<string, unknown>)
+      : null
+  const nested =
+    record?.data && typeof record.data === 'object'
+      ? (record.data as Record<string, unknown>)
+      : record
+  const fullText = String(nested?.text ?? '').trim()
+  if (!fullText) return entries
+
+  fullText.split(/\n+/).forEach((line) => {
+    const entry = normalizeOcrItem(line)
+    if (!entry) return
     entries.push(entry)
   })
 

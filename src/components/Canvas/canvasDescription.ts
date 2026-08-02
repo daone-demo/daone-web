@@ -6,6 +6,12 @@ export function formatCanvasDescription(taskType: string, description: string) {
   return type ? `[${type}] ${text}` : text
 }
 
+/** 资源上传类操作的画布描述 */
+export function formatUploadCanvasDescription(resourceName: string) {
+  const name = resourceName.trim() || '文件'
+  return formatCanvasDescription('上传', `上传了${name}资源`)
+}
+
 export function resolveVideoTaskTypeLabel(mode?: string) {
   switch (mode) {
     case 'text-to-video':
