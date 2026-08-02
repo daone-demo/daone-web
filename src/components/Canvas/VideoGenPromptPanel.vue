@@ -5,7 +5,6 @@
       'video-gen-prompt-panel--light': isLightTheme,
       'video-gen-prompt-panel--dragover': isDragOver,
     }"
-    @mousedown="onPanelMouseDown"
     @dragenter.prevent="onPanelDragEnter"
     @dragover.prevent="onPanelDragOver"
     @dragleave="onPanelDragLeave"
@@ -423,7 +422,6 @@ const emit = defineEmits<{
   'update:prompt': [value: string]
   'update:activeTab': [value: string]
   'update:aspectRatio': [value: VideoGenAspectRatio]
-  'drag-start': [event: MouseEvent]
   'quick-action': [key: string]
   'remove-source-ref': [nodeId: string]
   'upload-images': [files: File[]]
@@ -435,16 +433,6 @@ const emit = defineEmits<{
   'clear-marks': []
   submit: [payload: VideoGenPromptSubmitPayload]
 }>()
-
-const DRAG_IGNORE_SELECTOR =
-  'button, textarea, input, select, a, [contenteditable], .ant-dropdown, .ant-dropdown-menu'
-
-function onPanelMouseDown(event: MouseEvent) {
-  event.stopPropagation()
-  const target = event.target as HTMLElement | null
-  if (target?.closest(DRAG_IGNORE_SELECTOR)) return
-  emit('drag-start', event)
-}
 
 function onVideoNumChange(value: unknown) {
   if (value === undefined || value === null) return

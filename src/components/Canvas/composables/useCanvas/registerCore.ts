@@ -18,7 +18,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, findReusableImageGenerationNode, resetImageGenerationNodeForRetry, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
+  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, getImageGenerationPlaceholderSize, findReusableImageGenerationNode, resetImageGenerationNodeForRetry, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
   getConnectMenuPosition, resolveConnectSpawnPoint, getLinkedSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -94,6 +94,7 @@ import {
   type VideoToolbarClickPayload,
   type VideoToolbarClickEvent,
   type ImageDialogueSubmitPayload,
+  type ImageDialogueSettings,
   type VideoDialogueSubmitPayload,
   type VideoGenPromptSubmitPayload,
   type VideoDialogueSettings,
@@ -216,9 +217,6 @@ export function registerCore(bind: CanvasBindings) {
     promptPos,
     imageGenPromptPos,
     videoGenPromptPos,
-    videoGenPromptDragOffset,
-    imageInpaintDragOffset,
-    imageExpandDragOffset,
     showElementSelectMode,
     showVideoGenCanvasPickMode,
     showImageDialogueCanvasPickMode,
@@ -284,10 +282,6 @@ export function registerCore(bind: CanvasBindings) {
   let historyPushTimer: ReturnType<typeof setTimeout> | null = null
   let activeImageDialogueNodeId = ''
   let activeVideoDialogueNodeId = ''
-  /** 视频比例同步期间保持对话框屏幕位置不变 */
-  let suppressVideoDialogueRepos = false
-  /** 视频对话框打开后固定屏幕位置，切换比例时不跟随节点底边重算 */
-  let pinnedVideoDialoguePos: { left: number; top: number; width: number } | null = null
   let autoSaveDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let autoSaveEnabled = true
   let canvasContentReady = false
@@ -1955,7 +1949,6 @@ export function registerCore(bind: CanvasBindings) {
     closeImageEditText()
 
     inpaintSourceNodeId.value = selectedNodeId.value
-    imageInpaintDragOffset.value = { x: 0, y: 0 }
     showImageInpaint.value = true
     updateNodeToolbar()
   }
@@ -2235,6 +2228,10 @@ export function registerCore(bind: CanvasBindings) {
     if (sourceData.uploadState === 'uploading' || sourceData.imageGenState === 'loading') return
 
     const dialoguePreviews = getImageDialoguePreviewsForNode(sourceNodeId)
+    const provenanceRefs = dialoguePreviews.length
+      ? dialoguePreviews
+      : seedImageDialogueRefs(sourceData, sourceNodeId)
+    const provenanceSettings = { ...imageDialogueSettings.value }
     persistImageDialogueFields(sourceNodeId)
     if (fromImageGenPrompt) {
       closeImageGenPromptBar()
@@ -2276,11 +2273,7 @@ export function registerCore(bind: CanvasBindings) {
       })
       resultNodes.push(reusableNode)
     } else {
-      const batchPreviewSize = getNodeSize('image', 'editor', {
-        kind: 'image',
-        mode: 'editor',
-        imageGenState: 'loading',
-      })
+      const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode)
       const plannedPoints = planOutgoingResultPoints(
         g,
         sourceNode,
@@ -2302,6 +2295,14 @@ export function registerCore(bind: CanvasBindings) {
       }
     }
 
+    resultNodes.forEach((resultNode) => {
+      applyImageDialogueProvenance(resultNode, {
+        prompt,
+        settings: provenanceSettings,
+        sourceRefs: provenanceRefs,
+      })
+    })
+
     const primaryNode = resultNodes[0]
     selectedNodeId.value = primaryNode.id
     selectedKind.value = 'image'
@@ -2310,6 +2311,7 @@ export function registerCore(bind: CanvasBindings) {
     bumpToolbarRevision()
     updateNodeToolbar()
     scheduleHistoryPush()
+    openImageDialogue(primaryNode.id)
 
     const runners = resultNodes.map((resultNode, index) => {
       const fileName = resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount)
@@ -2784,11 +2786,7 @@ export function registerCore(bind: CanvasBindings) {
   ) {
     if (totalCount <= resultNodes.length) return
 
-    const batchPreviewSize = getNodeSize('image', 'editor', {
-      kind: 'image',
-      mode: 'editor',
-      imageGenState: 'loading',
-    })
+    const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode)
     const plannedPoints = planOutgoingResultPoints(
       g,
       sourceNode,
@@ -2899,12 +2897,7 @@ export function registerCore(bind: CanvasBindings) {
     const nodes: Node[] = []
     if (!extraResults.length) return nodes
 
-    const batchPreviewSize = getNodeSize('image', 'editor', {
-      kind: 'image',
-      mode: 'editor',
-      uploadState: 'done',
-      previewUrl: 'placeholder',
-    })
+    const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode)
     const plannedPoints = planOutgoingResultPoints(
       g,
       sourceNode,
@@ -2985,11 +2978,7 @@ export function registerCore(bind: CanvasBindings) {
     const requestedCount = Math.max(1, Math.floor(Number(taskParameters.count)) || 1)
     const singleTaskParameters = { ...taskParameters, count: 1 }
     const resultNodes: Node[] = []
-    const batchPreviewSize = getNodeSize('image', 'editor', {
-      kind: 'image',
-      mode: 'editor',
-      imageGenState: 'loading',
-    })
+    const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode)
     const plannedPoints = planOutgoingResultPoints(
       g,
       sourceNode,
@@ -3012,6 +3001,23 @@ export function registerCore(bind: CanvasBindings) {
         }),
       )
     }
+
+    const provenanceRefs = getImageDialoguePreviewsForNode(sourceNode.id)
+    const provenancePrompt =
+      sourceData.imageDialogueText?.trim() ||
+      sourceData.genPrompt?.trim() ||
+      config.prompt?.trim() ||
+      ''
+    const provenanceSettings = normalizeImageDialogueSettings(sourceData.imageDialogueSettings)
+    resultNodes.forEach((resultNode) => {
+      applyImageDialogueProvenance(resultNode, {
+        prompt: provenancePrompt,
+        settings: provenanceSettings,
+        sourceRefs: provenanceRefs.length
+          ? provenanceRefs
+          : seedImageDialogueRefs(sourceData, sourceNode.id),
+      })
+    })
 
     const primaryNode = resultNodes[0]
 
@@ -3238,6 +3244,16 @@ export function registerCore(bind: CanvasBindings) {
 
     selectedNodeId.value = id
     selectedKind.value = 'image'
+    if (!(data.imageSourceRefs?.length)) {
+      const refs = seedImageDialogueRefs(data, id)
+      if (refs.length) {
+        applyImageDialogueProvenance(cell as Node, {
+          prompt: data.imageDialogueText?.trim() || data.genPrompt?.trim() || '',
+          settings: normalizeImageDialogueSettings(data.imageDialogueSettings),
+          sourceRefs: refs,
+        })
+      }
+    }
     loadImageDialogueFields(id)
     showImageDialogue.value = true
     showImageHdMenu.value = false
@@ -3303,11 +3319,6 @@ export function registerCore(bind: CanvasBindings) {
     closeVideoGenPromptBar()
     syncNodeSelectionHighlight(id)
     updateNodeToolbar()
-    pinnedVideoDialoguePos = { ...dialoguePos.value }
-  }
-
-  function clearVideoDialoguePin() {
-    pinnedVideoDialoguePos = null
   }
 
   function toggleVideoDialogue() {
@@ -3315,7 +3326,6 @@ export function registerCore(bind: CanvasBindings) {
       persistVideoDialogueFields()
       showVideoDialogue.value = false
       activeVideoDialogueNodeId = ''
-      clearVideoDialoguePin()
       updateNodeToolbar()
       return
     }
@@ -3498,6 +3508,47 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     return refs
+  }
+
+  /** 将本次图生图的参考图 / 文案 / 参数写入结果节点，打开对话框可溯源并继续编辑 */
+  function applyImageDialogueProvenance(
+    targetNode: Node,
+    options: {
+      prompt: string
+      settings?: ImageDialogueSettings
+      sourceRefs: ImageSourceRef[]
+    },
+  ) {
+    const data = { ...(targetNode.getData() as CanvasNodeData) }
+    const refs = options.sourceRefs
+      .filter((item) => item.previewUrl?.trim())
+      .map((item) => ({
+        nodeId: item.nodeId,
+        assetId: item.assetId,
+        previewUrl: item.previewUrl,
+        fileName: item.fileName ?? '',
+      }))
+
+    data.imageSourceRefs = refs
+    const latest = refs[refs.length - 1]
+    if (latest) {
+      data.sourceNodeId = latest.nodeId
+      data.sourcePreviewUrl = latest.previewUrl
+      data.sourceFileName = latest.fileName
+      data.sourceAssetId = latest.assetId
+    }
+    data.inputUpdated = refs.length > 0
+
+    const prompt = options.prompt.trim()
+    if (prompt) {
+      data.imageDialogueText = prompt
+      data.genPrompt = prompt
+    }
+    if (options.settings) {
+      data.imageDialogueSettings = { ...options.settings }
+    }
+
+    targetNode.setData(data, { overwrite: true })
   }
 
   function addImageDialogueSourceRef(
@@ -3694,7 +3745,6 @@ export function registerCore(bind: CanvasBindings) {
     persistVideoDialogueFields()
     showVideoDialogue.value = false
     activeVideoDialogueNodeId = ''
-    clearVideoDialoguePin()
   }
 
   /** 关闭图片/视频节点底部对话框（打开连线菜单等互斥浮层时调用） */
@@ -3953,43 +4003,17 @@ export function registerCore(bind: CanvasBindings) {
     const anchorBottomY = pos.y + oldSize.height
     const anchorCenterX = pos.x + oldSize.width / 2
 
-    const shouldFreezeDialogue =
-      showVideoDialogue.value &&
-      selectedNodeId.value === nodeId &&
-      selectedKind.value === 'video'
-    const frozenDialoguePos =
-      shouldFreezeDialogue && pinnedVideoDialoguePos
-        ? { ...pinnedVideoDialoguePos }
-        : shouldFreezeDialogue
-          ? { ...dialoguePos.value }
-          : null
+    data.videoGenAspectRatio = ratio
+    cell.setData(data)
+    syncNodeShapeFromData(node)
 
-    suppressVideoDialogueRepos = shouldFreezeDialogue
-    try {
-      data.videoGenAspectRatio = ratio
-      cell.setData(data)
-      syncNodeShapeFromData(node)
+    const size = getNodeSize(data.kind, data.mode, data)
+    node.resize(size.width, size.height)
+    node.position(anchorCenterX - size.width / 2, anchorBottomY - size.height)
 
-      const size = getNodeSize(data.kind, data.mode, data)
-      node.resize(size.width, size.height)
-      node.position(anchorCenterX - size.width / 2, anchorBottomY - size.height)
-
-      updateVideoGenPromptBarPosition()
-      bumpToolbarRevision()
-      updateNodeToolbar({ skipDialoguePos: shouldFreezeDialogue })
-      if (frozenDialoguePos) {
-        dialoguePos.value = frozenDialoguePos
-        pinnedVideoDialoguePos = { ...frozenDialoguePos }
-      }
-    } finally {
-      void nextTick(() => {
-        if (frozenDialoguePos) {
-          dialoguePos.value = frozenDialoguePos
-          pinnedVideoDialoguePos = { ...frozenDialoguePos }
-        }
-        suppressVideoDialogueRepos = false
-      })
-    }
+    updateVideoGenPromptBarPosition()
+    bumpToolbarRevision()
+    updateNodeToolbar()
   }
 
   function onVideoGenAspectRatioChange(ratio: VideoGenAspectRatio) {
@@ -4797,7 +4821,6 @@ export function registerCore(bind: CanvasBindings) {
     activeVideoGenPromptNodeId.value = nodeId
     activePickerNodeId.value = ''
     videoGenActiveTab.value = tab
-    videoGenPromptDragOffset.value = { x: 0, y: 0 }
     loadVideoGenPromptFields(nodeId)
     updateVideoGenPromptBarPosition()
   }
@@ -7055,77 +7078,7 @@ export function registerCore(bind: CanvasBindings) {
     if (!cell?.isNode()) return
 
     const base = getNodeVideoGenPromptPosition(g, cell as Node, overlayRoot)
-    videoGenPromptPos.value = {
-      ...base,
-      left: base.left + videoGenPromptDragOffset.value.x,
-      top: base.top + videoGenPromptDragOffset.value.y,
-    }
-  }
-
-  function onVideoGenPromptDragStart(event: MouseEvent) {
-    const startX = event.clientX
-    const startY = event.clientY
-    const base = { ...videoGenPromptDragOffset.value }
-
-    const onMove = (moveEvent: MouseEvent) => {
-      videoGenPromptDragOffset.value = {
-        x: base.x + (moveEvent.clientX - startX),
-        y: base.y + (moveEvent.clientY - startY),
-      }
-      updateVideoGenPromptBarPosition()
-    }
-
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }
-
-  function onImageInpaintDragStart(event: MouseEvent) {
-    const startX = event.clientX
-    const startY = event.clientY
-    const base = { ...imageInpaintDragOffset.value }
-
-    const onMove = (moveEvent: MouseEvent) => {
-      imageInpaintDragOffset.value = {
-        x: base.x + (moveEvent.clientX - startX),
-        y: base.y + (moveEvent.clientY - startY),
-      }
-      updateNodeToolbar()
-    }
-
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }
-
-  function onImageExpandDragStart(event: MouseEvent) {
-    const startX = event.clientX
-    const startY = event.clientY
-    const base = { ...imageExpandDragOffset.value }
-
-    const onMove = (moveEvent: MouseEvent) => {
-      imageExpandDragOffset.value = {
-        x: base.x + (moveEvent.clientX - startX),
-        y: base.y + (moveEvent.clientY - startY),
-      }
-      updateNodeToolbar()
-    }
-
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    videoGenPromptPos.value = base
   }
 
   function updateMultiSelectToolbarPosition() {
@@ -7189,13 +7142,7 @@ export function registerCore(bind: CanvasBindings) {
     selectedKind.value = data.kind
     const node = cell as Node
     toolbarPos.value = getNodeToolbarPosition(g, node, overlayRoot)
-    if (
-      pinnedVideoDialoguePos &&
-      showVideoDialogue.value &&
-      selectedKind.value === 'video'
-    ) {
-      dialoguePos.value = pinnedVideoDialoguePos
-    } else if (!options?.skipDialoguePos && !suppressVideoDialogueRepos) {
+    if (!options?.skipDialoguePos) {
       dialoguePos.value = getNodeDialoguePosition(g, node, overlayRoot)
     }
     if (showImageCrop.value) {
@@ -7215,12 +7162,7 @@ export function registerCore(bind: CanvasBindings) {
       imageErasePos.value = getNodeCropOverlayPosition(g, node, overlayRoot)
     }
     if (showImageInpaint.value) {
-      const base = getNodeCropOverlayPosition(g, node, overlayRoot, 520, 520)
-      imageInpaintPos.value = {
-        ...base,
-        left: base.left + imageInpaintDragOffset.value.x,
-        top: base.top + imageInpaintDragOffset.value.y,
-      }
+      imageInpaintPos.value = getNodeCropOverlayPosition(g, node, overlayRoot, 520, 520)
     }
     if (showImageExpand.value) {
       syncImageNodeSizeToMediaAspect(node)
@@ -8283,7 +8225,7 @@ export function registerCore(bind: CanvasBindings) {
     if (selectedNodeId.value === node.id) {
       selectedKind.value = data.kind
       bumpToolbarRevision()
-      updateNodeToolbar({ skipDialoguePos: suppressVideoDialogueRepos })
+      updateNodeToolbar()
     }
   }
 
@@ -9050,21 +8992,7 @@ export function registerCore(bind: CanvasBindings) {
     instance.on('node:moved', ({ node }) => {
       snapGridSplitNodePosition(instance, node)
       groupMoveState.anchorId = ''
-      if (
-        !suppressVideoDialogueRepos &&
-        showVideoDialogue.value &&
-        selectedNodeId.value === node.id
-      ) {
-        clearVideoDialoguePin()
-      }
-      updateNodeToolbar({ skipDialoguePos: suppressVideoDialogueRepos })
-      if (
-        !suppressVideoDialogueRepos &&
-        showVideoDialogue.value &&
-        selectedNodeId.value === node.id
-      ) {
-        pinnedVideoDialoguePos = { ...dialoguePos.value }
-      }
+      updateNodeToolbar()
       syncViewportNodeVisibility()
       scheduleHistoryPush()
     })
@@ -9393,8 +9321,6 @@ export function registerCore(bind: CanvasBindings) {
     onImageInpaintComplete,
     onImageExpandComplete,
     onImageEditTextApply,
-    onImageInpaintDragStart,
-    onImageExpandDragStart,
     onImageGridSplitComplete,
     closeImageGenPromptBar,
     closeImagePreview,
@@ -9535,7 +9461,6 @@ export function registerCore(bind: CanvasBindings) {
     onTextExpandInput,
     onTextFormatAction,
     onVideoGenAddCanvasNode,
-    onVideoGenPromptDragStart,
     onVideoGenQuickAction,
     onVideoGenUploadFiles,
     onVideoHdStart,

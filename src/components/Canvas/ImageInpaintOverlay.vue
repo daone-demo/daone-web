@@ -1,5 +1,5 @@
 <template>
-  <div class="image-inpaint-overlay" @mousedown="onPanelMouseDown">
+  <div class="image-inpaint-overlay" @mousedown.stop>
     <div class="image-inpaint-overlay__toolbar">
       <button type="button" class="image-inpaint-overlay__btn" @click="emit('cancel')">
         <span class="image-inpaint-overlay__icon image-inpaint-overlay__icon--close" aria-hidden="true" />
@@ -176,23 +176,12 @@ const emit = defineEmits<{
     /** 父级上传/提交结束后调用，用于失败时恢复按钮可点 */
     settle?: () => void
   }]
-  'drag-start': [event: MouseEvent]
 }>()
-
-const DRAG_IGNORE_SELECTOR =
-  'button, textarea, input, select, a, [contenteditable], .ant-dropdown, .ant-dropdown-menu, .image-inpaint-overlay__stage, .image-inpaint-overlay__stage *, .image-inpaint-overlay__recenter'
 
 const MIN_VIEW_SCALE = 0.25
 const MAX_VIEW_SCALE = 6
 const ZOOM_STEP = 1.2
 const ZOOM_SENSITIVITY = 0.0012
-
-function onPanelMouseDown(event: MouseEvent) {
-  event.stopPropagation()
-  const target = event.target as HTMLElement | null
-  if (target?.closest(DRAG_IGNORE_SELECTOR)) return
-  emit('drag-start', event)
-}
 
 const stageRef = ref<HTMLElement | null>(null)
 const displayCanvasRef = ref<HTMLCanvasElement | null>(null)

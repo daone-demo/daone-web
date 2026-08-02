@@ -272,7 +272,10 @@ const {
 } = useMaterialAssets(scopeRef, columnCountRef)
 
 const onDoToggleMaterialFavorite = (item: MaterialItem) => {
-  if (!userInfoStore.userInfo?.isVip) {
+  console.log(userInfoStore.userInfo?.isVip)
+  if (userInfoStore.userInfo?.isVip) {
+    toggleMaterialFavorite(item)
+  } else {
     Modal.confirm({
       title: '提示',
       content: '该素材需要先升级会员才可使用',
@@ -282,8 +285,6 @@ const onDoToggleMaterialFavorite = (item: MaterialItem) => {
         modalStore.openModal('combo');
       },
     })
-  } else {
-    toggleMaterialFavorite(item)
   }
 }
 

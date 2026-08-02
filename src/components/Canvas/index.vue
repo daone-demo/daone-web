@@ -287,13 +287,10 @@
       @image-inpaint-complete="onImageInpaintComplete"
       @close-image-expand="closeImageExpand"
       @image-expand-complete="onImageExpandComplete"
-      @image-expand-drag-start="onImageExpandDragStart"
       @close-image-edit-text="closeImageEditText"
       @image-edit-text-apply="onImageEditTextApply"
-      @image-inpaint-drag-start="onImageInpaintDragStart"
       @reset-video-hd-panel="resetVideoHdPanel"
       @video-hd-start="onVideoHdStart"
-      @video-gen-drag-start="onVideoGenPromptDragStart"
       @video-gen-quick-action="onVideoGenQuickAction"
       @remove-video-source-ref="onRemoveVideoSourceRef"
       @upload-video-gen-images="onVideoGenUploadFiles"
@@ -622,10 +619,8 @@ const {
   onImageEraseComplete,
   onImageInpaintComplete,
   onImageExpandComplete,
-  onImageExpandDragStart,
   closeImageEditText,
   onImageEditTextApply,
-  onImageInpaintDragStart,
   onImageDialogueAddCanvasNode,
   onImageDialogueUploadFiles,
   onImageToolbarAction,
@@ -638,7 +633,6 @@ const {
   onTextExpandInput,
   onTextFormatAction,
   onVideoGenAddCanvasNode,
-  onVideoGenPromptDragStart,
   onVideoGenQuickAction,
   onVideoGenUploadFiles,
   onVideoHdStart,

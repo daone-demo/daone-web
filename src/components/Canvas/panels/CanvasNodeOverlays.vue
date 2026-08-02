@@ -202,6 +202,7 @@
       top: `${videoGenPromptPos.top}px`,
       width: `${videoGenPromptPos.width}px`,
     }"
+    @mousedown.stop
   >
     <VideoGenPromptPanel
       ref="videoGenPromptPanelRef"
@@ -222,7 +223,6 @@
       @update:video-num="emit('update:videoNum', $event)"
       @update:active-tab="emit('update:videoGenActiveTab', $event)"
       @update:aspect-ratio="emit('update:videoGenAspectRatio', $event)"
-      @drag-start="emit('video-gen-drag-start', $event)"
       @quick-action="emit('video-gen-quick-action', $event)"
       @remove-source-ref="emit('remove-video-source-ref', $event)"
       @upload-images="emit('upload-video-gen-images', $event)"
@@ -326,7 +326,6 @@
       :natural-height="imageInpaintSource.mediaHeight"
       @cancel="emit('close-image-inpaint')"
       @complete="emit('image-inpaint-complete', $event)"
-      @drag-start="emit('image-inpaint-drag-start', $event)"
     />
   </div>
 
@@ -684,18 +683,15 @@ const emit = defineEmits<{
     mask: { dataUrl: string; width: number; height: number }
     settle?: () => void
   }]
-  'image-inpaint-drag-start': [event: MouseEvent]
   'close-image-expand': []
   'image-expand-complete': [payload: {
     expandDirection: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL'
     expandRatio: number
   }]
-  'image-expand-drag-start': [event: MouseEvent]
   'close-image-edit-text': []
   'image-edit-text-apply': [changes: import('../editTextUtils').ImageEditTextChange[]]
   'reset-video-hd-panel': []
   'video-hd-start': []
-  'video-gen-drag-start': [event: MouseEvent]
   'video-gen-quick-action': [key: string]
   'remove-video-source-ref': [nodeId: string]
   'upload-video-gen-images': [files: File[]]

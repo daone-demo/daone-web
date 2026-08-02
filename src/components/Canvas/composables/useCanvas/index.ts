@@ -56,8 +56,6 @@ type GridSplitCanvasApi = Pick<
     | 'imageEraseSource'
     | 'closeImageInpaint'
     | 'onImageInpaintComplete'
-    | 'onImageInpaintDragStart'
-    | 'onImageExpandDragStart'
     | 'imageInpaintSource'
     | 'closeImageExpand'
     | 'onImageExpandComplete'

@@ -28,6 +28,7 @@ export {
   spawnCroppedImageNode,
   spawnErasedImageNode,
   spawnGenerationResultNode,
+  getImageGenerationPlaceholderSize,
   isImageGenerationFailedNode,
   findReusableImageGenerationNode,
   resetImageGenerationNodeForRetry,

@@ -508,6 +508,39 @@ export function spawnErasedImageNode(
   return node
 }
 
+/** 生成中占位节点：继承源图片节点的画布尺寸与媒体比例 */
+export function resolveImageGenerationPlaceholderLayout(sourceNode: Node) {
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  const sourceSize = sourceNode.getSize()
+
+  const data: Partial<CanvasNodeData> = {
+    kind: 'image',
+    mode: 'editor',
+    imageGenTask: 'picker',
+    imageGenState: 'loading',
+  }
+
+  if (sourceData.mediaWidth > 0 && sourceData.mediaHeight > 0) {
+    data.mediaWidth = sourceData.mediaWidth
+    data.mediaHeight = sourceData.mediaHeight
+  }
+  if (typeof sourceData.viewScale === 'number' && sourceData.viewScale !== 1) {
+    data.viewScale = sourceData.viewScale
+  }
+  if (sourceData.kind === 'image' && sourceSize.width > 0 && sourceSize.height > 0) {
+    data.editorWidth = sourceSize.width
+    data.editorHeight = sourceSize.height
+  }
+
+  const size = getNodeSize('image', 'editor', data)
+  return { width: size.width, height: size.height, data }
+}
+
+export function getImageGenerationPlaceholderSize(sourceNode: Node) {
+  const layout = resolveImageGenerationPlaceholderLayout(sourceNode)
+  return { width: layout.width, height: layout.height }
+}
+
 /** 在源节点右侧生成「生成中」结果节点，并连线 */
 export function spawnGenerationResultNode(
   graph: Graph,
@@ -523,12 +556,10 @@ export function spawnGenerationResultNode(
   },
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
+  const layout = resolveImageGenerationPlaceholderLayout(sourceNode)
   const slot = options.layoutSlot ?? countOutgoingSlots(graph, sourceNode.id)
   const overrides: Partial<CanvasNodeData> = {
-    kind: 'image',
-    mode: 'editor',
-    imageGenTask: 'picker',
-    imageGenState: 'loading',
+    ...layout.data,
     imageGenProgress: 0,
     title: options.title,
     fileName: options.fileName || options.title,
@@ -538,7 +569,7 @@ export function spawnGenerationResultNode(
     sourceAssetId: sourceData.assetId,
     inputUpdated: Boolean(sourceData.previewUrl),
   }
-  const size = getNodeSize('image', 'editor', overrides)
+  const size = { width: layout.width, height: layout.height }
   const point =
     options.centerPoint ??
     resolveOutgoingResultNodePoint(graph, sourceNode, size, {
@@ -602,6 +633,19 @@ export function resetImageGenerationNodeForRetry(
   if (options.prompt) {
     data.genPrompt = options.prompt
   }
+
+  const graph = (node.model?.graph as Graph | undefined) ?? null
+  const sourceId = data.sourceNodeId
+  if (graph && sourceId) {
+    const source = graph.getCellById(sourceId)
+    if (source?.isNode()) {
+      const layout = resolveImageGenerationPlaceholderLayout(source as Node)
+      node.setData({ ...data, ...layout.data }, { overwrite: true })
+      node.resize(layout.width, layout.height)
+      return
+    }
+  }
+
   node.setData(data, { overwrite: true })
 }
 

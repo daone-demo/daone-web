@@ -23,7 +23,7 @@ export const BIND_KEYS = [
   'selectedEdgeId', 'hoveredEdgeId', 'edgeDeleteBtnPos', 'pendingUploadNodeId', 'fileInputAccept', 'fileInputMultiple',
   'isCanvasFileDragOver', 'canvasFileDragDepth', 'pendingUploadFilter', 'toolbarPos',
   'multiSelectToolbarPos', 'groupToolbarPos', 'groupOverlayBox', 'dialoguePos', 'promptPos',
-  'imageGenPromptPos', 'videoGenPromptPos', 'videoGenPromptDragOffset', 'imageInpaintDragOffset', 'imageExpandDragOffset', 'showElementSelectMode',
+  'imageGenPromptPos', 'videoGenPromptPos', 'showElementSelectMode',
   'elementSelectReturnNodeId', 'elementSelectContext', 'imageCropPos', 'imageGridSplitPos', 'videoHdPos', 'selectedKind',
   'showImageToolbarMore', 'showImageToolbarMoreMenu', 'showImageToolbarCustomize',
   'imageToolbarCustomizeSettings', 'showImageHdMenu', 'showImageDialogue',

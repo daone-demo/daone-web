@@ -20,6 +20,7 @@ export interface UserInfo {
   avatarUrl?: string | null
   status?: string
   createdAt?: string
+  isVip?: boolean
   [key: string]: unknown
 }
 
