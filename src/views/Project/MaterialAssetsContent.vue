@@ -78,7 +78,7 @@
               <MaterialAssetHoverActions
                 :favorited="item.favorited"
                 @preview="openMaterialPreview(item)"
-                @toggle-favorite="toggleMaterialFavorite(item)"
+                @toggle-favorite="onDoToggleAssetFavorite(item)"
               />
             </div>
           </article>
@@ -110,7 +110,7 @@
           :key="columnIndex"
           class="home__inspiration-column"
         >
-          <button
+          <!-- <button
             v-if="columnIndex === 0 && showAssetUpload"
             type="button"
             class="project-panel__upload-card"
@@ -118,7 +118,7 @@
           >
             <span class="project-card__upload-icon" aria-hidden="true">+</span>
             <span class="project-card__upload-label">上传素材</span>
-          </button>
+          </button> -->
           <article
             v-for="item in column"
             :key="item.id"
@@ -153,7 +153,7 @@
               <MaterialAssetHoverActions
                 :favorited="item.favorited"
                 @preview="openAssetPreview(item)"
-                @toggle-favorite="toggleAssetFavorite(item)"
+                @toggle-favorite="toggleMaterialFavorite(item)"
               />
             </div>
           </article>
@@ -220,7 +220,13 @@ import {
   type AssetItem,
   type MaterialItem,
 } from './materialAssets'
+import { Modal } from 'ant-design-vue'
 import { useMaterialAssets } from './useMaterialAssets'
+import { useUserInfo } from '@/stores/useUserInfo'
+import { useModalStore } from '@stores/useModal';
+
+const userInfoStore = useUserInfo();
+const modalStore = useModalStore();
 
 const props = withDefaults(
   defineProps<{
@@ -247,7 +253,22 @@ const emit = defineEmits<{
 const scopeRef = toRef(props, 'scope')
 const columnCountRef = computed(() => props.columnCount)
 const showMaterialList = computed(() => isMaterialListScope(props.scope))
-
+const onDoToggleAssetFavorite = (item: AssetItem) => {
+  console.log('userInfoStore.userInfo', userInfoStore.userInfo?.isVip)
+  if (!userInfoStore.userInfo?.isVip) {
+    Modal.confirm({
+      title: '提示',
+      content: '该素材需要先升级会员才可使用',
+      okText: '升级',
+      cancelText: '取消',
+      onOk: () => {
+        modalStore.openModal('combo');
+      },
+    })
+  } else {
+    toggleAssetFavorite(item)
+  }
+}
 const {
   materialCategories,
   materialSubCategories,

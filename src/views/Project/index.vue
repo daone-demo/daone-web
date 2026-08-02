@@ -11,6 +11,11 @@
           @click="onChangeScope(tab.key)"
         >
           {{ tab.label }}
+          <img
+            v-if="userInfoStore.userInfo.isVip && tab.key === 'CENTER'"
+            src="@/assets/images/vip.svg"
+            class="project-panel__tab_icon"
+          />
         </button>
       </nav>
     </header>
@@ -25,8 +30,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { PROJECT_TABS, type ProjectTabKey } from './projectData'
-import MaterialAssetsContent from './MaterialAssetsContent.vue'
-
+import MaterialAssetsContent from './MaterialAssetsContent.vue';
+import { useUserInfo } from '@/stores/useUserInfo'
+const userInfoStore = useUserInfo();
 const scope = ref<ProjectTabKey>('CENTER')
 
 function onChangeScope(key: ProjectTabKey) {
