@@ -144,11 +144,12 @@
               />
               <div 
                 data-v-243dd551=""
-                style="width: 18px;position: absolute;"
-                class="w-full h-full flex items-center justify-center relative overflow-visible filter drop-shadow-sm transition-transform hover:scale-110 cursor-pointer"
+                class="image-node__mark-pin-interactive"
                 :class="{ 'image-node__mark-pin--analyzing': mark.pending }"
                 :style="markPinStyle(mark)"
-                :title="mark.label"
+                :title="mark.pending ? mark.label : `${mark.label}（点击删除）`"
+                @mousedown.stop
+                @click.stop="onMarkPinClick(mark, $event)"
               >
                 <svg 
                   data-v-243dd551=""
@@ -429,6 +430,14 @@ function onPreviewContextMenu(event: MouseEvent) {
   g.__openMediaContextMenu?.(getNode().id, event.clientX, event.clientY)
 }
 
+function onMarkPinClick(mark: ImageMarkItem, event: MouseEvent) {
+  if (mark.pending) return
+  event.preventDefault()
+  event.stopPropagation()
+  const g = getGraph() as CanvasGraph
+  g.__removeImageElementMark?.(mark.id)
+}
+
 function onUploadInputChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -694,6 +703,24 @@ onMounted(() => {
   border-radius: 2px;
   background: rgba(239, 68, 68, 0.06);
   pointer-events: none;
+}
+
+.image-node__mark-pin-interactive {
+  position: absolute;
+  width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.18));
+  transform: translate(-50%, -100%);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.15s ease;
+
+  &:hover:not(.image-node__mark-pin--analyzing) {
+    transform: translate(-50%, -100%) scale(1.1);
+  }
 }
 
 .image-node__mark-pin {

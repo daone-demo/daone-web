@@ -32,6 +32,8 @@ export {
   isImageGenerationFailedNode,
   findReusableImageGenerationNode,
   resetImageGenerationNodeForRetry,
+  shouldGenerateImageInPlaceOnNode,
+  prepareImageNodeForInPlaceGeneration,
   spawnCompletedImageResultNode,
   spawnGridSplitResultNodes,
   spawnModel3DResultNode,

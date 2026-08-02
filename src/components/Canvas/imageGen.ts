@@ -587,13 +587,17 @@ export function spawnGenerationResultNode(
 /** 图片生成失败、尚未成片的节点（可原地重试） */
 export function isImageGenerationFailedNode(data: CanvasNodeData | undefined): boolean {
   if (!data || data.kind !== 'image') return false
-  if (data.previewUrl?.trim()) return false
   if (data.imageGenState === 'loading') return false
-  return Boolean(
-    data.generationTaskId ||
-      data.title === '生成失败' ||
-      (data.mode === 'editor' && data.sourceNodeId && data.generationTaskType === 'IMAGE'),
+
+  const markedFailed = Boolean(
+    data.title === '生成失败' ||
+      data.generationTaskId ||
+      (data.mode === 'editor' && data.generationTaskType === 'IMAGE'),
   )
+  if (!markedFailed) return false
+
+  if (!data.previewUrl?.trim()) return true
+  return data.title === '生成失败'
 }
 
 /** 查找可复用的失败生成节点：无预览的源占位，或连出的失败子节点 */
@@ -629,24 +633,85 @@ export function resetImageGenerationNodeForRetry(
   data.title = options.title
   data.fileName = options.fileName
   data.previewUrl = ''
+  data.imageGenTask = undefined
   delete data.generationTaskId
+  delete data.generationTaskType
   if (options.prompt) {
     data.genPrompt = options.prompt
   }
 
-  const graph = (node.model?.graph as Graph | undefined) ?? null
-  const sourceId = data.sourceNodeId
-  if (graph && sourceId) {
-    const source = graph.getCellById(sourceId)
-    if (source?.isNode()) {
-      const layout = resolveImageGenerationPlaceholderLayout(source as Node)
-      node.setData({ ...data, ...layout.data }, { overwrite: true })
-      node.resize(layout.width, layout.height)
-      return
-    }
+  const layoutSource = resolveImageGenerationLayoutSourceNode(node)
+  const layout = resolveImageGenerationPlaceholderLayout(layoutSource)
+  node.setData({ ...data, ...layout.data }, { overwrite: true })
+  node.resize(layout.width, layout.height)
+}
+
+/** 无预览图的图生图上传占位节点（显示「点击或拖拽图片到此处上传」） */
+export function isImageGenerationUploadPlaceholderNode(data: CanvasNodeData | undefined): boolean {
+  if (!data || data.kind !== 'image') return false
+  if (data.previewUrl?.trim()) return false
+  if (data.uploadState === 'uploading' || data.imageGenState === 'loading') return false
+  return data.mode === 'picker' || data.imageGenTask === 'picker' || data.imageGenTask === 'img2img'
+}
+
+/** 图生图对话提交：仅上传占位 / 失败重试节点原地生成；已有成片的节点新建子节点 */
+export function shouldGenerateImageInPlaceOnNode(
+  data: CanvasNodeData,
+  options: { requestedCount: number; hasReferenceImages: boolean },
+): boolean {
+  if (options.requestedCount !== 1 || data.kind !== 'image') return false
+  if (!options.hasReferenceImages) return false
+  if (data.previewUrl?.trim() && !isImageGenerationFailedNode(data)) return false
+  return isImageGenerationUploadPlaceholderNode(data) || isImageGenerationFailedNode(data)
+}
+
+function resolveImageGenerationLayoutSourceNode(node: Node): Node {
+  const data = node.getData() as CanvasNodeData
+  const graph = node.model?.graph as Graph | undefined
+  if (!graph || !data.sourceNodeId) return node
+
+  const upstream = graph.getCellById(data.sourceNodeId)
+  if (!upstream?.isNode()) return node
+  const upstreamData = upstream.getData() as CanvasNodeData
+  if (!upstreamData.previewUrl?.trim()) return node
+
+  if (
+    isImageGenerationUploadPlaceholderNode(data) ||
+    (isImageGenerationFailedNode(data) && !data.previewUrl?.trim())
+  ) {
+    return upstream as Node
+  }
+  return node
+}
+
+/** 将节点置为生成中，用于原地图生图 */
+export function prepareImageNodeForInPlaceGeneration(
+  node: Node,
+  options: { title: string; fileName: string; prompt?: string },
+) {
+  const data = { ...(node.getData() as CanvasNodeData) }
+  data.kind = 'image'
+  data.mode = 'editor'
+  data.imageGenState = 'loading'
+  data.imageGenProgress = 0
+  data.title = options.title
+  data.fileName = options.fileName
+  data.imageGenTask = undefined
+  delete data.generationTaskId
+  delete data.generationTaskType
+  if (options.prompt) {
+    data.genPrompt = options.prompt
   }
 
-  node.setData(data, { overwrite: true })
+  if (data.previewUrl?.trim()) {
+    node.setData(data, { overwrite: true })
+    return
+  }
+
+  const layoutSource = resolveImageGenerationLayoutSourceNode(node)
+  const layout = resolveImageGenerationPlaceholderLayout(layoutSource)
+  node.setData({ ...data, ...layout.data }, { overwrite: true })
+  node.resize(layout.width, layout.height)
 }
 
 /** 在源节点右侧生成已完成的普通图片节点（无生成占位态），并连线 */

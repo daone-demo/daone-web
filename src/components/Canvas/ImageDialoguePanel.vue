@@ -506,8 +506,14 @@ function emitSettings() {
   emit('update:settings', buildSettingsFromRefs())
 }
 
+function hasCompletedElementMarks() {
+  return (props.elementMarks ?? []).some((mark) => !mark.pending)
+}
+
 function onWorkflowChange(workflowId: string | undefined) {
   selectedWorkFlow.value = workflowId ?? ''
+  if (!workflowId || hasCompletedElementMarks() || props.elementSelectMode) return
+  emit('toggle-mark')
 }
 
 watch(

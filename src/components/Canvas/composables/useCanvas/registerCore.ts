@@ -18,7 +18,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, getImageGenerationPlaceholderSize, findReusableImageGenerationNode, resetImageGenerationNodeForRetry, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
+  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, getImageGenerationPlaceholderSize, findReusableImageGenerationNode, resetImageGenerationNodeForRetry, isImageGenerationFailedNode, shouldGenerateImageInPlaceOnNode, prepareImageNodeForInPlaceGeneration, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
   getConnectMenuPosition, resolveConnectSpawnPoint, getLinkedSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -43,6 +43,7 @@ import { downloadCanvasMedia } from '../../mediaDownload'
 import {
   appendElementMarkToNode,
   appendImageMarkToNode,
+  applyImageMarkTaskParameters,
   buildImageMarkItem,
   clearElementMarksOnNode,
   clientPointToImageNaturalCoords,
@@ -2244,10 +2245,17 @@ export function registerCore(bind: CanvasBindings) {
       .map((item) => item.assetId)
       .filter((id): id is string => Boolean(id))
     const assetId = referenceAssetIds[0] || resolveImageAssetId(sourceData) || ''
+    const hasReferenceImages = Boolean(
+      referenceAssetIds.length > 0 ||
+        assetId ||
+        provenanceRefs.some((item) => item.previewUrl?.trim()),
+    )
+    const isImg2Img = hasReferenceImages
 
-    const title = buildImageActionResultTitle('文生图')
+    const title = buildImageActionResultTitle(isImg2Img ? '图生图' : '文生图')
     const sourceFileName = sourceData.fileName || sourceData.title || ''
-    const buildFileName = (name: string) => (name ? `文生图-${name}` : '文生图.png')
+    const buildFileName = (name: string) =>
+      isImg2Img ? (name ? `图生图-${name}` : '图生图.png') : (name ? `文生图-${name}` : '文生图.png')
     const requestedCount = Math.max(1, Math.floor(Number(payload.count)) || 1)
     const taskParameters: Record<string, unknown> = {
       model: payload.model,
@@ -2257,41 +2265,68 @@ export function registerCore(bind: CanvasBindings) {
     if (payload.resolution) {
       taskParameters.resolution = payload.resolution
     }
+    const dialogueElementMarks = Array.isArray(sourceData.elementMarks)
+      ? sourceData.elementMarks
+      : []
+    applyImageMarkTaskParameters(taskParameters, dialogueElementMarks, prompt)
 
     const buildIndexedFileName = (index: number) =>
       resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount)
 
     const resultNodes: Node[] = []
-    const reusableNode =
-      requestedCount === 1 ? findReusableImageGenerationNode(g, sourceNode) : null
+    const inPlaceTarget =
+      requestedCount === 1 &&
+      shouldGenerateImageInPlaceOnNode(sourceData, { requestedCount, hasReferenceImages })
+        ? sourceNode
+        : null
 
-    if (reusableNode) {
-      resetImageGenerationNodeForRetry(reusableNode, {
-        title,
-        fileName: buildIndexedFileName(0),
-        prompt,
-      })
-      resultNodes.push(reusableNode)
+    if (inPlaceTarget) {
+      if (isImageGenerationFailedNode(sourceData)) {
+        resetImageGenerationNodeForRetry(inPlaceTarget, {
+          title,
+          fileName: buildIndexedFileName(0),
+          prompt,
+        })
+      } else {
+        prepareImageNodeForInPlaceGeneration(inPlaceTarget, {
+          title,
+          fileName: buildIndexedFileName(0),
+          prompt,
+        })
+      }
+      resultNodes.push(inPlaceTarget)
     } else {
-      const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode)
-      const plannedPoints = planOutgoingResultPoints(
-        g,
-        sourceNode,
-        batchPreviewSize,
-        requestedCount,
-        'above',
-      )
+      const reusableNode =
+        requestedCount === 1 ? findReusableImageGenerationNode(g, sourceNode) : null
 
-      for (let index = 0; index < requestedCount; index += 1) {
-        resultNodes.push(
-          spawnGenerationResultNode(g, sourceNode, {
-            title,
-            fileName: buildIndexedFileName(index),
-            centerPoint: plannedPoints[index],
-            layoutSlot: index,
-            layoutTotal: requestedCount,
-          }),
+      if (reusableNode) {
+        resetImageGenerationNodeForRetry(reusableNode, {
+          title,
+          fileName: buildIndexedFileName(0),
+          prompt,
+        })
+        resultNodes.push(reusableNode)
+      } else {
+        const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode)
+        const plannedPoints = planOutgoingResultPoints(
+          g,
+          sourceNode,
+          batchPreviewSize,
+          requestedCount,
+          'above',
         )
+
+        for (let index = 0; index < requestedCount; index += 1) {
+          resultNodes.push(
+            spawnGenerationResultNode(g, sourceNode, {
+              title,
+              fileName: buildIndexedFileName(index),
+              centerPoint: plannedPoints[index],
+              layoutSlot: index,
+              layoutTotal: requestedCount,
+            }),
+          )
+        }
       }
     }
 
@@ -5029,10 +5064,24 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function findElementMarkById(markId: string) {
+    const g = graph.value
+    if (!g || !markId) return null
+
     const ownerId = getElementMarkOwnerNodeId()
-    if (!ownerId) return null
-    const data = graph.value?.getCellById(ownerId)?.getData() as CanvasNodeData | undefined
-    return data?.elementMarks?.find((mark) => mark.id === markId) ?? null
+    if (ownerId) {
+      const data = g.getCellById(ownerId)?.getData() as CanvasNodeData | undefined
+      const mark = data?.elementMarks?.find((item) => item.id === markId)
+      if (mark) return mark
+    }
+
+    for (const cell of g.getNodes()) {
+      const data = cell.getData() as CanvasNodeData
+      const marks = [...(data.elementMarks ?? []), ...(data.imageElementMarks ?? [])]
+      const found = marks.find((item) => item.id === markId)
+      if (found) return found
+    }
+
+    return null
   }
 
   function removeElementMark(markId: string) {
@@ -5043,9 +5092,10 @@ export function registerCore(bind: CanvasBindings) {
 
     removeImageMarkFromGraph(g, markId)
 
-    if (showImageDialogue.value) {
+    const ownerId = getElementMarkOwnerNodeId()
+    if (showImageDialogue.value || activeImageGenPromptNodeId.value) {
       imageDialogueText.value = stripMarkMentionFromPrompt(imageDialogueText.value, mark)
-      persistImageDialogueFields(getElementMarkOwnerNodeId())
+      if (ownerId) persistImageDialogueFields(ownerId)
     }
     if (showVideoGenPromptBar.value) {
       videoGenPromptText.value = stripMarkMentionFromPrompt(videoGenPromptText.value, mark)
@@ -7938,6 +7988,9 @@ export function registerCore(bind: CanvasBindings) {
       data.previewUrl &&
       e
     ) {
+      if (e.target instanceof Element && e.target.closest('.image-node__mark-pin-interactive')) {
+        return
+      }
       clearEdgeSelection()
       selectedNodeId.value = node.id
       selectedKind.value = 'image'
@@ -8928,6 +8981,7 @@ export function registerCore(bind: CanvasBindings) {
     const instance = createGraph(graphRef.value) as CanvasGraph
     instance.__openConnectMenu = openConnectMenuByNodeId
     instance.__openImageDialogue = openImageDialogue
+    instance.__removeImageElementMark = removeElementMark
     instance.__openImageContextMenu = openMediaContextMenu
     instance.__openMediaContextMenu = openMediaContextMenu
     instance.__openVideoDialogue = openVideoDialogue

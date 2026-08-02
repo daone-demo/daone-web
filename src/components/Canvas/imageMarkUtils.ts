@@ -315,6 +315,50 @@ export function clearElementMarksOnNode(node: Node) {
   return true
 }
 
+export function parseMarkIdsFromPrompt(prompt: string): string[] {
+  const ids: string[] = []
+  const regex = /@标记#([^：\s@]+)/g
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(prompt)) !== null) {
+    ids.push(match[1])
+  }
+  return ids
+}
+
+/** 从节点标记列表解析生成任务所需的原图像素坐标 */
+export function resolveImageMarkTaskCoordinates(
+  marks: ImageMarkItem[] | undefined,
+  prompt: string,
+): { x: number; y: number } | null {
+  const completed = (marks ?? []).filter(
+    (mark) => !mark.pending && Number.isFinite(mark.x) && Number.isFinite(mark.y),
+  )
+  if (!completed.length) return null
+
+  const idsFromPrompt = parseMarkIdsFromPrompt(prompt)
+  for (const id of idsFromPrompt) {
+    const found = completed.find((mark) => mark.id === id)
+    if (found) {
+      return { x: Math.round(found.x), y: Math.round(found.y) }
+    }
+  }
+
+  const latest = completed[completed.length - 1]
+  return { x: Math.round(latest.x), y: Math.round(latest.y) }
+}
+
+/** 将标记坐标写入图片生成任务 parameters（x / y 为原图像素坐标） */
+export function applyImageMarkTaskParameters(
+  parameters: Record<string, unknown>,
+  marks: ImageMarkItem[] | undefined,
+  prompt: string,
+): void {
+  const coords = resolveImageMarkTaskCoordinates(marks, prompt)
+  if (!coords) return
+  parameters.x = coords.x
+  parameters.y = coords.y
+}
+
 /** 从提示词文本中移除标记 mention */
 export function stripMarkMentionFromPrompt(prompt: string, mark: ImageMarkItem) {
   let next = prompt
