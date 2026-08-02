@@ -292,7 +292,7 @@
               </div>
             </div>
 
-            <div class="user-info__invoice-field">
+            <!-- <div class="user-info__invoice-field">
               <label class="user-info__invoice-label">单位名称</label>
               <input
                 v-model="invoiceForm.unitName"
@@ -300,11 +300,11 @@
                 type="text"
                 placeholder="请输入单位名称"
               />
-            </div>
+            </div> -->
           </div>
 
           <div class="user-info__invoice-row">
-            <div class="user-info__invoice-field">
+            <div class="user-info__invoice-field" v-if="invoiceHeaderType == 'enterprise'">
               <label class="user-info__invoice-label">纳税人识别号</label>
               <input
                 v-model="invoiceForm.taxId"
@@ -325,7 +325,7 @@
             </div>
           </div>
 
-          <div class="user-info__invoice-row">
+          <!-- <div class="user-info__invoice-row">
             <div class="user-info__invoice-field">
               <label class="user-info__invoice-label">开户银行</label>
               <input
@@ -345,9 +345,9 @@
                 placeholder="请输入银行账号"
               />
             </div>
-          </div>
+          </div> -->
 
-          <div class="user-info__invoice-field user-info__invoice-field--full">
+          <!-- <div class="user-info__invoice-field user-info__invoice-field--full">
             <label class="user-info__invoice-label">注册地址</label>
             <input
               v-model="invoiceForm.address"
@@ -355,7 +355,7 @@
               type="text"
               placeholder="请输入注册地址"
             />
-          </div>
+          </div> -->
 
           <footer class="user-info__invoice-footer">
             <button type="button" class="user-info__invoice-cancel" @click="closeInvoiceModal">取消</button>

@@ -17,7 +17,7 @@ export type HomeInspirationCategory = (typeof HOME_INSPIRATION_CATEGORIES)[numbe
 /** 首页灵感分类（接口返回） */
 export type HomeInspirationCategoryItem = {
   name: string
-  code: string
+  id: string
   children?: HomeInspirationCategoryItem[]
 }
 

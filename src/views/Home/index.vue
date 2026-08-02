@@ -74,10 +74,10 @@
         <div class="home__filters">
           <button
             v-for="category in inspirationCategories"
-            :key="category.code"
+            :key="category.id"
             type="button"
             class="home__filter-btn"
-            :class="{ 'home__filter-btn--active': activeCategoryCode === category.code }"
+            :class="{ 'home__filter-btn--active': activeCategoryCode === category.id }"
             @click="selectPrimaryCategory(category)"
           >
             {{ category.name }}
@@ -90,11 +90,11 @@
         >
           <button
             v-for="subCategory in activeSubCategories"
-            :key="subCategory.code"
+            :key="subCategory.id"
             type="button"
             class="home__filter-btn home__filter-btn--sub"
-            :class="{ 'home__filter-btn--active': activeSubCategoryCode === subCategory.code }"
-            @click="selectSubCategory(subCategory.code)"
+            :class="{ 'home__filter-btn--active': activeSubCategoryCode === subCategory.id }"
+            @click="selectSubCategory(subCategory.id)"
           >
             {{ subCategory.name }}
           </button>
@@ -376,7 +376,7 @@ const inspirationCategories = ref<HomeInspirationCategoryItem[]>([]);
 
 const activeSubCategories = computed(() => {
   const primary = inspirationCategories.value.find(
-    (category) => category.code === activeCategoryCode.value,
+    (category) => category.id === activeCategoryCode.value,
   )
   return primary?.children ?? []
 })
@@ -390,9 +390,9 @@ function getEffectiveCategoryCode(): string | undefined {
 }
 
 function selectPrimaryCategory(category: HomeInspirationCategoryItem) {
-  activeCategoryCode.value = category.code
+  activeCategoryCode.value = category.id
   if (category.children?.length) {
-    activeSubCategoryCode.value = category.children[0].code
+    activeSubCategoryCode.value = category.children[0].id
   } else {
     activeSubCategoryCode.value = null
   }

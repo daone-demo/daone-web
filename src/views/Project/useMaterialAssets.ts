@@ -87,7 +87,7 @@ export function useMaterialAssets(scope: Ref<ProjectTabKey>, columnCount: Ref<nu
           page: materialPage.value,
         })
         : await api.queryMaterials({
-          categoryCode: materialCode.value,
+          categoryId: materialCode.value,
           pageSize: MATERIAL_PAGE_SIZE,
           page: materialPage.value,
         })
@@ -138,11 +138,11 @@ export function useMaterialAssets(scope: Ref<ProjectTabKey>, columnCount: Ref<nu
   function selectPrimaryCategory(code: string) {
     activeCategoryCode.value = code
     materialSubCategories.value =
-      materialCategories.value.find((item: any) => item.code === code)?.children ?? []
+      materialCategories.value.find((item: any) => item.id === code)?.children ?? []
     if (materialSubCategories.value.length > 0) {
       materialSubCategories.value = [
-        { code: 'all', name: '全部' },
-        ...materialSubCategories.value.filter((item: any) => item.code !== 'all'),
+        { id: 'all', name: '全部' },
+        ...materialSubCategories.value.filter((item: any) => item.id !== 'all'),
       ]
       activeSubCategoryCode.value = 'all'
       materialCode.value = activeCategoryCode.value

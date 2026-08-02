@@ -14,11 +14,11 @@
       <div v-if="scope === 'CENTER'" class="home__filters">
         <button
           v-for="category in materialCategories"
-          :key="category.code"
+          :key="category.id"
           type="button"
           class="home__filter-btn"
-          :class="{ 'home__filter-btn--active': activeCategoryCode === category.code }"
-          @click="selectPrimaryCategory(category.code)"
+          :class="{ 'home__filter-btn--active': activeCategoryCode === category.id }"
+          @click="selectPrimaryCategory(category.id)"
         >
           {{ category.name }}
         </button>
@@ -30,11 +30,11 @@
       >
         <button
           v-for="subCategory in materialSubCategories"
-          :key="subCategory.code"
+          :key="subCategory.id"
           type="button"
           class="home__filter-btn home__filter-btn--sub"
-          :class="{ 'home__filter-btn--active': activeSubCategoryCode === subCategory.code }"
-          @click="selectSubCategory(subCategory.code)"
+          :class="{ 'home__filter-btn--active': activeSubCategoryCode === subCategory.id }"
+          @click="selectSubCategory(subCategory.id)"
         >
           {{ subCategory.name }}
         </button>

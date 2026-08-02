@@ -787,7 +787,7 @@ const api = {
   },
   /** 获取首页聚合数据，可按灵感分类筛选。 */
   getHome<T = unknown>(categoryCode?: string) {
-    return http.get<T>('/home', { params: categoryCode ? { categoryCode } : undefined })
+    return http.get<T>('/home', { params: categoryCode ? { categoryId: categoryCode } : undefined })
   },
   /** 生成图片。 */
   generateImage<T = unknown>(data: GenerateImageRequest) {
