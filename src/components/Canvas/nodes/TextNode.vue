@@ -917,6 +917,7 @@ onBeforeUnmount(() => {
     min-height: 0;
     display: flex;
     flex-direction: column;
+    justify-content: center;
   }
 }
 

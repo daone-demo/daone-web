@@ -65,32 +65,7 @@
 
           <template v-else>
             <div v-if="loading" class="canvas__project-browser-status">加载中...</div>
-            <div v-else-if="!projects.length" class="canvas__project-browser-grid">
-              <button
-                type="button"
-                class="canvas__project-browser-card canvas__project-browser-card--new"
-                @click="onNewProject"
-              >
-                <span class="canvas__project-browser-new-icon" aria-hidden="true">
-                  <i class="iconfont icon-icon-test" />
-                </span>
-                <span class="canvas__project-browser-new-label">新建项目</span>
-              </button>
-              <p class="canvas__project-browser-status canvas__project-browser-status--inline">暂无项目</p>
-            </div>
-
             <div v-else class="canvas__project-browser-grid">
-              <button
-                type="button"
-                class="canvas__project-browser-card canvas__project-browser-card--new"
-                @click="onNewProject"
-              >
-                <span class="canvas__project-browser-new-icon" aria-hidden="true">
-                  <i class="iconfont icon-icon-test" />
-                </span>
-                <span class="canvas__project-browser-new-label">新建项目</span>
-              </button>
-
               <article
                 v-for="project in projects"
                 :key="project.id"
@@ -150,36 +125,16 @@
               <span class="canvas__project-browser-range">
                 显示 {{ rangeStart }}-{{ rangeEnd }} 共 {{ total }} 个项目
               </span>
-              <div class="canvas__project-browser-pagination">
-                <button
-                  type="button"
-                  class="canvas__project-browser-page-btn"
-                  :disabled="page <= 1"
-                  aria-label="上一页"
-                  @click="goPage(page - 1)"
-                >
-                  ‹
-                </button>
-                <span class="canvas__project-browser-page-current">{{ page }}</span>
-                <button
-                  type="button"
-                  class="canvas__project-browser-page-btn"
-                  :disabled="page >= totalPages"
-                  aria-label="下一页"
-                  @click="goPage(page + 1)"
-                >
-                  ›
-                </button>
-                <select
-                  class="canvas__project-browser-page-size"
-                  :value="pageSize"
-                  @change="onPageSizeChange"
-                >
-                  <option v-for="size in PAGE_SIZE_OPTIONS" :key="size" :value="size">
-                    每页 {{ size }} 条
-                  </option>
-                </select>
-              </div>
+              <a-pagination
+                class="canvas__project-browser-pagination"
+                size="small"
+                :current="page"
+                :page-size="pageSize"
+                :total="total"
+                :page-size-options="PAGE_SIZE_OPTIONS"
+                show-size-changer
+                @change="onPaginationChange"
+              />
             </footer>
           </template>
         </div>
@@ -202,7 +157,7 @@ const PROJECT_BROWSER_TABS = [
 
 type ProjectBrowserTabKey = (typeof PROJECT_BROWSER_TABS)[number]['key']
 
-const PAGE_SIZE_OPTIONS = [8, 16, 24]
+const PAGE_SIZE_OPTIONS: (string | number)[] = ['8', '16', '24']
 
 defineProps<{
   activeProjectId: string
@@ -221,7 +176,7 @@ const searchKeyword = ref('')
 const projects = ref<CanvasProjectItem[]>([])
 const loading = ref(false)
 const page = ref(1)
-const pageSize = ref(8)
+const pageSize = ref(10)
 const total = ref(0)
 
 const activeTabLabel = computed(
@@ -277,17 +232,9 @@ function clearSearch() {
   reloadProjects()
 }
 
-function goPage(nextPage: number) {
-  if (nextPage < 1 || nextPage > totalPages.value) return
+function onPaginationChange(nextPage: number, nextPageSize: number) {
   page.value = nextPage
-  void loadProjects()
-}
-
-function onPageSizeChange(event: Event) {
-  const value = Number((event.target as HTMLSelectElement).value)
-  if (!PAGE_SIZE_OPTIONS.includes(value)) return
-  pageSize.value = value
-  page.value = 1
+  pageSize.value = nextPageSize
   void loadProjects()
 }
 
