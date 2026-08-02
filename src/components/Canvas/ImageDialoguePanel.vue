@@ -79,6 +79,12 @@
     </div>
 
     <div class="image-dialogue__input-wrap">
+      <MarkTagsEcho
+        :marks="elementMarks ?? []"
+        @remove="emit('remove-mark', $event)"
+        @clear="emit('clear-marks')"
+        @open-label-menu="onMarkTagOpenLabelMenu"
+      />
       <div
         ref="promptInputRef"
         class="image-dialogue__input image-dialogue__input--rich"
@@ -266,7 +272,8 @@ import { useCanvasBgTheme } from './useCanvasBgTheme';
 import ImageGenSettingsPopover from './ImageGenSettingsPopover.vue';
 import ImageStylePanel from './ImageStylePanel.vue';
 import DialogueWorkflowSelect from './DialogueWorkflowSelect.vue';
-import MarkLabelOptionMenu from './MarkLabelOptionMenu.vue';
+import MarkLabelOptionMenu from './MarkLabelOptionMenu.vue'
+import MarkTagsEcho from './MarkTagsEcho.vue';
 import { getMarkLabelOptions, hasMultipleMarkLabels, useImageMarkLabelMenu } from './useImageMarkLabelMenu';
 import {
   buildMarkMentionThumbStyle,
@@ -307,6 +314,7 @@ const props = defineProps<{
   elementMarks?: ImageMarkItem[]
   mentionInsertSerial?: number
   mentionInsertToken?: string
+  resolveMarkPreviewUrl?: (mark: ImageMarkItem) => string
   chatTools?: ChatTools | null
   workflows: WorkflowCategoryGroup[]
 }>();
@@ -321,6 +329,8 @@ const emit = defineEmits<{
   'toggle-mark': []
   'mention-inserted': []
   'select-mark-label': [markId: string, index: number]
+  'remove-mark': [markId: string]
+  'clear-marks': []
   submit: [payload: ImageDialogueSubmitPayload]
 }>()
 
@@ -347,8 +357,17 @@ const previewList = computed(() => {
 })
 
 function resolveMarkPreviewUrl(mark: ImageMarkItem) {
+  const resolved = props.resolveMarkPreviewUrl?.(mark)
+  if (resolved) return resolved
   const ref = previewList.value.find((item) => item.nodeId === mark.sourceNodeId)
   return ref?.previewUrl || props.previewUrl || ''
+}
+
+function formatMarkDisplayLabel(mark: ImageMarkItem) {
+  const marks = props.elementMarks ?? []
+  const index = marks.findIndex((item) => item.id === mark.id)
+  const order = index >= 0 ? index + 1 : marks.length + 1
+  return `${order}. ${mark.label}`
 }
 
 function getMarkThumbStyle(mark: ImageMarkItem) {
@@ -372,7 +391,7 @@ function resolveMarkMentionMeta(token: string): PromptMarkMentionMeta | null {
   )
 
   const labelOptions = mark ? getMarkLabelOptions(mark) : (parsed.label ? [parsed.label] : [])
-  const label = mark?.label ?? parsed.label ?? token
+  const label = mark ? formatMarkDisplayLabel(mark) : (parsed.label ? parsed.label : token)
   if (!mark) {
     return {
       label,
@@ -396,6 +415,7 @@ const {
   menu: markLabelMenuState,
   activeMarkOptions,
   activeMarkSelectedIndex,
+  openMenuForMark,
   openMenuFromMention,
   selectOption: selectMarkLabelOption,
   bindDocumentClose: bindMarkLabelMenuDocumentClose,
@@ -406,12 +426,18 @@ const {
   onAfterSelect: () => nextTick(() => syncPromptView()),
 })
 
+function onMarkTagOpenLabelMenu(markId: string, anchor: HTMLElement) {
+  const container = promptInputRef.value?.parentElement
+  if (!container) return
+  openMenuForMark(markId, anchor, container)
+}
+
 onMounted(() => {
   bindMarkLabelMenuDocumentClose()
   document.addEventListener('mousedown', onDocumentMouseDown, true)
   nextTick(() => {
     syncPromptView()
-    syncMissingMarksIntoPrompt()
+    stripMarkMentionsFromPrompt()
   })
 })
 
@@ -640,20 +666,19 @@ function insertRefMention(index: number) {
   insertMentionToken(`@图片${index}`)
 }
 
-function promptContainsMark(mark: ImageMarkItem) {
-  const idToken = `@标记#${mark.id}`
-  if (props.modelValue.includes(idToken)) return true
-  return Boolean(mark.mentionToken && props.modelValue.includes(mark.mentionToken))
-}
-
-function syncMissingMarksIntoPrompt() {
+function stripMarkMentionsFromPrompt() {
   const marks = props.elementMarks ?? []
-  const missing = marks.filter((mark) => mark.mentionToken && !promptContainsMark(mark))
-  if (!missing.length) return
-
-  for (const mark of missing) {
-    insertMentionToken(mark.mentionToken)
+  let text = props.modelValue
+  for (const mark of marks) {
+    const tokens = [mark.mentionToken, `@标记#${mark.id}`].filter(Boolean)
+    for (const token of tokens) {
+      text = text.split(token).join('')
+    }
   }
+  text = text.replace(/@标记#[^\s@]+(?:：[^\s@]+)?/g, '').replace(/\s{2,}/g, ' ').trim()
+  if (text === props.modelValue) return
+  emitPrompt(text)
+  nextTick(() => syncPromptView(text))
 }
 
 function onPromptClick(event: MouseEvent) {
@@ -730,17 +755,9 @@ watch(
 )
 
 watch(
-  () => props.elementMarks?.map((mark) => `${mark.id}:${mark.selectedLabelIndex ?? 0}:${mark.label}`).join('|') ?? '',
+  () => props.elementMarks?.map((mark) => `${mark.id}:${mark.pending ? 1 : 0}:${mark.selectedLabelIndex ?? 0}:${mark.label}`).join('|') ?? '',
   () => {
-    nextTick(() => syncPromptView())
-  },
-)
-
-watch(
-  () => props.elementMarks?.length ?? 0,
-  (length, prevLength) => {
-    if (length <= prevLength) return
-    nextTick(() => syncMissingMarksIntoPrompt())
+    nextTick(() => stripMarkMentionsFromPrompt())
   },
 )
 
@@ -1203,12 +1220,21 @@ function onDocumentMouseDown(event: MouseEvent) {
 
 .image-dialogue__input-wrap {
   position: relative;
+  // border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+
+  .image-dialogue--light & {
+    // border-color: #e5e7eb;
+    background: #fff;
+  }
 }
 
 .image-dialogue__input {
   width: 100%;
   min-height: 56px;
-  padding: 4px 2px;
+  padding: 4px 10px 8px;
   border: none;
   background: transparent;
   color: #f3f4f6;

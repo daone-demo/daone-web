@@ -219,7 +219,35 @@ export function setImageMarkAnalyzing(node: Node, point: { x: number; y: number 
 export function isImageMarkAnalyzing(graph: Graph): boolean {
   return graph.getNodes().some((cell) => {
     const data = (cell as Node).getData() as CanvasNodeData
-    return Boolean(data.imageMarkAnalyzing)
+    if (data.imageMarkAnalyzing) return true
+    const marks = [...(data.imageElementMarks ?? []), ...(data.elementMarks ?? [])]
+    return marks.some((mark) => mark.pending)
+  })
+}
+
+/** 替换画布上所有节点中的同一标记 */
+export function replaceImageMarkOnGraph(graph: Graph, markId: string, nextMark: ImageMarkItem) {
+  graph.getNodes().forEach((cell) => {
+    if (!cell.isNode()) return
+    const node = cell as Node
+    const data = { ...(node.getData() as CanvasNodeData) }
+    let changed = false
+
+    const replaceList = (list?: ImageMarkItem[]) => {
+      if (!list?.length) return list
+      const index = list.findIndex((mark) => mark.id === markId)
+      if (index < 0) return list
+      changed = true
+      const next = [...list]
+      next[index] = nextMark
+      return next
+    }
+
+    data.imageElementMarks = replaceList(data.imageElementMarks)
+    data.elementMarks = replaceList(data.elementMarks)
+    if (changed) {
+      node.setData(data, { overwrite: true })
+    }
   })
 }
 
@@ -232,4 +260,67 @@ export function markStyleFromNatural(
   const ratio = value / total
   if (axis === 'size') return `${ratio * 100}%`
   return `${ratio * 100}%`
+}
+
+function filterMarkList(list: ImageMarkItem[] | undefined, markId: string) {
+  if (!list?.length) return list
+  const next = list.filter((mark) => mark.id !== markId)
+  return next.length === list.length ? list : next
+}
+
+/** 从节点数据中移除指定标记 */
+export function removeImageMarkFromNode(node: Node, markId: string) {
+  const data = { ...(node.getData() as CanvasNodeData) }
+  let changed = false
+
+  if (data.imageElementMarks?.length) {
+    const next = filterMarkList(data.imageElementMarks, markId)
+    if (next !== data.imageElementMarks) {
+      data.imageElementMarks = next
+      changed = true
+    }
+  }
+  if (data.elementMarks?.length) {
+    const next = filterMarkList(data.elementMarks, markId)
+    if (next !== data.elementMarks) {
+      data.elementMarks = next
+      changed = true
+    }
+  }
+
+  if (changed) {
+    node.setData(data, { overwrite: true })
+  }
+  return changed
+}
+
+/** 从画布所有节点移除指定标记 */
+export function removeImageMarkFromGraph(graph: Graph, markId: string) {
+  let changed = false
+  graph.getNodes().forEach((cell) => {
+    if (!cell.isNode()) return
+    if (removeImageMarkFromNode(cell as Node, markId)) {
+      changed = true
+    }
+  })
+  return changed
+}
+
+/** 清空对话目标节点上的元素标记列表 */
+export function clearElementMarksOnNode(node: Node) {
+  const data = { ...(node.getData() as CanvasNodeData) }
+  if (!data.elementMarks?.length) return false
+  data.elementMarks = []
+  node.setData(data, { overwrite: true })
+  return true
+}
+
+/** 从提示词文本中移除标记 mention */
+export function stripMarkMentionFromPrompt(prompt: string, mark: ImageMarkItem) {
+  let next = prompt
+  const tokens = [mark.mentionToken, `@标记#${mark.id}`].filter(Boolean)
+  for (const token of tokens) {
+    next = next.split(token).join('')
+  }
+  return next.replace(/\s{2,}/g, ' ').trim()
 }

@@ -65,6 +65,8 @@ export interface ImageMarkItem {
   imageHeight: number
   /** 插入输入框的可删除 mention 文本 */
   mentionToken: string
+  /** 识别进行中（展示 loading 态，完成后清除） */
+  pending?: boolean
 }
 
 export interface CanvasNodeData {

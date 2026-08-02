@@ -44,10 +44,14 @@ import {
   appendElementMarkToNode,
   appendImageMarkToNode,
   buildImageMarkItem,
+  clearElementMarksOnNode,
   clientPointToImageNaturalCoords,
   parseImageMarkRecognizeResult,
+  removeImageMarkFromGraph,
+  replaceImageMarkOnGraph,
   setImageMarkAnalyzing,
   isImageMarkAnalyzing,
+  stripMarkMentionFromPrompt,
   updateImageMarkLabelOnNode,
 } from '../../imageMarkUtils'
 import { toVideoApiPrompt } from '../../promptMention'
@@ -95,6 +99,7 @@ import {
   type VideoDialogueSettings,
   type VideoGenResolution,
   type VideoGenDuration,
+  type ImageMarkItem,
   createDefaultImageDialogueSettings,
   createDefaultVideoDialogueSettings,
   isVideoNodeGenerating,
@@ -805,6 +810,13 @@ export function registerCore(bind: CanvasBindings) {
     return Array.isArray(data?.elementMarks) ? data!.elementMarks! : []
   })
 
+  const imageMarkAnalyzingActive = computed(() => {
+    void toolbarRevision.value
+    if (imageMarkRecognizing.value) return true
+    const g = graph.value
+    return Boolean(g && isImageMarkAnalyzing(g))
+  })
+
   const showNodeToolbar = computed(() => {
     void toolbarRevision.value
     if (videoToolbarClickDeferred.value) return false
@@ -1003,6 +1015,8 @@ export function registerCore(bind: CanvasBindings) {
       handleImageEditTextAction(event)
     } else if (event.key === 'IMAGE_EXPAND') {
       handleImageExpandAction(event)
+    } else if (event.key === 'annotate') {
+      handleImageAnnotateAction()
     } else if (event.key === 'IMAGE_CUSTOM' || event.key === 'customize') {
       handleImageCustomAction(event)
     } else {
@@ -4823,13 +4837,6 @@ export function registerCore(bind: CanvasBindings) {
     bumpToolbarRevision()
   }
 
-  function queueMentionInsert(token: string) {
-    const trimmed = token.trim()
-    if (!trimmed) return
-    mentionInsertToken.value = trimmed
-    mentionInsertSerial.value += 1
-  }
-
   async function handleImageMarkRecognize(sourceNode: Node, event?: MouseEvent) {
     const g = graph.value
     if (!g || !showElementSelectMode.value || !event) return
@@ -4857,8 +4864,27 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
+    const existingCount = (sourceData.imageElementMarks?.length ?? 0)
+    const markIndex = existingCount + 1
+    const pendingMark = buildImageMarkItem({
+      sourceNodeId: sourceNode.id,
+      assetId,
+      x: point.x,
+      y: point.y,
+      imageWidth: point.imageWidth,
+      imageHeight: point.imageHeight,
+      label: `标记${markIndex}`,
+      labelOptions: [`标记${markIndex}`],
+    })
+    pendingMark.pending = true
+
+    appendImageMarkToNode(sourceNode, pendingMark)
+    const returnCell = g.getCellById(returnNodeId)
+    if (returnCell?.isNode()) {
+      appendElementMarkToNode(returnCell as Node, pendingMark)
+    }
+
     imageMarkRecognizing.value = true
-    setImageMarkAnalyzing(sourceNode, { x: point.x, y: point.y })
     bumpToolbarRevision()
 
     const idempotencyKey =
@@ -4909,36 +4935,28 @@ export function registerCore(bind: CanvasBindings) {
         throw new Error('未返回标记识别结果')
       }
 
-      const mark = buildImageMarkItem({
-        sourceNodeId: sourceNode.id,
-        assetId,
-        x: point.x,
-        y: point.y,
-        imageWidth: point.imageWidth,
-        imageHeight: point.imageHeight,
-        label: parsed.label,
-        labelOptions: parsed.labelOptions,
+      const labelOptions = parsed.labelOptions?.length
+        ? parsed.labelOptions
+        : [parsed.label]
+      const completedMark: ImageMarkItem = {
+        ...pendingMark,
+        label: labelOptions[0],
+        labelOptions,
+        selectedLabelIndex: 0,
         description: parsed.description,
         bbox: parsed.bbox,
-      })
-
-      appendImageMarkToNode(sourceNode, mark)
-
-      const returnCell = g.getCellById(returnNodeId)
-      if (returnCell?.isNode()) {
-        appendElementMarkToNode(returnCell as Node, mark)
+        pending: false,
+        mentionToken: pendingMark.mentionToken,
       }
 
-      if (mark.mentionToken) {
-        queueMentionInsert(mark.mentionToken)
-      }
+      replaceImageMarkOnGraph(g, pendingMark.id, completedMark)
 
-      message.success(`已识别：${mark.label}`)
+      message.success(`已识别：${completedMark.label}`)
     } catch (error) {
+      removeImageMarkFromGraph(g, pendingMark.id)
       message.error(error instanceof Error ? error.message : '标记识别失败，请稍后重试')
     } finally {
       imageMarkRecognizing.value = false
-      setImageMarkAnalyzing(sourceNode, null)
       bumpToolbarRevision()
       scheduleHistoryPush()
     }
@@ -4962,6 +4980,107 @@ export function registerCore(bind: CanvasBindings) {
     scheduleHistoryPush()
     if (showImageDialogue.value) persistImageDialogueFields()
     if (showVideoGenPromptBar.value) persistVideoGenPrompt()
+  }
+
+  function getElementMarkOwnerNodeId() {
+    return (
+      elementSelectReturnNodeId.value
+      || activeImageGenPromptNodeId.value
+      || (showImageDialogue.value ? getActiveImageDialogueTargetNodeId() : '')
+      || (showVideoGenPromptBar.value ? activeVideoGenPromptNodeId.value : '')
+    )
+  }
+
+  function findElementMarkById(markId: string) {
+    const ownerId = getElementMarkOwnerNodeId()
+    if (!ownerId) return null
+    const data = graph.value?.getCellById(ownerId)?.getData() as CanvasNodeData | undefined
+    return data?.elementMarks?.find((mark) => mark.id === markId) ?? null
+  }
+
+  function removeElementMark(markId: string) {
+    const g = graph.value
+    if (!g || !markId) return
+    const mark = findElementMarkById(markId)
+    if (!mark) return
+
+    removeImageMarkFromGraph(g, markId)
+
+    if (showImageDialogue.value) {
+      imageDialogueText.value = stripMarkMentionFromPrompt(imageDialogueText.value, mark)
+      persistImageDialogueFields(getElementMarkOwnerNodeId())
+    }
+    if (showVideoGenPromptBar.value) {
+      videoGenPromptText.value = stripMarkMentionFromPrompt(videoGenPromptText.value, mark)
+      persistVideoGenPrompt()
+    }
+
+    bumpToolbarRevision()
+    scheduleHistoryPush()
+  }
+
+  function clearElementMarks() {
+    const g = graph.value
+    const ownerId = getElementMarkOwnerNodeId()
+    if (!g || !ownerId) return
+
+    const cell = g.getCellById(ownerId)
+    if (!cell?.isNode()) return
+    const data = cell.getData() as CanvasNodeData
+    const marks = [...(data.elementMarks ?? [])]
+    if (!marks.length) return
+
+    marks.forEach((mark) => removeImageMarkFromGraph(g, mark.id))
+    clearElementMarksOnNode(cell as Node)
+
+    if (showImageDialogue.value) {
+      let text = imageDialogueText.value
+      marks.forEach((mark) => {
+        text = stripMarkMentionFromPrompt(text, mark)
+      })
+      imageDialogueText.value = text
+      persistImageDialogueFields(ownerId)
+    }
+    if (showVideoGenPromptBar.value) {
+      let text = videoGenPromptText.value
+      marks.forEach((mark) => {
+        text = stripMarkMentionFromPrompt(text, mark)
+      })
+      videoGenPromptText.value = text
+      persistVideoGenPrompt()
+    }
+
+    bumpToolbarRevision()
+    scheduleHistoryPush()
+  }
+
+  function resolveElementMarkPreviewUrl(mark: ImageMarkItem) {
+    const g = graph.value
+    if (!g) return ''
+    const cell = g.getCellById(mark.sourceNodeId)
+    if (!cell?.isNode()) return ''
+    const data = cell.getData() as CanvasNodeData
+    return data.previewUrl?.trim() || ''
+  }
+
+  function handleImageAnnotateAction() {
+    const id = selectedNodeId.value
+    if (!id) return
+    const data = getSelectedNodeData()
+    if (data?.kind !== 'image' || !data.previewUrl) {
+      message.warning('请先选择一张图片')
+      return
+    }
+
+    if (showElementSelectMode.value && elementSelectContext.value === 'image-dialogue') {
+      exitElementSelectMode({ force: true })
+      return
+    }
+
+    if (!showImageDialogue.value || getActiveImageDialogueTargetNodeId() !== id) {
+      openImageDialogue(id)
+    }
+    enterElementSelectMode('image-dialogue')
   }
 
   function toggleImageDialogueMarkMode() {
@@ -9261,6 +9380,7 @@ export function registerCore(bind: CanvasBindings) {
     duplicateSelectedNodes,
     endSpacePan,
     elementMarks,
+    imageMarkAnalyzingActive,
     mentionInsertSerial,
     mentionInsertToken,
     enterElementSelectMode,
@@ -9271,6 +9391,9 @@ export function registerCore(bind: CanvasBindings) {
     toggleImageDialogueCanvasPickMode,
     toggleImageDialogueMarkMode,
     updateImageMarkLabel,
+    removeElementMark,
+    clearElementMarks,
+    resolveElementMarkPreviewUrl,
     filterUploadFiles,
     finishConnectSpawn,
     generateImageFromPrompt,

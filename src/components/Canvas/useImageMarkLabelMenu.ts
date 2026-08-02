@@ -63,6 +63,7 @@ export function useImageMarkLabelMenu(options: {
   function onDocumentMouseDown(event: MouseEvent) {
     const target = event.target as HTMLElement | null
     if (target?.closest('.mark-label-option-menu')) return
+    if (target?.closest('.mark-tags-echo')) return
     if (target?.closest('[data-mention^="@标记"]')) return
     closeMenu()
   }

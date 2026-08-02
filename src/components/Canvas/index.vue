@@ -240,6 +240,7 @@
       :element-marks="elementMarks"
       :mention-insert-serial="mentionInsertSerial"
       :mention-insert-token="mentionInsertToken"
+      :resolve-mark-preview-url="resolveElementMarkPreviewUrl"
       :video-dialogue-text="videoDialogueText"
       :video-dialogue-settings="videoDialogueSettings"
       :video-hd-magnification="videoHdMagnification"
@@ -302,6 +303,8 @@
       @toggle-image-dialogue-mark="toggleImageDialogueMarkMode"
       @mention-inserted="onMentionInserted"
       @select-mark-label="updateImageMarkLabel"
+      @remove-mark="removeElementMark"
+      @clear-marks="clearElementMarks"
     />
 
     <CanvasHiddenFileInput
@@ -679,6 +682,9 @@ const {
   toggleImageDialogueCanvasPickMode,
   toggleImageDialogueMarkMode,
   updateImageMarkLabel,
+  removeElementMark,
+  clearElementMarks,
+  resolveElementMarkPreviewUrl,
   showGroupToolbar,
   showSaveSkillPopover,
   saveSkillPopoverPos,

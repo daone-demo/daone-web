@@ -86,6 +86,7 @@ export type CanvasBindings = CanvasState & {
   imageDialoguePreviews: ComputedRef<import('../../constants').ImageSourceRef[]>
   imageDialoguePreviewUrl: ComputedRef<string>
   elementMarks: ComputedRef<import('../../constants').ImageMarkItem[]>
+  imageMarkAnalyzingActive: ComputedRef<boolean>
   showNodeToolbar: ComputedRef<boolean>
   showMultiSelectToolbar: ComputedRef<boolean>
   showToolbarFeatureButtons: ComputedRef<boolean>
@@ -131,6 +132,9 @@ export type CanvasBindings = CanvasState & {
   persistVideoDialogueFields: (nodeId?: string) => void
   toggleImageDialogueMarkMode: () => void
   updateImageMarkLabel: (markId: string, selectedLabelIndex: number) => void
+  removeElementMark: (markId: string) => void
+  clearElementMarks: () => void
+  resolveElementMarkPreviewUrl: (mark: import('../../constants').ImageMarkItem) => string
   onImageContextMenuAction: (key: string) => void
   imageContextMenuLocked: ComputedRef<boolean>
   openProjectBrowser: () => void

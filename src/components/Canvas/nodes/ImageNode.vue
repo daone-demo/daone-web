@@ -131,60 +131,26 @@
             @contextmenu.prevent.stop="onPreviewContextMenu"
           />
           <div
-            v-if="(data.imageElementMarks?.length || 0) > 0 || data.imageMarkAnalyzing"
+            v-if="(data.imageElementMarks?.length || 0) > 0"
             class="image-node__mark-layer"
             aria-hidden="true"
           >
-            <!-- <template v-for="mark in data.imageElementMarks ?? []" :key="mark.id">
+            <!-- legacy mark pill UI removed -->
+            <template v-for="(mark, index) in data.imageElementMarks ?? []" :key="mark.id">
               <div
-                v-if="mark.bbox"
+                v-if="mark.bbox && !mark.pending"
                 class="image-node__mark-box"
                 :style="markBoxStyle(mark)"
               />
-              <div class="image-node__mark-pill-wrap" :style="markPillWrapStyle(mark)">
-                <button
-                  type="button"
-                  class="image-node__mark-pill"
-                  @mousedown.stop
-                  @click.stop="onMarkPillClick(mark.id)"
-                >
-                  <span class="image-node__mark-pill-icon" aria-hidden="true">✦</span>
-                  {{ mark.label }}
-                  <span
-                    v-if="hasMultipleMarkLabels(mark)"
-                    class="image-node__mark-pill-chevron"
-                    aria-hidden="true"
-                  >⌄</span>
-                </button>
-                <div
-                  v-if="openMarkMenuId === mark.id && hasMultipleMarkLabels(mark)"
-                  class="image-node__mark-menu"
-                  @mousedown.stop
-                >
-                  <button
-                    v-for="(option, index) in getMarkLabelOptions(mark)"
-                    :key="`${option}-${index}`"
-                    type="button"
-                    class="image-node__mark-menu-item"
-                    @click.stop="selectMarkLabel(mark.id, index)"
-                  >
-                    <span>{{ option }}</span>
-                    <span
-                      class="image-node__mark-menu-dot"
-                      :class="{ 'image-node__mark-menu-dot--active': index === (mark.selectedLabelIndex ?? 0) }"
-                    />
-                  </button>
-                </div>
+              <div
+                class="image-node__mark-pin"
+                :class="{ 'image-node__mark-pin--analyzing': mark.pending }"
+                :style="markPinStyle(mark)"
+                :title="mark.label"
+              >
+                <span class="image-node__mark-pin-badge">{{ index + 1 }}</span>
               </div>
-            </template> -->
-            <div
-              v-if="data.imageMarkAnalyzing"
-              class="image-node__mark-analyzing"
-              :style="markAnalyzingStyle(data.imageMarkAnalyzing)"
-            >
-              <span class="image-node__spinner" aria-hidden="true" />
-              分析中...
-            </div>
+            </template>
           </div>
           <div
             v-if="showResizeHandles"
@@ -217,7 +183,7 @@
 import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Graph, Node } from '@antv/x6'
 import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
-import type { CanvasNodeData } from '../constants'
+import type { CanvasNodeData, ImageMarkItem } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
@@ -296,12 +262,25 @@ const dimensionLabel = computed(() => {
   return formatDimensions(width, height)
 })
 
-function markAnalyzingStyle(point: { x: number; y: number }) {
-  const imageWidth = data.mediaWidth || 1
-  const imageHeight = data.mediaHeight || 1
+function markPinStyle(mark: ImageMarkItem) {
+  const imageWidth = data.mediaWidth || mark.imageWidth || 1
+  const imageHeight = data.mediaHeight || mark.imageHeight || 1
   return {
-    left: markStyleFromNatural(point.x, imageWidth, 'x'),
-    top: markStyleFromNatural(point.y, imageHeight, 'y'),
+    left: markStyleFromNatural(mark.x, imageWidth, 'x'),
+    top: markStyleFromNatural(mark.y, imageHeight, 'y'),
+  }
+}
+
+function markBoxStyle(mark: ImageMarkItem) {
+  const bbox = mark.bbox
+  if (!bbox) return {}
+  const imageWidth = data.mediaWidth || mark.imageWidth || 1
+  const imageHeight = data.mediaHeight || mark.imageHeight || 1
+  return {
+    left: markStyleFromNatural(bbox.x, imageWidth, 'x'),
+    top: markStyleFromNatural(bbox.y, imageHeight, 'y'),
+    width: markStyleFromNatural(bbox.width, imageWidth, 'size'),
+    height: markStyleFromNatural(bbox.height, imageHeight, 'size'),
   }
 }
 
@@ -661,19 +640,69 @@ onMounted(() => {
   inset: 0;
   pointer-events: none;
   z-index: 2;
-
-  .image-node__mark-pill-wrap,
-  .image-node__mark-menu {
-    pointer-events: auto;
-  }
 }
 
 .image-node__mark-box {
   position: absolute;
   box-sizing: border-box;
-  border: 2px solid rgba(255, 255, 255, 0.95);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid #ef4444;
+  border-radius: 2px;
+  background: rgba(239, 68, 68, 0.06);
+  pointer-events: none;
+}
+
+.image-node__mark-pin {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+
+  &--analyzing .image-node__mark-pin-badge {
+    animation: image-node-mark-pin-pulse 1.2s ease-in-out infinite;
+  }
+}
+
+.image-node__mark-pin-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -7px;
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #3b82f6;
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes image-node-mark-pin-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  }
+
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.5);
+  }
 }
 
 .image-node__mark-pill-wrap {
@@ -751,22 +780,6 @@ onMounted(() => {
   &--active {
     background: #9ca3af;
   }
-}
-
-.image-node__mark-analyzing {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-  gap: 8px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.96);
-  color: #111827;
-  font-size: 12px;
-  line-height: 1;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .image-node__preview--uploading {

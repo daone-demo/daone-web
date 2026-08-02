@@ -158,6 +158,7 @@
       :element-marks="elementMarks"
       :mention-insert-serial="mentionInsertSerial"
       :mention-insert-token="mentionInsertToken"
+      :resolve-mark-preview-url="resolveMarkPreviewUrl"
       :chat-tools="chatTools"
       :workflows="workflows"
       @update:model-value="emit('update:imageDialogueText', $event)"
@@ -169,6 +170,8 @@
       @toggle-mark="emit('toggle-image-dialogue-mark')"
       @mention-inserted="emit('mention-inserted')"
       @select-mark-label="(markId, index) => emit('select-mark-label', markId, index)"
+      @remove-mark="emit('remove-mark', $event)"
+      @clear-marks="emit('clear-marks')"
       @submit="emit('submit-image-dialogue', $event)"
     />
   </div>
@@ -194,6 +197,7 @@
       :canvas-pick-mode="videoGenCanvasPickMode"
       :mention-insert-serial="mentionInsertSerial"
       :mention-insert-token="mentionInsertToken"
+      :resolve-mark-preview-url="resolveMarkPreviewUrl"
       :video-num="videoNum"
       :chat-tools="chatTools"
       @update:prompt="emit('update:videoGenPromptText', $event)"
@@ -208,6 +212,8 @@
       @toggle-canvas-pick="emit('toggle-video-gen-canvas-pick')"
       @mention-inserted="emit('mention-inserted')"
       @select-mark-label="(markId, index) => emit('select-mark-label', markId, index)"
+      @remove-mark="emit('remove-mark', $event)"
+      @clear-marks="emit('clear-marks')"
       @submit="emit('submit-video-gen-prompt', $event)"
     />
   </div>
@@ -370,6 +376,7 @@
       :element-marks="elementMarks"
       :mention-insert-serial="mentionInsertSerial"
       :mention-insert-token="mentionInsertToken"
+      :resolve-mark-preview-url="resolveMarkPreviewUrl"
       :chat-tools="chatTools"
       :workflows="workflows"
       @update:model-value="emit('update:imageDialogueText', $event)"
@@ -381,6 +388,8 @@
       @toggle-mark="emit('toggle-image-dialogue-mark')"
       @mention-inserted="emit('mention-inserted')"
       @select-mark-label="(markId, index) => emit('select-mark-label', markId, index)"
+      @remove-mark="emit('remove-mark', $event)"
+      @clear-marks="emit('clear-marks')"
       @submit="emit('submit-image-dialogue', $event)"
     />
   </div>
@@ -601,6 +610,7 @@ const props = defineProps<{
   elementMarks: ImageMarkItem[]
   mentionInsertSerial: number
   mentionInsertToken: string
+  resolveMarkPreviewUrl: (mark: ImageMarkItem) => string
   videoDialogueText: string
   videoDialogueSettings: VideoDialogueSettings
   videoHdMagnification: VideoHdMagnification
@@ -675,6 +685,8 @@ const emit = defineEmits<{
   'toggle-image-dialogue-mark': []
   'mention-inserted': []
   'select-mark-label': [markId: string, index: number]
+  'remove-mark': [markId: string]
+  'clear-marks': []
 }>()
 
 const showPromptWorkFlow = ref(false)
