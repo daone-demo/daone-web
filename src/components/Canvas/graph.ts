@@ -432,6 +432,7 @@ export type CanvasGraph = Graph & {
   __openConnectMenu?: ConnectMenuOpener
   __openImageDialogue?: (nodeId: string) => void
   __openImageContextMenu?: (nodeId: string, clientX: number, clientY: number) => void
+  __openMediaContextMenu?: (nodeId: string, clientX: number, clientY: number) => void
   __openVideoDialogue?: (nodeId: string) => void
   __deleteCanvasNode?: (nodeId: string) => void
   __uploadFileToCanvasNode?: (nodeId: string, file: File) => void

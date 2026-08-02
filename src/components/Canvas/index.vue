@@ -45,6 +45,7 @@
       @rename-project="(projectId, name) => emit('rename-project', projectId, name)"
       @delete-project="emit('delete-project', $event)"
       @load-more-projects="emit('load-more-projects')"
+      @open-project-browser="openProjectBrowser"
     />
 
     <div ref="graphRef" class="canvas__graph" />
@@ -333,6 +334,7 @@
     <CanvasImageContextMenu
       v-if="showImageContextMenu"
       :position="imageContextMenuPos"
+      :kind="imageContextMenuKind"
       :is-light="canvasBgTheme === 'light'"
       :node-locked="imageContextMenuLocked"
       @select="onImageContextMenuAction"
@@ -394,9 +396,21 @@
       @close="closeShortcutsPanel"
     />
 
+    <CanvasProjectBrowser
+      v-if="showProjectBrowser"
+      ref="projectBrowserRef"
+      :active-project-id="activeProjectId"
+      @close="closeProjectBrowser"
+      @select-project="selectProject"
+      @new-project="emit('new-project')"
+      @rename-project="(projectId, name) => emit('rename-project', projectId, name)"
+      @delete-project="(projectId) => emit('delete-project', projectId)"
+    />
+
     <CanvasImagePreview
       v-if="imagePreviewUrl"
       :url="imagePreviewUrl"
+      :kind="imagePreviewKind"
       @close="closeImagePreview"
     />
   </div>
@@ -428,6 +442,7 @@ import CanvasHistoryAnchor from './panels/CanvasHistoryAnchor.vue'
 import CanvasBottomLeftDock from './panels/CanvasBottomLeftDock.vue'
 import CanvasTextFormatAnchor from './panels/CanvasTextFormatAnchor.vue'
 import CanvasShortcutsBackdrop from './panels/CanvasShortcutsBackdrop.vue'
+import CanvasProjectBrowser from './panels/CanvasProjectBrowser.vue'
 import CanvasHiddenFileInput from './panels/CanvasHiddenFileInput.vue'
 import { useCanvas } from './composables/useCanvas'
 import { ref, watch } from 'vue'
@@ -469,6 +484,7 @@ const nodeOverlaysRef = ref<InstanceType<typeof CanvasNodeOverlays> | null>(null
 const fileInputComponentRef = ref<InstanceType<typeof CanvasHiddenFileInput> | null>(null)
 const bottomLeftDockRef = ref<InstanceType<typeof CanvasBottomLeftDock> | null>(null)
 const textExpandEditorComponentRef = ref<InstanceType<typeof CanvasTextExpandEditor> | null>(null)
+const projectBrowserRef = ref<InstanceType<typeof CanvasProjectBrowser> | null>(null)
 
 const canvasRuntime = useCanvas(emit, {
   canvasRef,
@@ -651,7 +667,9 @@ const {
   showConnectMenu,
   showImageContextMenu,
   imageContextMenuPos,
+  imageContextMenuKind,
   imageContextMenuLocked,
+  imagePreviewKind,
   onImageContextMenuAction,
   showEdgeDeleteButton,
   showElementSelectBar,
@@ -685,6 +703,7 @@ const {
   showMultiSelectToolbar,
   showNodeToolbar,
   showProjectMenu,
+  showProjectBrowser,
   showPromptBar,
   showShortcutsPanel,
   showTextFormatToolbar,
@@ -711,6 +730,8 @@ const {
   toggleMinimap,
   togglePanMode,
   toggleProjectMenu,
+  openProjectBrowser,
+  closeProjectBrowser,
   toggleShortcutsPanel,
   toggleUserMenu,
   toggleVideoDialogue,
@@ -772,6 +793,9 @@ defineExpose({
       loadProjectCanvas?: (payload: ProjectCanvasResponse) => boolean
     }).loadProjectCanvas
     return load?.(payload) ?? false
+  },
+  reloadProjectBrowser() {
+    projectBrowserRef.value?.reload()
   },
 })
 

@@ -133,6 +133,8 @@ export type CanvasBindings = CanvasState & {
   updateImageMarkLabel: (markId: string, selectedLabelIndex: number) => void
   onImageContextMenuAction: (key: string) => void
   imageContextMenuLocked: ComputedRef<boolean>
+  openProjectBrowser: () => void
+  closeProjectBrowser: () => void
   graph: ShallowRef<Graph | null>
   [key: string]: unknown
 }

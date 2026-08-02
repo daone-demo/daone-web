@@ -1465,13 +1465,36 @@ export const IMAGE_CONTEXT_MENU_SECTIONS: ImageContextMenuItem[][] = [
   [
     { key: 'preview', label: '预览', icon: 'preview' },
     { key: 'download', label: '下载', icon: 'download' },
-    { key: 'copy-image', label: '复制图片', icon: 'copy-image' },
+    // { key: 'copy-image', label: '复制图片', icon: 'copy-image' },
   ],
   [
     { key: 'save', label: '保存', icon: 'save' },
     { key: 'delete', label: '删除', icon: 'delete', danger: true },
   ],
 ]
+
+/** 视频节点右键菜单分组（与图片节点结构一致） */
+export const VIDEO_CONTEXT_MENU_SECTIONS: ImageContextMenuItem[][] = [
+  [
+    { key: 'chat', label: '对话', icon: 'chat' },
+    { key: 'send-agent', label: '添加到智能体', icon: 'send-agent' },
+  ],
+  [
+    { key: 'preview', label: '预览', icon: 'preview' },
+    { key: 'download', label: '下载', icon: 'download' },
+    // { key: 'copy-video', label: '复制视频', icon: 'copy-image' },
+  ],
+  [
+    { key: 'save', label: '保存', icon: 'save' },
+    { key: 'delete', label: '删除', icon: 'delete', danger: true },
+  ],
+]
+
+export type MediaContextMenuKind = 'image' | 'video'
+
+export function getMediaContextMenuSections(kind: MediaContextMenuKind) {
+  return kind === 'video' ? VIDEO_CONTEXT_MENU_SECTIONS : IMAGE_CONTEXT_MENU_SECTIONS
+}
 
 export const IMAGE_DIALOGUE_GREETING = 'Hi, 我是你的AI设计助理'
 export const IMAGE_DIALOGUE_PLACEHOLDER =

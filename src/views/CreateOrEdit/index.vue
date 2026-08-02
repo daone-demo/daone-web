@@ -242,16 +242,14 @@ const onNewProject = async () => {
   })
 }
 
-const onRenameProject = async (projectId: string, name: string) => {
+const onRenameProject = (projectId: string, name: string) => {
   project_Id.value = projectId;
   projectName.value = name;
   modalStore.openModal('updateProjectName');
-  await onRefreshProjects();
 }
 
-const onDeleteProject = async (projectId: string) => {
-  await api.deleteProject(projectId);
-  await onRefreshProjects();
+const onDeleteProject = async () => {
+  await onRefreshProjects()
 }
 
 const onCloseChat = () => {
@@ -265,6 +263,7 @@ const onRefreshProjects = async () => {
   page.value = 1
   projectsHasMore.value = true
   await onLoadProjects()
+  canvasRef.value?.reloadProjectBrowser?.()
 }
 
 const onLoadWorkflows = async () => {

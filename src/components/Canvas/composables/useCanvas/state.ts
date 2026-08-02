@@ -73,6 +73,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showBackToNodesBanner = ref(false)
   const isRecenteringToNodes = ref(false)
   const showProjectMenu = ref(false)
+  const showProjectBrowser = ref(false)
   const showUserMenu = ref(false)
   const canvasProjects = ref<CanvasProjectListItem[]>([])
   const activeProjectId = ref('')
@@ -82,6 +83,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showImageContextMenu = ref(false)
   const imageContextMenuPos = ref({ left: 0, top: 0 })
   const imageContextMenuNodeId = ref('')
+  const imageContextMenuKind = ref<'image' | 'video'>('image')
+  const imagePreviewKind = ref<'image' | 'video'>('image')
   const connectMenuPos = ref({ left: 0, top: 0 })
   const connectReleasePoint = ref<{ x: number; y: number } | null>(null)
   const addMenuPos = ref({ left: 0, top: 0 })
@@ -256,6 +259,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showBackToNodesBanner,
     isRecenteringToNodes,
     showProjectMenu,
+    showProjectBrowser,
     showUserMenu,
     canvasProjects,
     activeProjectId,
@@ -265,6 +269,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showImageContextMenu,
     imageContextMenuPos,
     imageContextMenuNodeId,
+    imageContextMenuKind,
+    imagePreviewKind,
     connectMenuPos,
     connectReleasePoint,
     addMenuPos,

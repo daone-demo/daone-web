@@ -64,6 +64,7 @@
     <div
       v-else-if="hasVideoPreview"
       class="video-node__body video-node__body--preview"
+      @contextmenu.prevent="onPreviewContextMenu"
     >
       <video
         ref="videoRef"
@@ -77,6 +78,7 @@
         @play="onPlay"
         @pause="onPause"
         @ended="onEnded"
+        @contextmenu.prevent.stop="onPreviewContextMenu"
       />
 
       <button
@@ -340,6 +342,14 @@ function onVideoNodeDblClick() {
   const node = getNode()
   const g = node.model?.graph as CanvasGraph | undefined
   g?.__openVideoDialogue?.(node.id)
+}
+
+function onPreviewContextMenu(event: MouseEvent) {
+  if (!hasVideoPreview.value || data.uploadState === 'uploading') return
+  event.preventDefault()
+  event.stopPropagation()
+  const g = canvasGraph()
+  g?.__openMediaContextMenu?.(getNode().id, event.clientX, event.clientY)
 }
 
 function onVideoLoadedMetadata(event: Event) {

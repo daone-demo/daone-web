@@ -42,6 +42,9 @@ type GridSplitCanvasApi = Pick<
     | 'showImageContextMenu'
     | 'imageContextMenuPos'
     | 'imageContextMenuNodeId'
+    | 'imageContextMenuKind'
+    | 'imagePreviewKind'
+    | 'showProjectBrowser'
 > &
   Pick<
     CanvasBindings,
@@ -85,6 +88,8 @@ type GridSplitCanvasApi = Pick<
     | 'onImageContextMenuAction'
     | 'imageContextMenuLocked'
     | 'showElementSelectBar'
+    | 'openProjectBrowser'
+    | 'closeProjectBrowser'
   >
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {

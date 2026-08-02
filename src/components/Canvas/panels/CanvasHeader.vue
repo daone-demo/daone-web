@@ -108,12 +108,26 @@
       </div>
       <span class="canvas__brand-divider" aria-hidden="true" />
       <div class="canvas__brand-group">
-        <button type="button" class="canvas__brand-icon-btn" title="保存（每 8 秒自动保存）" @click="emit('save')">
-          <i class="iconfont icon-baocun" style="font-size: 18px;"></i>
-        </button>
-        <button type="button" class="canvas__brand-icon-btn" title="打开文件夹">
-          <span class="canvas__brand-icon canvas__brand-icon--folder" aria-hidden="true" />
-        </button>
+        <a-popover placement="bottom">
+          <template #content>
+            <span>保存当前内容</span>
+          </template>
+          <button type="button" class="canvas__brand-icon-btn" @click="emit('save')">
+            <i class="iconfont icon-baocun" style="font-size: 18px;"></i>
+          </button>
+        </a-popover>
+        <a-popover placement="bottom">
+          <template #content>
+            <span>打开文件夹</span>
+          </template>
+          <button
+            type="button"
+            class="canvas__brand-icon-btn"
+            @click="emit('open-project-browser')"
+          >
+            <span class="canvas__brand-icon canvas__brand-icon--folder" aria-hidden="true" />
+          </button>
+        </a-popover>
       </div>
     </div>
     <div class="canvas__header-actions">
@@ -279,6 +293,7 @@ const emit = defineEmits<{
   'rename-project': [projectId: string, name: string],
   'delete-project': [projectId: string],
   'load-more-projects': [],
+  'open-project-browser': [],
 }>()
 
 const SCROLL_LOAD_THRESHOLD = 48

@@ -30,12 +30,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
-  IMAGE_CONTEXT_MENU_SECTIONS,
+  getMediaContextMenuSections,
   type ImageContextMenuItem,
+  type MediaContextMenuKind,
 } from '../constants'
 
 const props = defineProps<{
   position: { left: number; top: number }
+  kind?: MediaContextMenuKind
   isLight?: boolean
   nodeLocked?: boolean
 }>()
@@ -44,7 +46,7 @@ const emit = defineEmits<{
   select: [key: string]
 }>()
 
-const sections = computed(() => IMAGE_CONTEXT_MENU_SECTIONS)
+const sections = computed(() => getMediaContextMenuSections(props.kind ?? 'image'))
 
 function resolveLabel(item: ImageContextMenuItem) {
   if (item.key === 'lock') {

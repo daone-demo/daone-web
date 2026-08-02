@@ -402,7 +402,7 @@ function onPreviewContextMenu(event: MouseEvent) {
   event.preventDefault()
   event.stopPropagation()
   const g = getGraph() as CanvasGraph
-  g.__openImageContextMenu?.(getNode().id, event.clientX, event.clientY)
+  g.__openMediaContextMenu?.(getNode().id, event.clientX, event.clientY)
 }
 
 function onUploadInputChange(event: Event) {

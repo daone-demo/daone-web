@@ -153,6 +153,7 @@ export function registerCore(bind: CanvasBindings) {
     showBackToNodesBanner,
     isRecenteringToNodes,
     showProjectMenu,
+    showProjectBrowser,
     showUserMenu,
     canvasProjects,
     activeProjectId,
@@ -162,6 +163,8 @@ export function registerCore(bind: CanvasBindings) {
     showImageContextMenu,
     imageContextMenuPos,
     imageContextMenuNodeId,
+    imageContextMenuKind,
+    imagePreviewKind,
     connectMenuPos,
     connectReleasePoint,
     addMenuPos,
@@ -5165,6 +5168,16 @@ export function registerCore(bind: CanvasBindings) {
   function closeImageContextMenu() {
     showImageContextMenu.value = false
     imageContextMenuNodeId.value = ''
+    imageContextMenuKind.value = 'image'
+  }
+
+  function canOpenVideoContextMenu(data: CanvasNodeData) {
+    return (
+      data.kind === 'video' &&
+      Boolean(data.previewUrl?.trim()) &&
+      data.uploadState !== 'uploading' &&
+      !isVideoNodeGenerating(data)
+    )
   }
 
   function canOpenImageContextMenu(data: CanvasNodeData) {
@@ -5177,14 +5190,18 @@ export function registerCore(bind: CanvasBindings) {
     )
   }
 
-  function findImageNodeAtClientPoint(clientX: number, clientY: number) {
+  function canOpenMediaContextMenu(data: CanvasNodeData) {
+    return canOpenImageContextMenu(data) || canOpenVideoContextMenu(data)
+  }
+
+  function findMediaNodeAtClientPoint(clientX: number, clientY: number) {
     const g = graph.value
     if (!g) return null
 
     const local = clientPointToGraphLocal(g, clientX, clientY)
     const candidates = g
       .getNodes()
-      .filter((node) => canOpenImageContextMenu(node.getData() as CanvasNodeData))
+      .filter((node) => canOpenMediaContextMenu(node.getData() as CanvasNodeData))
       .sort((a, b) => (b.getZIndex() ?? 0) - (a.getZIndex() ?? 0))
 
     return (
@@ -5200,18 +5217,18 @@ export function registerCore(bind: CanvasBindings) {
     )
   }
 
-  function handleImageNodeContextMenu(nodeId: string, clientX: number, clientY: number, event?: MouseEvent) {
+  function handleMediaNodeContextMenu(nodeId: string, clientX: number, clientY: number, event?: MouseEvent) {
     event?.preventDefault()
     event?.stopPropagation()
-    openImageContextMenu(nodeId, clientX, clientY)
+    openMediaContextMenu(nodeId, clientX, clientY)
   }
 
   function onCanvasImageContextMenuCapture(event: MouseEvent) {
     const target = event.target
     if (target instanceof Element && target.closest('.canvas__image-context-menu')) return
-    const node = findImageNodeAtClientPoint(event.clientX, event.clientY)
+    const node = findMediaNodeAtClientPoint(event.clientX, event.clientY)
     if (!node) return
-    handleImageNodeContextMenu(node.id, event.clientX, event.clientY, event)
+    handleMediaNodeContextMenu(node.id, event.clientX, event.clientY, event)
   }
 
   function positionImageContextMenu(clientX: number, clientY: number) {
@@ -5226,7 +5243,7 @@ export function registerCore(bind: CanvasBindings) {
     }
   }
 
-  function openImageContextMenu(nodeId: string, clientX: number, clientY: number) {
+  function openMediaContextMenu(nodeId: string, clientX: number, clientY: number) {
     const g = graph.value
     const overlayRoot = canvasRef.value
     if (!g || !overlayRoot) return
@@ -5235,13 +5252,14 @@ export function registerCore(bind: CanvasBindings) {
     if (!cell?.isNode()) return
 
     const data = cell.getData() as CanvasNodeData
-    if (!canOpenImageContextMenu(data)) return
+    if (!canOpenMediaContextMenu(data)) return
 
     closeConnectMenu()
     closeAddMenu()
     closeImageContextMenu()
     selectGraphNodes(cell as Node)
     imageContextMenuNodeId.value = nodeId
+    imageContextMenuKind.value = data.kind === 'video' ? 'video' : 'image'
     imageContextMenuPos.value = positionImageContextMenu(clientX, clientY)
     showImageContextMenu.value = true
     ;(g as CanvasGraph).__suppressBlankCloseForConnect = true
@@ -5274,6 +5292,7 @@ export function registerCore(bind: CanvasBindings) {
 
   function onImageContextMenuAction(key: string) {
     const nodeId = imageContextMenuNodeId.value
+    const menuKind = imageContextMenuKind.value
     closeImageContextMenu()
     if (!nodeId) return
 
@@ -5284,6 +5303,36 @@ export function registerCore(bind: CanvasBindings) {
 
     if (selectedNodeId.value !== nodeId) {
       selectGraphNodes(cell as Node)
+    }
+
+    if (menuKind === 'video') {
+      switch (key) {
+        case 'chat':
+          openVideoDialogue(nodeId)
+          return
+        case 'send-agent':
+          addVideoToDialog()
+          return
+        case 'preview':
+          openMediaPreview()
+          return
+        case 'download':
+          onVideoToolbarAction({ key: 'download', label: '下载' })
+          return
+        case 'copy-video':
+        case 'copy-image':
+          duplicateSelectedNodes()
+          return
+        case 'save':
+          showAssetsPanel.value = true
+          return
+        case 'delete':
+          removeNodeById(nodeId)
+          return
+        default:
+          break
+      }
+      return
     }
 
     switch (key) {
@@ -5306,7 +5355,7 @@ export function registerCore(bind: CanvasBindings) {
         toggleImageAddToDialogMenu()
         return
       case 'preview':
-        openImagePreview()
+        openMediaPreview()
         return
       case 'download':
         onImageToolbarAction({ key: 'download', label: '下载' })
@@ -5315,6 +5364,7 @@ export function registerCore(bind: CanvasBindings) {
         toggleImageNodeLock(nodeId)
         return
       case 'copy-image':
+      case 'copy-video':
         duplicateSelectedNodes()
         return
       case 'save':
@@ -5339,6 +5389,20 @@ export function registerCore(bind: CanvasBindings) {
 
   function closeProjectMenu() {
     showProjectMenu.value = false
+  }
+
+  function openProjectBrowser() {
+    closeProjectMenu()
+    closeUserMenu()
+    closeZoomMenu()
+    closeAddMenu()
+    closeConnectMenu()
+    closeShortcutsPanel()
+    showProjectBrowser.value = true
+  }
+
+  function closeProjectBrowser() {
+    showProjectBrowser.value = false
   }
 
   function closeZoomMenu() {
@@ -5385,6 +5449,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   async function selectProject(projectId: string) {
+    closeProjectBrowser()
     if (projectId === activeProjectId.value) {
       closeProjectMenu()
       return
@@ -7896,6 +7961,10 @@ export function registerCore(bind: CanvasBindings) {
       closeProjectMenu()
       return true
     }
+    if (showProjectBrowser.value) {
+      closeProjectBrowser()
+      return true
+    }
     if (showUserMenu.value) {
       closeUserMenu()
       return true
@@ -8575,18 +8644,24 @@ export function registerCore(bind: CanvasBindings) {
     scheduleHistoryPush()
   }
 
-  function openImagePreview() {
+  function openMediaPreview() {
     const node = getSelectedNode()
     if (!node) return
     const data = node.getData() as CanvasNodeData
-    if (data.kind !== 'image' || !data.previewUrl) return
+    if ((data.kind !== 'image' && data.kind !== 'video') || !data.previewUrl) return
     closeImageToolbarMore()
     showImageHdMenu.value = false
+    imagePreviewKind.value = data.kind === 'video' ? 'video' : 'image'
     imagePreviewUrl.value = data.previewUrl
+  }
+
+  function openImagePreview() {
+    openMediaPreview()
   }
 
   function closeImagePreview() {
     imagePreviewUrl.value = ''
+    imagePreviewKind.value = 'image'
   }
 
   function cancelCurrentOperation() {
@@ -8670,7 +8745,8 @@ export function registerCore(bind: CanvasBindings) {
     const instance = createGraph(graphRef.value) as CanvasGraph
     instance.__openConnectMenu = openConnectMenuByNodeId
     instance.__openImageDialogue = openImageDialogue
-    instance.__openImageContextMenu = openImageContextMenu
+    instance.__openImageContextMenu = openMediaContextMenu
+    instance.__openMediaContextMenu = openMediaContextMenu
     instance.__openVideoDialogue = openVideoDialogue
     instance.__primarySelectedNodeId = () => selectedNodeId.value
     instance.__startImageNodeCornerResize = (event, corner) => {
@@ -8836,13 +8912,13 @@ export function registerCore(bind: CanvasBindings) {
     })
     instance.on('node:contextmenu', ({ node, e }: { node: Node; e: MouseEvent }) => {
       const data = node.getData() as CanvasNodeData
-      if (!canOpenImageContextMenu(data)) return
-      handleImageNodeContextMenu(node.id, e.clientX, e.clientY, e)
+      if (!canOpenMediaContextMenu(data)) return
+      handleMediaNodeContextMenu(node.id, e.clientX, e.clientY, e)
     })
     instance.on('blank:contextmenu', ({ e }: { e: MouseEvent }) => {
-      const node = findImageNodeAtClientPoint(e.clientX, e.clientY)
+      const node = findMediaNodeAtClientPoint(e.clientX, e.clientY)
       if (!node) return
-      handleImageNodeContextMenu(node.id, e.clientX, e.clientY, e)
+      handleMediaNodeContextMenu(node.id, e.clientX, e.clientY, e)
     })
     canvasRef.value?.addEventListener('contextmenu', onCanvasImageContextMenuCapture, true)
     instance.on('blank:click', () => {
@@ -9098,6 +9174,8 @@ export function registerCore(bind: CanvasBindings) {
     closeImagePreview,
     closeImageToolbarMore,
     closeProjectMenu,
+    closeProjectBrowser,
+    openProjectBrowser,
     closeShortcutsPanel,
     closeTextExpand,
     closeUserMenu,
