@@ -45,6 +45,7 @@ import {
   appendImageMarkToNode,
   applyImageMarkTaskParameters,
   buildImageMarkItem,
+  canSubmitImageDialogueTask,
   clearElementMarksOnNode,
   clientPointToImageNaturalCoords,
   parseImageMarkRecognizeResult,
@@ -293,6 +294,7 @@ export function registerCore(bind: CanvasBindings) {
   let videoToolbarDeferTimer: ReturnType<typeof setTimeout> | null = null
   const videoToolbarClickDeferred = ref(false)
   const imageMarkRecognizing = ref(false)
+  const selectedElementMarkId = ref('')
   const VIDEO_TOOLBAR_CLICK_DEFER_MS = 280
 
   function cancelVideoToolbarDefer() {
@@ -2209,12 +2211,6 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   async function handleImageDialogueSubmit(payload: ImageDialogueSubmitPayload) {
-    const prompt = payload.prompt.trim()
-    if (!prompt) {
-      message.warning('请输入提示词或标记需要识别的商品位置')
-      return
-    }
-
     const g = graph.value
     const fromImageGenPrompt = Boolean(activeImageGenPromptNodeId.value)
     const sourceNodeId =
@@ -2227,6 +2223,12 @@ export function registerCore(bind: CanvasBindings) {
     const sourceNode = cell as Node
     const sourceData = sourceNode.getData() as CanvasNodeData
     if (sourceData.uploadState === 'uploading' || sourceData.imageGenState === 'loading') return
+
+    const prompt = payload.prompt.trim()
+    if (!canSubmitImageDialogueTask(prompt, sourceData.elementMarks)) {
+      message.warning('请输入提示词或标记需要识别的商品位置')
+      return
+    }
 
     const dialoguePreviews = getImageDialoguePreviewsForNode(sourceNodeId)
     const provenanceRefs = dialoguePreviews.length
@@ -5084,6 +5086,52 @@ export function registerCore(bind: CanvasBindings) {
     return null
   }
 
+  function syncImageElementMarkSelection(sourceNodeId: string, markId: string) {
+    const g = graph.value
+    if (!g) return
+    g.getNodes().forEach((cell) => {
+      if (!cell.isNode()) return
+      const node = cell as Node
+      const nodeData = node.getData() as CanvasNodeData
+      const nextId = node.id === sourceNodeId && markId ? markId : undefined
+      if ((nodeData.selectedImageElementMarkId ?? '') === (nextId ?? '')) return
+      node.setData({ ...nodeData, selectedImageElementMarkId: nextId }, { overwrite: true })
+    })
+  }
+
+  function clearImageElementMarkSelection() {
+    selectedElementMarkId.value = ''
+    const g = graph.value
+    if (!g) return
+    g.getNodes().forEach((cell) => {
+      if (!cell.isNode()) return
+      const node = cell as Node
+      const nodeData = node.getData() as CanvasNodeData
+      if (!nodeData.selectedImageElementMarkId) return
+      node.setData({ ...nodeData, selectedImageElementMarkId: undefined }, { overwrite: true })
+    })
+  }
+
+  function selectElementMark(markId: string) {
+    const mark = findElementMarkById(markId)
+    if (!mark || mark.pending) return
+    selectedElementMarkId.value = markId
+    syncImageElementMarkSelection(mark.sourceNodeId, markId)
+    bumpToolbarRevision()
+  }
+
+  function removeSelectedElementMark(): boolean {
+    const markId = selectedElementMarkId.value
+    if (!markId) return false
+    const mark = findElementMarkById(markId)
+    if (!mark || mark.pending) {
+      clearImageElementMarkSelection()
+      return false
+    }
+    removeElementMark(markId)
+    return true
+  }
+
   function removeElementMark(markId: string) {
     const g = graph.value
     if (!g || !markId) return
@@ -5100,6 +5148,10 @@ export function registerCore(bind: CanvasBindings) {
     if (showVideoGenPromptBar.value) {
       videoGenPromptText.value = stripMarkMentionFromPrompt(videoGenPromptText.value, mark)
       persistVideoGenPrompt()
+    }
+
+    if (selectedElementMarkId.value === markId) {
+      clearImageElementMarkSelection()
     }
 
     bumpToolbarRevision()
@@ -5119,6 +5171,7 @@ export function registerCore(bind: CanvasBindings) {
 
     marks.forEach((mark) => removeImageMarkFromGraph(g, mark.id))
     clearElementMarksOnNode(cell as Node)
+    clearImageElementMarkSelection()
 
     if (showImageDialogue.value) {
       let text = imageDialogueText.value
@@ -7991,6 +8044,7 @@ export function registerCore(bind: CanvasBindings) {
       if (e.target instanceof Element && e.target.closest('.image-node__mark-pin-interactive')) {
         return
       }
+      clearImageElementMarkSelection()
       clearEdgeSelection()
       selectedNodeId.value = node.id
       selectedKind.value = 'image'
@@ -8929,6 +8983,7 @@ export function registerCore(bind: CanvasBindings) {
     getSelectedNode,
     removeSelectedNodes,
     removeSelectedEdge,
+    removeSelectedElementMark,
     hasSelectedNodes: () => getGraphSelectedNodeIds().length > 0 || Boolean(selectedNodeId.value),
     hasSelectedEdge: () => Boolean(selectedEdgeId.value),
     openImagePreview,
@@ -8982,6 +9037,7 @@ export function registerCore(bind: CanvasBindings) {
     instance.__openConnectMenu = openConnectMenuByNodeId
     instance.__openImageDialogue = openImageDialogue
     instance.__removeImageElementMark = removeElementMark
+    instance.__selectImageElementMark = selectElementMark
     instance.__openImageContextMenu = openMediaContextMenu
     instance.__openMediaContextMenu = openMediaContextMenu
     instance.__openVideoDialogue = openVideoDialogue
@@ -9159,6 +9215,7 @@ export function registerCore(bind: CanvasBindings) {
     })
     canvasRef.value?.addEventListener('contextmenu', onCanvasImageContextMenuCapture, true)
     instance.on('blank:click', () => {
+      clearImageElementMarkSelection()
       dismissOneCanvasLayer()
     })
     instance.on('node:change:data', handleNodeDataChange)

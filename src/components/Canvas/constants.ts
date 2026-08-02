@@ -147,6 +147,8 @@ export interface CanvasNodeData {
   durationSeconds?: number
   /** 图片元素标记（显示在图片节点上的识别框） */
   imageElementMarks?: ImageMarkItem[]
+  /** 当前选中的图片元素标记 ID（用于键盘删除） */
+  selectedImageElementMarkId?: string
   /** 当前是否正在分析标记点 */
   imageMarkAnalyzing?: { x: number; y: number } | null
   /** 对话面板中的元素标记列表 */

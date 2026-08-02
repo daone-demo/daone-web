@@ -286,6 +286,7 @@ import DialogueWorkflowSelect from './DialogueWorkflowSelect.vue';
 import MarkLabelOptionMenu from './MarkLabelOptionMenu.vue'
 import MarkTagsEcho from './MarkTagsEcho.vue';
 import { getMarkLabelOptions, hasMultipleMarkLabels, useImageMarkLabelMenu } from './useImageMarkLabelMenu';
+import { canSubmitImageDialogueTask, hasCompletedImageMarks } from './imageMarkUtils';
 import {
   buildMarkMentionThumbStyle,
   createPromptMentionApi,
@@ -507,7 +508,7 @@ function emitSettings() {
 }
 
 function hasCompletedElementMarks() {
-  return (props.elementMarks ?? []).some((mark) => !mark.pending)
+  return hasCompletedImageMarks(props.elementMarks)
 }
 
 function onWorkflowChange(workflowId: string | undefined) {
@@ -841,7 +842,7 @@ async function onTranslatePrompt() {
 
 function onSend() {
   const prompt = props.modelValue.trim()
-  if (!prompt) {
+  if (!canSubmitImageDialogueTask(prompt, props.elementMarks)) {
     message.warning('请输入提示词或标记需要识别的商品位置')
     return
   }

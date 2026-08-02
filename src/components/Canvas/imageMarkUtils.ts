@@ -315,6 +315,18 @@ export function clearElementMarksOnNode(node: Node) {
   return true
 }
 
+export function hasCompletedImageMarks(marks: ImageMarkItem[] | undefined): boolean {
+  return (marks ?? []).some((mark) => !mark.pending)
+}
+
+/** 图片对话生成：有提示词或已完成标记即可提交 */
+export function canSubmitImageDialogueTask(
+  prompt: string,
+  marks: ImageMarkItem[] | undefined,
+): boolean {
+  return Boolean(prompt.trim()) || hasCompletedImageMarks(marks)
+}
+
 export function parseMarkIdsFromPrompt(prompt: string): string[] {
   const ids: string[] = []
   const regex = /@标记#([^：\s@]+)/g

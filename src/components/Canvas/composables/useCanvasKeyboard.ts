@@ -40,6 +40,7 @@ type CanvasKeyboardDeps = {
   getSelectedNode: () => Node | null
   removeSelectedNodes: () => void
   removeSelectedEdge: () => boolean
+  removeSelectedElementMark?: () => boolean
   hasSelectedNodes: () => boolean
   hasSelectedEdge: () => boolean
   openImagePreview: () => void
@@ -374,6 +375,10 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
     }
 
     if (key !== 'Delete' && key !== 'Backspace') return
+    if (deps.removeSelectedElementMark?.()) {
+      event.preventDefault()
+      return
+    }
     if (deps.hasSelectedEdge()) {
       event.preventDefault()
       deps.removeSelectedEdge()

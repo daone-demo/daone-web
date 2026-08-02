@@ -140,14 +140,17 @@
               <div
                 v-if="mark.bbox && !mark.pending"
                 class="image-node__mark-box"
+                :class="{ 'image-node__mark-box--selected': data.selectedImageElementMarkId === mark.id }"
                 :style="markBoxStyle(mark)"
               />
-              <div 
-                data-v-243dd551=""
+              <div
                 class="image-node__mark-pin-interactive"
-                :class="{ 'image-node__mark-pin--analyzing': mark.pending }"
+                :class="{
+                  'image-node__mark-pin--analyzing': mark.pending,
+                  'image-node__mark-pin-interactive--selected': data.selectedImageElementMarkId === mark.id,
+                }"
                 :style="markPinStyle(mark)"
-                :title="mark.pending ? mark.label : `${mark.label}（点击删除）`"
+                :title="mark.pending ? mark.label : mark.label"
                 @mousedown.stop
                 @click.stop="onMarkPinClick(mark, $event)"
               >
@@ -435,7 +438,7 @@ function onMarkPinClick(mark: ImageMarkItem, event: MouseEvent) {
   event.preventDefault()
   event.stopPropagation()
   const g = getGraph() as CanvasGraph
-  g.__removeImageElementMark?.(mark.id)
+  g.__selectImageElementMark?.(mark.id)
 }
 
 function onUploadInputChange(event: Event) {
@@ -703,6 +706,12 @@ onMounted(() => {
   border-radius: 2px;
   background: rgba(239, 68, 68, 0.06);
   pointer-events: none;
+
+  &--selected {
+    border-width: 3px;
+    background: rgba(239, 68, 68, 0.12);
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35);
+  }
 }
 
 .image-node__mark-pin-interactive {
@@ -720,6 +729,10 @@ onMounted(() => {
 
   &:hover:not(.image-node__mark-pin--analyzing) {
     transform: translate(-50%, -100%) scale(1.1);
+  }
+
+  &--selected {
+    filter: drop-shadow(0 0 0 2px #ef4444) drop-shadow(0 1px 2px rgba(15, 23, 42, 0.18));
   }
 }
 
