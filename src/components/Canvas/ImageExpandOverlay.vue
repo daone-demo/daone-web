@@ -86,10 +86,18 @@
       <div class="image-expand-overlay__stage">
         <div
           class="image-expand-overlay__node"
+          :class="{
+            'image-expand-overlay__node--grab': spaceHeld && !imageDragging,
+            'image-expand-overlay__node--grabbing': imageDragging,
+          }"
           :style="frameStyle"
-          @mousedown.stop="startDrag('move-node', $event)"
+          @mousedown.stop="onFrameMouseDown"
         >
-          <div class="image-expand-overlay__image-box" :style="imageInnerStyle">
+          <div
+            class="image-expand-overlay__image-box"
+            :style="imageInnerStyle"
+            @mousedown.stop="onImageMouseDown"
+          >
             <img
               :src="imageUrl"
               class="image-expand-overlay__image"
@@ -132,7 +140,6 @@ import {
 } from './graph'
 import {
   clampExpandFrame,
-  clampFramePosition,
   clampImageOffset,
   computeExpandNaturalMetrics,
   computeExpandRequestMetrics,
@@ -140,6 +147,9 @@ import {
   createInitialExpandFrame,
   type ExpandRect,
 } from './expandUtils'
+
+const LONG_PRESS_MS = 320
+const LONG_PRESS_MOVE_CANCEL_PX = 6
 
 const props = defineProps<{
   imageUrl: string
@@ -171,7 +181,10 @@ const imageBounds = ref<ExpandRect>({ x: 0, y: 0, width: 100, height: 100 })
 const expandFrame = ref<ExpandRect>({ x: 0, y: 0, width: 100, height: 100 })
 
 const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const
-type Handle = (typeof handles)[number] | 'move-node'
+type Handle = (typeof handles)[number] | 'move-image'
+
+const spaceHeld = ref(false)
+const imageDragging = ref(false)
 
 let dragState: {
   handle: Handle
@@ -180,6 +193,9 @@ let dragState: {
   startFrame: ExpandRect
   startImage: ExpandRect
 } | null = null
+
+let longPressTimer: ReturnType<typeof setTimeout> | null = null
+let longPressCleanup: (() => void) | null = null
 
 const workspaceOffsetStyle = computed(() => ({
   paddingTop: `${IMAGE_EXPAND_TOOLBAR_HEIGHT + IMAGE_EXPAND_TOOLBAR_GAP}px`,
@@ -322,7 +338,19 @@ function selectAspect(key: ImageExpandAspectKey) {
         )
 }
 
+function clearLongPressWatch() {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+  if (longPressCleanup) {
+    longPressCleanup()
+    longPressCleanup = null
+  }
+}
+
 function startDrag(handle: Handle, event: MouseEvent) {
+  clearLongPressWatch()
   dragState = {
     handle,
     startX: event.clientX,
@@ -330,8 +358,82 @@ function startDrag(handle: Handle, event: MouseEvent) {
     startFrame: { ...expandFrame.value },
     startImage: { ...imageBounds.value },
   }
+  if (handle === 'move-image') {
+    imageDragging.value = true
+  }
   window.addEventListener('mousemove', onDragMove)
   window.addEventListener('mouseup', onDragEnd)
+}
+
+function onImageMouseDown(event: MouseEvent) {
+  if (event.button !== 0) return
+  event.preventDefault()
+  if (spaceHeld.value) {
+    startDrag('move-image', event)
+    return
+  }
+
+  const startX = event.clientX
+  const startY = event.clientY
+  const startImage = { ...imageBounds.value }
+
+  clearLongPressWatch()
+  longPressTimer = setTimeout(() => {
+    longPressTimer = null
+    if (longPressCleanup) {
+      longPressCleanup()
+      longPressCleanup = null
+    }
+    dragState = {
+      handle: 'move-image',
+      startX,
+      startY,
+      startFrame: { ...expandFrame.value },
+      startImage,
+    }
+    imageDragging.value = true
+    window.addEventListener('mousemove', onDragMove)
+    window.addEventListener('mouseup', onDragEnd)
+  }, LONG_PRESS_MS)
+
+  const onMove = (moveEvent: MouseEvent) => {
+    const dx = moveEvent.clientX - startX
+    const dy = moveEvent.clientY - startY
+    if (dx * dx + dy * dy <= LONG_PRESS_MOVE_CANCEL_PX * LONG_PRESS_MOVE_CANCEL_PX) return
+    clearLongPressWatch()
+  }
+
+  const onUp = () => {
+    clearLongPressWatch()
+  }
+
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+  longPressCleanup = () => {
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+}
+
+function onFrameMouseDown(event: MouseEvent) {
+  if (event.button !== 0 || !spaceHeld.value) return
+  event.preventDefault()
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.image-expand-overlay__handle, .image-expand-overlay__image-box')) return
+  startDrag('move-image', event)
+}
+
+function onWindowKeyDown(event: KeyboardEvent) {
+  if (event.code === 'Space' && !event.repeat) {
+    event.preventDefault()
+    spaceHeld.value = true
+  }
+}
+
+function onWindowKeyUp(event: KeyboardEvent) {
+  if (event.code === 'Space') {
+    spaceHeld.value = false
+  }
 }
 
 function onDragMove(event: MouseEvent) {
@@ -341,23 +443,16 @@ function onDragMove(event: MouseEvent) {
   const dy = event.clientY - dragState.startY
   const ratio = currentRatio.value
 
-  if (dragState.handle === 'move-node') {
-    const nextFrame = clampFramePosition(
+  if (dragState.handle === 'move-image') {
+    imageBounds.value = clampImageOffset(
       {
-        ...dragState.startFrame,
-        x: dragState.startFrame.x + dx,
-        y: dragState.startFrame.y + dy,
+        ...dragState.startImage,
+        x: dragState.startImage.x + dx,
+        y: dragState.startImage.y + dy,
       },
+      expandFrame.value,
       workspaceSize.value,
     )
-    const appliedDx = nextFrame.x - dragState.startFrame.x
-    const appliedDy = nextFrame.y - dragState.startFrame.y
-    expandFrame.value = nextFrame
-    imageBounds.value = {
-      ...dragState.startImage,
-      x: dragState.startImage.x + appliedDx,
-      y: dragState.startImage.y + appliedDy,
-    }
     return
   }
 
@@ -421,6 +516,8 @@ function onDragMove(event: MouseEvent) {
 
 function onDragEnd() {
   dragState = null
+  imageDragging.value = false
+  clearLongPressWatch()
   window.removeEventListener('mousemove', onDragMove)
   window.removeEventListener('mouseup', onDragEnd)
 }
@@ -447,10 +544,14 @@ watch(
 
 onMounted(() => {
   resetLayout()
+  window.addEventListener('keydown', onWindowKeyDown)
+  window.addEventListener('keyup', onWindowKeyUp)
 })
 
 onBeforeUnmount(() => {
   onDragEnd()
+  window.removeEventListener('keydown', onWindowKeyDown)
+  window.removeEventListener('keyup', onWindowKeyUp)
 })
 </script>
 
@@ -622,9 +723,21 @@ onBeforeUnmount(() => {
   border: 2px solid #3b82f6;
   border-radius: 2px;
   box-sizing: border-box;
-  cursor: move;
+  cursor: default;
   z-index: 2;
   pointer-events: auto;
+
+  &--grab {
+    cursor: grab;
+  }
+
+  &--grabbing {
+    cursor: grabbing;
+
+    .image-expand-overlay__image-box {
+      cursor: grabbing;
+    }
+  }
   background-color: #eceff3;
   background-image:
     linear-gradient(45deg, rgba(255, 255, 255, 0.55) 25%, transparent 25%),
@@ -639,7 +752,9 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: 1;
   overflow: hidden;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
 }
 
 .image-expand-overlay__image {
@@ -649,6 +764,7 @@ onBeforeUnmount(() => {
   display: block;
   pointer-events: none;
   user-select: none;
+  -webkit-user-drag: none;
 }
 
 .image-expand-overlay__image-dash {
