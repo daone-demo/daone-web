@@ -118,7 +118,12 @@
               </div>
             </div>
             <span class="pointer-events-none absolute left-1 top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-lg bg-black/65 px-1 text-[9px] leading-none text-white backdrop-blur-sm transition-opacity group-hover:opacity-0">{{index+1}}</span>
-            <button type="button" class="absolute right-0.5 top-0.5 z-20 flex size-[15px] items-center justify-center rounded-full border opacity-0 transition-opacity group-hover:opacity-100 border-neutral-300/90 bg-white text-neutral-600 shadow-sm hover:bg-neutral-100">
+            <button
+              type="button"
+              class="absolute right-0.5 top-0.5 z-20 flex size-[15px] items-center justify-center rounded-full border opacity-0 transition-opacity group-hover:opacity-100 border-neutral-300/90 bg-white text-neutral-600 shadow-sm hover:bg-neutral-100"
+              title="移除"
+              @click.stop="emit('remove-source-ref', ref.nodeId)"
+            >
               <svg 
                 xmlns="http://www.w3.org/2000/svg"
                 xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -136,6 +141,7 @@
         </span>
         <!-- <span v-else class="video-gen-prompt-panel__text-ref-preview">{{ ref.textPreview }}</span> -->
         <button
+          v-if="ref.kind !== 'text'"
           type="button"
           class="video-gen-prompt-panel__ref-remove"
           title="删除"
@@ -606,12 +612,7 @@ const validationError = computed(() => {
   return imageSourceCount.value > 0
 })
 
-const showSourceRefs = computed(() => {
-  if (props.activeTab === 'text2video') {
-    return textSourceCount.value > 0
-  }
-  return true
-})
+const showSourceRefs = computed(() => props.activeTab !== 'text2video')
 
 const showImageUpload = computed(() => props.activeTab !== 'text2video')
 

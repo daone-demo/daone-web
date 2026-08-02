@@ -462,7 +462,9 @@ export function registerCore(bind: CanvasBindings) {
     if (imageRefs.length) {
       return imageRefs.map((ref) => ({ ...ref, kind: ref.kind ?? 'image' }))
     }
-
+    if (videoGenActiveTab.value === 'text2video') {
+      return []
+    }
     return getVideoTextSourceRefs(g, id, getTextNodePlainContent)
   })
 
@@ -3991,15 +3993,13 @@ export function registerCore(bind: CanvasBindings) {
     const cell = g.getCellById(nodeId)
     if (!cell?.isNode()) return
     const data = cell.getData() as CanvasNodeData
+    const upstreamText = resolveVideoUpstreamPrompt(nodeId)
     let prompt = data.genPrompt?.trim() ?? ''
     if (!prompt) {
       prompt = data.videoDialogueText?.trim() ?? ''
     }
-    const hasTextSources = findIncomingTextNodes(g, nodeId).some(
-      (node) => Boolean(getTextNodePlainContent(node)),
-    )
-    if (!prompt && !hasTextSources) {
-      prompt = resolveVideoUpstreamPrompt(nodeId)
+    if (!prompt && upstreamText) {
+      prompt = upstreamText
     }
     videoGenPromptText.value = prompt
     videoGenActiveTab.value = data.videoGenTab ?? 'text2video'
@@ -6156,7 +6156,7 @@ export function registerCore(bind: CanvasBindings) {
       const target = currentCell as Node
       const targetData = target.getData() as CanvasNodeData
       if (targetData.kind === 'text' || targetData.kind === 'video') {
-        handleNodeEdgeLinked(target.id)
+        handleNodeEdgeLinked(target.id, edge.getSourceCellId() ?? undefined)
       } else if (targetData.kind === 'image' && canImageNodeAcceptIncoming(targetData)) {
         linkImageSourceFromEdge(g, edge, target)
       } else {
@@ -6274,6 +6274,7 @@ export function registerCore(bind: CanvasBindings) {
       : undefined
 
     if (sourceData?.kind === 'text') {
+      const upstreamText = getTextNodePlainContent(sourceCell as Node)
       g.getEdges().forEach((edge) => {
         if (
           edge.getSourceCellId() === sourceNodeId &&
@@ -6282,6 +6283,15 @@ export function registerCore(bind: CanvasBindings) {
           g.removeEdge(edge.id)
         }
       })
+      if (
+        upstreamText &&
+        videoGenPromptText.value.trim() === upstreamText.trim()
+      ) {
+        videoGenPromptText.value = ''
+        data.genPrompt = ''
+        data.videoDialogueText = ''
+        cell.setData(data, { overwrite: true })
+      }
     } else {
       disconnectImageFromVideo(g, sourceNodeId, videoNodeId)
       const fromStored = Array.isArray(data.videoSourceRefs) ? data.videoSourceRefs : []
@@ -6619,10 +6629,14 @@ export function registerCore(bind: CanvasBindings) {
       }
     } else if (data.kind === 'video') {
       syncVideoSourceRefsSnapshot(targetNodeId)
-      const source =
+      let source =
         sourceNodeId && g.getCellById(sourceNodeId)?.isNode()
           ? (g.getCellById(sourceNodeId) as Node)
           : null
+      if (!source) {
+        const textNodes = findIncomingTextNodes(g, targetNodeId)
+        if (textNodes.length) source = textNodes[textNodes.length - 1] ?? null
+      }
       const sourceData = source?.getData() as CanvasNodeData | undefined
       if (
         sourceData?.kind === 'text' &&
@@ -8301,6 +8315,16 @@ export function registerCore(bind: CanvasBindings) {
         imageGenPromptText.value = upstream
       }
     }
+
+    const videoNodeId = activeVideoGenPromptNodeId.value
+    if (videoNodeId && videoGenActiveTab.value === 'text2video') {
+      const upstream = resolveVideoUpstreamPrompt(videoNodeId)
+      if (upstream && !videoGenPromptText.value.trim()) {
+        videoGenPromptText.value = upstream
+        persistVideoGenPrompt()
+      }
+    }
+
     bumpToolbarRevision()
     scheduleHistoryPush()
   }
