@@ -172,6 +172,8 @@ export type TextFormatCommand =
   | 'ordered'
   | 'hr'
   | 'copy'
+  | 'cut'
+  | 'paste'
   | 'expand'
   | 'color'
   | 'clear-color'

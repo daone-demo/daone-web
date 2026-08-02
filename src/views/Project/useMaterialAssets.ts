@@ -34,9 +34,7 @@ export function useMaterialAssets(scope: Ref<ProjectTabKey>, columnCount: Ref<nu
   const previewOpen = ref(false)
   const previewItem = ref<PreviewItem | null>(null)
 
-  const showAssetUpload = computed(
-    () => scope.value === 'FILES' || scope.value === 'MINE',
-  )
+  const showAssetUpload = computed(() => scope.value === 'FILES')
 
   const materialColumns = computed(() =>
     buildMaterialColumns(materialList.value, columnCount.value),

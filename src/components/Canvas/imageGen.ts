@@ -553,6 +553,58 @@ export function spawnGenerationResultNode(
   return node
 }
 
+/** 图片生成失败、尚未成片的节点（可原地重试） */
+export function isImageGenerationFailedNode(data: CanvasNodeData | undefined): boolean {
+  if (!data || data.kind !== 'image') return false
+  if (data.previewUrl?.trim()) return false
+  if (data.imageGenState === 'loading') return false
+  return Boolean(
+    data.generationTaskId ||
+      data.title === '生成失败' ||
+      (data.mode === 'editor' && data.sourceNodeId && data.generationTaskType === 'IMAGE'),
+  )
+}
+
+/** 查找可复用的失败生成节点：无预览的源占位，或连出的失败子节点 */
+export function findReusableImageGenerationNode(graph: Graph, sourceNode: Node): Node | null {
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  if (!sourceData.previewUrl?.trim() && isImageGenerationFailedNode(sourceData)) {
+    return sourceNode
+  }
+
+  let candidate: Node | null = null
+  for (const edge of graph.getEdges()) {
+    if (edge.getSourceCellId() !== sourceNode.id) continue
+    const target = graph.getCellById(edge.getTargetCellId()!)
+    if (!target?.isNode()) continue
+    const data = target.getData() as CanvasNodeData
+    if (isImageGenerationFailedNode(data)) {
+      candidate = target as Node
+    }
+  }
+  return candidate
+}
+
+/** 将失败节点重置为生成中，用于原地重试 */
+export function resetImageGenerationNodeForRetry(
+  node: Node,
+  options: { title: string; fileName: string; prompt?: string },
+) {
+  const data = { ...(node.getData() as CanvasNodeData) }
+  data.kind = 'image'
+  data.mode = 'editor'
+  data.imageGenState = 'loading'
+  data.imageGenProgress = 0
+  data.title = options.title
+  data.fileName = options.fileName
+  data.previewUrl = ''
+  delete data.generationTaskId
+  if (options.prompt) {
+    data.genPrompt = options.prompt
+  }
+  node.setData(data, { overwrite: true })
+}
+
 /** 在源节点右侧生成已完成的普通图片节点（无生成占位态），并连线 */
 export function spawnCompletedImageResultNode(
   graph: Graph,

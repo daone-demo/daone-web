@@ -12,7 +12,7 @@
         >
           {{ tab.label }}
           <img
-            v-if="userInfoStore.userInfo.isVip && tab.key === 'CENTER'"
+            v-if="userInfoStore.userInfo?.isVip && tab.key === 'CENTER'"
             src="@/assets/images/vip.svg"
             class="project-panel__tab_icon"
           />

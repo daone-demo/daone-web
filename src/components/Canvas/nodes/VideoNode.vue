@@ -32,7 +32,7 @@
       ×
     </button>
 
-    <button
+    <!-- <button
       v-if="data.mode === 'picker'"
       type="button"
       class="video-node__upload-btn"
@@ -40,7 +40,7 @@
       @click="triggerUpload"
     >
       ↑ 上传
-    </button>
+    </button> -->
 
     <div
       v-if="data.mode === 'picker'"

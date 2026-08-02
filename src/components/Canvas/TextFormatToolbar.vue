@@ -160,9 +160,18 @@
 
     <span class="tft__divider" />
 
-    <!-- 下载 / 删除 -->
+    <!-- 下载 / 剪贴板 / 删除 -->
     <button type="button" class="tft__btn" title="下载文本" @click="emitCmd('download')">
       <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" />
+    </button>
+    <button type="button" class="tft__btn" title="复制" @click="emitCmd('copy')">
+      <span class="canvas__node-toolbar-icon" data-icon="copy" aria-hidden="true" />
+    </button>
+    <button type="button" class="tft__btn" title="剪切" @click="emitCmd('cut')">
+      <span class="canvas__node-toolbar-icon" data-icon="cut" aria-hidden="true" />
+    </button>
+    <button type="button" class="tft__btn" title="粘贴" @click="emitCmd('paste')">
+      <span class="canvas__node-toolbar-icon" data-icon="paste" aria-hidden="true" />
     </button>
     <button
       type="button"

@@ -756,6 +756,12 @@ function execFormat(cmd: TextFormatCommand, value?: string) {
     case 'copy':
       void copyContent()
       return
+    case 'cut':
+      void cutContent()
+      return
+    case 'paste':
+      void pasteContent()
+      return
     case 'expand':
       canvasGraph().__requestTextExpand?.(getNode().id)
       return
@@ -766,13 +772,87 @@ function execFormat(cmd: TextFormatCommand, value?: string) {
   onEditorInput()
 }
 
+function getClipboardText() {
+  const el = editorRef.value
+  if (!el) return ''
+
+  restoreEditorSelection()
+  const sel = window.getSelection()
+  if (sel?.rangeCount) {
+    const range = sel.getRangeAt(0)
+    if (el.contains(range.commonAncestorContainer) && !range.collapsed) {
+      return range.toString()
+    }
+  }
+  return el.innerText
+}
+
+function hasEditorSelection() {
+  const el = editorRef.value
+  if (!el) return false
+
+  restoreEditorSelection()
+  const sel = window.getSelection()
+  if (!sel?.rangeCount) return false
+  const range = sel.getRangeAt(0)
+  return el.contains(range.commonAncestorContainer) && !range.collapsed
+}
+
 async function copyContent() {
-  const text = editorRef.value?.innerText ?? ''
+  const text = getClipboardText()
   if (!text.trim()) return
   try {
     await navigator.clipboard.writeText(text)
   } catch {
-    // ignore clipboard errors
+    try {
+      document.execCommand('copy')
+    } catch {
+      // ignore clipboard errors
+    }
+  }
+}
+
+async function cutContent() {
+  const el = editorRef.value
+  if (!el) return
+  el.focus()
+  restoreEditorSelection()
+
+  const text = getClipboardText()
+  if (!text.trim()) return
+
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    // continue removing content even if clipboard write fails
+  }
+
+  if (hasEditorSelection()) {
+    document.execCommand('delete')
+  } else {
+    el.innerHTML = ''
+  }
+  onEditorInput()
+}
+
+async function pasteContent() {
+  const el = editorRef.value
+  if (!el) return
+  el.focus()
+  restoreEditorSelection()
+
+  try {
+    const text = await navigator.clipboard.readText()
+    if (!text) return
+    document.execCommand('insertText', false, text)
+    onEditorInput()
+  } catch {
+    try {
+      document.execCommand('paste')
+      onEditorInput()
+    } catch {
+      // ignore clipboard errors
+    }
   }
 }
 

@@ -18,7 +18,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
+  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, findReusableImageGenerationNode, resetImageGenerationNodeForRetry, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
   getConnectMenuPosition, resolveConnectSpawnPoint, getLinkedSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -2261,43 +2261,55 @@ export function registerCore(bind: CanvasBindings) {
       taskParameters.resolution = payload.resolution
     }
 
-    sourceNode.setData(
-      {
-        ...sourceData,
-        imageGenState: 'loading',
-        imageGenProgress: 0,
-        genPrompt: prompt,
-      },
-      { overwrite: true },
-    )
+    const buildIndexedFileName = (index: number) =>
+      resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount)
 
-    selectedNodeId.value = sourceNodeId
+    const resultNodes: Node[] = []
+    const reusableNode =
+      requestedCount === 1 ? findReusableImageGenerationNode(g, sourceNode) : null
+
+    if (reusableNode) {
+      resetImageGenerationNodeForRetry(reusableNode, {
+        title,
+        fileName: buildIndexedFileName(0),
+        prompt,
+      })
+      resultNodes.push(reusableNode)
+    } else {
+      const batchPreviewSize = getNodeSize('image', 'editor', {
+        kind: 'image',
+        mode: 'editor',
+        imageGenState: 'loading',
+      })
+      const plannedPoints = planOutgoingResultPoints(
+        g,
+        sourceNode,
+        batchPreviewSize,
+        requestedCount,
+        'above',
+      )
+
+      for (let index = 0; index < requestedCount; index += 1) {
+        resultNodes.push(
+          spawnGenerationResultNode(g, sourceNode, {
+            title,
+            fileName: buildIndexedFileName(index),
+            centerPoint: plannedPoints[index],
+            layoutSlot: index,
+            layoutTotal: requestedCount,
+          }),
+        )
+      }
+    }
+
+    const primaryNode = resultNodes[0]
+    selectedNodeId.value = primaryNode.id
     selectedKind.value = 'image'
-    syncNodeSelectionHighlight(sourceNodeId)
+    syncNodeSelectionHighlight(primaryNode.id)
+    syncNodeCount()
     bumpToolbarRevision()
     updateNodeToolbar()
-
-    const resultNodes: Node[] = [sourceNode]
-    const batchPreviewSize = getNodeSize('image', 'editor', {
-      kind: 'image',
-      mode: 'editor',
-      imageGenState: 'loading',
-    })
-    const extraCount = Math.max(0, requestedCount - 1)
-    const plannedPoints =
-      extraCount > 0
-        ? planOutgoingResultPoints(g, sourceNode, batchPreviewSize, extraCount, 'above')
-        : []
-
-    for (let index = 1; index < requestedCount; index += 1) {
-      resultNodes.push(
-        spawnGenerationResultNode(g, sourceNode, {
-          title,
-          fileName: resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount),
-          centerPoint: plannedPoints[index - 1],
-        }),
-      )
-    }
+    scheduleHistoryPush()
 
     const runners = resultNodes.map((resultNode, index) => {
       const fileName = resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount)
@@ -2378,20 +2390,21 @@ export function registerCore(bind: CanvasBindings) {
         (outcome) => outcome.status === 'fulfilled' && outcome.value.started,
       )
       if (!started) {
-        if (sourceNode.getData().imageGenState === 'loading') {
-          markGenerationNodeFailed(sourceNode)
-        }
+        resultNodes.forEach((node) => {
+          if ((node.getData() as CanvasNodeData).imageGenState === 'loading') {
+            markGenerationNodeFailed(node)
+          }
+        })
         return
       }
 
       scheduleHistoryPush()
     } catch (error) {
       resultNodes.forEach((node) => {
-        if (node.id !== sourceNodeId) markGenerationNodeFailed(node)
+        if ((node.getData() as CanvasNodeData).imageGenState === 'loading') {
+          markGenerationNodeFailed(node)
+        }
       })
-      if (sourceNode.getData().imageGenState === 'loading') {
-        markGenerationNodeFailed(sourceNode)
-      }
       message.error(isRequestError(error) ? error.message : '生成失败，请稍后重试')
     } finally {
       bumpToolbarRevision()

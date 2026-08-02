@@ -78,7 +78,7 @@
               <MaterialAssetHoverActions
                 :favorited="item.favorited"
                 @preview="openMaterialPreview(item)"
-                @toggle-favorite="onDoToggleAssetFavorite(item)"
+                @toggle-favorite="onDoToggleMaterialFavorite(item)"
               />
             </div>
           </article>
@@ -93,14 +93,6 @@
     </section>
 
     <section v-else class="material-assets__section material-assets__section--assets">
-      <input
-        ref="uploadInputRef"
-        class="project-card__upload-input"
-        type="file"
-        accept="image/*"
-        multiple
-        @change="handleUploadChange"
-      />
       <div
         class="home__inspiration-grid"
         @scroll.passive="onAssetGridScroll"
@@ -153,7 +145,7 @@
               <MaterialAssetHoverActions
                 :favorited="item.favorited"
                 @preview="openAssetPreview(item)"
-                @toggle-favorite="toggleMaterialFavorite(item)"
+                @toggle-favorite="onDoToggleAssetFavorite(item)"
               />
             </div>
           </article>
@@ -191,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, toRef } from 'vue'
+import { computed, onMounted, onUnmounted, toRef } from 'vue'
 import EmbeddedVideoPlayer from '@components/EmbeddedVideoPlayer/index.vue'
 import MaterialAssetHoverActions from './MaterialAssetHoverActions.vue'
 import {
@@ -246,29 +238,10 @@ const props = withDefaults(
   },
 )
 
-const emit = defineEmits<{
-  upload: [files: File[]]
-}>()
-
 const scopeRef = toRef(props, 'scope')
 const columnCountRef = computed(() => props.columnCount)
 const showMaterialList = computed(() => isMaterialListScope(props.scope))
-const onDoToggleAssetFavorite = (item: AssetItem) => {
-  console.log('userInfoStore.userInfo', userInfoStore.userInfo?.isVip)
-  if (!userInfoStore.userInfo?.isVip) {
-    Modal.confirm({
-      title: '提示',
-      content: '该素材需要先升级会员才可使用',
-      okText: '升级',
-      cancelText: '取消',
-      onOk: () => {
-        modalStore.openModal('combo');
-      },
-    })
-  } else {
-    toggleAssetFavorite(item)
-  }
-}
+
 const {
   materialCategories,
   materialSubCategories,
@@ -298,7 +271,37 @@ const {
   onLoadAssets,
 } = useMaterialAssets(scopeRef, columnCountRef)
 
-const uploadInputRef = ref<HTMLInputElement | null>(null)
+const onDoToggleMaterialFavorite = (item: MaterialItem) => {
+  if (!userInfoStore.userInfo?.isVip) {
+    Modal.confirm({
+      title: '提示',
+      content: '该素材需要先升级会员才可使用',
+      okText: '升级',
+      cancelText: '取消',
+      onOk: () => {
+        modalStore.openModal('combo');
+      },
+    })
+  } else {
+    toggleMaterialFavorite(item)
+  }
+}
+
+const onDoToggleAssetFavorite = (item: AssetItem) => {
+  if (!userInfoStore.userInfo?.isVip) {
+    Modal.confirm({
+      title: '提示',
+      content: '该素材需要先升级会员才可使用',
+      okText: '升级',
+      cancelText: '取消',
+      onOk: () => {
+        modalStore.openModal('combo');
+      },
+    })
+  } else {
+    toggleAssetFavorite(item)
+  }
+}
 
 let suppressClick = false
 
@@ -330,18 +333,6 @@ function materialToDragPayload(item: MaterialItem): CanvasAssetDragPayload {
 
 function onMaterialDragStart(event: DragEvent, item: MaterialItem) {
   startCanvasDrag(event, materialToDragPayload(item))
-}
-
-function triggerUpload() {
-  uploadInputRef.value?.click()
-}
-
-function handleUploadChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = Array.from(input.files ?? [])
-  if (!files.length) return
-  emit('upload', files)
-  input.value = ''
 }
 
 function onAssetClick(item: AssetItem) {

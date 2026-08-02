@@ -80,12 +80,13 @@
         type="button"
         class="image-dialogue-footer__icon"
         :class="{ 'image-dialogue-footer__icon--loading': translating }"
-        title="翻译"
+        :title="translating ? '翻译中' : '翻译'"
         :disabled="translating"
         @mousedown.stop
         @click.stop="emit('translate')"
       >
-        <span class="image-dialogue-footer__icon-glyph" data-icon="translate" aria-hidden="true" />
+        <span v-if="translating" class="image-dialogue-footer__translate-label">翻译中...</span>
+        <span v-else class="image-dialogue-footer__icon-glyph" data-icon="translate" aria-hidden="true" />
       </button>
       <span class="image-dialogue-footer__credits">
         <span class="image-dialogue-footer__credits-icon" aria-hidden="true" />
@@ -487,9 +488,19 @@ onBeforeUnmount(() => {
     cursor: not-allowed;
   }
 
-  &--loading .image-dialogue-footer__icon-glyph[data-icon='translate'] {
-    opacity: 0.35;
+  &--loading {
+    width: auto;
+    min-width: 28px;
+    padding: 0 6px;
+    cursor: not-allowed;
   }
+}
+
+.image-dialogue-footer__translate-label {
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  color: #6b7280;
 }
 
 .image-dialogue-footer__chip-icon {

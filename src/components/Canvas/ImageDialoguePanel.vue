@@ -231,12 +231,23 @@
           type="button"
           class="image-dialogue__icon"
           :class="{ 'image-dialogue__icon--loading': translating }"
-          title="翻译"
+          :title="translating ? '翻译中' : '翻译'"
           :disabled="translating"
           @mousedown.stop
           @click.stop="onTranslatePrompt"
         >
-        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--libtv pointer-events-none text-fg-default size-4" width="1.1em" height="1em" viewBox="0 0 19.71 18"><path d="M15.52 7.2c.16 0 .31.1.37.26l3.8 10a.4.4 0 0 1-.38.54h-1.03a.4.4 0 0 1-.37-.27l-.88-2.48h-4.36l-.88 2.48a.4.4 0 0 1-.37.27h-1.03a.4.4 0 0 1-.37-.54l3.79-10a.4.4 0 0 1 .37-.26zM7.7 0c.22 0 .4.18.4.4v1.4H14c.22 0 .4.18.4.4v1a.4.4 0 0 1-.4.4h-2.21a16 16 0 0 1-1.42 3.33A11 11 0 0 1 8.5 9.54l1.99 2.02c.1.11.14.28.09.42l-.43 1.16a.3.3 0 0 1-.5.1l-2.4-2.46-4.27 4.24a.4.4 0 0 1-.56 0l-.7-.7a.4.4 0 0 1 0-.56L6 9.5q-.79-.8-1.43-1.8-.55-.85-1-1.89a.3.3 0 0 1 .27-.41h1.2a.4.4 0 0 1 .35.22q.39.74.79 1.31.45.65 1.08 1.3.73-.73 1.54-2.08.8-1.33 1.2-2.55H.4a.4.4 0 0 1-.4-.4v-1c0-.22.18-.4.4-.4h5.9V.4c0-.22.18-.4.4-.4zm5.53 13.68h3.24l-1.62-4.59z" fill="currentColor"></path></svg>
+          <span v-if="translating" class="image-dialogue__translate-label">翻译中...</span>
+          <svg
+            v-else
+            xmlns="http://www.w3.org/2000/svg"
+            xmlns:xlink="http://www.w3.org/1999/xlink"
+            aria-hidden="true"
+            role="img"
+            class="iconify iconify--libtv pointer-events-none text-fg-default size-4"
+            width="1.1em"
+            height="1em"
+            viewBox="0 0 19.71 18"
+          ><path d="M15.52 7.2c.16 0 .31.1.37.26l3.8 10a.4.4 0 0 1-.38.54h-1.03a.4.4 0 0 1-.37-.27l-.88-2.48h-4.36l-.88 2.48a.4.4 0 0 1-.37.27h-1.03a.4.4 0 0 1-.37-.54l3.79-10a.4.4 0 0 1 .37-.26zM7.7 0c.22 0 .4.18.4.4v1.4H14c.22 0 .4.18.4.4v1a.4.4 0 0 1-.4.4h-2.21a16 16 0 0 1-1.42 3.33A11 11 0 0 1 8.5 9.54l1.99 2.02c.1.11.14.28.09.42l-.43 1.16a.3.3 0 0 1-.5.1l-2.4-2.46-4.27 4.24a.4.4 0 0 1-.56 0l-.7-.7a.4.4 0 0 1 0-.56L6 9.5q-.79-.8-1.43-1.8-.55-.85-1-1.89a.3.3 0 0 1 .27-.41h1.2a.4.4 0 0 1 .35.22q.39.74.79 1.31.45.65 1.08 1.3.73-.73 1.54-2.08.8-1.33 1.2-2.55H.4a.4.4 0 0 1-.4-.4v-1c0-.22.18-.4.4-.4h5.9V.4c0-.22.18-.4.4-.4zm5.53 13.68h3.24l-1.62-4.59z" fill="currentColor"></path></svg>
         </button>
         <span class="image-dialogue__credits">
           <span class="image-dialogue__credits-icon" aria-hidden="true" />
@@ -1696,8 +1707,22 @@ function onDocumentMouseDown(event: MouseEvent) {
     background: #f3f4f6;
   }
 
-  &--loading .image-dialogue__icon-glyph[data-icon='translate'] {
-    opacity: 0.35;
+  &--loading {
+    width: auto;
+    min-width: 28px;
+    padding: 0 6px;
+    cursor: not-allowed;
+  }
+}
+
+.image-dialogue__translate-label {
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  color: #9ca3af;
+
+  .image-dialogue--light & {
+    color: #6b7280;
   }
 }
 
