@@ -7,7 +7,6 @@ import {
   type VideoDialogueSettings,
   type VideoGenAspectRatio,
   type VideoHdMagnification,
-  createDefaultImageDialogueSettings,
   createDefaultVideoDialogueSettings,
 } from '../../constants'
 import { refreshCanvasNodeViews } from '../../graph'
@@ -207,7 +206,13 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const imageDialogueText = ref('')
   const mentionInsertSerial = ref(0)
   const mentionInsertToken = ref('')
-  const imageDialogueSettings = ref<ImageDialogueSettings>(createDefaultImageDialogueSettings())
+  const imageDialogueSettings = ref<ImageDialogueSettings>({
+    modelKey: '',
+    aspectRatio: '',
+    resolution: '',
+    imageCount: 0,
+    workflowId: '',
+  })
   const videoDialogueText = ref('')
   const videoDialogueSettings = ref<VideoDialogueSettings>(createDefaultVideoDialogueSettings())
   const videoHdMagnification = ref<VideoHdMagnification>('2')

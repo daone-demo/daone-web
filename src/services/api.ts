@@ -872,7 +872,7 @@ const api = {
     return http.delete(`/inspirations/${pathId(materialId)}/favorite`)
   },
   queryAiSkills<T = unknown>() {
-    return http.get<T>('/ai/skills')
+    return http.get<T>('/agent-skills')
   },
 }
 export default api

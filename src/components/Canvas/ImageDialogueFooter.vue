@@ -115,6 +115,7 @@ import {
   IMAGE_DIALOGUE_MODEL_MENU,
   buildImageDialogueModelsFromCapabilities,
   normalizeImageDialogueSettingsForModel,
+  pickImageDialogueSettingsInput,
   resolveImageDialogueModelApiValue,
   resolveImageDialogueModelKey,
   type ChatTools,
@@ -168,11 +169,13 @@ function applyNormalizedToolbarSettings(partial: Partial<ImageDialogueSettings> 
   const normalized = normalizeImageDialogueSettingsForModel(
     {
       modelKey: selectedModelKey.value,
-      ...(genAspectRatio.value ? { aspectRatio: genAspectRatio.value } : {}),
-      ...(genResolution.value ? { resolution: genResolution.value } : {}),
-      imageCount: genImageCount.value,
-      workflowId: '',
-      ...partial,
+      ...pickImageDialogueSettingsInput({
+        aspectRatio: genAspectRatio.value,
+        resolution: genResolution.value,
+        imageCount: genImageCount.value,
+      }),
+      ...pickImageDialogueSettingsInput(partial),
+      ...(partial.imageCount != null ? { imageCount: partial.imageCount } : {}),
     },
     props.chatTools,
   )

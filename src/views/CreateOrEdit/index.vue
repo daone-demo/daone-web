@@ -372,7 +372,7 @@ const onLoadChatTools = async () => {
 const onLoadAiSkills = async () => {
   const res: any = await api.queryAiSkills()
   console.log('aiSkills', res);
-  aiSkills.value = res.items ?? [];
+  aiSkills.value = res ?? [];
 }
 
 async function initializePage() {

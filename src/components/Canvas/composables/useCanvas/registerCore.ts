@@ -19,7 +19,7 @@ import {
   NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
   spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, getImageGenerationPlaceholderSize, findReusableImageGenerationNode, resetImageGenerationNodeForRetry, isImageGenerationFailedNode, shouldGenerateImageInPlaceOnNode, prepareImageNodeForInPlaceGeneration, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
-  getConnectMenuPosition, resolveConnectSpawnPoint, getLinkedSpawnPoint, detachEdgeRelation, isPersistedEdge,
+  getConnectMenuPosition, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
@@ -104,6 +104,8 @@ import {
   type VideoGenDuration,
   type ImageMarkItem,
   createDefaultImageDialogueSettings,
+  normalizeImageDialogueSettingsForModel,
+  pickImageDialogueSettingsInput,
   createDefaultVideoDialogueSettings,
   isVideoNodeGenerating,
 } from '../../constants'
@@ -3897,16 +3899,7 @@ export function registerCore(bind: CanvasBindings) {
   function normalizeImageDialogueSettings(
     saved?: CanvasNodeData['imageDialogueSettings'],
   ) {
-    const defaults = createDefaultImageDialogueSettings()
-    if (!saved) return defaults
-    return {
-      aspectRatio: saved.aspectRatio ?? defaults.aspectRatio,
-      resolution: saved.resolution ?? defaults.resolution,
-      imageCount: saved.imageCount ?? defaults.imageCount,
-      // 空值交给面板按 chatTools.modelOptions 第一项回填
-      modelKey: saved.modelKey?.trim() ? saved.modelKey : defaults.modelKey,
-      workflowId: saved.workflowId ?? defaults.workflowId,
-    }
+    return normalizeImageDialogueSettingsForModel(pickImageDialogueSettingsInput(saved ?? {}))
   }
 
   function loadImageDialogueFields(nodeId: string) {
@@ -3919,7 +3912,15 @@ export function registerCore(bind: CanvasBindings) {
 
     activeImageDialogueNodeId = nodeId
     imageDialogueText.value = data.imageDialogueText ?? ''
-    imageDialogueSettings.value = normalizeImageDialogueSettings(data.imageDialogueSettings)
+    imageDialogueSettings.value = data.imageDialogueSettings
+      ? normalizeImageDialogueSettings(data.imageDialogueSettings)
+      : {
+          modelKey: '',
+          aspectRatio: '',
+          resolution: '',
+          imageCount: 0,
+          workflowId: '',
+        }
   }
 
   function persistImageDialogueFields(nodeId?: string) {

@@ -304,6 +304,7 @@ import {
   buildImageWorkflowOptionGroups,
   buildImageWorkflowOptions,
   normalizeImageDialogueSettingsForModel,
+  pickImageDialogueSettingsInput,
   resolveImageDialogueModelApiValue,
   resolveImageDialogueModelKey,
   type ChatTools,
@@ -489,16 +490,47 @@ function buildSettingsFromRefs(): ImageDialogueSettings {
   }
 }
 
-function applySettingsToRefs(settings: ImageDialogueSettings) {
+function getSettingsSignature(settings: Partial<ImageDialogueSettings>) {
+  return [
+    settings.workflowId ?? '',
+    settings.modelKey ?? '',
+    settings.aspectRatio ?? '',
+    settings.resolution ?? '',
+    settings.imageCount ?? '',
+  ].join('|')
+}
+
+/** 按 chatTools 列表第一项回填宽高比 / 分辨率 / 张数 */
+function applyApiListDefaults(options?: {
+  modelKey?: string
+  workflowId?: string
+  emit?: boolean
+}) {
+  const normalized = normalizeImageDialogueSettingsForModel(
+    pickImageDialogueSettingsInput({
+      modelKey: options?.modelKey ?? selectedModelKey.value,
+      workflowId: options?.workflowId ?? selectedWorkFlow.value,
+    }),
+    props.chatTools,
+  )
   skipSettingsWatch = true
-  const normalized = normalizeImageDialogueSettingsForModel(settings, props.chatTools)
   genAspectRatio.value = normalized.aspectRatio
   genResolution.value = normalized.resolution
   genImageCount.value = normalized.imageCount
   selectedModelKey.value = normalized.modelKey
-  selectedWorkFlow.value = settings.workflowId ?? normalized.workflowId ?? ''
   nextTick(() => {
     skipSettingsWatch = false
+    if (options?.emit !== false) {
+      emitSettings()
+    }
+  })
+}
+
+function applyExternalSettings(settings: ImageDialogueSettings) {
+  selectedWorkFlow.value = settings.workflowId ?? ''
+  applyApiListDefaults({
+    workflowId: settings.workflowId || undefined,
+    emit: false,
   })
 }
 
@@ -518,9 +550,13 @@ function onWorkflowChange(workflowId: string | undefined) {
 }
 
 watch(
-  () => props.settings,
-  (settings) => {
-    applySettingsToRefs(settings)
+  () => [props.settings, props.chatTools] as const,
+  ([settings, chatTools]) => {
+    if (!chatTools) return
+    const incoming = getSettingsSignature(settings)
+    const current = getSettingsSignature(buildSettingsFromRefs())
+    if (incoming === current) return
+    applyExternalSettings(settings)
   },
   { deep: true, immediate: true },
 )
@@ -552,41 +588,11 @@ const qualityLabel = computed(() => {
   return `${aspectLabel} · ${genResolution.value} · x${genImageCount.value}`
 })
 
-function applyNormalizedToolbarSettings(partial: Partial<ImageDialogueSettings> = {}) {
-  const normalized = normalizeImageDialogueSettingsForModel(
-    {
-      ...buildSettingsFromRefs(),
-      ...partial,
-    },
-    props.chatTools,
-  )
-  skipSettingsWatch = true
-  genAspectRatio.value = normalized.aspectRatio
-  genResolution.value = normalized.resolution
-  genImageCount.value = normalized.imageCount
-  selectedModelKey.value = normalized.modelKey
-  nextTick(() => {
-    skipSettingsWatch = false
-    emitSettings()
-  })
-}
-
-function syncDialogueDefaultsFromChatTools() {
-  applyNormalizedToolbarSettings()
-}
-
-watch(
-  () => props.chatTools,
-  () => {
-    syncDialogueDefaultsFromChatTools()
-  },
-  { immediate: true, deep: true },
-)
-
 watch(
   () => selectedModelKey.value,
   () => {
-    applyNormalizedToolbarSettings()
+    if (skipSettingsWatch) return
+    applyApiListDefaults()
   },
 )
 

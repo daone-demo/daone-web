@@ -1132,22 +1132,30 @@ export type ImageDialogueModelEntry = {
 }
 
 function parseImageModelResolutions(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-
-  const result: string[] = []
-  for (const item of value) {
-    if (typeof item === 'string' && item.trim()) {
-      result.push(item.trim())
-      continue
+  if (Array.isArray(value)) {
+    const result: string[] = []
+    for (const item of value) {
+      if (typeof item === 'string' && item.trim()) {
+        result.push(item.trim())
+        continue
+      }
+      if (!item || typeof item !== 'object') continue
+      const row = item as Record<string, unknown>
+      const rawValue = row.value ?? row.key ?? row.label
+      const valueText = typeof rawValue === 'string' ? rawValue.trim() : ''
+      if (!valueText) continue
+      result.push(valueText)
     }
-    if (!item || typeof item !== 'object') continue
-    const row = item as Record<string, unknown>
-    const rawValue = row.value ?? row.key ?? row.label
-    const valueText = typeof rawValue === 'string' ? rawValue.trim() : ''
-    if (!valueText) continue
-    result.push(valueText)
+    return result
   }
-  return result
+
+  if (value && typeof value === 'object') {
+    const row = value as Record<string, unknown>
+    const options = row.options ?? row.values ?? row.items ?? row.list
+    if (options) return parseImageModelResolutions(options)
+  }
+
+  return []
 }
 
 function buildImageCapabilityFallbackEntry(capability: ImageCapability | null) {
@@ -1697,6 +1705,22 @@ export function createDefaultImageDialogueSettings(
   source?: ImageDialogueSource,
 ): ImageDialogueSettings {
   return normalizeImageDialogueSettingsForModel({}, source)
+}
+
+/** 仅保留用户已填写的图片对话设置字段，空值交给 normalize 取列表第一项 */
+export function pickImageDialogueSettingsInput(
+  partial: Partial<ImageDialogueSettings> | undefined,
+): Partial<ImageDialogueSettings> {
+  if (!partial) return {}
+  const input: Partial<ImageDialogueSettings> = {}
+  if (partial.modelKey?.trim()) input.modelKey = partial.modelKey.trim()
+  if (partial.workflowId?.trim()) input.workflowId = partial.workflowId.trim()
+  if (partial.aspectRatio?.trim()) input.aspectRatio = partial.aspectRatio.trim()
+  if (partial.resolution?.trim()) input.resolution = partial.resolution.trim()
+  if (partial.imageCount != null && Number.isFinite(partial.imageCount) && partial.imageCount > 0) {
+    input.imageCount = Math.floor(partial.imageCount)
+  }
+  return input
 }
 
 /** 将 modelKey 规范为 models[].value；兼容误存 label 的场景 */

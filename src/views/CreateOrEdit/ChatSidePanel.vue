@@ -103,7 +103,7 @@
             class="chat-panel__skill-btn"
             @click="selectSkill(skill)"
           >
-            {{ skill }}
+            {{ skill.displayName }}
           </button>
         </div>
 
@@ -223,7 +223,7 @@
           </Teleport>
 
           <div v-if="selectedSkill" class="chat-panel__skill-chip-row">
-            <span class="chat-panel__skill-chip">/{{ selectedSkill.command }}</span>
+            <span class="chat-panel__skill-chip">/{{ selectedSkill.displayName }}</span>
             <span v-if="!message.trim()" class="chat-panel__skill-tab-hint">Tab</span>
           </div>
 
@@ -459,6 +459,7 @@ const props = defineProps<{
   currentSessionId?: string,
   sessionName?: string
   chatTools?: any[]
+  aiSkills?: any[]
 }>()
 
 const API_BASE = 'https://api.dev.daoneai.com/daone_dev/api/v1';
@@ -478,14 +479,11 @@ const AUTO_MODE_LABELS: Record<string, string> = {
   Quality: '质量',
 }
 
-const skills = [
-  '有声书',
-  '剪映导出',
-  '电商商品图',
-  '图片重混',
-  '微短剧剧本',
-  '技能创建',
-]
+const skills = computed(() => props.aiSkills.filter((item: any) => item.category == "CUSTOM") ?? [])
+
+
+
+const filteredChatSkills = computed(() => props.aiSkills.filter((item: any) => item.category == "ecommerce") ?? [])
 
 type ChatModelCategory = 'image' | 'video' | 'audio'
 
@@ -659,17 +657,6 @@ const chatSkills = computed<ChatSkillItem[]>(() => {
     if (mapped) byCommand.set(mapped.command, mapped)
   })
   return Array.from(byCommand.values())
-})
-
-const filteredChatSkills = computed(() => {
-  const query = detectSlashQuery(message.value)
-  if (!query) return chatSkills.value
-  const lower = query.toLowerCase()
-  return chatSkills.value.filter(
-    (item) =>
-      item.command.toLowerCase().includes(lower)
-      || item.name.toLowerCase().includes(lower),
-  )
 })
 
 const { isLightTheme } = useCanvasBgTheme()
