@@ -337,38 +337,45 @@ export function parseMarkIdsFromPrompt(prompt: string): string[] {
   return ids
 }
 
-/** 从节点标记列表解析生成任务所需的原图像素坐标 */
-export function resolveImageMarkTaskCoordinates(
+/** 从节点标记列表解析生成任务所需的原图像素坐标数组 */
+export function resolveImageMarkTaskPoints(
   marks: ImageMarkItem[] | undefined,
   prompt: string,
-): { x: number; y: number } | null {
+): { x: number; y: number }[] {
   const completed = (marks ?? []).filter(
     (mark) => !mark.pending && Number.isFinite(mark.x) && Number.isFinite(mark.y),
   )
-  if (!completed.length) return null
+  if (!completed.length) return []
 
   const idsFromPrompt = parseMarkIdsFromPrompt(prompt)
-  for (const id of idsFromPrompt) {
-    const found = completed.find((mark) => mark.id === id)
-    if (found) {
-      return { x: Math.round(found.x), y: Math.round(found.y) }
+  if (idsFromPrompt.length) {
+    const points: { x: number; y: number }[] = []
+    for (const id of idsFromPrompt) {
+      const found = completed.find((mark) => mark.id === id)
+      if (found) {
+        points.push({ x: Math.round(found.x), y: Math.round(found.y) })
+      }
     }
+    if (points.length) return points
   }
 
-  const latest = completed[completed.length - 1]
-  return { x: Math.round(latest.x), y: Math.round(latest.y) }
+  return completed.map((mark) => ({
+    x: Math.round(mark.x),
+    y: Math.round(mark.y),
+  }))
 }
 
-/** 将标记坐标写入图片生成任务 parameters（x / y 为原图像素坐标） */
+/** 将标记坐标写入图片生成任务 parameters.points（原图像素坐标） */
 export function applyImageMarkTaskParameters(
   parameters: Record<string, unknown>,
   marks: ImageMarkItem[] | undefined,
   prompt: string,
 ): void {
-  const coords = resolveImageMarkTaskCoordinates(marks, prompt)
-  if (!coords) return
-  parameters.x = coords.x
-  parameters.y = coords.y
+  const points = resolveImageMarkTaskPoints(marks, prompt)
+  if (!points.length) return
+  parameters.points = points
+  delete parameters.x
+  delete parameters.y
 }
 
 /** 从提示词文本中移除标记 mention */
