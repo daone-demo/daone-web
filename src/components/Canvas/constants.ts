@@ -836,6 +836,13 @@ export function isImageWorkflowRecord(workflow: WorkflowRecord | null | undefine
   return type === 'IMAGE'
 }
 
+/** 仅保留 type 为 VIDEO 的工作流（兼容大小写与 TYPE 字段） */
+export function isVideoWorkflowRecord(workflow: WorkflowRecord | null | undefined): boolean {
+  if (!workflow) return false
+  const type = String(workflow.type ?? workflow.TYPE ?? '').trim().toUpperCase()
+  return type === 'VIDEO'
+}
+
 /** 图片对话/文生图对话框共用：从 workflows 列表解析 IMAGE 类型选项 */
 export function buildImageWorkflowOptions(
   workflows: WorkflowCategoryGroup[] | WorkflowRecord[] | null | undefined,
@@ -866,6 +873,44 @@ export function buildImageWorkflowOptionGroups(
   }
 
   return groupWorkflowsByCategory(buildImageWorkflowOptions(workflows))
+    .map((group) => ({
+      categoryId: group.categoryId,
+      categoryName: group.categoryName,
+      children: group.workflows.map(normalizeWorkflowOption),
+    }))
+    .filter((group) => group.children.length > 0)
+}
+
+/** 视频对话面板：从 workflows 列表解析 VIDEO 类型选项 */
+export function buildVideoWorkflowOptions(
+  workflows: WorkflowCategoryGroup[] | WorkflowRecord[] | null | undefined,
+): ImageWorkflowOption[] {
+  return flattenWorkflowCategoryGroups(workflows)
+    .filter((workflow) => workflow?.id !== undefined && workflow?.id !== null)
+    .filter(isVideoWorkflowRecord)
+    .map(normalizeWorkflowOption)
+}
+
+/** 视频对话面板：按 categoryId 输出二级菜单选项（仅 VIDEO） */
+export function buildVideoWorkflowOptionGroups(
+  workflows: WorkflowCategoryGroup[] | WorkflowRecord[] | null | undefined,
+): ImageWorkflowOptionGroup[] {
+  if (!Array.isArray(workflows) || !workflows.length) return []
+
+  if (isWorkflowCategoryGroup(workflows[0])) {
+    return (workflows as WorkflowCategoryGroup[])
+      .map((group) => ({
+        categoryId: group.categoryId,
+        categoryName: group.categoryName,
+        children: group.workflows
+          .filter((workflow) => workflow?.id !== undefined && workflow?.id !== null)
+          .filter(isVideoWorkflowRecord)
+          .map(normalizeWorkflowOption),
+      }))
+      .filter((group) => group.children.length > 0)
+  }
+
+  return groupWorkflowsByCategory(buildVideoWorkflowOptions(workflows))
     .map((group) => ({
       categoryId: group.categoryId,
       categoryName: group.categoryName,

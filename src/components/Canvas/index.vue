@@ -402,7 +402,6 @@
       :active-project-id="activeProjectId"
       @close="closeProjectBrowser"
       @select-project="selectProject"
-      @new-project="emit('new-project')"
       @rename-project="(projectId, name) => emit('rename-project', projectId, name)"
       @delete-project="(projectId) => emit('delete-project', projectId)"
     />

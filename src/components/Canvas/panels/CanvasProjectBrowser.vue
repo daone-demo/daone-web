@@ -166,7 +166,6 @@ defineProps<{
 const emit = defineEmits<{
   close: []
   'select-project': [projectId: string]
-  'new-project': []
   'rename-project': [projectId: string, name: string]
   'delete-project': [projectId: string]
 }>()
@@ -240,11 +239,6 @@ function onPaginationChange(nextPage: number, nextPageSize: number) {
 
 function onSelectProject(projectId: string) {
   emit('select-project', projectId)
-  emit('close')
-}
-
-function onNewProject() {
-  emit('new-project')
   emit('close')
 }
 

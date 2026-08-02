@@ -22,7 +22,7 @@
           :class="{ 'video-dialogue__select--active': showAdvisorMenu }"
           @click="toggleAdvisorMenu"
         >
-          视频参谋
+          {{ advisorButtonLabel }}
           <span class="video-dialogue__select-arrow" aria-hidden="true" />
         </button>
         <div
@@ -30,30 +30,34 @@
           class="video-dialogue__advisor-menu"
           @mousedown.stop
         >
-          <div
-            v-for="item in VIDEO_ADVISOR_MENU"
-            :key="item.key"
-            class="video-dialogue__advisor-item"
-            :class="{ 'video-dialogue__advisor-item--active': activeAdvisorKey === item.key }"
-            @mouseenter="activeAdvisorKey = item.key"
-          >
-            <span>{{ item.label }}</span>
-            <span class="video-dialogue__advisor-arrow" aria-hidden="true" />
+          <template v-if="workflowOptionGroups.length">
             <div
-              v-if="activeAdvisorKey === item.key"
-              class="video-dialogue__advisor-submenu"
+              v-for="item in workflowOptionGroups"
+              :key="item.categoryId"
+              class="video-dialogue__advisor-item"
+              :class="{ 'video-dialogue__advisor-item--active': activeAdvisorKey === item.categoryId }"
+              @mouseenter="activeAdvisorKey = item.categoryId"
             >
-              <button
-                v-for="child in item.children"
-                :key="child.key"
-                type="button"
-                class="video-dialogue__advisor-subitem"
-                @click="selectAdvisorItem"
+              <span>{{ item.categoryName }}</span>
+              <span class="video-dialogue__advisor-arrow" aria-hidden="true" />
+              <div
+                v-if="activeAdvisorKey === item.categoryId"
+                class="video-dialogue__advisor-submenu"
               >
-                {{ child.label }}
-              </button>
+                <button
+                  v-for="child in item.children"
+                  :key="child.id"
+                  type="button"
+                  class="video-dialogue__advisor-subitem"
+                  :class="{ 'video-dialogue__advisor-subitem--active': child.id === selectedWorkflowId }"
+                  @click="selectAdvisorItem(child.id)"
+                >
+                  {{ child.name }}
+                </button>
+              </div>
             </div>
-          </div>
+          </template>
+          <p v-else class="video-dialogue__advisor-empty">暂无工作流</p>
         </div>
       </div>
     </div>
@@ -229,12 +233,12 @@ import {
 } from './videoGenPromptMention'
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
-  VIDEO_ADVISOR_MENU,
   VIDEO_DIALOGUE_CREDITS,
   VIDEO_GEN_PROMPT_PLACEHOLDER,
   VIDEO_DIALOGUE_MODEL_MENU,
   buildVideoDialogueCountOptionsFromCapabilities,
   buildVideoDialogueModelsFromCapabilities,
+  buildVideoWorkflowOptionGroups,
   formatVideoGenSettings,
   normalizeVideoDialogueSettingsForModel,
   resolveVideoDialogueModelApiValue,
@@ -245,6 +249,7 @@ import {
   type VideoGenAspectRatio,
   type VideoGenDuration,
   type VideoGenResolution,
+  type WorkflowCategoryGroup,
 } from './constants'
 import type { VideoSourceRef } from './videoGen'
 
@@ -253,6 +258,7 @@ const props = defineProps<{
   settings: VideoDialogueSettings
   sourceRefs?: VideoSourceRef[]
   chatTools?: ChatTools | null
+  workflows?: WorkflowCategoryGroup[]
 }>()
 
 const emit = defineEmits<{
@@ -267,7 +273,16 @@ const emit = defineEmits<{
 const showAdvisorMenu = ref(false)
 const showVideoSettings = ref(false)
 const showModelMenu = ref(false)
-const activeAdvisorKey = ref<(typeof VIDEO_ADVISOR_MENU)[number]['key']>('dynamic')
+const activeAdvisorKey = ref('')
+const selectedWorkflowId = ref('')
+const workflowOptionGroups = computed(() => buildVideoWorkflowOptionGroups(props.workflows))
+const advisorButtonLabel = computed(() => {
+  for (const group of workflowOptionGroups.value) {
+    const found = group.children.find((item) => item.id === selectedWorkflowId.value)
+    if (found) return found.name
+  }
+  return '视频参谋'
+})
 const videoDuration = ref<VideoGenDuration>(5)
 const videoAspectRatio = ref<VideoGenAspectRatio>('16:9')
 const videoResolution = ref<VideoGenResolution>('720P')
@@ -590,13 +605,14 @@ function selectModel(model: VideoDialogueModelItem) {
 function toggleAdvisorMenu() {
   showAdvisorMenu.value = !showAdvisorMenu.value
   if (showAdvisorMenu.value) {
-    activeAdvisorKey.value = 'dynamic'
+    activeAdvisorKey.value = workflowOptionGroups.value[0]?.categoryId ?? ''
     showVideoSettings.value = false
     showModelMenu.value = false
   }
 }
 
-function selectAdvisorItem() {
+function selectAdvisorItem(workflowId: string) {
+  selectedWorkflowId.value = workflowId
   showAdvisorMenu.value = false
 }
 
@@ -824,6 +840,19 @@ onBeforeUnmount(() => {
   &:hover {
     background: #f3f4f6;
   }
+
+  &--active {
+    background: #f3f4f6;
+    color: #111827;
+    font-weight: 500;
+  }
+}
+
+.video-dialogue__advisor-empty {
+  padding: 12px 14px;
+  margin: 0;
+  font-size: 13px;
+  color: #9ca3af;
 }
 
 .video-dialogue__refs {

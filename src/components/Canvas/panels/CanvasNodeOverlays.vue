@@ -400,6 +400,7 @@
       :settings="videoDialogueSettings"
       :source-refs="videoDialogueSourceRefs"
       :chat-tools="chatTools"
+      :workflows="workflows"
       @update:model-value="emit('update:videoDialogueText', $event)"
       @update:settings="emit('update:videoDialogueSettings', $event)"
       @remove-source-ref="emit('remove-video-dialogue-source-ref', $event)"
