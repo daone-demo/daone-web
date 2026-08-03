@@ -176,7 +176,9 @@
 
       <p v-if="assetLoading" class="project-material__loading">加载中...</p>
       <p v-else-if="!assetHasMore && assetList.length" class="project-material__end">没有更多了</p>
-      <p v-else-if="!assetLoading && !assetList.length && !showAssetUpload" class="project-material__empty">暂无内容</p>
+      <p v-else-if="!assetLoading && !assetList.length && !showAssetUpload" class="project-material__empty">
+        {{ scope === 'DIGITAL_HUMAN' ? '暂无数字人' : '暂无内容' }}
+      </p>
     </section>
 
     <a-modal

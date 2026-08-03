@@ -913,9 +913,13 @@ const api = {
   applyInvoice<T = unknown>(data: any) {
     return http.post<T>(`/invoices/apply`, data)
   },
-  /** 保存画布元素组 */
-  createDigitalHuman<T = unknown>(data: any) {
+  /** 查询我的数字人列表 */
+  getDigitalHumans<T = unknown>(params?: PageQuery) {
+    return http.get<PageResult<T>>('/digital-humans', { params })
+  },
+  /** 新增数字人 */
+  createDigitalHuman<T = unknown>(data: { assetId: string | number }) {
     return http.post<T>(`/digital-humans`, data)
-  }
+  },
 }
 export default api

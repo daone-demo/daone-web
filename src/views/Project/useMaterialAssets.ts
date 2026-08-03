@@ -143,21 +143,45 @@ export function useMaterialAssets(
     }
   }
 
+  function normalizeDigitalHumanItem(item: any): AssetItem {
+    const assetId = item?.assetId ?? item?.id
+    return normalizeAssetItem({
+      id: String(assetId ?? ''),
+      previewUrl: item?.previewUrl || '',
+      url: item?.previewUrl || '',
+      type: 'IMAGE',
+      favorited: false,
+    })
+  }
+
   async function onLoadAssets() {
     if (assetLoading.value || !assetHasMore.value) return
     assetLoading.value = true
     try {
-      const typeParam = resolveMaterialTypeParam()
-      const dateParam = resolveAssetDateParam()
-      const res: any = await api.getAssets({
-        scope: scope.value,
-        ...(typeParam ? { type: typeParam } : {}),
-        ...(dateParam ? { date: dateParam } : {}),
+      const pageParams = {
         pageSize: MATERIAL_PAGE_SIZE,
         page: assetPage.value,
-      })
-      const records = ((res.records ?? []) as AssetItem[]).map(normalizeAssetItem)
-      const total = Number(res.total ?? records.length)
+      }
+
+      let records: AssetItem[] = []
+      let total = 0
+
+      if (scope.value === 'DIGITAL_HUMAN') {
+        const res: any = await api.getDigitalHumans(pageParams)
+        records = ((res.records ?? []) as any[]).map(normalizeDigitalHumanItem)
+        total = Number(res.total ?? records.length)
+      } else {
+        const typeParam = resolveMaterialTypeParam()
+        const dateParam = resolveAssetDateParam()
+        const res: any = await api.getAssets({
+          scope: scope.value,
+          ...(typeParam ? { type: typeParam } : {}),
+          ...(dateParam ? { date: dateParam } : {}),
+          ...pageParams,
+        })
+        records = ((res.records ?? []) as AssetItem[]).map(normalizeAssetItem)
+        total = Number(res.total ?? records.length)
+      }
 
       if (assetPage.value === 1) {
         assetList.value = records
