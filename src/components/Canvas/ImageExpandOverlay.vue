@@ -97,6 +97,8 @@
             class="image-expand-overlay__image-box"
             :style="imageInnerStyle"
             @mousedown.stop="onImageMouseDown"
+            @mouseenter="showImageDragHint = true"
+            @mouseleave="showImageDragHint = false"
           >
             <img
               :src="imageUrl"
@@ -104,6 +106,12 @@
               draggable="false"
               alt=""
             />
+            <div
+              v-if="showImageDragHint && !imageDragging"
+              class="image-expand-overlay__drag-hint"
+            >
+              长按鼠标进行拖拽
+            </div>
           </div>
 
           <div class="image-expand-overlay__image-dash" :style="imageInnerStyle" />
@@ -185,6 +193,7 @@ type Handle = (typeof handles)[number] | 'move-image'
 
 const spaceHeld = ref(false)
 const imageDragging = ref(false)
+const showImageDragHint = ref(false)
 
 let dragState: {
   handle: Handle
@@ -417,6 +426,7 @@ function startImageLongPressDrag(event: MouseEvent) {
 }
 
 function onImageMouseDown(event: MouseEvent) {
+  showImageDragHint.value = false
   startImageLongPressDrag(event)
 }
 
@@ -521,6 +531,7 @@ function onDragMove(event: MouseEvent) {
 function onDragEnd() {
   dragState = null
   imageDragging.value = false
+  showImageDragHint.value = false
   clearLongPressWatch()
   window.removeEventListener('mousemove', onDragMove)
   window.removeEventListener('mouseup', onDragEnd)
@@ -769,6 +780,23 @@ onBeforeUnmount(() => {
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
+}
+
+.image-expand-overlay__drag-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: rgba(15, 23, 42, 0.42);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
 }
 
 .image-expand-overlay__image-dash {
