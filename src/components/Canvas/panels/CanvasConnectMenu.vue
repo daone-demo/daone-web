@@ -4,7 +4,7 @@
     :style="{ left: `${position.left}px`, top: `${position.top}px` }"
     @mousedown.stop
   >
-    <h4 class="canvas__connect-title">添加上下文</h4>
+    <!-- <h4 class="canvas__connect-title">添加上下文</h4> -->
     <button
       v-for="item in CONNECT_GENERATE_MENU"
       :key="item.key"

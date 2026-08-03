@@ -412,10 +412,9 @@ function cancelPendingUpload() {
 
 function onPreviewClick() {
   if (isGridSplitNode.value) return
+  // 有预览时单击仅选中节点（由 graph node:click 处理，显示上方操作栏），双击再打开下方对话框
   if (data.previewUrl?.trim() && data.uploadState !== 'uploading') {
     cancelPendingUpload()
-    const g = getGraph() as CanvasGraph
-    g?.__openImageDialogue?.(getNode().id)
     return
   }
   cancelPendingUpload()
@@ -427,6 +426,7 @@ function onPreviewClick() {
 
 function onPreviewDblClick() {
   cancelPendingUpload()
+  if (!data.previewUrl?.trim() || data.uploadState === 'uploading') return
   const node = getNode()
   const g = node.model?.graph as CanvasGraph | undefined
   g?.__openImageDialogue?.(node.id)
