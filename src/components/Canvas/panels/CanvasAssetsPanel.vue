@@ -96,6 +96,8 @@
         ref="materialAssetsRef"
         :key="tab"
         :scope="tab"
+        :asset-type="type"
+        :asset-date="date"
         :column-count="CANVAS_MATERIAL_COLUMN_COUNT"
         embedded
         :is-light="isLight"

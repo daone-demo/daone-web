@@ -15,7 +15,12 @@ import {
   type PreviewItem,
 } from './materialAssets'
 
-export function useMaterialAssets(scope: Ref<ProjectTabKey>, columnCount: Ref<number>) {
+export function useMaterialAssets(
+  scope: Ref<ProjectTabKey>,
+  columnCount: Ref<number>,
+  assetType: Ref<'all' | 'image' | 'video'> = ref('all'),
+  assetDate: Ref<unknown> = ref(null),
+) {
   const materialCategories = ref<any[]>([])
   const materialCode = ref('')
   const activeCategoryCode = ref('')
@@ -48,12 +53,43 @@ export function useMaterialAssets(scope: Ref<ProjectTabKey>, columnCount: Ref<nu
     materialPage.value = 1
     materialHasMore.value = true
     materialList.value = []
+    materialLoading.value = false
   }
 
   function resetAssetList() {
     assetPage.value = 1
     assetHasMore.value = true
     assetList.value = []
+    assetLoading.value = false
+  }
+
+  function resolveMaterialTypeParam(): 'IMAGE' | 'VIDEO' | undefined {
+    if (assetType.value === 'image') return 'IMAGE'
+    if (assetType.value === 'video') return 'VIDEO'
+    return undefined
+  }
+
+  function resolveAssetDateParam(): string | undefined {
+    const value = assetDate.value
+    if (!value) return undefined
+    if (typeof value === 'string') return value
+    if (typeof value === 'object' && value !== null && 'format' in value) {
+      const format = (value as { format?: (pattern: string) => string }).format
+      return typeof format === 'function' ? format('YYYY-MM-DD') : undefined
+    }
+    return undefined
+  }
+
+  function reloadForFilters() {
+    if (isMaterialListScope(scope.value)) {
+      resetMaterialList()
+      void onLoadMaterials()
+      return
+    }
+    if (scope.value === 'FILES') {
+      resetAssetList()
+      void onLoadAssets()
+    }
   }
 
   async function onLoadMaterialCategories() {
@@ -81,13 +117,16 @@ export function useMaterialAssets(scope: Ref<ProjectTabKey>, columnCount: Ref<nu
     if (scope.value === 'CENTER' && !materialCode.value) return
     materialLoading.value = true
     try {
+      const typeParam = resolveMaterialTypeParam()
       const res: any = scope.value === 'FAVORITE'
         ? await api.queryMaterialFavorites({
+          ...(typeParam ? { type: typeParam } : {}),
           pageSize: MATERIAL_PAGE_SIZE,
           page: materialPage.value,
         })
         : await api.queryMaterials({
           categoryId: materialCode.value,
+          ...(typeParam ? { type: typeParam } : {}),
           pageSize: MATERIAL_PAGE_SIZE,
           page: materialPage.value,
         })
@@ -114,8 +153,12 @@ export function useMaterialAssets(scope: Ref<ProjectTabKey>, columnCount: Ref<nu
     if (assetLoading.value || !assetHasMore.value) return
     assetLoading.value = true
     try {
+      const typeParam = resolveMaterialTypeParam()
+      const dateParam = resolveAssetDateParam()
       const res: any = await api.getAssets({
         scope: scope.value,
+        ...(typeParam ? { type: typeParam } : {}),
+        ...(dateParam ? { date: dateParam } : {}),
         pageSize: MATERIAL_PAGE_SIZE,
         page: assetPage.value,
       })
@@ -272,6 +315,16 @@ export function useMaterialAssets(scope: Ref<ProjectTabKey>, columnCount: Ref<nu
     void loadForScope(nextScope)
   })
 
+  watch(assetType, () => {
+    reloadForFilters()
+  })
+
+  watch(assetDate, () => {
+    if (scope.value === 'FILES') {
+      reloadForFilters()
+    }
+  })
+
   return {
     materialCategories,
     materialSubCategories,
@@ -301,5 +354,6 @@ export function useMaterialAssets(scope: Ref<ProjectTabKey>, columnCount: Ref<nu
     onMaterialGridScroll,
     onAssetGridScroll,
     resetAssetList,
+    reloadForFilters,
   }
 }

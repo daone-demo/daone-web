@@ -252,6 +252,8 @@ const props = withDefaults(
     useWindowScroll?: boolean
     batchSelectMode?: boolean
     selectedAssetIds?: string[]
+    assetType?: 'all' | 'image' | 'video'
+    assetDate?: unknown
   }>(),
   {
     columnCount: MATERIAL_COLUMN_COUNT,
@@ -261,6 +263,8 @@ const props = withDefaults(
     useWindowScroll: false,
     batchSelectMode: false,
     selectedAssetIds: () => [],
+    assetType: 'all',
+    assetDate: undefined,
   },
 )
 
@@ -270,6 +274,8 @@ const emit = defineEmits<{
 
 const scopeRef = toRef(props, 'scope')
 const columnCountRef = computed(() => props.columnCount)
+const assetTypeRef = toRef(props, 'assetType')
+const assetDateRef = toRef(props, 'assetDate')
 const showMaterialList = computed(() => isMaterialListScope(props.scope))
 
 const {
@@ -299,7 +305,8 @@ const {
   onAssetGridScroll,
   onLoadMaterials,
   onLoadAssets,
-} = useMaterialAssets(scopeRef, columnCountRef)
+  reloadForFilters,
+} = useMaterialAssets(scopeRef, columnCountRef, assetTypeRef, assetDateRef)
 
 const onDoToggleMaterialFavorite = (item: MaterialItem) => {
   console.log(userInfoStore.userInfo?.isVip)
@@ -410,6 +417,7 @@ function getSelectedAssetPayloads(): CanvasAssetDragPayload[] {
 
 defineExpose({
   getSelectedAssetPayloads,
+  reloadForFilters,
 })
 
 function toDragPayload(item: AssetItem): CanvasAssetDragPayload {
