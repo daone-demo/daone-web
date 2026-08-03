@@ -1,3 +1,5 @@
+import type { ProjectVersionRecord } from '@/services/api'
+
 export type HistoryRecordKind = 'image' | 'video' | 'text' | 'custom'
 
 export type HistoryRecordTab = 'all' | HistoryRecordKind
@@ -11,6 +13,8 @@ export type HistoryRecord = {
   dateLabel: string
 }
 
+export type { ProjectVersionRecord }
+
 export const HISTORY_RECORD_TABS: { key: HistoryRecordTab; label: string }[] = [
   { key: 'all', label: '全部' },
   { key: 'image', label: '图片' },
@@ -19,64 +23,68 @@ export const HISTORY_RECORD_TABS: { key: HistoryRecordTab; label: string }[] = [
   { key: 'custom', label: '自定义' },
 ]
 
-/** 演示用历史记录数据 */
-export const CANVAS_HISTORY_RECORDS: HistoryRecord[] = [
-  {
-    id: '1',
-    kind: 'image',
-    summary:
-      '提取图片中的主体，适合换背景：画面中有一条形态优美、色彩鲜艳的锦鲤，周围环绕着粉色、白色的荷花与荷叶，整体氛围清新雅致。',
-    time: '22:07',
-    dateKey: '2026-06-02',
-    dateLabel: '2026年6月2日星期二',
-  },
-  {
-    id: '2',
-    kind: 'image',
-    summary: '提取图片中的主体，适合换背景',
-    time: '22:07',
-    dateKey: '2026-06-02',
-    dateLabel: '2026年6月2日星期二',
-  },
-  {
-    id: '3',
-    kind: 'image',
-    summary:
-      '一位年轻女性，长发自然披散，五官精致，眼神明亮，皮肤白皙，身着简约白色上衣，背景为柔和的自然光环境，整体风格清新写实。',
-    time: '16:39',
-    dateKey: '2026-06-02',
-    dateLabel: '2026年6月2日星期二',
-  },
-  {
-    id: '4',
-    kind: 'text',
-    summary: '这幅画，颜色厚重到位，阳光温暖明亮，人物表情生动，整体构图平衡，适合作为宣传海报主视觉。',
-    time: '16:39',
-    dateKey: '2026-06-02',
-    dateLabel: '2026年6月2日星期二',
-  },
-  {
-    id: '5',
-    kind: 'image',
-    summary: '一位女性上半身肖像，真实皮肤细腻，柔和侧光，浅景深背景虚化，电影感色调。',
-    time: '16:39',
-    dateKey: '2026-06-02',
-    dateLabel: '2026年6月2日星期二',
-  },
-  {
-    id: '6',
-    kind: 'video',
-    summary: '图生视频：镜头缓慢推进，主体轻微转头，光影随云层变化，时长 5 秒。',
-    time: '14:12',
-    dateKey: '2026-06-01',
-    dateLabel: '2026年6月1日星期一',
-  },
-  {
-    id: '7',
-    kind: 'custom',
-    summary: '自定义工作流 · 批量抠图导出',
-    time: '11:05',
-    dateKey: '2026-06-01',
-    dateLabel: '2026年6月1日星期一',
-  },
-]
+export function mapCanvasSaveTypeToHistoryKind(type?: string): HistoryRecordKind {
+  switch (String(type ?? '').trim().toUpperCase()) {
+    case 'IMAGE':
+      return 'image'
+    case 'VIDEO':
+      return 'video'
+    case 'TEXT':
+      return 'text'
+    case 'CUSTOM':
+      return 'custom'
+    default:
+      return 'custom'
+  }
+}
+
+function formatHistoryDateKey(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return 'unknown'
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function formatHistoryDateLabel(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '未知日期'
+  const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日${weekdays[date.getDay()]}`
+}
+
+function formatHistoryTime(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${hours}:${minutes}`
+}
+
+export function mapProjectVersionToHistoryRecord(
+  record: ProjectVersionRecord,
+): HistoryRecord | null {
+  const createdAt = record.createdAt?.trim() || ''
+  const summary =
+    record.description?.trim() ||
+  (record.versionNo != null ? `版本 ${record.versionNo}` : `版本 ${record.id}`)
+
+  return {
+    id: String(record.id),
+    kind: mapCanvasSaveTypeToHistoryKind(record.type),
+    summary,
+    time: createdAt ? formatHistoryTime(createdAt) : '',
+    dateKey: createdAt ? formatHistoryDateKey(createdAt) : 'unknown',
+    dateLabel: createdAt ? formatHistoryDateLabel(createdAt) : '未知日期',
+  }
+}
+
+export function mapProjectVersionsToHistoryRecords(
+  records: ProjectVersionRecord[] | null | undefined,
+): HistoryRecord[] {
+  if (!Array.isArray(records)) return []
+  return records
+    .map(mapProjectVersionToHistoryRecord)
+    .filter((item): item is HistoryRecord => Boolean(item))
+}

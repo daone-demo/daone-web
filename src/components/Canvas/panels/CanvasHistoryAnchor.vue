@@ -5,6 +5,7 @@
 </template>
 
 <script setup lang="ts">
+import type { ProjectVersionRecord } from '@/services/api'
 import CanvasHistoryPanel from '../CanvasHistoryPanel.vue'
 
 const emit = defineEmits<{
@@ -12,6 +13,6 @@ const emit = defineEmits<{
 }>()
 
 defineProps<{
-  list: any[]
+  list: ProjectVersionRecord[]
 }>()
 </script>

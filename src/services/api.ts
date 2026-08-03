@@ -274,6 +274,15 @@ export interface CanvasSaveResponse extends ProjectCanvasResponse {
   savedAt: string
 }
 
+/** GET /projects/{projectId}/versions 单条版本记录。 */
+export interface ProjectVersionRecord {
+  id: string | number
+  versionNo?: number
+  description?: string
+  type?: CanvasSaveVersionType | string
+  createdAt?: string
+}
+
 export interface ShareCreateRequest {
   expireDays?: number
 }

@@ -451,7 +451,7 @@ import CanvasHiddenFileInput from './panels/CanvasHiddenFileInput.vue'
 import { useCanvas } from './composables/useCanvas'
 import { ref, watch } from 'vue'
 import api from '@/services/api'
-import type { ProjectCanvasResponse } from '@/services/api'
+import type { ProjectCanvasResponse, ProjectVersionRecord } from '@/services/api'
 import { type ProjectTabKey } from '@/views/Project/projectData'
 import type { ElementGroupRecord, AssetCenterTabKey } from './assetCenterData'
 import type { ImageCapability, WorkflowCategoryGroup, CanvasAssetDragPayload } from './constants'
@@ -479,7 +479,7 @@ defineProps<{
 }>()
 
 const skillList = ref<ElementGroupRecord[]>([]);
-const historyList = ref<any[]>([]);
+const historyList = ref<ProjectVersionRecord[]>([])
 const historyPage = ref(1);
 
 const canvasRef = ref<HTMLElement | null>(null)
@@ -865,10 +865,13 @@ const onLoadSkill = () => {
 }
 
 const onLoadHistory = () => {
-  api.getProjectVersions(activeProjectId.value, { pageSize: 50, page: historyPage.value })
-    .then((res: any) => {
-      historyList.value = res.records ?? [];
-    })
+  if (!activeProjectId.value) return
+  api.getProjectVersions<ProjectVersionRecord>(activeProjectId.value, {
+    pageSize: 50,
+    page: historyPage.value,
+  }).then((res) => {
+    historyList.value = res.records ?? []
+  })
 }
 
 watch(showAssetCenterPanel, (open) => {

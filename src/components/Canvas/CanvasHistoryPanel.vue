@@ -54,7 +54,11 @@
             <li v-for="item in group.items" :key="item.id" class="canvas-history__item">
               <button type="button" class="canvas-history__item-btn">
                 <span class="canvas-history__item-text">{{ item.summary }}</span>
-                <time class="canvas-history__item-time" :datetime="item.time">{{ item.time }}</time>
+                <time
+                  v-if="item.time"
+                  class="canvas-history__item-time"
+                  :datetime="item.dateKey"
+                >{{ item.time }}</time>
               </button>
             </li>
           </ul>
@@ -67,9 +71,10 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import type { ProjectVersionRecord } from '@/services/api'
 import {
-  CANVAS_HISTORY_RECORDS,
   HISTORY_RECORD_TABS,
+  mapProjectVersionsToHistoryRecords,
   type HistoryRecord,
   type HistoryRecordTab,
 } from './canvasHistoryRecords'
@@ -78,16 +83,18 @@ const emit = defineEmits<{
   close: []
 }>()
 
-defineProps<{
-  list: any[]
+const props = defineProps<{
+  list: ProjectVersionRecord[]
 }>()
 
 const searchQuery = ref('')
 const activeTab = ref<HistoryRecordTab>('all')
 
+const historyRecords = computed(() => mapProjectVersionsToHistoryRecords(props.list))
+
 const filteredRecords = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  return CANVAS_HISTORY_RECORDS.filter((record) => {
+  return historyRecords.value.filter((record) => {
     if (activeTab.value !== 'all' && record.kind !== activeTab.value) return false
     if (!q) return true
     return record.summary.toLowerCase().includes(q)
