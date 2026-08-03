@@ -523,11 +523,10 @@ export function resolveImageGenerationPlaceholderLayout(sourceNode: Node) {
   if (sourceData.mediaWidth > 0 && sourceData.mediaHeight > 0) {
     data.mediaWidth = sourceData.mediaWidth
     data.mediaHeight = sourceData.mediaHeight
-  }
-  if (typeof sourceData.viewScale === 'number' && sourceData.viewScale !== 1) {
-    data.viewScale = sourceData.viewScale
-  }
-  if (sourceData.kind === 'image' && sourceSize.width > 0 && sourceSize.height > 0) {
+    if (sourceSize.width > 0) {
+      data.editorWidth = sourceSize.width
+    }
+  } else if (sourceData.kind === 'image' && sourceSize.width > 0 && sourceSize.height > 0) {
     data.editorWidth = sourceSize.width
     data.editorHeight = sourceSize.height
   }

@@ -2742,6 +2742,16 @@ export function isPortrait(width: number, height: number) {
   return height > width
 }
 
+/** 图片生成任务进行中、尚无预览图时，按源图媒体比例占位 */
+export function shouldAdaptImageGenerationPlaceholder(data?: Partial<CanvasNodeData>) {
+  if (!data) return false
+  if (data.kind !== 'image') return false
+  if (data.imageGenState !== 'loading') return false
+  if (data.previewUrl?.trim()) return false
+  if (!(data.mediaWidth! > 0 && data.mediaHeight! > 0)) return false
+  return true
+}
+
 /** 上传完成 / AI 生成完成后，按固定宽度与图片比例自适应高度 */
 export function shouldAdaptImageNodeHeight(data?: Partial<CanvasNodeData>) {
   if (!data) return false

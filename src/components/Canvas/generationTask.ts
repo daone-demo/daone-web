@@ -588,6 +588,14 @@ export async function applyGenerationResultToNode(
     }
   }
 
+  const displayWidth = node.getSize().width
+  delete data.editorWidth
+  delete data.editorHeight
+  delete data.viewScale
+  if (data.mediaWidth && data.mediaHeight && displayWidth > 0) {
+    data.editorWidth = displayWidth
+  }
+
   setNodeData(node, data)
   syncNodeShapeFromData(node)
   const size = getNodeSize(data.kind, data.mode, data)

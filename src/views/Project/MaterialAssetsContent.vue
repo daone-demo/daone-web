@@ -506,8 +506,14 @@ onUnmounted(() => {
     user-select: none;
   }
 
-  .home__inspiration-hover {
+  .home__inspiration-hover,
+  .home__inspiration-hover :deep(*) {
     pointer-events: auto;
+    user-select: auto;
+  }
+
+  .home__inspiration-hover-btn {
+    cursor: default;
   }
 }
 

@@ -29,6 +29,7 @@ import {
   type NodeKind,
   type NodeMode,
   getImageAdaptiveNodeSize,
+  shouldAdaptImageGenerationPlaceholder,
   shouldAdaptImageNodeHeight,
   getVideoAdaptiveNodeSize,
   shouldAdaptVideoNodeHeight,
@@ -540,6 +541,9 @@ export function getBaseNodeSize(
     return NODE_SIZE.model3d.editor
   }
   if (kind === 'image') {
+    if (data && shouldAdaptImageGenerationPlaceholder(data)) {
+      return getImageAdaptiveNodeSize(data)
+    }
     if (data?.editorWidth && data?.editorHeight) {
       return {
         width: data.editorWidth,
