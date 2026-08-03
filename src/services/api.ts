@@ -921,5 +921,9 @@ const api = {
   createDigitalHuman<T = unknown>(data: { assetId: string | number }) {
     return http.post<T>(`/digital-humans`, data)
   },
+  queryInvoiceTitles<T = unknown>(params?: { keyword?: string }) {
+    return http.get<T>('invoices/title/search', { params })
+  },
 }
 export default api
+

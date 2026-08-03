@@ -272,11 +272,27 @@
 
             <div class="user-info__invoice-field">
               <label class="user-info__invoice-label">发票抬头</label>
+              <a-select
+                v-if="invoiceType == 'COMPANY'"
+                v-model:value="invoiceForm.invoiceTitle"
+                show-search
+                placeholder="请输入单位名称"
+                class="user-info__invoice-select"
+                :default-active-first-option="false"
+                :show-arrow="false"
+                :filter-option="false"
+                :not-found-content="invoiceTitleSearching ? undefined : null"
+                :loading="invoiceTitleSearching"
+                :options="invoiceTitleOptions"
+                @search="handleInvoiceTitleSearch"
+                @change="handleInvoiceTitleChange"
+              />
               <input
                 v-model="invoiceForm.invoiceTitle"
                 class="user-info__invoice-input"
                 type="text"
                 placeholder="请输入单位名称"
+                v-else
               />
             </div>
           </div>
@@ -495,7 +511,7 @@
 
 <script setup lang="ts">
 import { useModalStore } from '@stores/useModal';
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import QRCode from 'qrcode';
 import {
   BILL_STATUS_LABEL,
@@ -510,7 +526,7 @@ import api from '@/services/api';
 import { useUserInfo } from '@/stores/useUserInfo';
 import tools from '@/utils/tools';
 import dayjs from 'dayjs';
-import { message } from 'ant-design-vue';
+import { message, type SelectProps } from 'ant-design-vue';
 import { useNeedReloadPointsStore } from '@stores/useNeedReload';
 const needReloadPointsStore = useNeedReloadPointsStore();
 
@@ -520,7 +536,20 @@ watch(needReloadPointsStore.getNeedReloadPoints, (newVal) => {
     needReloadPointsStore.setNeedReloadPoints(false);
   }
 })
+const invoiceTitleOptions = ref<SelectProps['options']>([]);
+const invoiceTitleSearching = ref(false)
 
+type InvoiceTitleSearchItem = {
+  addr?: string
+  bank?: string
+  bankAccount?: string
+  name: string
+  phone?: string
+  taxNo?: string
+}
+
+const invoiceTitleRecords = ref<InvoiceTitleSearchItem[]>([])
+let invoiceTitleSearchTimer: ReturnType<typeof setTimeout> | null = null
 const modalStore = useModalStore();
 const userInfoStore = useUserInfo();
 type InvoiceHeaderType = 'PERSONAL' | 'COMPANY'
@@ -613,6 +642,8 @@ function resetInvoiceForm() {
     bankAccount: '',
     address: '',
   }
+  invoiceTitleOptions.value = []
+  invoiceTitleRecords.value = []
 }
 
 function openInvoiceModal(orderNo: string) {
@@ -906,6 +937,84 @@ const applyInvoice = () => {
   })
 }
 
+function normalizeInvoiceTitleResults(data: unknown): InvoiceTitleSearchItem[] {
+  if (!data) return []
+  if (Array.isArray(data)) {
+    return data.filter((item): item is InvoiceTitleSearchItem => Boolean(item?.name))
+  }
+  if (typeof data === 'object') {
+    const record = data as InvoiceTitleSearchItem
+    if (record.name) return [record]
+    const list = (data as { list?: InvoiceTitleSearchItem[] }).list
+    if (Array.isArray(list)) {
+      return list.filter((item) => Boolean(item?.name))
+    }
+  }
+  return []
+}
+
+function applyInvoiceTitleRecord(record: InvoiceTitleSearchItem) {
+  invoiceForm.value.invoiceTitle = record.name
+  if (record.taxNo) invoiceForm.value.taxNo = record.taxNo
+  if (record.phone) invoiceForm.value.contact = record.phone
+  if (record.bank) invoiceForm.value.bankName = record.bank
+  if (record.bankAccount) invoiceForm.value.bankAccount = record.bankAccount
+  if (record.addr) invoiceForm.value.address = record.addr
+}
+
+const handleInvoiceTitleSearch = (value: string) => {
+  const keyword = value.trim()
+  invoiceForm.value.invoiceTitle = keyword
+
+  if (invoiceTitleSearchTimer) {
+    clearTimeout(invoiceTitleSearchTimer)
+    invoiceTitleSearchTimer = null
+  }
+
+  if (!keyword) {
+    invoiceTitleOptions.value = []
+    invoiceTitleRecords.value = []
+    invoiceTitleSearching.value = false
+    return
+  }
+
+  if (invoiceType.value !== 'COMPANY') {
+    invoiceTitleOptions.value = []
+    invoiceTitleRecords.value = []
+    return
+  }
+
+  invoiceTitleSearchTimer = setTimeout(async () => {
+    invoiceTitleSearchTimer = null
+    invoiceTitleSearching.value = true
+    try {
+      const res = await api.queryInvoiceTitles<
+        InvoiceTitleSearchItem | InvoiceTitleSearchItem[]
+      >({ keyword })
+      const records = normalizeInvoiceTitleResults(res)
+      invoiceTitleRecords.value = records
+      invoiceTitleOptions.value = records.map((item) => ({
+        value: item.name,
+        label: item.name,
+      }))
+    } catch {
+      invoiceTitleOptions.value = []
+      invoiceTitleRecords.value = []
+    } finally {
+      invoiceTitleSearching.value = false
+    }
+  }, 300)
+}
+
+const handleInvoiceTitleChange: SelectProps['onChange'] = (value) => {
+  const title = value != null ? String(value) : ''
+  invoiceForm.value.invoiceTitle = title
+  const matched = invoiceTitleRecords.value.find((item) => item.name === title)
+  if (matched) {
+    applyInvoiceTitleRecord(matched)
+  }
+}
+
 // const openPointsLogDetail = (id: string) => {
 //   api.getPointsLedgerDetail(id).then(res=>{
 //     console.log('res', res);
@@ -919,6 +1028,13 @@ watch([orderNo, selectedPayMethod], ([no, method]) => {
     payUrl.value = '';
   }
 });
+
+onBeforeUnmount(() => {
+  if (invoiceTitleSearchTimer) {
+    clearTimeout(invoiceTitleSearchTimer)
+    invoiceTitleSearchTimer = null
+  }
+})
 
 onMounted(() => {
   const tab = route.query.tab

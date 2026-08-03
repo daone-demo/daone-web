@@ -65,6 +65,8 @@ type GridSplitCanvasApi = Pick<
     | 'handleImageDialogueSubmit'
     | 'handleVideoDialogueSubmit'
     | 'handleVideoGenPromptSubmit'
+    | 'onImageDialogueAddCanvasNode'
+    | 'onImageDialogueAddDigitalHumanRef'
     | 'onVideoGenAspectRatioChange'
     | 'onVideoToolbarAction'
     | 'isText2VideoTask'

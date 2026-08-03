@@ -760,6 +760,55 @@
   }
 }
 
+.user-info__invoice-select {
+  width: 100%;
+
+  :deep(.ant-select-selector) {
+    width: 100%;
+    height: 44px !important;
+    padding: 0 14px !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 10px !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    font-size: 14px;
+    color: #111827;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease;
+  }
+
+  :deep(.ant-select-selection-search) {
+    inset-inline-start: 14px;
+    inset-inline-end: 14px;
+  }
+
+  :deep(.ant-select-selection-search-input) {
+    height: 42px !important;
+    font-size: 14px;
+  }
+
+  :deep(.ant-select-selection-item),
+  :deep(.ant-select-selection-placeholder) {
+    line-height: 42px !important;
+    padding: 0 !important;
+    font-size: 14px;
+  }
+
+  :deep(.ant-select-selection-placeholder) {
+    color: #9ca3af;
+  }
+
+  &:hover :deep(.ant-select-selector) {
+    border-color: #e5e7eb !important;
+  }
+
+  &.ant-select-focused :deep(.ant-select-selector),
+  &.ant-select-open :deep(.ant-select-selector) {
+    border-color: #93c5fd !important;
+    box-shadow: none !important;
+  }
+}
+
 .user-info__invoice-type-group {
   display: flex;
   gap: 12px;
