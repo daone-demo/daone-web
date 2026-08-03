@@ -1542,6 +1542,7 @@ export const IMAGE_NODE_TOOLBAR_MORE_MENU = [
 ] satisfies ImageToolbarMenuItem[]
 
 export type ImageContextMenuIcon =
+  | 'send-model'
   | 'layer-top'
   | 'layer-bottom'
   | 'data-advisor'
@@ -1567,6 +1568,7 @@ export const IMAGE_CONTEXT_MENU_SECTIONS: ImageContextMenuItem[][] = [
   [
     { key: 'chat', label: '对话', icon: 'chat' },
     { key: 'send-agent', label: '添加到智能体', icon: 'send-agent' },
+    { key: 'send-model', label: '添加到我的模特', icon: 'send-model' },
   ],
   [
     { key: 'preview', label: '预览', icon: 'preview' },

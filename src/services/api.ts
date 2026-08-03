@@ -913,5 +913,9 @@ const api = {
   applyInvoice<T = unknown>(data: any) {
     return http.post<T>(`/invoices/apply`, data)
   },
+  /** 保存画布元素组 */
+  createDigitalHuman<T = unknown>(data: any) {
+    return http.post<T>(`/digital-humans`, data)
+  }
 }
 export default api

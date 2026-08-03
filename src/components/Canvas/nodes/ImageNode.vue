@@ -151,10 +151,13 @@
                   'image-node__mark-pin-interactive--selected': data.selectedImageElementMarkId === mark.id,
                 }"
                 :style="markPinStyle(mark)"
-                :title="mark.pending ? '识别中' : mark.label"
                 @mousedown.stop
                 @click.stop="onMarkPinClick(mark, $event)"
               >
+                <img
+                  src="@/assets/images/remove.png"
+                  class="image-node__mark-pin-interactive_remove"
+                />
                 <svg 
                   data-v-243dd551=""
                   viewBox="0 0 24 24"
@@ -737,9 +740,24 @@ onMounted(() => {
   &:hover:not(.image-node__mark-pin--analyzing) {
     transform: translate(-50%, -100%) scale(1.1);
   }
+  &_remove {
+    width: 5px !important;
+    height: auto;
+    cursor: pointer;
+    position: absolute;
+    right: 2px;
+    top: -10px;
+    z-index: 1;
+    opacity: 0;
+  }
 
   &--selected {
     filter: drop-shadow(0 0 0 2px #ef4444) drop-shadow(0 1px 2px rgba(15, 23, 42, 0.18));
+  }
+}
+.image-node__mark-pin-interactive:hover {
+  .image-node__mark-pin-interactive_remove {
+    opacity: 1;
   }
 }
 

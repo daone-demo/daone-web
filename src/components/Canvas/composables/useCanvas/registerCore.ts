@@ -306,7 +306,7 @@ export function registerCore(bind: CanvasBindings) {
   const videoToolbarClickDeferred = ref(false)
   const imageMarkRecognizing = ref(false)
   const selectedElementMarkId = ref('')
-  const VIDEO_TOOLBAR_CLICK_DEFER_MS = 280
+  // const VIDEO_TOOLBAR_CLICK_DEFER_MS = 280
 
   function cancelVideoToolbarDefer() {
     if (videoToolbarDeferTimer) {
@@ -316,19 +316,19 @@ export function registerCore(bind: CanvasBindings) {
     videoToolbarClickDeferred.value = false
   }
 
-  function scheduleVideoToolbarDefer() {
-    cancelVideoToolbarDefer()
-    videoToolbarClickDeferred.value = true
-    videoToolbarDeferTimer = setTimeout(() => {
-      videoToolbarDeferTimer = null
-      videoToolbarClickDeferred.value = false
-      bumpToolbarRevision()
-    }, VIDEO_TOOLBAR_CLICK_DEFER_MS)
-  }
+  // function scheduleVideoToolbarDefer() {
+  //   cancelVideoToolbarDefer()
+  //   videoToolbarClickDeferred.value = true
+  //   videoToolbarDeferTimer = setTimeout(() => {
+  //     videoToolbarDeferTimer = null
+  //     videoToolbarClickDeferred.value = false
+  //     bumpToolbarRevision()
+  //   }, VIDEO_TOOLBAR_CLICK_DEFER_MS)
+  // }
 
-  function shouldDeferVideoToolbarOnClick(data: CanvasNodeData) {
-    return data.kind === 'video' && !data.groupId
-  }
+  // function shouldDeferVideoToolbarOnClick(data: CanvasNodeData) {
+  //   return data.kind === 'video' && !data.groupId
+  // }
 
   function toggleUserMenu() {
     showUserMenu.value = !showUserMenu.value
@@ -5945,6 +5945,9 @@ export function registerCore(bind: CanvasBindings) {
       case 'send-agent':
         toggleImageAddToDialogMenu()
         return
+      case 'send-model':
+        void addImageToMyModels(nodeId)
+        return
       case 'preview':
         openMediaPreview()
         return
@@ -5966,6 +5969,27 @@ export function registerCore(bind: CanvasBindings) {
         return
       default:
         break
+    }
+  }
+
+  async function addImageToMyModels(nodeId: string) {
+    const g = graph.value
+    if (!g) return
+    const cell = g.getCellById(nodeId)
+    if (!cell?.isNode()) return
+
+    const assetId = resolveImageAssetId(cell.getData() as CanvasNodeData)
+    if (!assetId) {
+      message.warning('图片素材 ID 不存在，请等待上传完成')
+      return
+    }
+
+    try {
+      await api.createDigitalHuman({ assetId: Number(assetId) || assetId })
+      message.success('已添加到我的模特')
+    } catch (error) {
+      console.error('[send-model] createDigitalHuman failed', error)
+      message.error('添加到我的模特失败，请稍后重试')
     }
   }
 
