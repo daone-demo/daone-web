@@ -14,7 +14,7 @@
         @click="onTagClick(mark, $event)"
       >
         <span class="mark-tags-echo__index">{{ index + 1 }}.</span>
-        <span class="mark-tags-echo__label">{{ mark.label }}</span>
+        <span class="mark-tags-echo__label">{{ mark.pending ? '识别中' : mark.label }}</span>
         <span
           v-if="mark.pending"
           class="mark-tags-echo__spinner"
@@ -31,7 +31,7 @@
         </span>
       </button>
     </div>
-    <button
+    <!-- <button
       v-if="marks.some((mark) => !mark.pending)"
       type="button"
       class="mark-tags-echo__clear"
@@ -40,7 +40,7 @@
       @click.stop="emit('clear')"
     >
       <span class="mark-tags-echo__clear-icon" aria-hidden="true" />
-    </button>
+    </button> -->
   </div>
 </template>
 

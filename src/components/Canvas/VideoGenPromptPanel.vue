@@ -701,7 +701,8 @@ function formatMarkDisplayLabel(mark: ImageMarkItem) {
   const marks = props.elementMarks ?? []
   const index = marks.findIndex((item) => item.id === mark.id)
   const order = index >= 0 ? index + 1 : marks.length + 1
-  return `${order}. ${mark.label}`
+  const label = mark.pending ? '识别中' : mark.label
+  return `${order}. ${label}`
 }
 
 function getMarkThumbStyle(mark: ImageMarkItem) {

@@ -151,7 +151,7 @@
                   'image-node__mark-pin-interactive--selected': data.selectedImageElementMarkId === mark.id,
                 }"
                 :style="markPinStyle(mark)"
-                :title="mark.pending ? mark.label : mark.label"
+                :title="mark.pending ? '识别中' : mark.label"
                 @mousedown.stop
                 @click.stop="onMarkPinClick(mark, $event)"
               >

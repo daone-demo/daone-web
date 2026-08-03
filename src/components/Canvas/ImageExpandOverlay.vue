@@ -87,7 +87,7 @@
         <div
           class="image-expand-overlay__node"
           :class="{
-            'image-expand-overlay__node--grab': spaceHeld && !imageDragging,
+            'image-expand-overlay__node--grab': !imageDragging,
             'image-expand-overlay__node--grabbing': imageDragging,
           }"
           :style="frameStyle"
@@ -365,9 +365,10 @@ function startDrag(handle: Handle, event: MouseEvent) {
   window.addEventListener('mouseup', onDragEnd)
 }
 
-function onImageMouseDown(event: MouseEvent) {
+function startImageLongPressDrag(event: MouseEvent) {
   if (event.button !== 0) return
   event.preventDefault()
+
   if (spaceHeld.value) {
     startDrag('move-image', event)
     return
@@ -415,12 +416,15 @@ function onImageMouseDown(event: MouseEvent) {
   }
 }
 
+function onImageMouseDown(event: MouseEvent) {
+  startImageLongPressDrag(event)
+}
+
 function onFrameMouseDown(event: MouseEvent) {
-  if (event.button !== 0 || !spaceHeld.value) return
-  event.preventDefault()
+  if (event.button !== 0) return
   const target = event.target as HTMLElement | null
   if (target?.closest('.image-expand-overlay__handle, .image-expand-overlay__image-box')) return
-  startDrag('move-image', event)
+  startImageLongPressDrag(event)
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
