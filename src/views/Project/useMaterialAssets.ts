@@ -21,7 +21,6 @@ export function useMaterialAssets(
   columnCount: Ref<number>,
   assetType: Ref<AssetsFileType> = ref('all'),
   assetDate: Ref<unknown> = ref(null),
-  projectId: Ref<string | undefined> = ref(undefined),
 ) {
   const materialCategories = ref<any[]>([])
   const materialCode = ref('')
@@ -150,10 +149,8 @@ export function useMaterialAssets(
     try {
       const typeParam = resolveMaterialTypeParam()
       const dateParam = resolveAssetDateParam()
-      const projectIdParam = projectId.value?.trim()
       const res: any = await api.getAssets({
         scope: scope.value,
-        ...(projectIdParam ? { projectId: projectIdParam } : {}),
         ...(typeParam ? { type: typeParam } : {}),
         ...(dateParam ? { date: dateParam } : {}),
         pageSize: MATERIAL_PAGE_SIZE,
@@ -317,12 +314,6 @@ export function useMaterialAssets(
   })
 
   watch(assetDate, () => {
-    if (scope.value === 'FILES') {
-      reloadForFilters()
-    }
-  })
-
-  watch(projectId, () => {
     if (scope.value === 'FILES') {
       reloadForFilters()
     }

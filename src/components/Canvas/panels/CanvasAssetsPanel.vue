@@ -78,7 +78,6 @@
         :scope="tab"
         :asset-type="type"
         :asset-date="date"
-        :project-id="projectId"
         :column-count="CANVAS_MATERIAL_COLUMN_COUNT"
         embedded
         :is-light="isLight"
@@ -106,12 +105,10 @@ const props = withDefaults(
     tab: ProjectTabKey
     date: any
     type?: AssetsFileType
-    projectId?: string
     isLight?: boolean
   }>(),
   {
     type: 'all',
-    projectId: undefined,
   },
 )
 

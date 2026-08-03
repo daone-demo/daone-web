@@ -155,7 +155,6 @@
       :tab="assetsTab"
       :date="assetsDate"
       :type="assetsType"
-      :project-id="activeProjectId"
       @update:type="onChangeAssetsType($event)"
       :is-light="canvasBgTheme === 'light'"
       @update:tab="onChangeAssetsTab($event)"
