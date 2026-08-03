@@ -23,6 +23,7 @@
         placeholder="选择工作流"
         :light="isLightTheme"
         @update:model-value="onWorkflowChange"
+        @select-digital-human="onDigitalHumanSelect"
       />
       <!-- <button type="button" class="image-dialogue__expand" title="展开">
         <span class="image-dialogue__expand-icon" aria-hidden="true" />
@@ -283,6 +284,7 @@ import { useCanvasBgTheme } from './useCanvasBgTheme';
 import ImageGenSettingsPopover from './ImageGenSettingsPopover.vue';
 import ImageStylePanel from './ImageStylePanel.vue';
 import DialogueWorkflowSelect from './DialogueWorkflowSelect.vue';
+import type { DigitalHumanPickerItem } from './DigitalHumanPickerPanel.vue';
 import MarkLabelOptionMenu from './MarkLabelOptionMenu.vue'
 import MarkTagsEcho from './MarkTagsEcho.vue';
 import { getMarkLabelOptions, hasMultipleMarkLabels, useImageMarkLabelMenu } from './useImageMarkLabelMenu';
@@ -303,6 +305,7 @@ import {
   buildImageDialogueModelsFromCapabilities,
   buildImageWorkflowOptionGroups,
   buildImageWorkflowOptions,
+  isMyModelWorkflow,
   normalizeImageDialogueSettingsForModel,
   pickImageDialogueSettingsInput,
   resolveImageDialogueModelApiValue,
@@ -340,6 +343,7 @@ const emit = defineEmits<{
   'add-canvas-node': [nodeId: string]
   'toggle-canvas-pick': []
   'toggle-mark': []
+  'add-digital-human-ref': [payload: { assetId: string; previewUrl: string }]
   'mention-inserted': []
   'select-mark-label': [markId: string, index: number]
   'remove-mark': [markId: string]
@@ -546,8 +550,18 @@ function hasCompletedElementMarks() {
 
 function onWorkflowChange(workflowId: string | undefined) {
   selectedWorkFlow.value = workflowId ?? ''
+  const workflow = workflowOptions.value.find((item) => item.id === workflowId)
+  if (isMyModelWorkflow(workflow)) return
   if (!workflowId || hasCompletedElementMarks() || props.elementSelectMode) return
   emit('toggle-mark')
+}
+
+function onDigitalHumanSelect(item: DigitalHumanPickerItem) {
+  if (!item.assetId || !item.previewUrl) return
+  emit('add-digital-human-ref', {
+    assetId: item.assetId,
+    previewUrl: item.previewUrl,
+  })
 }
 
 watch(

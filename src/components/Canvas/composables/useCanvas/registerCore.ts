@@ -116,6 +116,7 @@ import {
   pickImageDialogueSettingsInput,
   createDefaultVideoDialogueSettings,
   isVideoNodeGenerating,
+  resolveGenerationTaskWorkflowId,
 } from '../../constants'
 import { splitImageIntoGrid, snapGridSplitNodePosition, areAllGridSplitResultNodes } from '../../gridSplitUtils'
 import {
@@ -774,6 +775,10 @@ export function registerCore(bind: CanvasBindings) {
     }
   }
 
+  function isDigitalHumanDialogueRef(item: ImageSourceRef): boolean {
+    return String(item.nodeId ?? '').startsWith('digital-human-')
+  }
+
   /** 自身已有媒体时，排除溯源/上游节点，只保留自己与用户额外添加的参考图 */
   function resolveImageDialogueRefs(
     data: CanvasNodeData,
@@ -785,6 +790,7 @@ export function registerCore(bind: CanvasBindings) {
     const selfRef = buildNodeSelfDialogueRef(data, targetNodeId)
 
     if (selfRef) {
+      const digitalHumanRefs = existing.filter(isDigitalHumanDialogueRef)
       const lineageId =
         data.sourceNodeId && data.sourceNodeId !== targetNodeId
           ? data.sourceNodeId
@@ -792,7 +798,9 @@ export function registerCore(bind: CanvasBindings) {
       const lineageUrl = lineageId ? (data.sourcePreviewUrl?.trim() || '') : ''
       const nonSelf = existing.filter(
         (item) =>
-          item.nodeId !== targetNodeId && item.previewUrl !== selfRef.previewUrl,
+          item.nodeId !== targetNodeId &&
+          item.previewUrl !== selfRef.previewUrl &&
+          !isDigitalHumanDialogueRef(item),
       )
       const isLineageRef = (item: ImageSourceRef) =>
         Boolean(
@@ -804,10 +812,16 @@ export function registerCore(bind: CanvasBindings) {
         nonSelf.length > 0 &&
         (nonSelf.every(isLineageRef) || (!lineageId && nonSelf.length === 1))
       if (!nonSelf.length || onlyUpstream) {
-        return [selfRef]
+        return digitalHumanRefs.length ? [selfRef, ...digitalHumanRefs] : [selfRef]
       }
       const extras = nonSelf.filter((item) => !isLineageRef(item))
-      return extras.length ? [selfRef, ...extras] : [selfRef]
+      const mergedExtras = [
+        ...extras,
+        ...digitalHumanRefs.filter(
+          (item) => !extras.some((extra) => extra.assetId === item.assetId),
+        ),
+      ]
+      return mergedExtras.length ? [selfRef, ...mergedExtras] : [selfRef]
     }
 
     if (existing.length) {
@@ -841,10 +855,15 @@ export function registerCore(bind: CanvasBindings) {
 
   const imageDialoguePreviews = computed<ImageSourceRef[]>(() => {
     void toolbarRevision.value
-    const id = activeImageGenPromptNodeId.value
-      || (showImageDialogue.value
-        ? (activeImageDialogueNodeId || (selectedKind.value === 'image' ? selectedNodeId.value : ''))
-        : selectedNodeId.value)
+    let id = ''
+    if (showImageDialogue.value) {
+      id = activeImageDialogueNodeId
+        || (selectedKind.value === 'image' ? selectedNodeId.value : '')
+    } else if (activeImageGenPromptNodeId.value) {
+      id = activeImageGenPromptNodeId.value
+    } else {
+      id = selectedNodeId.value
+    }
     if (!id) return []
     return getImageDialoguePreviewsForNode(id)
   })
@@ -2465,7 +2484,10 @@ export function registerCore(bind: CanvasBindings) {
                   : assetId
                     ? [assetId]
                     : undefined,
-              workflowId: resolveGenerationTaskWorkflowId(payload.workflowId),
+              workflowId: resolveGenerationTaskWorkflowId(
+                payload.workflowId,
+                payload.workflow,
+              ),
             },
             idempotencyKey,
           )
@@ -2867,13 +2889,6 @@ export function registerCore(bind: CanvasBindings) {
     if (option === '精准') return 'precise'
     if (option === '擦除') return 'erase'
     return option
-  }
-
-  function resolveGenerationTaskWorkflowId(
-    workflowId?: string | number | null,
-  ): string | null {
-    if (workflowId === undefined || workflowId === null || workflowId === '') return null
-    return String(workflowId)
   }
 
   function resolveGenerationResultFileName(
@@ -3564,11 +3579,14 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function getActiveImageDialogueTargetNodeId() {
+    if (showImageDialogue.value) {
+      if (activeImageDialogueNodeId) return activeImageDialogueNodeId
+      if (selectedNodeId.value && selectedKind.value === 'image') {
+        return selectedNodeId.value
+      }
+    }
     if (activeImageGenPromptNodeId.value) return activeImageGenPromptNodeId.value
     if (activeImageDialogueNodeId) return activeImageDialogueNodeId
-    if (showImageDialogue.value && selectedNodeId.value && selectedKind.value === 'image') {
-      return selectedNodeId.value
-    }
     return ''
   }
 
@@ -3863,6 +3881,74 @@ export function registerCore(bind: CanvasBindings) {
       bumpToolbarRevision()
       scheduleHistoryPush()
     })
+  }
+
+  function appendImageDialogueDigitalHumanRef(
+    payload: {
+      assetId: string
+      previewUrl: string
+    },
+    targetNodeId?: string,
+  ): boolean {
+    const g = graph.value
+    const id = targetNodeId ?? selectedNodeId.value
+    if (!g || !id || !payload.previewUrl?.trim() || !payload.assetId) return false
+
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return false
+
+    const data = { ...(cell.getData() as CanvasNodeData) }
+    if (!canNodeHostImageDialogue(data, id)) return false
+
+    const ref: ImageSourceRef = {
+      nodeId: `digital-human-${payload.assetId}`,
+      assetId: payload.assetId,
+      previewUrl: payload.previewUrl,
+      fileName: '我的数字人',
+    }
+
+    const refs = Array.isArray(data.imageSourceRefs)
+      ? data.imageSourceRefs.filter((item) => item.previewUrl?.trim())
+      : []
+
+    if (refs.some((item) => item.assetId === payload.assetId)) {
+      return true
+    }
+
+    data.imageSourceRefs = [...refs, ref]
+    data.inputUpdated = data.imageSourceRefs.some((item) => Boolean(item.previewUrl))
+
+    const selfRef = buildNodeSelfDialogueRef(data, id)
+    if (!selfRef) {
+      data.sourceNodeId = ref.nodeId
+      data.sourcePreviewUrl = ref.previewUrl
+      data.sourceFileName = ref.fileName
+      data.sourceAssetId = ref.assetId
+    }
+
+    cell.setData(data, { overwrite: true })
+    bumpToolbarRevision()
+    scheduleHistoryPush()
+    return true
+  }
+
+  function onImageDialogueAddDigitalHumanRef(payload: {
+    assetId: string
+    previewUrl: string
+  }) {
+    const targetNodeId = getActiveImageDialogueTargetNodeId() || selectedNodeId.value
+    const appended = appendImageDialogueDigitalHumanRef(payload, targetNodeId)
+    if (!appended) return
+
+    if (activeImageGenPromptNodeId.value === targetNodeId) {
+      loadImageGenPromptFields(targetNodeId)
+    }
+    if (showImageDialogue.value && getActiveImageDialogueTargetNodeId() === targetNodeId) {
+      loadImageDialogueFields(targetNodeId)
+      persistImageDialogueFields(targetNodeId)
+    }
+    bumpToolbarRevision()
+    updateNodeToolbar()
   }
 
   function clearImageDialoguePreview(sourceNodeId?: string) {
@@ -4812,7 +4898,10 @@ export function registerCore(bind: CanvasBindings) {
                   parameters: imageParameters,
                   projectId: activeProjectId.value,
                   nodeId: resultNode.id,
-                  workflowId: resolveGenerationTaskWorkflowId(imagePayload?.workflowId),
+                  workflowId: resolveGenerationTaskWorkflowId(
+                    imagePayload?.workflowId,
+                    imagePayload?.workflow,
+                  ),
                 },
                 idempotencyKey,
               )
@@ -9875,6 +9964,7 @@ export function registerCore(bind: CanvasBindings) {
     activeGroupSelection,
     addElementGroupFromRecord,
     addFromMenu,
+    appendImageDialogueDigitalHumanRef,
     addImageDialogueSourceRef,
     addImageFromAsset,
     addVideoFromAsset,
@@ -10039,6 +10129,7 @@ export function registerCore(bind: CanvasBindings) {
     onImageCropComplete,
     onImageResizePointerDown,
     onImageDialogueAddCanvasNode,
+    onImageDialogueAddDigitalHumanRef,
     onImageDialogueUploadFiles,
     onImageContextMenuAction,
     onImageToolbarAction,

@@ -28,16 +28,45 @@
             type="button"
             class="dialogue-workflow-select__category"
             :class="{ 'dialogue-workflow-select__category--active': group.categoryId === activeCategoryId }"
-            @mouseenter="activeCategoryId = group.categoryId"
-            @click="activeCategoryId = group.categoryId"
+            @mouseenter="onCategoryHover(group.categoryId)"
+            @click="onCategoryHover(group.categoryId)"
           >
             <span class="dialogue-workflow-select__category-label">{{ group.categoryName }}</span>
             <span class="dialogue-workflow-select__category-arrow" aria-hidden="true" />
           </button>
         </div>
         <div class="dialogue-workflow-select__submenu">
+          <DigitalHumanPickerPanel
+            v-if="showDigitalHumanPicker"
+            :light="light"
+            @back="closeDigitalHumanPicker"
+            @select="onDigitalHumanSelect"
+          />
+          <template v-else>
+            <button
+              v-for="item in activeGroupChildren"
+              :key="item.id"
+              type="button"
+              class="dialogue-workflow-select__item"
+              :class="{ 'dialogue-workflow-select__item--active': item.id === modelValue }"
+              @click="select(item.id)"
+            >
+              {{ item.name }}
+            </button>
+            <p v-if="!activeGroupChildren.length" class="dialogue-workflow-select__empty">暂无工作流</p>
+          </template>
+        </div>
+      </template>
+      <template v-else>
+        <DigitalHumanPickerPanel
+          v-if="showDigitalHumanPicker"
+          :light="light"
+          @back="closeDigitalHumanPicker"
+          @select="onDigitalHumanSelect"
+        />
+        <template v-else>
           <button
-            v-for="item in activeGroupChildren"
+            v-for="item in flatOptions"
             :key="item.id"
             type="button"
             class="dialogue-workflow-select__item"
@@ -46,21 +75,8 @@
           >
             {{ item.name }}
           </button>
-          <p v-if="!activeGroupChildren.length" class="dialogue-workflow-select__empty">暂无工作流</p>
-        </div>
-      </template>
-      <template v-else>
-        <button
-          v-for="item in flatOptions"
-          :key="item.id"
-          type="button"
-          class="dialogue-workflow-select__item"
-          :class="{ 'dialogue-workflow-select__item--active': item.id === modelValue }"
-          @click="select(item.id)"
-        >
-          {{ item.name }}
-        </button>
-        <p v-if="!flatOptions.length" class="dialogue-workflow-select__empty">暂无工作流</p>
+          <p v-if="!flatOptions.length" class="dialogue-workflow-select__empty">暂无工作流</p>
+        </template>
       </template>
     </div>
   </div>
@@ -68,7 +84,14 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { ImageWorkflowOptionGroup } from './constants'
+import DigitalHumanPickerPanel, {
+  type DigitalHumanPickerItem,
+} from './DigitalHumanPickerPanel.vue'
+import {
+  isMyModelWorkflow,
+  type ImageWorkflowOption,
+  type ImageWorkflowOptionGroup,
+} from './constants'
 
 export type DialogueWorkflowOption = {
   id: string
@@ -94,10 +117,12 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:modelValue': [value: string | undefined]
+  'select-digital-human': [item: DigitalHumanPickerItem]
 }>()
 
 const open = ref(false)
 const activeCategoryId = ref('')
+const showDigitalHumanPicker = ref(false)
 
 const hasGroups = computed(() => props.groups.length > 0)
 
@@ -132,6 +157,13 @@ function syncActiveCategory() {
   activeCategoryId.value = selectedGroup?.categoryId ?? props.groups[0]?.categoryId ?? ''
 }
 
+function onCategoryHover(categoryId: string) {
+  activeCategoryId.value = categoryId
+  if (!isMyModelWorkflow(findWorkflowOption(props.modelValue ?? ''))) {
+    showDigitalHumanPicker.value = false
+  }
+}
+
 function toggle() {
   open.value = !open.value
   if (open.value) {
@@ -141,10 +173,30 @@ function toggle() {
 
 function close() {
   open.value = false
+  showDigitalHumanPicker.value = false
+}
+
+function closeDigitalHumanPicker() {
+  showDigitalHumanPicker.value = false
+}
+
+function findWorkflowOption(id: string): ImageWorkflowOption | undefined {
+  return flatOptions.value.find((item) => item.id === id)
 }
 
 function select(id: string) {
+  const item = findWorkflowOption(id)
   emit('update:modelValue', id)
+  if (isMyModelWorkflow(item)) {
+    showDigitalHumanPicker.value = true
+    return
+  }
+  showDigitalHumanPicker.value = false
+  close()
+}
+
+function onDigitalHumanSelect(item: DigitalHumanPickerItem) {
+  emit('select-digital-human', item)
   close()
 }
 
@@ -302,8 +354,10 @@ onBeforeUnmount(() => {
 }
 
 .dialogue-workflow-select__submenu {
-  flex: 1;
-  min-width: 0;
+  flex: 0 0 auto;
+  width: 155px;
+  min-width: 155px;
+  max-width: 155px;
   align-self: flex-start;
   margin-left: 8px;
   padding: 6px;
@@ -311,7 +365,7 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .dialogue-workflow-select__item {

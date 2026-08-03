@@ -45,6 +45,18 @@
     }
   }
 
+  .text-node__translate {
+    color: #6b7280;
+
+    &:hover:not(:disabled) {
+      background: #f3f4f6;
+    }
+  }
+
+  .text-node__translate-label {
+    color: #6b7280;
+  }
+
   .text-node__hero-icon span {
     background: #9ca3af;
   }

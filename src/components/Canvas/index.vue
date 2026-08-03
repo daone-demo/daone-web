@@ -303,6 +303,7 @@
       @toggle-video-gen-canvas-pick="toggleVideoGenCanvasPickMode"
       @toggle-image-dialogue-canvas-pick="toggleImageDialogueCanvasPickMode"
       @toggle-image-dialogue-mark="toggleImageDialogueMarkMode"
+      @add-image-dialogue-digital-human="onImageDialogueAddDigitalHumanRef"
       @mention-inserted="onMentionInserted"
       @select-mark-label="updateImageMarkLabel"
       @remove-mark="removeElementMark"
@@ -643,6 +644,7 @@ const {
   closeImageEditText,
   onImageEditTextApply,
   onImageDialogueAddCanvasNode,
+  onImageDialogueAddDigitalHumanRef,
   onImageDialogueUploadFiles,
   onImageToolbarAction,
   onVideoToolbarAction,

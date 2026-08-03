@@ -749,11 +749,39 @@ export type WorkflowRecord = {
   name: string
   description?: string
   type?: string
+  buttonType?: string
   categoryId?: string | number | null
   categoryName?: string
   category?: { id?: string | number; name?: string } | null
   workflowJson?: string
   [key: string]: unknown
+}
+
+/** 工作流按钮类型：我的模特（弹出数字人选择器） */
+export const WORKFLOW_BUTTON_TYPE_MY_MODEL = 'MY_MODEL'
+
+export function resolveWorkflowButtonType(
+  workflow: WorkflowRecord | null | undefined,
+): string {
+  if (!workflow) return ''
+  const raw = workflow.buttonType ?? workflow.button_type
+  return String(raw ?? '').trim().toUpperCase()
+}
+
+export function isMyModelWorkflow(
+  workflow: WorkflowRecord | null | undefined,
+): boolean {
+  return resolveWorkflowButtonType(workflow) === WORKFLOW_BUTTON_TYPE_MY_MODEL
+}
+
+/** 创建生成任务时：MY_MODEL 工作流不传 workflowId */
+export function resolveGenerationTaskWorkflowId(
+  workflowId?: string | number | null,
+  workflow?: WorkflowRecord | null,
+): string | null {
+  if (isMyModelWorkflow(workflow)) return null
+  if (workflowId === undefined || workflowId === null || workflowId === '') return null
+  return String(workflowId)
 }
 
 export type WorkflowCategoryGroup = {

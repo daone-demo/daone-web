@@ -42,7 +42,6 @@
         <i class="iconfont icon-tupian" style="font-size: 18px;" />
         <span class="image-node__title-text">{{ data.title }}</span>
       </span>
-      <span v-if="dimensionLabel" class="image-node__size">{{ dimensionLabel }}</span>
     </div>
 
     <div class="image-node__body">
@@ -210,7 +209,6 @@
             class="image-node__resize-frame"
             @mousedown.stop
           >
-            <span v-if="dimensionLabel" class="image-node__resize-size">{{ dimensionLabel }}</span>
             <button
               v-for="corner in resizeCorners"
               :key="corner"
@@ -235,7 +233,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Graph, Node } from '@antv/x6'
-import { CANVAS_IMAGE_NODE_DRAG_TYPE, formatDimensions, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
+import { CANVAS_IMAGE_NODE_DRAG_TYPE, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
 import type { CanvasNodeData, ImageMarkItem } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
@@ -248,7 +246,6 @@ import { resolveImageNaturalSizeCached } from '../imageDisplayUrl'
 import { markStyleFromNatural } from '../imageMarkUtils'
 import {
   canResizeImageNode,
-  getBaseNodeSize,
   getNodeSize,
   syncNodeShapeFromData,
   type CanvasGraph,
@@ -302,18 +299,6 @@ function onPreviewImageLoad() {
       // ignore
     })
 }
-
-const dimensionLabel = computed(() => {
-  void sizeRevision.value
-  if (!data.mediaWidth || !data.mediaHeight) return ''
-  const node = getNode()
-  const baseSize = getBaseNodeSize(data.kind, data.mode, { ...data, viewScale: 1 })
-  if (!baseSize.width) return ''
-  const scale = node.getSize().width / baseSize.width
-  const width = Math.round(data.mediaWidth * scale)
-  const height = Math.round(data.mediaHeight * scale)
-  return formatDimensions(width, height)
-})
 
 function markPinStyle(mark: ImageMarkItem) {
   const imageWidth = data.mediaWidth || mark.imageWidth || 1

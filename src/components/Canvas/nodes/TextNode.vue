@@ -130,18 +130,50 @@
         @mousedown="onEditorMouseDown"
         @pointerdown.stop
       />
-      <span
-        class="text-node__resize"
-        title="拖拽调整大小"
-        @mousedown.stop.prevent="onResizeStart"
-      />
+      <div class="text-node__corner-tools" @mousedown.stop @pointerdown.stop>
+        <button
+          type="button"
+          class="text-node__translate"
+          :class="{ 'text-node__translate--loading': translating }"
+          :title="translating ? '翻译中' : '翻译'"
+          :disabled="translating"
+          @mousedown.stop
+          @click.stop="onTranslateContent"
+        >
+          <span v-if="translating" class="text-node__translate-label">翻译中...</span>
+          <svg
+            v-else
+            xmlns="http://www.w3.org/2000/svg"
+            xmlns:xlink="http://www.w3.org/1999/xlink"
+            aria-hidden="true"
+            role="img"
+            class="iconify iconify--libtv pointer-events-none text-fg-default size-4"
+            width="1.1em"
+            height="1em"
+            viewBox="0 0 19.71 18"
+          >
+            <path
+              d="M15.52 7.2c.16 0 .31.1.37.26l3.8 10a.4.4 0 0 1-.38.54h-1.03a.4.4 0 0 1-.37-.27l-.88-2.48h-4.36l-.88 2.48a.4.4 0 0 1-.37.27h-1.03a.4.4 0 0 1-.37-.54l3.79-10a.4.4 0 0 1 .37-.26zM7.7 0c.22 0 .4.18.4.4v1.4H14c.22 0 .4.18.4.4v1a.4.4 0 0 1-.4.4h-2.21a16 16 0 0 1-1.42 3.33A11 11 0 0 1 8.5 9.54l1.99 2.02c.1.11.14.28.09.42l-.43 1.16a.3.3 0 0 1-.5.1l-2.4-2.46-4.27 4.24a.4.4 0 0 1-.56 0l-.7-.7a.4.4 0 0 1 0-.56L6 9.5q-.79-.8-1.43-1.8-.55-.85-1-1.89a.3.3 0 0 1 .27-.41h1.2a.4.4 0 0 1 .35.22q.39.74.79 1.31.45.65 1.08 1.3.73-.73 1.54-2.08.8-1.33 1.2-2.55H.4a.4.4 0 0 1-.4-.4v-1c0-.22.18-.4.4-.4h5.9V.4c0-.22.18-.4.4-.4zm5.53 13.68h3.24l-1.62-4.59z"
+              fill="currentColor"
+            />
+          </svg>
+        </button>
+        <span
+          class="text-node__resize"
+          title="拖拽调整大小"
+          @mousedown.stop.prevent="onResizeStart"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
 import type { Node } from '@antv/x6'
+import api, { type PromptTranslationData } from '@/services/api'
+import { isRequestError } from '@/utils/request'
 import {
   TEXT_EDITOR_PLACEHOLDER,
   TEXT_PICKER_TRY_ACTIONS,
@@ -179,7 +211,7 @@ if (!vsvProto.__btnPatched) {
         tag === 'textarea' ||
         tag === 'select' ||
         target.closest(
-          'button, [contenteditable="true"], .canvas-node__delete, .canvas-node__delete-float, .node-port-plus',
+          'button, [contenteditable="true"], .canvas-node__delete, .canvas-node__delete-float, .node-port-plus, .text-node__corner-tools',
         )
       ) {
         return
@@ -229,6 +261,7 @@ function removeSelf(event?: Event) {
 
 const editorRef = ref<HTMLElement | null>(null)
 const titleInputRef = ref<HTMLInputElement | null>(null)
+const translating = ref(false)
 const isEditorComposing = ref(false)
 const isEditingTitle = ref(false)
 const titleDraft = ref('')
@@ -257,7 +290,7 @@ function shouldIgnoreNodeShellEvent(target: EventTarget | null) {
   if (!(target instanceof Element)) return true
   return Boolean(
     target.closest(
-      'button, [contenteditable="true"], input, .text-node__title, .text-node__resize, .node-port-plus, .canvas-node__delete, .canvas-node__delete-float',
+      'button, [contenteditable="true"], input, .text-node__title, .text-node__corner-tools, .node-port-plus, .canvas-node__delete, .canvas-node__delete-float',
     ),
   )
 }
@@ -860,6 +893,36 @@ function getPlainText() {
   return editorRef.value?.innerText ?? ''
 }
 
+async function onTranslateContent() {
+  const text = getPlainText().trim()
+  if (!text) {
+    message.warning('请输入需要翻译的提示词')
+    return
+  }
+  if (translating.value) return
+
+  translating.value = true
+  try {
+    const result = await api.translatePrompt<PromptTranslationData>({
+      text,
+      targetLanguage: 'EN',
+    })
+    const translated = result?.translatedText?.trim()
+    if (!translated) {
+      message.warning('翻译结果为空')
+      return
+    }
+    const el = editorRef.value
+    if (!el) return
+    el.innerText = translated
+    onEditorInput()
+  } catch (error) {
+    message.error(isRequestError(error) ? error.message : '提示词翻译失败，请稍后重试')
+  } finally {
+    translating.value = false
+  }
+}
+
 function focusEditor() {
   editorRef.value?.focus()
 }
@@ -1350,14 +1413,60 @@ onBeforeUnmount(() => {
   }
 }
 
-.text-node__resize {
+.text-node__corner-tools {
   position: absolute;
-  right: 6px;
-  bottom: 6px;
+  right: 4px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 1;
+}
+
+.text-node__translate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: #2a2a30;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  &--loading {
+    width: auto;
+    min-width: 28px;
+    padding: 0 6px;
+    cursor: not-allowed;
+  }
+}
+
+.text-node__translate-label {
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  color: #9ca3af;
+}
+
+.text-node__resize {
+  position: relative;
   width: 12px;
   height: 12px;
   cursor: nwse-resize;
   opacity: 0.45;
+  flex-shrink: 0;
 
   &::before {
     content: '';
