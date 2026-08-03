@@ -2,7 +2,7 @@
   <div v-if="showFilters" class="material-assets-filter-bar">
     <template v-if="scope === 'FILES'">
       <a-date-picker
-        :value="date"
+        :value="dateValue"
         value-format="YYYY-MM-DD"
         format="YYYY-MM-DD"
         allow-clear
@@ -40,11 +40,11 @@ const props = withDefaults(
   defineProps<{
     scope: ProjectTabKey
     type?: AssetsFileType
-    date?: unknown
+    date?: string | Dayjs | null
   }>(),
   {
     type: 'all',
-    date: null,
+    date: undefined,
   },
 )
 
@@ -54,6 +54,8 @@ const emit = defineEmits<{
 }>()
 
 const showFilters = computed(() => props.scope === 'FILES' || props.scope === 'CENTER')
+
+const dateValue = computed(() => props.date ?? undefined)
 
 function onTypeChange(value: unknown) {
   if (value === 'all' || value === 'image' || value === 'video') {

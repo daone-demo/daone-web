@@ -85,7 +85,6 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import type { ProjectVersionRecord } from '@/services/api'
 import {
-  HISTORY_RECORD_TABS,
   mapProjectVersionsToHistoryRecords,
   type HistoryRecord,
   type HistoryRecordTab,

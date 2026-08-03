@@ -2437,7 +2437,7 @@ export function registerCore(bind: CanvasBindings) {
     bumpToolbarRevision()
     updateNodeToolbar()
     scheduleHistoryPush()
-    openImageDialogue(primaryNode.id)
+    // 图生图新节点下方对话框默认隐藏，用户点击节点后再打开
 
     const runners = resultNodes.map((resultNode, index) => {
       const fileName = resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount)
