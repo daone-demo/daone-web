@@ -254,6 +254,7 @@ const props = withDefaults(
     selectedAssetIds?: string[]
     assetType?: 'all' | 'image' | 'video'
     assetDate?: unknown
+    projectId?: string
   }>(),
   {
     columnCount: MATERIAL_COLUMN_COUNT,
@@ -265,6 +266,7 @@ const props = withDefaults(
     selectedAssetIds: () => [],
     assetType: 'all',
     assetDate: undefined,
+    projectId: undefined,
   },
 )
 
@@ -276,6 +278,7 @@ const scopeRef = toRef(props, 'scope')
 const columnCountRef = computed(() => props.columnCount)
 const assetTypeRef = toRef(props, 'assetType')
 const assetDateRef = toRef(props, 'assetDate')
+const projectIdRef = toRef(props, 'projectId')
 const showMaterialList = computed(() => isMaterialListScope(props.scope))
 
 const {
@@ -306,7 +309,7 @@ const {
   onLoadMaterials,
   onLoadAssets,
   reloadForFilters,
-} = useMaterialAssets(scopeRef, columnCountRef, assetTypeRef, assetDateRef)
+} = useMaterialAssets(scopeRef, columnCountRef, assetTypeRef, assetDateRef, projectIdRef)
 
 const onDoToggleMaterialFavorite = (item: MaterialItem) => {
   console.log(userInfoStore.userInfo?.isVip)

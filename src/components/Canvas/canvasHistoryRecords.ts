@@ -1,4 +1,4 @@
-import type { ProjectVersionRecord } from '@/services/api'
+import type { ProjectCanvasResponse, ProjectVersionRecord, ProjectVersionDetailResponse } from '@/services/api'
 
 export type HistoryRecordKind = 'image' | 'video' | 'text' | 'custom'
 
@@ -87,4 +87,23 @@ export function mapProjectVersionsToHistoryRecords(
   return records
     .map(mapProjectVersionToHistoryRecord)
     .filter((item): item is HistoryRecord => Boolean(item))
+}
+
+/** 将历史版本详情转换为画布加载 payload，不使用 versionNo 作为 revision */
+export function buildProjectCanvasPayloadFromVersionDetail(
+  detail: ProjectVersionDetailResponse,
+  projectId: string,
+  revision: number,
+): ProjectCanvasResponse | null {
+  const canvasData = detail.canvasData ?? detail.canvas
+  if (!canvasData) return null
+
+  return {
+    projectId: String(detail.projectId ?? projectId),
+    revision,
+    canvasData,
+    canvas: canvasData,
+    updatedAt: detail.createdAt ?? new Date().toISOString(),
+    description: detail.description,
+  }
 }

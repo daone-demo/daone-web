@@ -283,6 +283,19 @@ export interface ProjectVersionRecord {
   createdAt?: string
 }
 
+/** GET /projects/{projectId}/versions/{versionId} 版本详情。 */
+export interface ProjectVersionDetailResponse {
+  id: string | number
+  projectId?: string
+  versionNo?: number
+  revision?: number
+  canvasData?: CanvasData
+  canvas?: CanvasData
+  description?: string
+  type?: CanvasSaveVersionType | string
+  createdAt?: string
+}
+
 export interface ShareCreateRequest {
   expireDays?: number
 }
@@ -491,6 +504,8 @@ export interface AssetListQuery extends PageQuery {
   type?: string
   source?: string
   keyword?: string
+  /** 日期筛选，格式 yyyy-MM-dd */
+  date?: string
   pageSize?: number
   page?: number
 }

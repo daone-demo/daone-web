@@ -45,6 +45,7 @@ import {
   resolveCanvasSaveType,
   resolveVideoTaskTypeLabel,
 } from '../../canvasDescription'
+import { buildProjectCanvasPayloadFromVersionDetail } from '../../canvasHistoryRecords'
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
 import { downloadCanvasMedia } from '../../mediaDownload'
 import {
@@ -131,7 +132,7 @@ import {
 } from '../../skillStorage'
 import type { AssetCenterItem } from '../../assetCenterData'
 import type { GroupLayoutDirection, ImageResizeCorner } from './sharedImports'
-import type { ProjectCanvasResponse } from '@/services/api'
+import type { ProjectCanvasResponse, ProjectVersionDetailResponse } from '@/services/api'
 import { isRequestError } from '@/utils/request'
 import type { Project } from '@/stores/useProject'
 import type {
@@ -6229,6 +6230,28 @@ export function registerCore(bind: CanvasBindings) {
     return loaded
   }
 
+  function loadProjectCanvasFromVersion(detail: ProjectVersionDetailResponse) {
+    const projectId = activeProjectId.value
+    if (!projectId) return false
+
+    const payload = buildProjectCanvasPayloadFromVersionDetail(
+      detail,
+      projectId,
+      canvasRevision.value,
+    )
+    if (!payload) return false
+
+    resetCanvasInteractionState()
+    const loaded = applyProjectCanvasPayload(payload)
+    if (!loaded) return false
+
+    markCanvasContentReady()
+    const project = canvasProjects.value.find((item) => item.id === projectId)
+    if (project) project.saved = false
+    scheduleHistoryPush({ autoSave: false })
+    return true
+  }
+
   function buildCanvasSnapshot(): CanvasSnapshot | null {
     const g = graph.value
     if (!g) return null
@@ -9945,6 +9968,7 @@ export function registerCore(bind: CanvasBindings) {
     saveCanvasAndWait,
     setCanvasDescription,
     loadProjectCanvas,
+    loadProjectCanvasFromVersion,
     handleTextPickerAction,
     handleTidyCanvas,
     handleUndo,

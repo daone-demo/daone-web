@@ -155,6 +155,7 @@
       :tab="assetsTab"
       :date="assetsDate"
       :type="assetsType"
+      :project-id="activeProjectId"
       @update:type="onChangeAssetsType($event)"
       :is-light="canvasBgTheme === 'light'"
       @update:tab="onChangeAssetsTab($event)"
@@ -316,7 +317,16 @@
       @change="onFileSelected"
     />
 
-    <CanvasHistoryAnchor v-if="showHistoryPanel" :list="historyList" @close="closeHistoryPanel" />
+    <CanvasHistoryAnchor
+      v-if="showHistoryPanel"
+      :list="historyList"
+      :loading="historyLoading"
+      :has-more="historyHasMore"
+      :restoring="historyRestoring"
+      @close="closeHistoryPanel"
+      @load-more="onLoadMoreHistory"
+      @select="onSelectHistoryVersion"
+    />
 
     <CanvasLeftToolbar
       :canvas-bg-theme="canvasBgTheme"
@@ -450,8 +460,9 @@ import CanvasProjectBrowser from './panels/CanvasProjectBrowser.vue'
 import CanvasHiddenFileInput from './panels/CanvasHiddenFileInput.vue'
 import { useCanvas } from './composables/useCanvas'
 import { ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
 import api from '@/services/api'
-import type { ProjectCanvasResponse, ProjectVersionRecord } from '@/services/api'
+import type { ProjectCanvasResponse, ProjectVersionDetailResponse, ProjectVersionRecord } from '@/services/api'
 import { type ProjectTabKey } from '@/views/Project/projectData'
 import type { ElementGroupRecord, AssetCenterTabKey } from './assetCenterData'
 import type { ImageCapability, WorkflowCategoryGroup, CanvasAssetDragPayload } from './constants'
@@ -478,9 +489,13 @@ defineProps<{
   workflows: WorkflowCategoryGroup[]
 }>()
 
-const skillList = ref<ElementGroupRecord[]>([]);
+const skillList = ref<ElementGroupRecord[]>([])
+const HISTORY_PAGE_SIZE = 50
 const historyList = ref<ProjectVersionRecord[]>([])
-const historyPage = ref(1);
+const historyPage = ref(1)
+const historyLoading = ref(false)
+const historyHasMore = ref(true)
+const historyRestoring = ref(false)
 
 const canvasRef = ref<HTMLElement | null>(null)
 const graphRef = ref<HTMLElement | null>(null)
@@ -812,6 +827,12 @@ defineExpose({
     }).loadProjectCanvas
     return load?.(payload) ?? false
   },
+  loadProjectCanvasFromVersion(detail: ProjectVersionDetailResponse) {
+    const load = (canvasRuntime as {
+      loadProjectCanvasFromVersion?: (detail: ProjectVersionDetailResponse) => boolean
+    }).loadProjectCanvasFromVersion
+    return load?.(detail) ?? false
+  },
   reloadProjectBrowser() {
     projectBrowserRef.value?.reload()
   },
@@ -864,14 +885,65 @@ const onLoadSkill = () => {
   })
 }
 
-const onLoadHistory = () => {
-  if (!activeProjectId.value) return
-  api.getProjectVersions<ProjectVersionRecord>(activeProjectId.value, {
-    pageSize: 50,
-    page: historyPage.value,
-  }).then((res) => {
-    historyList.value = res.records ?? []
-  })
+const onLoadHistory = async (reset = false) => {
+  if (!activeProjectId.value || historyLoading.value) return
+  if (!reset && !historyHasMore.value) return
+
+  if (reset) {
+    historyPage.value = 1
+    historyHasMore.value = true
+  }
+
+  historyLoading.value = true
+  try {
+    const res = await api.getProjectVersions<ProjectVersionRecord>(activeProjectId.value, {
+      pageSize: HISTORY_PAGE_SIZE,
+      page: historyPage.value,
+    })
+    const records = res.records ?? []
+    if (reset) {
+      historyList.value = records
+    } else {
+      const existingIds = new Set(historyList.value.map((item) => String(item.id)))
+      historyList.value.push(
+        ...records.filter((item) => !existingIds.has(String(item.id))),
+      )
+    }
+    historyHasMore.value = records.length >= HISTORY_PAGE_SIZE
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+const onLoadMoreHistory = () => {
+  if (!historyHasMore.value || historyLoading.value) return
+  historyPage.value += 1
+  void onLoadHistory()
+}
+
+const onSelectHistoryVersion = async (versionId: string) => {
+  if (!activeProjectId.value || historyRestoring.value || !versionId) return
+
+  historyRestoring.value = true
+  try {
+    const detail = await api.getProjectVersion<ProjectVersionDetailResponse>(
+      activeProjectId.value,
+      versionId,
+    )
+    const loaded = (canvasRuntime as {
+      loadProjectCanvasFromVersion?: (detail: ProjectVersionDetailResponse) => boolean
+    }).loadProjectCanvasFromVersion?.(detail)
+    if (!loaded) {
+      message.error('恢复历史版本失败')
+      return
+    }
+    closeHistoryPanel()
+  } catch (error) {
+    console.error('[Canvas] restore history version failed', error)
+    message.error('加载历史版本失败')
+  } finally {
+    historyRestoring.value = false
+  }
 }
 
 watch(showAssetCenterPanel, (open) => {
@@ -882,7 +954,7 @@ watch(showAssetCenterPanel, (open) => {
 
 watch(showHistoryPanel, (open) => {
   if (open && activeProjectId.value) {
-    onLoadHistory();
+    void onLoadHistory(true)
   }
 })
 </script>

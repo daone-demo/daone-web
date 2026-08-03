@@ -20,6 +20,7 @@ export function useMaterialAssets(
   columnCount: Ref<number>,
   assetType: Ref<'all' | 'image' | 'video'> = ref('all'),
   assetDate: Ref<unknown> = ref(null),
+  projectId: Ref<string | undefined> = ref(undefined),
 ) {
   const materialCategories = ref<any[]>([])
   const materialCode = ref('')
@@ -72,7 +73,16 @@ export function useMaterialAssets(
   function resolveAssetDateParam(): string | undefined {
     const value = assetDate.value
     if (!value) return undefined
-    if (typeof value === 'string') return value
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      return trimmed || undefined
+    }
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      const year = value.getFullYear()
+      const month = String(value.getMonth() + 1).padStart(2, '0')
+      const day = String(value.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
     if (typeof value === 'object' && value !== null && 'format' in value) {
       const format = (value as { format?: (pattern: string) => string }).format
       return typeof format === 'function' ? format('YYYY-MM-DD') : undefined
@@ -155,8 +165,10 @@ export function useMaterialAssets(
     try {
       const typeParam = resolveMaterialTypeParam()
       const dateParam = resolveAssetDateParam()
+      const projectIdParam = projectId.value?.trim()
       const res: any = await api.getAssets({
         scope: scope.value,
+        ...(projectIdParam ? { projectId: projectIdParam } : {}),
         ...(typeParam ? { type: typeParam } : {}),
         ...(dateParam ? { date: dateParam } : {}),
         pageSize: MATERIAL_PAGE_SIZE,
@@ -320,6 +332,12 @@ export function useMaterialAssets(
   })
 
   watch(assetDate, () => {
+    if (scope.value === 'FILES') {
+      reloadForFilters()
+    }
+  })
+
+  watch(projectId, () => {
     if (scope.value === 'FILES') {
       reloadForFilters()
     }

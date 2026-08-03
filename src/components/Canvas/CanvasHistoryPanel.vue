@@ -13,7 +13,7 @@
       </button>
     </header>
 
-    <div class="canvas-history__toolbar">
+    <!-- <div class="canvas-history__toolbar">
       <label class="canvas-history__search">
         <span class="canvas-history__search-icon" aria-hidden="true" />
         <input
@@ -27,9 +27,9 @@
       <button type="button" class="canvas-history__calendar" title="按日期筛选" aria-label="按日期筛选">
         <span class="canvas-history__calendar-icon" aria-hidden="true" />
       </button>
-    </div>
+    </div> -->
 
-    <nav class="canvas-history__tabs" aria-label="历史记录分类">
+    <!-- <nav class="canvas-history__tabs" aria-label="历史记录分类">
       <button
         v-for="tab in HISTORY_RECORD_TABS"
         :key="tab.key"
@@ -40,9 +40,9 @@
       >
         {{ tab.label }}
       </button>
-    </nav>
+    </nav> -->
 
-    <div class="canvas-history__body">
+    <div ref="bodyRef" class="canvas-history__body" @scroll="onBodyScroll">
       <template v-if="groupedRecords.length">
         <section
           v-for="group in groupedRecords"
@@ -52,7 +52,12 @@
           <h3 class="canvas-history__date">{{ group.dateLabel }}</h3>
           <ul class="canvas-history__list">
             <li v-for="item in group.items" :key="item.id" class="canvas-history__item">
-              <button type="button" class="canvas-history__item-btn">
+              <button
+                type="button"
+                class="canvas-history__item-btn"
+                :disabled="restoring"
+                @click="emit('select', item.id)"
+              >
                 <span class="canvas-history__item-text">{{ item.summary }}</span>
                 <time
                   v-if="item.time"
@@ -64,13 +69,20 @@
           </ul>
         </section>
       </template>
-      <p v-else class="canvas-history__empty">暂无匹配的历史记录</p>
+      <p v-else-if="!loading" class="canvas-history__empty">暂无匹配的历史记录</p>
+      <p v-if="loading" class="canvas-history__status">加载中...</p>
+      <p v-else-if="hasMore && groupedRecords.length" class="canvas-history__status canvas-history__status--hint">
+        继续滚动加载更多
+      </p>
+      <p v-else-if="groupedRecords.length" class="canvas-history__status canvas-history__status--hint">
+        没有更多了
+      </p>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { ProjectVersionRecord } from '@/services/api'
 import {
   HISTORY_RECORD_TABS,
@@ -81,14 +93,50 @@ import {
 
 const emit = defineEmits<{
   close: []
+  'load-more': []
+  select: [versionId: string]
 }>()
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   list: ProjectVersionRecord[]
-}>()
+  loading?: boolean
+  hasMore?: boolean
+  restoring?: boolean
+}>(), {
+  loading: false,
+  hasMore: false,
+  restoring: false,
+})
 
 const searchQuery = ref('')
 const activeTab = ref<HistoryRecordTab>('all')
+const bodyRef = ref<HTMLElement | null>(null)
+
+function onBodyScroll() {
+  const el = bodyRef.value
+  if (!el || props.loading || !props.hasMore) return
+  const threshold = 48
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {
+    emit('load-more')
+  }
+}
+
+async function tryAutoFillHistory() {
+  if (props.loading || !props.hasMore) return
+  await nextTick()
+  const el = bodyRef.value
+  if (!el) return
+  if (el.scrollHeight <= el.clientHeight + 1) {
+    emit('load-more')
+  }
+}
+
+watch(
+  () => [props.list.length, props.hasMore, props.loading] as const,
+  () => {
+    void tryAutoFillHistory()
+  },
+)
 
 const historyRecords = computed(() => mapProjectVersionsToHistoryRecords(props.list))
 
@@ -326,8 +374,13 @@ const groupedRecords = computed(() => {
   text-align: left;
   cursor: pointer;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: #f9fafb;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 }
 
@@ -357,5 +410,17 @@ const groupedRecords = computed(() => {
   font-size: 13px;
   color: #9ca3af;
   text-align: center;
+}
+
+.canvas-history__status {
+  margin: 8px 0 4px;
+  padding-right: 12px;
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: center;
+}
+
+.canvas-history__status--hint {
+  padding-bottom: 4px;
 }
 </style>

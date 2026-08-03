@@ -38,9 +38,11 @@
           <template v-if="!batchSelectMode && tab == 'FILES'">
             <a-date-picker
               :value="date"
-              type="date"
+              value-format="YYYY-MM-DD"
+              format="YYYY-MM-DD"
+              allow-clear
               placeholder="选择日期"
-              @update:value="emit('update:date', $event)"
+              @update:value="onDateChange"
             />
             <a-select
               :value="type"
@@ -98,6 +100,7 @@
         :scope="tab"
         :asset-type="type"
         :asset-date="date"
+        :project-id="projectId"
         :column-count="CANVAS_MATERIAL_COLUMN_COUNT"
         embedded
         :is-light="isLight"
@@ -112,6 +115,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import type { Dayjs } from 'dayjs'
 import MaterialAssetsContent from '@/views/Project/MaterialAssetsContent.vue'
 import { PROJECT_TABS, type ProjectTabKey } from '@/views/Project/projectData'
 import type { CanvasAssetDragPayload } from '@/components/Canvas/constants'
@@ -131,10 +135,12 @@ const props = withDefaults(
     tab: ProjectTabKey
     date: any
     type?: AssetsFileType
+    projectId?: string
     isLight?: boolean
   }>(),
   {
     type: 'all',
+    projectId: undefined,
   },
 )
 
@@ -154,6 +160,18 @@ function onTypeChange(value: unknown) {
   if (value === 'all' || value === 'image' || value === 'video') {
     emit('update:type', value)
   }
+}
+
+function onDateChange(value: string | Dayjs | null) {
+  if (value === null || value === undefined) {
+    emit('update:date', null)
+    return
+  }
+  if (typeof value === 'string') {
+    emit('update:date', value)
+    return
+  }
+  emit('update:date', value.format('YYYY-MM-DD'))
 }
 
 function enterBatchSelectMode() {
