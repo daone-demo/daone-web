@@ -95,6 +95,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showAssetCenterPanel = ref(false)
   const showHistoryPanel = ref(false)
   const assetsTab = ref<ProjectTabKey>('CENTER')
+  const assetsType = ref<'all' | 'image' | 'video'>('all')
+  const assetsDate = ref<any>(null)
   const assetsLoading = ref(false)
   const assetCenterTab = ref<'ALL' | '角色' | '场景' | '风格包' | '自定义'>('ALL')
   const assetCenterSearch = ref('')
@@ -285,6 +287,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showAssetCenterPanel,
     showHistoryPanel,
     assetsTab,
+    assetsType,
+    assetsDate,
     assetsLoading,
     assetCenterTab,
     assetCenterSearch,

@@ -153,8 +153,13 @@
     <CanvasAssetsPanel
       v-if="showAssetsPanel"
       :tab="assetsTab"
+      :date="assetsDate"
+      :type="assetsType"
+      @update:type="onChangeAssetsType($event)"
       :is-light="canvasBgTheme === 'light'"
       @update:tab="onChangeAssetsTab($event)"
+      @update:date="onChangeAssetsDate($event)"
+      @batch-insert="onBatchInsertAssets($event)"
       @close="showAssetsPanel = false"
     />
 
@@ -449,7 +454,7 @@ import api from '@/services/api'
 import type { ProjectCanvasResponse } from '@/services/api'
 import { type ProjectTabKey } from '@/views/Project/projectData'
 import type { ElementGroupRecord, AssetCenterTabKey } from './assetCenterData'
-import type { ImageCapability, WorkflowCategoryGroup } from './constants'
+import type { ImageCapability, WorkflowCategoryGroup, CanvasAssetDragPayload } from './constants'
 
 const emit = defineEmits<{
   'focus-chat': []
@@ -501,6 +506,8 @@ const {
   addMenuDropPoint,
   addMenuPos,
   assetsTab,
+  assetsDate,
+  assetsType,
   assetCenterLoading,
   assetCenterSearch,
   assetCenterTab,
@@ -822,6 +829,21 @@ export type CanvasProjectItem = {
 
 const onChangeAssetsTab = (tab: ProjectTabKey) => {
   assetsTab.value = tab
+}
+
+const onChangeAssetsType = (type: 'all' | 'image' | 'video') => {
+  assetsType.value = type
+}
+
+const onChangeAssetsDate = (date: any) => {
+  assetsDate.value = date
+}
+
+const onBatchInsertAssets = (assets: CanvasAssetDragPayload[]) => {
+  const fn = (canvasRuntime as {
+    batchInsertAssetsFromLibrary?: (assets: CanvasAssetDragPayload[]) => number
+  }).batchInsertAssetsFromLibrary
+  fn?.(assets)
 }
 
 const onChangeAssetCenterTab = (tab: AssetCenterTabKey) => {

@@ -53,7 +53,11 @@
             v-for="item in column"
             :key="item.id"
             class="home__inspiration-card"
-            :draggable="enableDrag && canDragMaterial(item)"
+            :class="{
+              'home__inspiration-card--batch-mode': batchSelectMode,
+              'home__inspiration-card--batch-selected': batchSelectMode && isAssetSelected(item.id),
+            }"
+            :draggable="enableDrag && !batchSelectMode && canDragMaterial(item)"
             @click.stop="onMaterialClick(item)"
             @dragstart.stop="onMaterialDragStart($event, item)"
             @dragend.stop="onDragEnd"
@@ -62,6 +66,12 @@
               class="home__inspiration-media"
               :class="{ 'home__inspiration-media--video': item.type === 'VIDEO' }"
             >
+              <span
+                v-if="batchSelectMode"
+                class="material-assets__batch-check"
+                :class="{ 'material-assets__batch-check--selected': isAssetSelected(item.id) }"
+                aria-hidden="true"
+              />
               <img
                 v-if="item.type === 'IMAGE'"
                 class="home__inspiration-image"
@@ -76,6 +86,7 @@
                 preview
               />
               <MaterialAssetHoverActions
+                v-if="!batchSelectMode"
                 :favorited="item.favorited"
                 @preview="openMaterialPreview(item)"
                 @toggle-favorite="onDoToggleMaterialFavorite(item)"
@@ -115,7 +126,11 @@
             v-for="item in column"
             :key="item.id"
             class="home__inspiration-card"
-            :draggable="enableDrag && canDragAsset(item)"
+            :class="{
+              'home__inspiration-card--batch-mode': batchSelectMode,
+              'home__inspiration-card--batch-selected': batchSelectMode && isAssetSelected(item.id),
+            }"
+            :draggable="enableDrag && !batchSelectMode && canDragAsset(item)"
             @click.stop="onAssetClick(item)"
             @dragstart.stop="onAssetDragStart($event, item)"
             @dragend.stop="onDragEnd"
@@ -124,6 +139,12 @@
               class="home__inspiration-media"
               :class="{ 'home__inspiration-media--video': isVideoAsset(item) }"
             >
+              <span
+                v-if="batchSelectMode"
+                class="material-assets__batch-check"
+                :class="{ 'material-assets__batch-check--selected': isAssetSelected(item.id) }"
+                aria-hidden="true"
+              />
               <img
                 v-if="!isVideoAsset(item)"
                 class="home__inspiration-image"
@@ -143,6 +164,7 @@
                 <span class="home__inspiration-video-play" aria-hidden="true" />
               </template>
               <MaterialAssetHoverActions
+                v-if="!batchSelectMode"
                 :favorited="item.favorited"
                 @preview="openAssetPreview(item)"
                 @toggle-favorite="onDoToggleAssetFavorite(item)"
@@ -228,6 +250,8 @@ const props = withDefaults(
     isLight?: boolean
     enableDrag?: boolean
     useWindowScroll?: boolean
+    batchSelectMode?: boolean
+    selectedAssetIds?: string[]
   }>(),
   {
     columnCount: MATERIAL_COLUMN_COUNT,
@@ -235,8 +259,14 @@ const props = withDefaults(
     isLight: false,
     enableDrag: false,
     useWindowScroll: false,
+    batchSelectMode: false,
+    selectedAssetIds: () => [],
   },
 )
+
+const emit = defineEmits<{
+  'update:selectedAssetIds': [ids: string[]]
+}>()
 
 const scopeRef = toRef(props, 'scope')
 const columnCountRef = computed(() => props.columnCount)
@@ -319,6 +349,10 @@ function onMaterialClick(item: MaterialItem) {
     suppressClick = false
     return
   }
+  if (props.batchSelectMode) {
+    toggleAssetSelection(item)
+    return
+  }
   openMaterialPreview(item)
 }
 
@@ -341,8 +375,42 @@ function onAssetClick(item: AssetItem) {
     suppressClick = false
     return
   }
+  if (props.batchSelectMode) {
+    toggleAssetSelection(item)
+    return
+  }
   openAssetPreview(item)
 }
+
+function isAssetSelected(id: string) {
+  return props.selectedAssetIds.includes(id)
+}
+
+function toggleAssetSelection(item: AssetItem | MaterialItem) {
+  const current = props.selectedAssetIds
+  const next = current.includes(item.id)
+    ? current.filter((id) => id !== item.id)
+    : [...current, item.id]
+  emit('update:selectedAssetIds', next)
+}
+
+function getSelectedAssetPayloads(): CanvasAssetDragPayload[] {
+  const selected = new Set(props.selectedAssetIds)
+
+  if (isMaterialListScope(props.scope)) {
+    return materialList.value
+      .filter((item) => selected.has(item.id) && resolveMaterialMediaUrl(item))
+      .map((item) => materialToDragPayload(item))
+  }
+
+  return assetList.value
+    .filter((item) => selected.has(item.id) && resolveAssetMediaUrl(item))
+    .map((item) => toDragPayload(item))
+}
+
+defineExpose({
+  getSelectedAssetPayloads,
+})
 
 function toDragPayload(item: AssetItem): CanvasAssetDragPayload {
   return {
@@ -432,6 +500,45 @@ onUnmounted(() => {
 
   .home__inspiration-hover {
     pointer-events: auto;
+  }
+}
+
+.home__inspiration-card--batch-mode {
+  cursor: pointer;
+}
+
+.home__inspiration-card--batch-selected {
+  .home__inspiration-media {
+    box-shadow: inset 0 0 0 2px #2563eb;
+  }
+}
+
+.material-assets__batch-check {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.35);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.material-assets__batch-check--selected {
+  border-color: #2563eb;
+  background: #2563eb;
+
+  &::before {
+    content: '✓';
   }
 }
 

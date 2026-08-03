@@ -19,7 +19,6 @@
         </button>
       </nav>
     </header>
-
     <MaterialAssetsContent
       :scope="scope"
       :use-window-scroll="true"

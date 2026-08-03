@@ -276,38 +276,38 @@
                 <button
                   type="button"
                   class="user-info__invoice-type-btn"
-                  :class="{ 'user-info__invoice-type-btn--active': invoiceHeaderType === 'personal' }"
-                  @click="invoiceHeaderType = 'personal'"
+                  :class="{ 'user-info__invoice-type-btn--active': invoiceType === 'PERSONAL' }"
+                  @click="invoiceType = 'PERSONAL'"
                 >
                   个人
                 </button>
                 <button
                   type="button"
                   class="user-info__invoice-type-btn"
-                  :class="{ 'user-info__invoice-type-btn--active': invoiceHeaderType === 'enterprise' }"
-                  @click="invoiceHeaderType = 'enterprise'"
+                  :class="{ 'user-info__invoice-type-btn--active': invoiceType === 'COMPANY' }"
+                  @click="invoiceType = 'COMPANY'"
                 >
                   企业
                 </button>
               </div>
             </div>
 
-            <!-- <div class="user-info__invoice-field">
-              <label class="user-info__invoice-label">单位名称</label>
+            <div class="user-info__invoice-field">
+              <label class="user-info__invoice-label">发票抬头</label>
               <input
-                v-model="invoiceForm.unitName"
+                v-model="invoiceForm.invoiceTitle"
                 class="user-info__invoice-input"
                 type="text"
                 placeholder="请输入单位名称"
               />
-            </div> -->
+            </div>
           </div>
 
           <div class="user-info__invoice-row">
-            <div class="user-info__invoice-field" v-if="invoiceHeaderType == 'enterprise'">
+            <div class="user-info__invoice-field" v-if="invoiceType == 'COMPANY'">
               <label class="user-info__invoice-label">纳税人识别号</label>
               <input
-                v-model="invoiceForm.taxId"
+                v-model="invoiceForm.taxNo"
                 class="user-info__invoice-input"
                 type="text"
                 placeholder="请输入纳税人识别号"
@@ -359,7 +359,7 @@
 
           <footer class="user-info__invoice-footer">
             <button type="button" class="user-info__invoice-cancel" @click="closeInvoiceModal">取消</button>
-            <button type="submit" class="user-info__invoice-submit">申请</button>
+            <button type="submit" class="user-info__invoice-submit" @click="applyInvoice">申请</button>
           </footer>
         </form>
       </div>
@@ -545,7 +545,7 @@ watch(needReloadPointsStore.getNeedReloadPoints, (newVal) => {
 
 const modalStore = useModalStore();
 const userInfoStore = useUserInfo();
-type InvoiceHeaderType = 'personal' | 'enterprise'
+type InvoiceHeaderType = 'PERSONAL' | 'COMPANY'
 type PayMethod = 'ALIPAY' | 'WECHAT' | 'BANK_TRANSFER'
 const route = useRoute();
 const router = useRouter();
@@ -560,10 +560,10 @@ const activeTab = ref<UserInfoTabKey>('account')
 const pointsFilter = ref<PointsLogFilterKey>('all')
 const showInvoiceModal = ref(false)
 const invoiceOrderNo = ref('')
-const invoiceHeaderType = ref<InvoiceHeaderType>('enterprise')
+const invoiceType = ref<InvoiceHeaderType>('COMPANY')
 const invoiceForm = ref({
-  unitName: '',
-  taxId: '',
+  invoiceTitle: '',
+  taxNo: '',
   contact: '',
   bankName: '',
   bankAccount: '',
@@ -626,10 +626,10 @@ function openPointsModal() {
 }
 
 function resetInvoiceForm() {
-  invoiceHeaderType.value = 'enterprise'
+  invoiceType.value = 'COMPANY'
   invoiceForm.value = {
-    unitName: '',
-    taxId: '',
+    invoiceTitle: '',
+    taxNo: '',
     contact: '',
     bankName: '',
     bankAccount: '',
@@ -891,6 +891,41 @@ const onChangeOrderPage = (page: number) => {
 const onChangePointsPage = (key: number) => {  
   page.value = key;
   onLoadPoints();
+}
+
+const applyInvoice = () => {
+  const params: {
+    invoiceTitle: string
+    orderNo: string
+    email: string
+    buyerType: InvoiceHeaderType
+    taxNo?: string
+  } = {
+    invoiceTitle: invoiceForm.value.invoiceTitle,
+    orderNo: invoiceOrderNo.value,
+    email: invoiceForm.value.contact,
+    buyerType: invoiceType.value,
+  }
+  if (!params.invoiceTitle) {
+    message.error('请输入发票抬头')
+    return
+  }
+  if (!params.email) {
+    message.error('请输入联系方式')
+    return
+  }
+  if (invoiceType.value === 'COMPANY') {
+    params.taxNo = invoiceForm.value.taxNo
+    if (!params.taxNo) {
+      message.error('请输入纳税人识别号')
+      return
+    }
+  }
+  api.applyInvoice(params).then(() => {
+    message.success('申请成功')
+    closeInvoiceModal()
+    onLoadOrderList()
+  })
 }
 
 // const openPointsLogDetail = (id: string) => {

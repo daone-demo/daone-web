@@ -881,5 +881,9 @@ const api = {
   notifyFpapi<T = unknown>(data: any) {
     return http.post<T>(`/invoices/fpapi/notify`, data)
   },
+  /** 保存画布元素组 */
+  applyInvoice<T = unknown>(data: any) {
+    return http.post<T>(`/invoices/apply`, data)
+  },
 }
 export default api

@@ -9644,6 +9644,45 @@ export function registerCore(bind: CanvasBindings) {
     scheduleHistoryPush()
   }
 
+  function batchInsertAssetsFromLibrary(assets: CanvasAssetDragPayload[]) {
+    const g = graph.value
+    if (!g) return 0
+
+    const validAssets = assets.filter((asset) => asset.previewUrl)
+    if (!validAssets.length) return 0
+
+    const basePoint = getGraphCenter()
+    const createdNodes: Node[] = []
+
+    validAssets.forEach((asset, index) => {
+      const kind = asset.mediaType === 'VIDEO' ? 'video' : 'image'
+      const point = getMultiUploadSpawnPoint(basePoint, index, kind)
+      const title = asset.fileName || (kind === 'video' ? '视频' : '图片')
+      const node = addCanvasNode(g, kind, point, {
+        mode: 'editor',
+        title,
+        fileName: title,
+      })
+
+      if (asset.mediaType === 'VIDEO') {
+        void applyRemoteVideoToNode(node, asset)
+      } else {
+        applyRemoteImageToNode(node, asset)
+      }
+
+      createdNodes.push(node)
+    })
+
+    if (!createdNodes.length) return 0
+
+    selectGraphNodes(createdNodes)
+    syncNodeCount()
+    scheduleHistoryPush()
+    ensureInfiniteCanvasArea(g)
+    message.success(`已批量插入 ${createdNodes.length} 个素材`)
+    return createdNodes.length
+  }
+
   async function addImagesFromFiles(files: File[]) {
     const imageFiles = files.filter((file) => file.type.startsWith('image/'))
     if (!imageFiles.length) return []
@@ -9698,6 +9737,7 @@ export function registerCore(bind: CanvasBindings) {
     addImageDialogueSourceRef,
     addImageFromAsset,
     addVideoFromAsset,
+    batchInsertAssetsFromLibrary,
     addImageFromFile,
     addImagesFromFiles,
     addNode,

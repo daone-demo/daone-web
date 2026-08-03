@@ -231,7 +231,9 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showAssetsPanel = ref(false)
   const showAssetCenterPanel = ref(false)
   const showHistoryPanel = ref(false)
-  const assetsTab = ref<ProjectTabKey>('CENTER')
+  const assetsTab = ref<ProjectTabKey>('CENTER');
+  const assetsType = ref<'all' | 'image' | 'video'>('all');
+  const assetsDate = ref<any>(null);
   const assetsLoading = ref(false)
   const assetCenterTab = ref<'ALL' | '角色' | '场景' | '风格包' | '自定义'>('ALL')
   const assetCenterSearch = ref('')
@@ -4076,6 +4078,8 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     applyZoomAfterChange,
     assetsLoading,
     assetsTab,
+    assetsType,
+    assetsDate,
     assetCenterItems,
     assetCenterLoading,
     assetCenterSearch,
