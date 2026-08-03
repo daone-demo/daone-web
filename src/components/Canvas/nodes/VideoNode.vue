@@ -339,6 +339,7 @@ function onEmptyMouseDown(event: MouseEvent) {
 }
 
 function onVideoNodeDblClick() {
+  if (!hasVideoPreview.value || data.uploadState === 'uploading') return
   const node = getNode()
   const g = node.model?.graph as CanvasGraph | undefined
   g?.__openVideoDialogue?.(node.id)

@@ -3481,6 +3481,8 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function handleVideoNodeDblClick({ node }: { node: Node }) {
+    const data = node.getData() as CanvasNodeData
+    if (!canAutoOpenVideoDialogue(data)) return
     openVideoDialogue(node.id)
   }
 
@@ -3646,6 +3648,15 @@ export function registerCore(bind: CanvasBindings) {
       data.kind === 'image' &&
       Boolean(data.previewUrl?.trim()) &&
       data.uploadState !== 'uploading'
+    )
+  }
+
+  function canAutoOpenVideoDialogue(data: CanvasNodeData) {
+    return (
+      data.kind === 'video' &&
+      Boolean(data.previewUrl?.trim()) &&
+      data.uploadState !== 'uploading' &&
+      !isVideoNodeGenerating(data)
     )
   }
 
@@ -8430,11 +8441,7 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
-    if (shouldDeferVideoToolbarOnClick(data)) {
-      scheduleVideoToolbarDefer()
-    } else {
-      cancelVideoToolbarDefer()
-    }
+    cancelVideoToolbarDefer()
 
     resetImageToolbarMore()
     resetImageCrop()
@@ -8478,7 +8485,7 @@ export function registerCore(bind: CanvasBindings) {
       if (activePickerNodeId.value && data.kind === 'text') {
         loadPromptBarContext(node.id)
       }
-      // 图片节点单击仅选中并显示上方操作栏；下方对话框改为双击打开
+      // 图片/视频节点单击仅选中并显示上方操作栏；下方对话框改为双击打开
       if (!showElementSelectMode.value) {
         resetImageDialogue()
       }

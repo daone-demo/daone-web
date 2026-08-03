@@ -279,8 +279,16 @@ const onRenameProject = (projectId: string, name: string) => {
   modalStore.openModal('updateProjectName');
 }
 
-const onDeleteProject = async () => {
-  await onRefreshProjects()
+const onDeleteProject = async (projectId: string) => {
+
+  Modal.confirm({
+    title: '删除项目',
+    content: '确定删除该项目吗？',
+    onOk: async () => {
+      await api.deleteProject(projectId)
+      await onRefreshProjects()
+    },
+  })
 }
 
 const onCloseChat = () => {
