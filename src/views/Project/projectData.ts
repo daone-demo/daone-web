@@ -1,9 +1,8 @@
 export const PROJECT_TABS = [
-  // { key: 'RECOMMENDED', label: '智能推荐' },
   { key: 'CENTER', label: '素材中心' },
-  // { key: 'MINE', label: '我的素材' },
   { key: 'FAVORITE', label: '我的收藏' },
   { key: 'FILES', label: '我的文件' },
+  { key: 'DIGITAL_HUMAN', label: '我的数字人' },
 ] as const
 
 export type ProjectTabKey = (typeof PROJECT_TABS)[number]['key']

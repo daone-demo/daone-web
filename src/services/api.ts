@@ -244,6 +244,8 @@ export interface CanvasData {
 }
 
 /** PUT /projects/{projectId}/canvas 请求体。 */
+export type CanvasSaveVersionType = 'IMAGE' | 'VIDEO' | 'TEXT' | 'CUSTOM'
+
 export interface CanvasSaveRequest {
   /** 客户端当前画布版本，用于乐观锁校验。 */
   revision: number
@@ -253,6 +255,8 @@ export interface CanvasSaveRequest {
   canvasData: CanvasData
   /** 画布最后一次提交的描述。 */
   description?: string
+  /** 版本类型：IMAGE=图片，VIDEO=视频，TEXT=文字，CUSTOM=自定义 */
+  type?: CanvasSaveVersionType
 }
 
 /** GET /projects/{projectId}/canvas 响应 data。 */

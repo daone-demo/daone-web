@@ -412,6 +412,12 @@ function cancelPendingUpload() {
 
 function onPreviewClick() {
   if (isGridSplitNode.value) return
+  if (data.previewUrl?.trim() && data.uploadState !== 'uploading') {
+    cancelPendingUpload()
+    const g = getGraph() as CanvasGraph
+    g?.__openImageDialogue?.(getNode().id)
+    return
+  }
   cancelPendingUpload()
   uploadClickTimer = setTimeout(() => {
     requestFile()

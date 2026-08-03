@@ -16,20 +16,6 @@
             <p class="user-info__phone">{{ profileState.phoneMasked }}</p>
           </div>
         </div>
-
-        <!-- <div class="user-info__switch-account">
-          <img
-            class="user-info__switch-avatar"
-            :src="USER_PROFILE.previousAccount.avatar"
-            alt=""
-            aria-hidden="true"
-          />
-          <div class="user-info__switch-text">
-            <span class="user-info__switch-label">切换前账号</span>
-            <span class="user-info__switch-name">{{ USER_PROFILE.previousAccount.name }}</span>
-          </div>
-        </div> -->
-
         <a-flex gap="10" align="center">
           <button type="button" class="user-info__edit-btn" @click="openEditProfileModal">
             <span class="user-info__edit-icon" aria-hidden="true" />
@@ -40,7 +26,6 @@
           </button>
         </a-flex>
       </section>
-
       <section class="user-info__detail-card">
         <nav class="user-info__tabs" aria-label="账户设置">
           <button
@@ -54,14 +39,8 @@
             {{ tab.label }}
           </button>
         </nav>
-
         <div v-if="activeTab === 'account'" class="user-info__account">
           <div class="user-info__form-grid">
-            <!-- <div class="user-info__field">
-              <label class="user-info__label">会员信息</label>
-              <div class="user-info__input">{{ profileState.id }}</div>
-            </div> -->
-
             <div class="user-info__field">
               <label class="user-info__label">当前订阅</label>
               <div class="user-info__input user-info__input--with-action">
@@ -76,7 +55,6 @@
                 </button>
               </div>
             </div>
-
             <div class="user-info__field">
               <label class="user-info__label">可用积分</label>
               <div class="user-info__input user-info__input--with-inline-btn">

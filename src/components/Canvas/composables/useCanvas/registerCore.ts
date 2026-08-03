@@ -41,6 +41,8 @@ import {
 import {
   formatCanvasDescription,
   formatUploadCanvasDescription,
+  resolveCanvasSaveDescription,
+  resolveCanvasSaveType,
   resolveVideoTaskTypeLabel,
 } from '../../canvasDescription'
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
@@ -757,32 +759,83 @@ export function registerCore(bind: CanvasBindings) {
     }
   })
 
-  function getImageDialoguePreviewsForNode(nodeId: string): ImageSourceRef[] {
-    const g = graph.value
-    const cell = g?.getCellById(nodeId)
-    if (!cell?.isNode()) return []
-    const data = cell.getData() as CanvasNodeData
-    const refs = Array.isArray(data.imageSourceRefs)
-      ? data.imageSourceRefs.filter((item) => item.previewUrl)
+  function buildNodeSelfDialogueRef(
+    data: CanvasNodeData,
+    nodeId: string,
+  ): ImageSourceRef | null {
+    const previewUrl = data.previewUrl?.trim()
+    if (!previewUrl) return null
+    return {
+      nodeId,
+      assetId: data.assetId,
+      previewUrl,
+      fileName: data.fileName || data.title || '',
+    }
+  }
+
+  /** 自身已有媒体时，排除溯源/上游节点，只保留自己与用户额外添加的参考图 */
+  function resolveImageDialogueRefs(
+    data: CanvasNodeData,
+    targetNodeId: string,
+  ): ImageSourceRef[] {
+    const existing = Array.isArray(data.imageSourceRefs)
+      ? data.imageSourceRefs.filter((item) => item.previewUrl?.trim())
       : []
-    if (refs.length) {
-      return refs.map((item) => ({
+    const selfRef = buildNodeSelfDialogueRef(data, targetNodeId)
+
+    if (selfRef) {
+      const lineageId =
+        data.sourceNodeId && data.sourceNodeId !== targetNodeId
+          ? data.sourceNodeId
+          : ''
+      const lineageUrl = lineageId ? (data.sourcePreviewUrl?.trim() || '') : ''
+      const nonSelf = existing.filter(
+        (item) =>
+          item.nodeId !== targetNodeId && item.previewUrl !== selfRef.previewUrl,
+      )
+      const isLineageRef = (item: ImageSourceRef) =>
+        Boolean(
+          (lineageId && item.nodeId === lineageId) ||
+            (lineageUrl && item.previewUrl === lineageUrl),
+        )
+      // 只有溯源父节点、或无法识别 lineage 时的单张上游图 → 不展示
+      const onlyUpstream =
+        nonSelf.length > 0 &&
+        (nonSelf.every(isLineageRef) || (!lineageId && nonSelf.length === 1))
+      if (!nonSelf.length || onlyUpstream) {
+        return [selfRef]
+      }
+      const extras = nonSelf.filter((item) => !isLineageRef(item))
+      return extras.length ? [selfRef, ...extras] : [selfRef]
+    }
+
+    if (existing.length) {
+      return existing.map((item) => ({
         nodeId: item.nodeId,
         assetId: item.assetId,
         previewUrl: item.previewUrl,
         fileName: item.fileName ?? '',
       }))
     }
-    const single = data.sourcePreviewUrl || ''
-    if (single) {
+
+    if (data.sourceNodeId && data.sourcePreviewUrl) {
       return [{
-        nodeId: data.sourceNodeId ?? '',
+        nodeId: data.sourceNodeId,
         assetId: data.sourceAssetId,
-        previewUrl: single,
+        previewUrl: data.sourcePreviewUrl,
         fileName: data.sourceFileName ?? '',
       }]
     }
+
     return []
+  }
+
+  function getImageDialoguePreviewsForNode(nodeId: string): ImageSourceRef[] {
+    const g = graph.value
+    const cell = g?.getCellById(nodeId)
+    if (!cell?.isNode()) return []
+    const data = cell.getData() as CanvasNodeData
+    return resolveImageDialogueRefs(data, nodeId)
   }
 
   const imageDialoguePreviews = computed<ImageSourceRef[]>(() => {
@@ -803,7 +856,7 @@ export function registerCore(bind: CanvasBindings) {
         : selectedNodeId.value)
     if (!id) return ''
     const data = graph.value?.getCellById(id)?.getData() as CanvasNodeData | undefined
-    return data?.sourcePreviewUrl || data?.previewUrl || ''
+    return data?.previewUrl || data?.sourcePreviewUrl || ''
   })
 
   const elementMarks = computed(() => {
@@ -1456,7 +1509,7 @@ export function registerCore(bind: CanvasBindings) {
       (event.assetId ? [event.assetId] : [])
 
     const prompt = config.prompt?.trim() ?? ''
-    recordCanvasDescription(prompt, config.title)
+    recordCanvasDescription(config.title, '')
     const liveSourceRefs = getVideoSourceRefs(g, sourceNodeId)
     syncVideoSourceRefsSnapshot(sourceNodeId)
 
@@ -1869,7 +1922,7 @@ export function registerCore(bind: CanvasBindings) {
 
     const title = buildImageActionResultTitle(event.label || '图片转3D')
     const modelDetail = sourceData.fileName || sourceData.title || event.label || '图片转3D'
-    recordCanvasDescription(modelDetail, '图生3D')
+    recordCanvasDescription(title, '')
     const resultNode = spawnModel3DResultNode(g, sourceNode, {
       title,
       fileName: `${event.label?.trim() || '图片转3D'}.glb`,
@@ -2279,12 +2332,20 @@ export function registerCore(bind: CanvasBindings) {
     )
     const isImg2Img = hasReferenceImages
     const imageDialogueTaskType = isImg2Img ? '图生图' : '文生图'
-    recordCanvasDescription(prompt, imageDialogueTaskType)
 
-    const title = buildImageActionResultTitle(isImg2Img ? '图生图' : '文生图')
+    // 选中工作流时，结果节点命名用工作流名称；否则回退到图生图/文生图
+    const workflowName =
+      payload.workflow?.name?.trim() ||
+      (typeof payload.workflow?.description === 'string'
+        ? payload.workflow.description.trim()
+        : '') ||
+      ''
+    const resultLabel = workflowName || (isImg2Img ? '图生图' : '文生图')
+    recordCanvasDescription(resultLabel, '')
+    const title = buildImageActionResultTitle(resultLabel)
     const sourceFileName = sourceData.fileName || sourceData.title || ''
     const buildFileName = (name: string) =>
-      isImg2Img ? (name ? `图生图-${name}` : '图生图.png') : (name ? `文生图-${name}` : '文生图.png')
+      name ? `${resultLabel}-${name}` : `${resultLabel}.png`
     const requestedCount = Math.max(1, Math.floor(Number(payload.count)) || 1)
     const taskParameters: Record<string, unknown> = {
       model: payload.model,
@@ -3078,7 +3139,7 @@ export function registerCore(bind: CanvasBindings) {
       sourceData.genPrompt?.trim() ||
       config.prompt?.trim() ||
       ''
-    recordCanvasDescription(provenancePrompt, config.title)
+    recordCanvasDescription(config.title, '')
     const provenanceSettings = normalizeImageDialogueSettings(sourceData.imageDialogueSettings)
     resultNodes.forEach((resultNode) => {
       applyImageDialogueProvenance(resultNode, {
@@ -3318,14 +3379,19 @@ export function registerCore(bind: CanvasBindings) {
 
     selectedNodeId.value = id
     selectedKind.value = 'image'
-    if (!(data.imageSourceRefs?.length)) {
-      const refs = seedImageDialogueRefs(data, id)
-      if (refs.length) {
-        applyImageDialogueProvenance(cell as Node, {
-          prompt: data.imageDialogueText?.trim() || data.genPrompt?.trim() || '',
-          settings: normalizeImageDialogueSettings(data.imageDialogueSettings),
-          sourceRefs: refs,
-        })
+    const refs = seedImageDialogueRefs(data, id)
+    if (refs.length) {
+      const currentRefs = Array.isArray(data.imageSourceRefs)
+        ? data.imageSourceRefs.filter((item) => item.previewUrl)
+        : []
+      const refsChanged =
+        currentRefs.length !== refs.length ||
+        refs.some((item, index) =>
+          item.nodeId !== currentRefs[index]?.nodeId ||
+          item.previewUrl !== currentRefs[index]?.previewUrl,
+        )
+      if (!currentRefs.length || refsChanged) {
+        syncImageDialogueSourceRefs(cell as Node, refs)
       }
     }
     loadImageDialogueFields(id)
@@ -3569,29 +3635,30 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function seedImageDialogueRefs(data: CanvasNodeData, targetNodeId: string): ImageSourceRef[] {
-    const refs = Array.isArray(data.imageSourceRefs) ? [...data.imageSourceRefs] : []
-    if (refs.length) return refs
+    return resolveImageDialogueRefs(data, targetNodeId)
+  }
 
-    if (data.sourceNodeId && data.sourcePreviewUrl) {
-      refs.push({
-        nodeId: data.sourceNodeId,
-        assetId: data.sourceAssetId,
-        previewUrl: data.sourcePreviewUrl,
-        fileName: data.sourceFileName ?? '',
-      })
-      return refs
-    }
+  function canAutoOpenImageDialogue(data: CanvasNodeData) {
+    return (
+      data.kind === 'image' &&
+      Boolean(data.previewUrl?.trim()) &&
+      data.uploadState !== 'uploading'
+    )
+  }
 
-    if (data.previewUrl) {
-      refs.push({
-        nodeId: targetNodeId,
-        assetId: data.assetId,
-        previewUrl: data.previewUrl,
-        fileName: data.fileName || data.title || '',
-      })
-    }
-
-    return refs
+  /** 仅同步对话框参考图列表，不覆盖节点溯源 source* 字段 */
+  function syncImageDialogueSourceRefs(targetNode: Node, sourceRefs: ImageSourceRef[]) {
+    const data = { ...(targetNode.getData() as CanvasNodeData) }
+    data.imageSourceRefs = sourceRefs
+      .filter((item) => item.previewUrl?.trim())
+      .map((item) => ({
+        nodeId: item.nodeId,
+        assetId: item.assetId,
+        previewUrl: item.previewUrl,
+        fileName: item.fileName ?? '',
+      }))
+    data.inputUpdated = data.imageSourceRefs.some((item) => Boolean(item.previewUrl))
+    targetNode.setData(data, { overwrite: true })
   }
 
   /** 将本次图生图的参考图 / 文案 / 参数写入结果节点，打开对话框可溯源并继续编辑 */
@@ -6199,13 +6266,20 @@ export function registerCore(bind: CanvasBindings) {
     saveType: 'MANUAL' | 'AUTO',
     project?: (typeof canvasProjects.value)[number],
   ) {
-    const sendSave = (revision: number, canvasSnapshot: CanvasSnapshot) =>
-      api.saveProjectCanvas(projectId, {
+    const sendSave = (revision: number, canvasSnapshot: CanvasSnapshot) => {
+      const description =
+        resolveCanvasSaveDescription(graph.value) ||
+        lastCanvasDescription.value ||
+        undefined
+      const type = resolveCanvasSaveType(graph.value)
+      return api.saveProjectCanvas(projectId, {
         revision,
         saveType,
         canvasData: canvasSnapshot,
-        description: lastCanvasDescription.value || undefined,
+        description,
+        type,
       })
+    }
 
     try {
       const res = await sendSave(canvasRevision.value, snapshot)
@@ -6335,11 +6409,15 @@ export function registerCore(bind: CanvasBindings) {
 
   function inferGenerationTaskDescriptionFromNode(node: Node) {
     const data = node.getData() as CanvasNodeData
+    const title = data.title?.trim()
+    if (title) {
+      return { detail: title, taskType: '' }
+    }
+
     const detail =
       data.imageDialogueText?.trim() ||
       data.videoDialogueText?.trim() ||
       data.genPrompt?.trim() ||
-      data.title?.trim() ||
       ''
     if (!detail) return null
 
@@ -8334,9 +8412,6 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     resetImageToolbarMore()
-    if (!showElementSelectMode.value) {
-      resetImageDialogue()
-    }
     resetImageCrop()
     resetImageExpand()
     resetImageEditText()
@@ -8359,8 +8434,14 @@ export function registerCore(bind: CanvasBindings) {
 
     if (showImageGenPrompt) {
       openImageGenPromptBar(node.id)
+      if (!showElementSelectMode.value) {
+        resetImageDialogue()
+      }
     } else if (showVideoGenPrompt) {
       openVideoGenPromptBar(node.id, data.videoGenTab ?? 'text2video')
+      if (!showElementSelectMode.value) {
+        resetImageDialogue()
+      }
     } else {
       closeImageGenPromptBar()
       closeVideoGenPromptBar()
@@ -8371,6 +8452,13 @@ export function registerCore(bind: CanvasBindings) {
       activePickerNodeId.value = showTextPromptBar ? node.id : ''
       if (activePickerNodeId.value && data.kind === 'text') {
         loadPromptBarContext(node.id)
+      }
+      if (!showElementSelectMode.value) {
+        if (canAutoOpenImageDialogue(data)) {
+          openImageDialogue(node.id)
+        } else {
+          resetImageDialogue()
+        }
       }
     }
 
