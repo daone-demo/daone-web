@@ -20,6 +20,13 @@
         </nav>
         <a-flex gap="10" align="center">
           <a-button
+            size="small"
+            :disabled="!selectableAssetIds.length"
+            @click="toggleSelectAll"
+          >
+            {{ isAllSelected ? '取消全选' : '全选' }}
+          </a-button>
+          <a-button
             v-if="!batchSelectMode"
             size="small"
             @click="enterBatchSelectMode"
@@ -35,43 +42,14 @@
           >
             取消选择
           </a-button>
-          <template v-if="!batchSelectMode && tab == 'FILES'">
-            <a-date-picker
-              :value="date"
-              value-format="YYYY-MM-DD"
-              format="YYYY-MM-DD"
-              allow-clear
-              placeholder="选择日期"
-              @update:value="onDateChange"
+          <template v-if="!batchSelectMode && (tab === 'FILES' || tab === 'CENTER')">
+            <MaterialAssetsFilterBar
+              :scope="tab"
+              :type="type"
+              :date="date"
+              @update:type="onTypeChange"
+              @update:date="onDateChange"
             />
-            <a-select
-              :value="type"
-              @update:value="onTypeChange"
-              style="width: 100px"
-            >
-              <a-select-option
-                v-for="item in ASSETS_TYPE_OPTIONS"
-                :key="item.value"
-                :value="item.value"
-              >
-                {{ item.label }}
-              </a-select-option>
-            </a-select>
-          </template>
-          <template v-if="!batchSelectMode && tab == 'CENTER'">
-            <a-select
-              :value="type"
-              @update:value="onTypeChange"
-              style="width: 100px"
-            >
-              <a-select-option
-                v-for="item in ASSETS_TYPE_OPTIONS"
-                :key="item.value"
-                :value="item.value"
-              >
-                {{ item.label }}
-              </a-select-option>
-            </a-select>
           </template>
         </a-flex>
       </a-flex>
@@ -108,27 +86,20 @@
         :batch-select-mode="batchSelectMode"
         :selected-asset-ids="selectedAssetIds"
         @update:selected-asset-ids="selectedAssetIds = $event"
+        @update:selectable-asset-ids="selectableAssetIds = $event"
       />
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import type { Dayjs } from 'dayjs'
+import { computed, ref, watch } from 'vue'
 import MaterialAssetsContent from '@/views/Project/MaterialAssetsContent.vue'
-import { PROJECT_TABS, type ProjectTabKey } from '@/views/Project/projectData'
+import MaterialAssetsFilterBar from '@/views/Project/MaterialAssetsFilterBar.vue'
+import { PROJECT_TABS, type AssetsFileType, type ProjectTabKey } from '@/views/Project/projectData'
 import type { CanvasAssetDragPayload } from '@/components/Canvas/constants'
 
-const CANVAS_MATERIAL_COLUMN_COUNT = 3
-
-type AssetsFileType = 'all' | 'image' | 'video'
-
-const ASSETS_TYPE_OPTIONS: Array<{ label: string; value: AssetsFileType }> = [
-  { label: '全部', value: 'all' },
-  { label: '图片', value: 'image' },
-  { label: '视频', value: 'video' },
-]
+const CANVAS_MATERIAL_COLUMN_COUNT = 8
 
 const props = withDefaults(
   defineProps<{
@@ -154,28 +125,38 @@ const emit = defineEmits<{
 
 const batchSelectMode = ref(false)
 const selectedAssetIds = ref<string[]>([])
+const selectableAssetIds = ref<string[]>([])
 const materialAssetsRef = ref<InstanceType<typeof MaterialAssetsContent> | null>(null)
 
-function onTypeChange(value: unknown) {
-  if (value === 'all' || value === 'image' || value === 'video') {
-    emit('update:type', value)
-  }
+const isAllSelected = computed(() => {
+  if (!selectableAssetIds.value.length) return false
+  const selected = new Set(selectedAssetIds.value)
+  return selectableAssetIds.value.every((id) => selected.has(id))
+})
+
+function onTypeChange(value: AssetsFileType) {
+  emit('update:type', value)
 }
 
-function onDateChange(value: string | Dayjs | null) {
-  if (value === null || value === undefined) {
-    emit('update:date', null)
-    return
-  }
-  if (typeof value === 'string') {
-    emit('update:date', value)
-    return
-  }
-  emit('update:date', value.format('YYYY-MM-DD'))
+function onDateChange(value: string | null) {
+  emit('update:date', value)
 }
 
 function enterBatchSelectMode() {
   batchSelectMode.value = true
+}
+
+function toggleSelectAll() {
+  if (!batchSelectMode.value) {
+    batchSelectMode.value = true
+  }
+
+  if (isAllSelected.value) {
+    materialAssetsRef.value?.clearAssetSelection()
+    return
+  }
+
+  materialAssetsRef.value?.selectAllAssets()
 }
 
 function exitBatchSelectMode() {

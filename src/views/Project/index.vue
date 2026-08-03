@@ -18,9 +18,18 @@
           />
         </button>
       </nav>
+      <MaterialAssetsFilterBar
+        :scope="scope"
+        :type="assetType"
+        :date="assetDate"
+        @update:type="assetType = $event"
+        @update:date="assetDate = $event"
+      />
     </header>
     <MaterialAssetsContent
       :scope="scope"
+      :asset-type="assetType"
+      :asset-date="assetDate"
       :use-window-scroll="true"
     />
   </div>
@@ -28,11 +37,15 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { PROJECT_TABS, type ProjectTabKey } from './projectData'
-import MaterialAssetsContent from './MaterialAssetsContent.vue';
+import { PROJECT_TABS, type AssetsFileType, type ProjectTabKey } from './projectData'
+import MaterialAssetsContent from './MaterialAssetsContent.vue'
+import MaterialAssetsFilterBar from './MaterialAssetsFilterBar.vue'
 import { useUserInfo } from '@/stores/useUserInfo'
-const userInfoStore = useUserInfo();
+
+const userInfoStore = useUserInfo()
 const scope = ref<ProjectTabKey>('CENTER')
+const assetType = ref<AssetsFileType>('all')
+const assetDate = ref<string | null>(null)
 
 function onChangeScope(key: ProjectTabKey) {
   scope.value = key

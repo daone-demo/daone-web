@@ -14,11 +14,12 @@ import {
   isVideoAsset,
   type PreviewItem,
 } from './materialAssets'
+import { normalizeAssetDateValue, type AssetsFileType } from './projectData'
 
 export function useMaterialAssets(
   scope: Ref<ProjectTabKey>,
   columnCount: Ref<number>,
-  assetType: Ref<'all' | 'image' | 'video'> = ref('all'),
+  assetType: Ref<AssetsFileType> = ref('all'),
   assetDate: Ref<unknown> = ref(null),
   projectId: Ref<string | undefined> = ref(undefined),
 ) {
@@ -71,23 +72,7 @@ export function useMaterialAssets(
   }
 
   function resolveAssetDateParam(): string | undefined {
-    const value = assetDate.value
-    if (!value) return undefined
-    if (typeof value === 'string') {
-      const trimmed = value.trim()
-      return trimmed || undefined
-    }
-    if (value instanceof Date && !Number.isNaN(value.getTime())) {
-      const year = value.getFullYear()
-      const month = String(value.getMonth() + 1).padStart(2, '0')
-      const day = String(value.getDate()).padStart(2, '0')
-      return `${year}-${month}-${day}`
-    }
-    if (typeof value === 'object' && value !== null && 'format' in value) {
-      const format = (value as { format?: (pattern: string) => string }).format
-      return typeof format === 'function' ? format('YYYY-MM-DD') : undefined
-    }
-    return undefined
+    return normalizeAssetDateValue(assetDate.value) ?? undefined
   }
 
   function reloadForFilters() {

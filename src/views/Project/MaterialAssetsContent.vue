@@ -205,7 +205,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, toRef } from 'vue'
+import { computed, onMounted, onUnmounted, toRef, watch } from 'vue'
 import EmbeddedVideoPlayer from '@components/EmbeddedVideoPlayer/index.vue'
 import MaterialAssetHoverActions from './MaterialAssetHoverActions.vue'
 import {
@@ -221,7 +221,7 @@ import {
   startCanvasAssetDrag,
   wasCanvasAssetDropHandled,
 } from '@/components/Canvas/canvasAssetDrag'
-import type { ProjectTabKey } from './projectData'
+import { type AssetsFileType, type ProjectTabKey } from './projectData'
 import {
   MATERIAL_COLUMN_COUNT,
   SCROLL_LOAD_THRESHOLD,
@@ -252,7 +252,7 @@ const props = withDefaults(
     useWindowScroll?: boolean
     batchSelectMode?: boolean
     selectedAssetIds?: string[]
-    assetType?: 'all' | 'image' | 'video'
+    assetType?: AssetsFileType
     assetDate?: unknown
     projectId?: string
   }>(),
@@ -272,6 +272,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:selectedAssetIds': [ids: string[]]
+  'update:selectableAssetIds': [ids: string[]]
 }>()
 
 const scopeRef = toRef(props, 'scope')
@@ -404,6 +405,26 @@ function toggleAssetSelection(item: AssetItem | MaterialItem) {
   emit('update:selectedAssetIds', next)
 }
 
+function getSelectableAssetIds(): string[] {
+  if (isMaterialListScope(props.scope)) {
+    return materialList.value
+      .filter((item) => resolveMaterialMediaUrl(item))
+      .map((item) => item.id)
+  }
+
+  return assetList.value
+    .filter((item) => resolveAssetMediaUrl(item))
+    .map((item) => item.id)
+}
+
+function selectAllAssets() {
+  emit('update:selectedAssetIds', getSelectableAssetIds())
+}
+
+function clearAssetSelection() {
+  emit('update:selectedAssetIds', [])
+}
+
 function getSelectedAssetPayloads(): CanvasAssetDragPayload[] {
   const selected = new Set(props.selectedAssetIds)
 
@@ -421,7 +442,18 @@ function getSelectedAssetPayloads(): CanvasAssetDragPayload[] {
 defineExpose({
   getSelectedAssetPayloads,
   reloadForFilters,
+  getSelectableAssetIds,
+  selectAllAssets,
+  clearAssetSelection,
 })
+
+watch(
+  [materialList, assetList, () => props.scope],
+  () => {
+    emit('update:selectableAssetIds', getSelectableAssetIds())
+  },
+  { deep: true, immediate: true },
+)
 
 function toDragPayload(item: AssetItem): CanvasAssetDragPayload {
   return {
