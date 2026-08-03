@@ -241,7 +241,7 @@
           </button>
         </header>
 
-        <form class="user-info__invoice-form" @submit.prevent="submitInvoice">
+        <form class="user-info__invoice-form" @submit.prevent="applyInvoice">
           <div class="user-info__invoice-field user-info__invoice-field--full">
             <label class="user-info__invoice-label">订单号</label>
             <div class="user-info__invoice-readonly">{{ invoiceOrderNo }}</div>
@@ -353,7 +353,7 @@
 
           <footer class="user-info__invoice-footer">
             <button type="button" class="user-info__invoice-cancel" @click="closeInvoiceModal">取消</button>
-            <button type="submit" class="user-info__invoice-submit" @click="applyInvoice">申请</button>
+            <button type="submit" class="user-info__invoice-submit">申请</button>
           </footer>
         </form>
       </div>
@@ -729,10 +729,6 @@ function closeInvoiceModal() {
   showInvoiceModal.value = false
 }
 
-function submitInvoice() {
-  closeInvoiceModal()
-}
-
 function openEditProfileModal() {
   revokeAvatarPreview()
   editProfileForm.value = {
@@ -930,11 +926,15 @@ const applyInvoice = () => {
       return
     }
   }
-  api.applyInvoice(params).then(() => {
-    message.success('申请成功')
-    closeInvoiceModal()
-    onLoadOrderList()
-  })
+  api.applyInvoice(params)
+    .then(() => {
+      message.success('申请成功')
+      closeInvoiceModal()
+      onLoadOrderList()
+    })
+    .catch(() => {
+      // 接口报错时保持弹窗打开，便于用户修改后重试
+    })
 }
 
 function normalizeInvoiceTitleResults(data: unknown): InvoiceTitleSearchItem[] {
