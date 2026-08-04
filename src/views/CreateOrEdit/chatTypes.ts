@@ -17,12 +17,28 @@ export interface QuestionnaireOption {
   description?: string
 }
 
-export interface Questionnaire {
+export interface QuestionnaireStep {
+  name?: string
   question: string
+  allowCustom: boolean
+  options: QuestionnaireOption[]
+}
+
+export interface Questionnaire {
+  /** 问卷总述 / 首屏说明 */
+  question: string
+  /** 当前步骤（1-based） */
   step: number
   totalSteps: number
   allowCustom: boolean
+  /** 当前步骤选项（兼容单题 / 多步） */
   options: QuestionnaireOption[]
+  /** 多步问卷完整步骤；有值时前端本地推进 */
+  steps?: QuestionnaireStep[]
+  /** 当前步骤标题（来自 steps[i].question） */
+  stepQuestion?: string
+  /** 当前步骤 name，用于答案回传 */
+  stepName?: string
 }
 
 export interface ChatMessage {
@@ -34,6 +50,10 @@ export interface ChatMessage {
   tip?: string
   questionnaire?: Questionnaire
   questionnaireAnswered?: boolean
+  /** 多步问卷已选答案：stepName/stepIndex -> label */
+  questionnaireAnswers?: Record<string, string>
+  /** 生图任务 ID（来自 SSE generationTaskIds / GENERATE_IMAGE） */
+  generationTaskIds?: string[]
 }
 
 export interface ChatDraft {

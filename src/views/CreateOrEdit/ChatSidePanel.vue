@@ -142,21 +142,37 @@
               />
             </div>
             <div v-if="item.text" class="chat-panel__message-bubble">
-              <p class="chat-panel__message-text">
-                {{ item.text }}<span
-                  v-if="item.role === 'assistant' && streamingMessageIds.has(item.id)"
-                  class="chat-panel__stream-caret"
-                  aria-hidden="true"
-                />
-              </p>
+              <div
+                v-if="item.role === 'assistant'"
+                class="chat-panel__message-markdown"
+                v-html="renderChatMarkdown(item.text)"
+              />
+              <p v-else class="chat-panel__message-text">{{ item.text }}</p>
+              <span
+                v-if="item.role === 'assistant' && streamingMessageIds.has(item.id)"
+                class="chat-panel__stream-caret"
+                aria-hidden="true"
+              />
             </div>
             <div
               v-if="item.questionnaire && !item.questionnaireAnswered"
               class="chat-panel__questionnaire"
             >
+              <p
+                v-if="item.questionnaire.totalSteps > 1"
+                class="chat-panel__questionnaire-step"
+              >
+                第 {{ item.questionnaire.step }} / {{ item.questionnaire.totalSteps }} 步
+              </p>
+              <p
+                v-if="item.questionnaire.stepQuestion"
+                class="chat-panel__questionnaire-question"
+              >
+                {{ item.questionnaire.stepQuestion }}
+              </p>
               <button
                 v-for="option in item.questionnaire.options"
-                :key="option.value"
+                :key="`${item.questionnaire.step}-${option.value}`"
                 type="button"
                 class="chat-panel__questionnaire-option"
                 :disabled="isStreaming || isSending"
@@ -484,8 +500,17 @@ import {
   type ImageCapability,
   type ChatTools,
 } from '@/components/Canvas/constants'
-import type { ChatAttachment, ChatMessage, ChatSendPayload, ChatSession, Questionnaire, QuestionnaireOption } from './chatTypes'
+import type {
+  ChatAttachment,
+  ChatMessage,
+  ChatSendPayload,
+  ChatSession,
+  Questionnaire,
+  QuestionnaireOption,
+  QuestionnaireStep,
+} from './chatTypes'
 import { CHAT_TIPS } from './chatTypes'
+import { renderChatMarkdown } from './chatMarkdown'
 import { useSSE } from '@/hooks/useSSE'
 import { getToken } from '@/utils/request'
 import api from '@/services/api';
@@ -919,6 +944,8 @@ async function loadSessionMessages(session: ChatSession) {
       role: string
       content: string
       createdAt?: string
+      generationTaskIds?: Array<string | number>
+      mainTaskId?: string | number
       agentActions?: StreamEvent['agentActions']
       agentStatus?: string
     }>(chatId, { page: 1, pageSize: 100 })
@@ -958,6 +985,7 @@ async function loadSessionMessages(session: ChatSession) {
         kind: 'text' as const,
         questionnaire,
         questionnaireAnswered,
+        generationTaskIds: collectGenerationTaskIds(item),
       }
     })
     scrollMessagesToBottom()
@@ -1283,6 +1311,8 @@ type StreamEvent = {
     }
     [key: string]: unknown
   }
+  generationTaskIds?: Array<string | number>
+  mainTaskId?: string | number
   agentActions?: Array<{
     tool?: string
     type?: string
@@ -1294,6 +1324,17 @@ type StreamEvent = {
       totalSteps?: number
       allowCustom?: boolean
       options?: Array<{ label?: string; value?: string; description?: string }>
+      steps?: Array<{
+        name?: string
+        question?: string
+        allowCustom?: boolean
+        options?: Array<{ label?: string; value?: string; description?: string }>
+      }>
+      taskId?: string | number
+      taskName?: string
+      taskType?: string
+      capabilityCode?: string
+      nodeId?: string
     }
   }>
   agentStatus?: string
@@ -1305,37 +1346,96 @@ type StreamEvent = {
   text?: string
 }
 
+type QuestionnaireOptionSource = {
+  label?: string
+  value?: string
+  description?: string
+}
+
+type QuestionnaireStepSource = {
+  name?: string
+  question?: string
+  allowCustom?: boolean
+  options?: QuestionnaireOptionSource[]
+}
+
 type QuestionnaireSource = {
   question?: string
   step?: number
   totalSteps?: number
   allowCustom?: boolean
-  options?: Array<{ label?: string; value?: string; description?: string }>
+  options?: QuestionnaireOptionSource[]
+  steps?: QuestionnaireStepSource[]
 }
 
-function normalizeQuestionnaire(
-  data: QuestionnaireSource | undefined,
-  fallbackQuestion?: string,
-): Questionnaire | undefined {
-  if (!data?.options?.length) return undefined
+function normalizeQuestionnaireOptions(
+  options?: QuestionnaireOptionSource[],
+): QuestionnaireOption[] {
+  if (!options?.length) return []
 
-  const options = data.options
+  return options
     .filter((item): item is QuestionnaireOption => Boolean(item.label && item.value))
     .map((item) => ({
       label: item.label,
       value: item.value,
       description: item.description,
     }))
+}
+
+function normalizeQuestionnaireSteps(
+  steps?: QuestionnaireStepSource[],
+): QuestionnaireStep[] {
+  if (!steps?.length) return []
+
+  const normalized: QuestionnaireStep[] = []
+  steps.forEach((step) => {
+    const options = normalizeQuestionnaireOptions(step.options)
+    if (!options.length) return
+    normalized.push({
+      name: step.name,
+      question: step.question || '',
+      allowCustom: step.allowCustom ?? false,
+      options,
+    })
+  })
+  return normalized
+}
+
+function normalizeQuestionnaire(
+  data: QuestionnaireSource | undefined,
+  fallbackQuestion?: string,
+): Questionnaire | undefined {
+  if (!data) return undefined
+
+  const steps = normalizeQuestionnaireSteps(data.steps)
+  const stepIndex = Math.max(0, (data.step ?? 1) - 1)
+  const activeStep = steps[stepIndex]
+  const options = activeStep
+    ? activeStep.options
+    : normalizeQuestionnaireOptions(data.options)
 
   if (!options.length) return undefined
 
+  const totalSteps = data.totalSteps ?? (steps.length || 1)
+  const step = data.step ?? 1
+  const stepQuestion = activeStep?.question || data.question || fallbackQuestion || ''
+
   return {
-    question: data.question || fallbackQuestion || '',
-    step: data.step ?? 1,
-    totalSteps: data.totalSteps ?? 1,
-    allowCustom: data.allowCustom ?? false,
+    question: data.question || fallbackQuestion || stepQuestion,
+    step,
+    totalSteps,
+    allowCustom: activeStep?.allowCustom ?? data.allowCustom ?? false,
     options,
+    steps: steps.length ? steps : undefined,
+    stepQuestion,
+    stepName: activeStep?.name,
   }
+}
+
+function findQuestionnaireAction(agentActions?: StreamEvent['agentActions']) {
+  return agentActions?.find(
+    (item) => item.type === 'QUESTIONNAIRE' || item.tool === 'ask_user',
+  )
 }
 
 function extractQuestionnaireFromStreamPayload(payload: StreamEvent): Questionnaire | undefined {
@@ -1343,9 +1443,7 @@ function extractQuestionnaireFromStreamPayload(payload: StreamEvent): Questionna
     return normalizeQuestionnaire(payload.arguments.questionnaire, payload.arguments.question)
   }
 
-  const action = payload.agentActions?.find(
-    (item) => item.type === 'QUESTIONNAIRE' || item.tool === 'ask_user',
-  )
+  const action = findQuestionnaireAction(payload.agentActions)
   if (action?.data) {
     return normalizeQuestionnaire(action.data, action.summary || action.data.question)
   }
@@ -1357,13 +1455,132 @@ function extractQuestionnaireFromHistoryItem(item: {
   content?: string
   agentActions?: StreamEvent['agentActions']
 }): Questionnaire | undefined {
-  const action = item.agentActions?.find(
-    (entry) => entry.type === 'QUESTIONNAIRE' || entry.tool === 'ask_user',
-  )
+  const action = findQuestionnaireAction(item.agentActions)
   if (action?.data) {
     return normalizeQuestionnaire(action.data, action.summary || action.data.question)
   }
   return undefined
+}
+
+function collectGenerationTaskIds(payload: StreamEvent): string[] {
+  const ids = new Set<string>()
+
+  payload.generationTaskIds?.forEach((id) => {
+    const normalized = String(id ?? '').trim()
+    if (normalized) ids.add(normalized)
+  })
+
+  if (payload.mainTaskId != null) {
+    const mainTaskId = String(payload.mainTaskId).trim()
+    if (mainTaskId) ids.add(mainTaskId)
+  }
+
+  payload.agentActions?.forEach((action) => {
+    if (action.type !== 'GENERATE_IMAGE' && action.tool !== 'generate_image') return
+    const taskId = String(action.data?.taskId ?? '').trim()
+    if (taskId) ids.add(taskId)
+  })
+
+  return Array.from(ids)
+}
+
+function extractGenerateImageTip(payload: StreamEvent): string | undefined {
+    const action = payload.agentActions?.find(
+      (item) => item.type === 'GENERATE_IMAGE' || item.tool === 'generate_image',
+    )
+    if (!action) return undefined
+
+    const taskName = String(action.data?.taskName ?? '').trim()
+    const summary = String(action.summary ?? '').trim()
+    if (taskName && summary) return `${taskName}：${summary}`
+    return taskName || summary || '图片生成任务处理中...'
+}
+
+function applyStreamAgentPayload(
+  assistant: ChatMessage,
+  payload: StreamEvent,
+) {
+  const questionnaire = extractQuestionnaireFromStreamPayload(payload)
+  if (questionnaire) {
+    assistant.questionnaire = questionnaire
+    if (!assistant.text.trim()) {
+      assistant.text = questionnaire.question
+    }
+  } else if (payload.content && !assistant.text.trim()) {
+    assistant.text = payload.content
+  }
+
+  const taskIds = collectGenerationTaskIds(payload)
+  if (taskIds.length) {
+    assistant.generationTaskIds = taskIds
+  }
+
+  const generateTip = extractGenerateImageTip(payload)
+  if (generateTip) {
+    assistant.tip = generateTip
+  } else if (payload.agentStatus && payload.agentStatus !== 'NEED_INPUT') {
+    assistant.tip = undefined
+  } else if (questionnaire) {
+    assistant.tip = undefined
+  }
+}
+
+function advanceLocalQuestionnaire(
+  message: ChatMessage,
+  option: QuestionnaireOption,
+): boolean {
+  const questionnaire = message.questionnaire
+  if (!questionnaire?.steps?.length) return false
+
+  const answers = { ...(message.questionnaireAnswers ?? {}) }
+  const answerKey = questionnaire.stepName || `step-${questionnaire.step}`
+  answers[answerKey] = option.label
+  message.questionnaireAnswers = answers
+
+  const nextStepIndex = questionnaire.step
+  const nextStep = questionnaire.steps[nextStepIndex]
+  if (!nextStep) return false
+
+  message.questionnaire = {
+    ...questionnaire,
+    step: nextStepIndex + 1,
+    allowCustom: nextStep.allowCustom,
+    options: nextStep.options,
+    stepQuestion: nextStep.question,
+    stepName: nextStep.name,
+  }
+  return true
+}
+
+function buildQuestionnaireSubmitContent(
+  message: ChatMessage,
+  option: QuestionnaireOption,
+): string {
+  const questionnaire = message.questionnaire
+  if (!questionnaire?.steps?.length) return option.label
+
+  const answers = message.questionnaireAnswers ?? {}
+  return questionnaire.steps
+    .map((step, index) => {
+      const key = step.name || `step-${index + 1}`
+      const value = answers[key]
+      if (!value) return ''
+      return `${key}: ${value}`
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
+function onQuestionnaireSelect(message: ChatMessage, option: QuestionnaireOption) {
+  if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
+
+  const hasMoreLocalSteps = advanceLocalQuestionnaire(message, option)
+  if (hasMoreLocalSteps) return
+
+  message.questionnaireAnswered = true
+  const session = ensureActiveSession()
+  const submitContent = buildQuestionnaireSubmitContent(message, option)
+  void onSendMessage(session, [], submitContent, [])
 }
 
 function parseStreamEvent(data: string): StreamEvent | null {
@@ -1538,10 +1755,7 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
         if (assistant.text.trim() || streamingMessageIds.value.has(assistant.id)) {
           return
         }
-        const iteration = payload.iteration
-        assistant.tip = iteration
-          ? `思考中...`
-          : '思考中...'
+        assistant.tip = String(payload.message ?? '').trim() || '思考中...'
         scrollMessagesToBottom()
         return
       }
@@ -1569,18 +1783,12 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
           assistant.id = String(payload.id)
         }
 
-        const questionnaire = extractQuestionnaireFromStreamPayload(payload)
-        if (questionnaire) {
-          assistant.questionnaire = questionnaire
-          if (!assistant.text.trim()) {
-            assistant.text = questionnaire.question
-          }
-        } else if (payload.content && !assistant.text.trim()) {
-          assistant.text = payload.content
-        }
+        applyStreamAgentPayload(assistant, payload)
 
         cancelTypewriter(assistant.id)
-        assistant.tip = undefined
+        if (!extractGenerateImageTip(payload)) {
+          assistant.tip = undefined
+        }
         scrollMessagesToBottom()
         return
       }
@@ -1748,14 +1956,6 @@ async function copyMessage(text: string) {
   } catch {
     // ignore clipboard failures
   }
-}
-
-function onQuestionnaireSelect(message: ChatMessage, option: QuestionnaireOption) {
-  if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
-
-  message.questionnaireAnswered = true
-  const session = ensureActiveSession()
-  void onSendMessage(session, [], option.label, [])
 }
 
 function stopProcessing() {
@@ -2270,6 +2470,123 @@ defineExpose({
   white-space: pre-wrap;
 }
 
+.chat-panel__message-markdown {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.55;
+  word-break: break-word;
+
+  :deep(p) {
+    margin: 0 0 0.75em;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4) {
+    margin: 0.9em 0 0.5em;
+    color: #111827;
+    font-weight: 600;
+    line-height: 1.35;
+
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  :deep(h1) {
+    font-size: 18px;
+  }
+
+  :deep(h2) {
+    font-size: 16px;
+  }
+
+  :deep(h3),
+  :deep(h4) {
+    font-size: 15px;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 0.5em 0 0.75em;
+    padding-left: 1.25em;
+  }
+
+  :deep(li) {
+    margin: 0.25em 0;
+  }
+
+  :deep(blockquote) {
+    margin: 0.75em 0;
+    padding: 0.25em 0 0.25em 0.75em;
+    border-left: 3px solid #d1d5db;
+    color: #4b5563;
+  }
+
+  :deep(code) {
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    background: #e5e7eb;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.92em;
+  }
+
+  :deep(pre) {
+    margin: 0.75em 0;
+    padding: 10px 12px;
+    overflow-x: auto;
+    border-radius: 8px;
+    background: #e5e7eb;
+
+    code {
+      padding: 0;
+      background: transparent;
+    }
+  }
+
+  :deep(table) {
+    display: block;
+    width: 100%;
+    margin: 0.75em 0;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  :deep(th),
+  :deep(td) {
+    padding: 6px 10px;
+    border: 1px solid #e5e7eb;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  :deep(th) {
+    background: #f9fafb;
+    font-weight: 600;
+  }
+
+  :deep(hr) {
+    margin: 0.9em 0;
+    border: 0;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  :deep(a) {
+    color: #2563eb;
+    text-decoration: underline;
+  }
+
+  :deep(strong) {
+    font-weight: 600;
+  }
+}
+
 .chat-panel__questionnaire {
   display: flex;
   flex-direction: column;
@@ -2277,6 +2594,21 @@ defineExpose({
   width: 100%;
   max-width: 85%;
   margin-top: 10px;
+}
+
+.chat-panel__questionnaire-step {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chat-panel__questionnaire-question {
+  margin: 0 0 2px;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .chat-panel__questionnaire-option {
@@ -3303,6 +3635,55 @@ defineExpose({
   }
 
   .chat-panel__message-text {
+    color: #e5e7eb;
+  }
+
+  .chat-panel__message-markdown {
+    color: #e5e7eb;
+
+    :deep(h1),
+    :deep(h2),
+    :deep(h3),
+    :deep(h4) {
+      color: #f3f4f6;
+    }
+
+    :deep(blockquote) {
+      border-left-color: #4b5563;
+      color: #9ca3af;
+    }
+
+    :deep(code) {
+      background: #3d3d45;
+    }
+
+    :deep(pre) {
+      background: #3d3d45;
+    }
+
+    :deep(th),
+    :deep(td) {
+      border-color: #3d3d45;
+    }
+
+    :deep(th) {
+      background: #252528;
+    }
+
+    :deep(hr) {
+      border-top-color: #3d3d45;
+    }
+
+    :deep(a) {
+      color: #60a5fa;
+    }
+  }
+
+  .chat-panel__questionnaire-step {
+    color: #9ca3af;
+  }
+
+  .chat-panel__questionnaire-question {
     color: #e5e7eb;
   }
 
