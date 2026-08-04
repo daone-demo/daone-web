@@ -5,7 +5,7 @@ import { Selection } from '@antv/x6-plugin-selection'
 import '@antv/x6-plugin-selection/es/index.css'
 import { register } from '@antv/x6-vue-shape'
 import { getDefaultEdgeStroke } from './canvasTheme'
-import { bindFlowEdgeInteraction, getFlowEdgeAttrs, getPreviewEdgeAttrs } from './edgeStyle'
+import { bindFlowEdgeInteraction, getFlowEdgeAttrs, getPreviewEdgeAttrs, registerCanvasEdgeDefaults } from './edgeStyle'
 import { canOpenConnectMenu } from './nodeConnect'
 import { resolveImageNaturalSize, resolveVideoNaturalSize } from './upload'
 import '@antv/x6-vue-shape'
@@ -479,6 +479,8 @@ const counters: Record<NodeKind, number> = {
 export function registerShapes() {
   if (shapesRegistered) return
   shapesRegistered = true
+
+  registerCanvasEdgeDefaults()
 
   register({ shape: 'text-node', width: 180, height: 270, component: TextNode })
   register({ shape: 'image-node', width: 180, height: 270, component: ImageNode })

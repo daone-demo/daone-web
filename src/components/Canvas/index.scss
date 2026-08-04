@@ -783,6 +783,11 @@
     transition: stroke 0.15s ease, stroke-width 0.15s ease;
   }
 
+  .x6-edge:not(.canvas-edge--preview) path:nth-child(2) {
+    marker-start: none;
+    marker-end: none;
+  }
+
   .x6-edge.canvas-edge--selected path:nth-child(2) {
     stroke: #6b7cff;
     stroke-width: 2;

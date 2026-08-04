@@ -1,4 +1,5 @@
 import type { Edge, Graph } from '@antv/x6'
+import { Shape } from '@antv/x6'
 
 /** 选中连线高亮色 */
 export const FLOW_EDGE_SELECTED_COLOR = '#6b7cff'
@@ -9,6 +10,52 @@ export const FLOW_EDGE_PREVIEW_DOT_COLOR = '#6b7cff'
 export const FLOW_EDGE_COLOR = '#787f8a'
 
 let canvasEdgeStroke = FLOW_EDGE_COLOR
+let canvasEdgeDefaultsRegistered = false
+
+/** X6 默认 edge 带 classic 箭头；覆盖为无箭头连线 */
+export function registerCanvasEdgeDefaults() {
+  if (canvasEdgeDefaultsRegistered) return
+  canvasEdgeDefaultsRegistered = true
+
+  Shape.Edge.define({
+    shape: 'edge',
+    overwrite: true,
+    markup: [
+        {
+          tagName: 'path',
+          selector: 'wrap',
+          groupSelector: 'lines',
+          attrs: {
+            fill: 'none',
+            cursor: 'pointer',
+            stroke: 'transparent',
+            strokeLinecap: 'round',
+          },
+        },
+        {
+          tagName: 'path',
+          selector: 'line',
+          groupSelector: 'lines',
+          attrs: {
+            fill: 'none',
+            pointerEvents: 'none',
+          },
+        },
+      ],
+      attrs: {
+        lines: {
+          connection: true,
+          strokeLinejoin: 'round',
+        },
+        wrap: {
+          strokeWidth: 10,
+        },
+        line: {
+          strokeWidth: 2,
+        },
+      },
+  })
+}
 
 export function setCanvasEdgeStroke(color: string) {
   canvasEdgeStroke = color
@@ -74,6 +121,10 @@ export function applyFlowEdgeStyle(
 ) {
   const preview = isPreviewEdge(graph, edge)
   edge.setAttrs(getFlowEdgeAttrs(canvasEdgeStroke, selected, preview))
+  if (!preview) {
+    edge.removeAttrByPath('line/targetMarker')
+    edge.removeAttrByPath('line/sourceMarker')
+  }
   const view = graph.findViewByCell(edge)
   if (!view) return
   view.removeClass('canvas-edge--selected')
