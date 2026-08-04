@@ -3613,7 +3613,7 @@ export function registerCore(bind: CanvasBindings) {
     exitImageDialogueCanvasPickMode()
   }
 
-  /** 生成成功后清空源节点对话框输入（文案/模型/参数/标记），结果节点溯源数据保持不变 */
+  /** 生成成功后清空源节点对话框输入（文案/模型/参数/标记/额外参考图），保留节点自身图片 */
   function resetImageDialogueInputOnSourceNode(sourceNodeId: string) {
     const g = graph.value
     if (!g || !sourceNodeId) return
@@ -3634,6 +3634,11 @@ export function registerCore(bind: CanvasBindings) {
     data.imageDialogueText = ''
     data.genPrompt = ''
     data.imageDialogueSettings = createDefaultImageDialogueSettings()
+    data.imageSourceRefs = []
+    delete data.sourceNodeId
+    delete data.sourcePreviewUrl
+    delete data.sourceFileName
+    delete data.sourceAssetId
     data.inputUpdated = false
 
     node.setData(data, { overwrite: true })
