@@ -2770,6 +2770,19 @@ export function canOpenImageDialogueOnNode(data: CanvasNodeData): boolean {
     data.imageSourceRefs.some((item) => item.previewUrl?.trim())
 }
 
+/** 节点是否已持久化图片对话溯源（生成结果节点打开对话框时应回填参考图与参数） */
+export function hasPersistedImageDialogueProvenance(data: CanvasNodeData): boolean {
+  if (data.imageDialogueText?.trim()) return true
+  const settings = data.imageDialogueSettings
+  if (!settings) return false
+  return Boolean(
+    settings.modelKey?.trim() ||
+    settings.aspectRatio?.trim() ||
+    settings.resolution?.trim() ||
+    settings.workflowId?.trim(),
+  )
+}
+
 /** 用户本地文件正在上传（显示「上传中」时隐藏删除按钮） */
 export function isNodeFileUploading(data?: Partial<CanvasNodeData>) {
   if (!data || data.uploadState !== 'uploading') return false

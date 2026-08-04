@@ -532,10 +532,18 @@ function applyApiListDefaults(options?: {
 }
 
 function applyExternalSettings(settings: ImageDialogueSettings) {
-  selectedWorkFlow.value = settings.workflowId ?? ''
-  applyApiListDefaults({
-    workflowId: settings.workflowId || undefined,
-    emit: false,
+  const normalized = normalizeImageDialogueSettingsForModel(
+    pickImageDialogueSettingsInput(settings),
+    props.chatTools,
+  )
+  skipSettingsWatch = true
+  selectedWorkFlow.value = normalized.workflowId ?? ''
+  genAspectRatio.value = normalized.aspectRatio
+  genResolution.value = normalized.resolution
+  genImageCount.value = normalized.imageCount
+  selectedModelKey.value = normalized.modelKey
+  nextTick(() => {
+    skipSettingsWatch = false
   })
 }
 

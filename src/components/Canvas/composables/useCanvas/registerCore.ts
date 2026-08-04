@@ -113,6 +113,7 @@ import {
   type VideoGenDuration,
   type ImageMarkItem,
   canOpenImageDialogueOnNode,
+  hasPersistedImageDialogueProvenance,
   normalizeImageDialogueSettingsForModel,
   pickImageDialogueSettingsInput,
   createDefaultVideoDialogueSettings,
@@ -788,6 +789,35 @@ export function registerCore(bind: CanvasBindings) {
     const existing = Array.isArray(data.imageSourceRefs)
       ? data.imageSourceRefs.filter((item) => item.previewUrl?.trim())
       : []
+
+    // 生成结果节点：保留持久化的图生图输入参考图，不因自身已有预览而折叠为仅自己
+    if (hasPersistedImageDialogueProvenance(data) && existing.length) {
+      const selfRef = buildNodeSelfDialogueRef(data, targetNodeId)
+      const onlySelfPersisted =
+        selfRef &&
+        existing.length === 1 &&
+        (existing[0].nodeId === targetNodeId || existing[0].previewUrl === selfRef.previewUrl)
+      if (
+        onlySelfPersisted &&
+        data.sourceNodeId &&
+        data.sourceNodeId !== targetNodeId &&
+        data.sourcePreviewUrl?.trim()
+      ) {
+        return [{
+          nodeId: data.sourceNodeId,
+          assetId: data.sourceAssetId,
+          previewUrl: data.sourcePreviewUrl,
+          fileName: data.sourceFileName ?? '',
+        }]
+      }
+      return existing.map((item) => ({
+        nodeId: item.nodeId,
+        assetId: item.assetId,
+        previewUrl: item.previewUrl,
+        fileName: item.fileName ?? '',
+      }))
+    }
+
     const selfRef = buildNodeSelfDialogueRef(data, targetNodeId)
 
     if (selfRef) {
@@ -2446,6 +2476,7 @@ export function registerCore(bind: CanvasBindings) {
         prompt,
         settings: provenanceSettings,
         sourceRefs: provenanceRefs,
+        elementMarks: dialogueElementMarks.length ? dialogueElementMarks : undefined,
       })
     })
 
@@ -3697,6 +3728,7 @@ export function registerCore(bind: CanvasBindings) {
       prompt: string
       settings?: ImageDialogueSettings
       sourceRefs: ImageSourceRef[]
+      elementMarks?: ImageMarkItem[]
     },
   ) {
     const data = { ...(targetNode.getData() as CanvasNodeData) }
@@ -3726,6 +3758,9 @@ export function registerCore(bind: CanvasBindings) {
     }
     if (options.settings) {
       data.imageDialogueSettings = { ...options.settings }
+    }
+    if (options.elementMarks?.length) {
+      data.elementMarks = options.elementMarks.map((mark) => ({ ...mark }))
     }
 
     targetNode.setData(data, { overwrite: true })
