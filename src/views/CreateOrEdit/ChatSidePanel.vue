@@ -506,6 +506,7 @@ import type {
   ChatMessage,
   ChatSendPayload,
   ChatSession,
+  ChatTaskCreatedPayload,
   Questionnaire,
   QuestionnaireOption,
   QuestionnaireStep,
@@ -580,6 +581,7 @@ const emit = defineEmits<{
   'new-chat': [],
   'set-session-name': [name: string],
   'close-chat': [],
+  'task-created': [payload: ChatTaskCreatedPayload],
 }>()
 
 const onTargetCollapse = () => {
@@ -1359,6 +1361,47 @@ type StreamEvent = {
   delta?: { content?: string }
   message?: string
   text?: string
+  taskId?: string | number
+  status?: string
+  statusLabel?: string
+  detail?: string
+  completed?: number
+  total?: number
+  currentTaskName?: string
+  taskType?: string
+  capabilityCode?: string
+  nodeId?: string
+  taskName?: string
+  prompt?: string
+}
+
+const RUNNING_TASK_STATUSES = new Set(['RUNNING', 'PENDING', 'QUEUED', 'PROCESSING'])
+const TERMINAL_TASK_STATUSES = new Set([
+  'SUCCEEDED',
+  'SUCCESS',
+  'FAILED',
+  'ERROR',
+  'CANCELLED',
+  'CANCELED',
+])
+
+function isRunningTaskStatus(status?: string) {
+  return RUNNING_TASK_STATUSES.has(String(status || '').toUpperCase())
+}
+
+function isTerminalTaskStatus(status?: string) {
+  return TERMINAL_TASK_STATUSES.has(String(status || '').toUpperCase())
+}
+
+function resolveTaskStatusTip(payload: StreamEvent): string {
+  const detail = typeof payload.detail === 'string' ? payload.detail.trim() : ''
+  const statusLabel = typeof payload.statusLabel === 'string' ? payload.statusLabel.trim() : ''
+  const currentTaskName = typeof payload.currentTaskName === 'string'
+    ? payload.currentTaskName.trim()
+    : ''
+  if (detail) return detail
+  if (statusLabel && currentTaskName) return `${currentTaskName}：${statusLabel}`
+  return statusLabel || currentTaskName || '处理中...'
 }
 
 type QuestionnaireOptionSource = {
@@ -1753,6 +1796,17 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
     return current.messages.find((item) => item.id === assistantId)
   }
 
+  // 收到 task_status=RUNNING 后，后台任务仍在执行；流结束/网络抖动时不当作请求失败
+  let awaitingRunningTask = false
+
+  const rememberTaskId = (assistant: ChatMessage, taskId: unknown) => {
+    const normalized = String(taskId ?? '').trim()
+    if (!normalized) return
+    assistant.generationTaskIds = Array.from(
+      new Set([...(assistant.generationTaskIds ?? []), normalized]),
+    )
+  }
+
   const token = getToken()
   void connect({
     url: `${API_BASE}/chat-sessions/${chatId}/messages/stream`,
@@ -1787,6 +1841,63 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
         return
       }
 
+      if (eventName === 'task_created') {
+        rememberTaskId(assistant, payload.taskId)
+        awaitingRunningTask = true
+        const taskName = typeof payload.taskName === 'string' ? payload.taskName.trim() : ''
+        assistant.tip = taskName ? `已创建任务「${taskName}」，处理中...` : '已创建生成任务，处理中...'
+        emit('task-created', {
+          taskId: payload.taskId as string | number,
+          taskType: payload.taskType,
+          taskName: payload.taskName,
+          prompt: payload.prompt,
+          capabilityCode: payload.capabilityCode,
+          nodeId: payload.nodeId,
+        })
+        scrollMessagesToBottom()
+        return
+      }
+
+      if (eventName === 'task_status' || eventName === 'task_progress') {
+        rememberTaskId(assistant, payload.taskId)
+
+        if (eventName === 'task_status') {
+          if (isRunningTaskStatus(payload.status)) {
+            awaitingRunningTask = true
+            assistant.tip = resolveTaskStatusTip(payload)
+          } else if (isTerminalTaskStatus(payload.status)) {
+            awaitingRunningTask = false
+            const tip = resolveTaskStatusTip(payload)
+            const failed = /FAIL|ERROR|CANCEL/i.test(String(payload.status || ''))
+            if (failed) {
+              assistant.tip = tip
+            } else if (!assistant.text.trim()) {
+              assistant.tip = tip
+            } else {
+              assistant.tip = undefined
+            }
+          } else {
+            assistant.tip = resolveTaskStatusTip(payload)
+          }
+        } else {
+          // task_progress：任务仍在推进，保持等待态
+          awaitingRunningTask = true
+          const progressTip = resolveTaskStatusTip(payload)
+          if (
+            typeof payload.completed === 'number'
+            && typeof payload.total === 'number'
+            && payload.total > 0
+          ) {
+            assistant.tip = `${progressTip}（${payload.completed}/${payload.total}）`
+          } else {
+            assistant.tip = progressTip
+          }
+        }
+
+        scrollMessagesToBottom()
+        return
+      }
+
       if (eventName === 'tool_result' || eventName === 'tool_res') {
         if (payload.success === false && payload.summary) {
           if (!assistant.text.trim() && !payload.summary.includes('工具不存在')) {
@@ -1811,6 +1922,9 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
         }
 
         applyStreamAgentPayload(assistant, payload)
+        if (assistant.generationTaskIds?.length) {
+          awaitingRunningTask = true
+        }
 
         cancelTypewriter(assistant.id)
         scrollMessagesToBottom()
@@ -1839,6 +1953,14 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
     onDone() {
       cancelTypewriter(assistantId)
       const assistant = resolveAssistant()
+      if (awaitingRunningTask) {
+        // 任务仍在 RUNNING：保留处理中 tip，不把流结束当成失败
+        if (assistant && !assistant.tip) {
+          assistant.tip = '处理中...'
+        }
+        scrollMessagesToBottom()
+        return
+      }
       if (assistant) {
         assistant.tip = undefined
       }
@@ -1858,6 +1980,12 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
         assistant.kind = 'balance_error'
         assistant.text = ''
         assistant.tip = undefined
+        awaitingRunningTask = false
+      } else if (awaitingRunningTask) {
+        // RUNNING 期间 SSE 抖动/对端关闭：不展示「请求失败」
+        if (!assistant.tip) {
+          assistant.tip = '处理中...'
+        }
       } else if (!assistant.text.trim()) {
         assistant.text = '请求失败，请稍后重试。'
         assistant.tip = errorMessage

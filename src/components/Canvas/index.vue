@@ -781,6 +781,7 @@ const {
   addElementGroupFromRecord,
   addImageFromFile,
   addImagesFromFiles,
+  createNodeFromChatTask,
   getNodeCount,
 } = canvasRuntime
 
@@ -797,6 +798,7 @@ function onMentionInserted() {
 defineExpose({
   addImageFromFile,
   addImagesFromFiles,
+  createNodeFromChatTask,
   getNodeCount,
   hasUnsavedChanges(): boolean {
     const fn = (canvasRuntime as { hasUnsavedChanges?: () => boolean }).hasUnsavedChanges

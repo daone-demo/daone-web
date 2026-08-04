@@ -68,6 +68,7 @@ import {
 import { toVideoApiPrompt } from '../../promptMention'
 import {
   bindGenerationTaskId,
+  findNodeByGenerationTaskId,
   followModelGenerationTaskOnNode,
   followTextGenerationTaskOnNode,
   isGenerationTaskTerminal,
@@ -85,10 +86,13 @@ import {
   setGenerationTaskSettledHandler,
   setGenerationTaskSucceededHandler,
   startImageGenerationOnNode,
+  startImageGenerationTaskFollow,
+  startTextGenerationTaskFollow,
   startVideoGenerationTaskFollow,
   resolveGenerationResultPreview,
   type GenerationTaskDetail,
   type GenerationTaskResult,
+  type GenerationTaskType,
 } from '../../generationTask'
 import type { CanvasElementGroupDragPayload } from '../../constants'
 import {
@@ -9898,6 +9902,197 @@ export function registerCore(bind: CanvasBindings) {
     })
   }
 
+  /** 对话 SSE task_created：在画布新建节点、绑定 taskId，并复用现有轮询回写逻辑 */
+  function createNodeFromChatTask(payload: {
+    taskId: string | number
+    taskType?: string
+    taskName?: string
+    prompt?: string
+    capabilityCode?: string
+    nodeId?: string
+  }) {
+    const g = graph.value
+    if (!g) return null
+
+    const taskId = String(payload.taskId ?? '').trim()
+    if (!taskId) return null
+
+    const existingByTask = findNodeByGenerationTaskId(g, taskId)
+    if (existingByTask) return existingByTask
+
+    const preferredNodeId = String(payload.nodeId ?? '').trim()
+    const canUsePreferredId =
+      Boolean(preferredNodeId)
+      && preferredNodeId !== '字符串值'
+      && !g.getCellById(preferredNodeId)
+
+    if (preferredNodeId && preferredNodeId !== '字符串值') {
+      const existingCell = g.getCellById(preferredNodeId)
+      if (existingCell?.isNode()) {
+        const existingNode = existingCell as Node
+        const taskType = normalizeChatTaskType(payload.taskType)
+        bindGenerationTaskId(existingNode, taskId, taskType)
+        followChatTaskOnNode(existingNode, taskId, taskType, payload)
+        scheduleHistoryPush()
+        return existingNode
+      }
+    }
+
+    const taskType = normalizeChatTaskType(payload.taskType)
+    const title = String(payload.taskName || '').trim() || '生成中'
+    const prompt = String(payload.prompt || '').trim()
+    const center = getGraphCenter()
+    const stacking = g.getNodes().filter((node) => {
+      const data = node.getData() as CanvasNodeData
+      return (
+        data.imageGenState === 'loading'
+        || data.textGenState === 'loading'
+        || data.uploadState === 'uploading'
+      )
+    }).length
+    const point = { x: center.x + stacking * 48, y: center.y + stacking * 36 }
+    const nodeOptions = canUsePreferredId ? { id: preferredNodeId } : undefined
+
+    let node: Node
+    if (taskType === 'VIDEO') {
+      node = addCanvasNode(
+        g,
+        'video',
+        point,
+        {
+          mode: 'editor',
+          uploadState: 'uploading',
+          uploadProgress: 0,
+          generationTaskType: 'VIDEO',
+          title,
+          fileName: `${title}.mp4`,
+          previewUrl: '',
+          genPrompt: prompt,
+          videoDialogueText: prompt,
+        },
+        nodeOptions,
+      )
+    } else if (taskType === 'TEXT') {
+      node = addCanvasNode(
+        g,
+        'text',
+        point,
+        {
+          mode: 'editor',
+          textGenState: 'loading',
+          textGenProgress: 0,
+          generationTaskType: 'TEXT',
+          title,
+          content: '',
+          genPrompt: prompt,
+        },
+        nodeOptions,
+      )
+    } else if (taskType === 'MODEL') {
+      node = addCanvasNode(
+        g,
+        'model3d',
+        point,
+        {
+          mode: 'editor',
+          imageGenState: 'loading',
+          imageGenProgress: 0,
+          generationTaskType: 'MODEL',
+          title,
+          fileName: `${title}.glb`,
+          previewUrl: '',
+          mediaWidth: 320,
+          mediaHeight: 360,
+          genPrompt: prompt,
+        },
+        nodeOptions,
+      )
+    } else {
+      node = addCanvasNode(
+        g,
+        'image',
+        point,
+        {
+          mode: 'editor',
+          imageGenTask: 'picker',
+          imageGenState: 'loading',
+          imageGenProgress: 0,
+          generationTaskType: 'IMAGE',
+          title,
+          fileName: `${title}.png`,
+          previewUrl: '',
+          genPrompt: prompt,
+        },
+        nodeOptions,
+      )
+    }
+
+    bindGenerationTaskId(node, taskId, taskType)
+    followChatTaskOnNode(node, taskId, taskType, { taskName: title, prompt })
+    selectGraphNodes(node)
+    syncNodeCount()
+    scheduleHistoryPush()
+    ensureInfiniteCanvasArea(g)
+    return node
+  }
+
+  function normalizeChatTaskType(raw?: string): GenerationTaskType {
+    const type = String(raw || 'IMAGE').trim().toUpperCase()
+    if (type === 'VIDEO') return 'VIDEO'
+    if (type === 'TEXT') return 'TEXT'
+    if (type === 'MODEL' || type === 'MODEL3D' || type === '3D') return 'MODEL'
+    return 'IMAGE'
+  }
+
+  function followChatTaskOnNode(
+    node: Node,
+    taskId: string,
+    taskType: GenerationTaskType,
+    payload: { taskName?: string; prompt?: string },
+  ) {
+    const title = String(payload.taskName || '').trim() || '生成中'
+    const onError = (reason: string) => message.error(reason)
+    const onComplete = () => {
+      syncNodeCount()
+      scheduleHistoryPush()
+    }
+
+    if (taskType === 'VIDEO') {
+      startVideoGenerationTaskFollow(node, taskId, {
+        title,
+        fileName: `${title}.mp4`,
+        onError,
+        onComplete: () => onComplete(),
+      })
+      return
+    }
+
+    if (taskType === 'TEXT') {
+      startTextGenerationTaskFollow(node, taskId, {
+        title,
+        toHtml: plainTextToEditorHtml,
+        onError,
+        onComplete: () => onComplete(),
+      })
+      return
+    }
+
+    if (taskType === 'MODEL') {
+      void followModelGenerationTaskOnNode(node, taskId, {
+        title,
+        onError,
+      }).finally(() => onComplete())
+      return
+    }
+
+    startImageGenerationTaskFollow(node, taskId, {
+      title,
+      fileName: `${title}.png`,
+      onError,
+      onComplete: () => onComplete(),
+    })
+  }
+
   function addImageFromFile(
     file: File,
     point?: { x: number; y: number },
@@ -10098,6 +10293,7 @@ export function registerCore(bind: CanvasBindings) {
     batchInsertAssetsFromLibrary,
     addImageFromFile,
     addImagesFromFiles,
+    createNodeFromChatTask,
     addNode,
     addPromptImageSourceRef,
     altVoiceTimer,

@@ -82,6 +82,16 @@ export interface ChatSendPayload {
   attachments: ChatAttachment[]
 }
 
+/** 对话 SSE task_created 事件，用于在画布创建生成节点 */
+export interface ChatTaskCreatedPayload {
+  taskId: string | number
+  taskType?: string
+  taskName?: string
+  prompt?: string
+  capabilityCode?: string
+  nodeId?: string
+}
+
 export const CHAT_TIPS = [
   '提示：将文件拖入工作区即可作为素材使用。',
   'Tip: Subtitle style changes can be applied to the current caption or all captions.',

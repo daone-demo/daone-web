@@ -37,6 +37,7 @@
         @load-history-sessions="onLoadHistorySessions"
         @set-current-session-id="onSetCurrentSessionId"
         @send="onChatSend"
+        @task-created="onChatTaskCreated"
         @new-chat="onNewChat"
         @set-session-name="onSetSessionName"
         @close-chat="onCloseChat"
@@ -59,7 +60,7 @@ import { ExclamationCircleFilled } from '@ant-design/icons-vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import Canvas from '@/components/Canvas/index.vue'
 import ChatSidePanel from './ChatSidePanel.vue'
-import type { ChatSendPayload } from './chatTypes'
+import type { ChatSendPayload, ChatTaskCreatedPayload } from './chatTypes'
 import api, { type ProjectCanvasResponse } from '@/services/api'
 import { isLeaveConfirmSuppressed } from '@/utils/leaveGuard'
 import { useModalStore } from '@stores/useModal'
@@ -114,6 +115,7 @@ type CanvasExpose = {
   saveCanvasAndWait: (saveType?: 'MANUAL' | 'AUTO') => Promise<boolean>
   setCanvasDescription: (description: string, taskType?: string) => void
   loadProjectCanvas: (payload: ProjectCanvasResponse) => boolean
+  createNodeFromChatTask: (payload: ChatTaskCreatedPayload) => Node | null
 }
 
 type CanvasProjectItem = {
@@ -201,6 +203,10 @@ async function onChatSend(payload: ChatSendPayload) {
   } finally {
     chatPanelRef.value?.endProcessing()
   }
+}
+
+function onChatTaskCreated(payload: ChatTaskCreatedPayload) {
+  canvasRef.value?.createNodeFromChatTask?.(payload)
 }
 
 function onNewChat() {
