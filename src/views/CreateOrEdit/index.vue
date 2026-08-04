@@ -280,10 +280,11 @@ const onRenameProject = (projectId: string, name: string) => {
 }
 
 const onDeleteProject = async (projectId: string) => {
-
   Modal.confirm({
     title: '删除项目',
     content: '确定删除该项目吗？',
+    cancelText: '取消',
+    okText: '确定',
     onOk: async () => {
       await api.deleteProject(projectId)
       await onRefreshProjects()
