@@ -51,6 +51,7 @@
               @update:date="onDateChange"
             />
           </template>
+          <span v-if="tab === 'CENTER'" class="canvas__assets-center-tip">素材仅供学习交流，不可商用</span>
         </a-flex>
       </a-flex>
       <button type="button" class="canvas__assets-close" @click="onClose">×</button>
@@ -182,3 +183,16 @@ watch(() => props.tab, () => {
   exitBatchSelectMode()
 })
 </script>
+
+<style scoped>
+.canvas__assets-center-tip {
+  color: #f59e0b;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: min(560px, 52vw);
+  margin-right: 15px;
+  font-size: 12px;
+  line-height: 1;
+  overflow: hidden;
+}
+</style>

@@ -1540,7 +1540,7 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
         }
         const iteration = payload.iteration
         assistant.tip = iteration
-          ? `思考中...（第 ${iteration} 轮）`
+          ? `思考中...`
           : '思考中...'
         scrollMessagesToBottom()
         return
