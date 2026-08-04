@@ -158,9 +158,10 @@
                 <tr>
                   <th scope="col">订单号</th>
                   <th scope="col">类型</th>
-                  <th scope="col">状态</th>
                   <th scope="col">金额</th>
                   <th scope="col">日期</th>
+                  <th scope="col">状态</th>
+                  <th scope="col">开票状态</th>
                   <th scope="col">操作</th>
                 </tr>
               </thead>
@@ -181,14 +182,15 @@
                   </td>
                   <td>{{ bill.productName }}</td>
                   <td>
+                    <strong class="user-info__bill-amount">¥{{ tools.div(bill.amountFen, 100) }}</strong>
+                  </td>
+                  <td>{{ dayjs(bill.createdAt).format('YYYY-MM-DD HH:mm:ss') }}</td>
+                  <td>
                     <span class="user-info__bill-status" :class="`user-info__bill-status--${bill.status}`">
                       {{ BILL_STATUS_LABEL[bill.status as keyof typeof BILL_STATUS_LABEL] }}
                     </span>
                   </td>
-                  <td>
-                    <strong class="user-info__bill-amount">¥{{ tools.div(bill.amountFen, 100) }}</strong>
-                  </td>
-                  <td>{{ dayjs(bill.createdAt).format('YYYY-MM-DD HH:mm:ss') }}</td>
+                  <td></td>
                   <td>
                     <button
                       type="button"

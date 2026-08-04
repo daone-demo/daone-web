@@ -75,6 +75,7 @@ export {
   getGroupScreenBox,
   getMultiSelectionToolbarPosition,
   getNodeToolbarPosition,
+  getImageMarkHintPosition,
   getNodeSize,
   getScroller,
   getEdgeDeleteButtonPosition,

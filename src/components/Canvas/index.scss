@@ -1158,6 +1158,24 @@
   }
 }
 
+.canvas__image-mark-hint {
+  position: absolute;
+  z-index: 6;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.92);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.2;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+
+  &--light {
+    background: rgba(17, 24, 39, 0.88);
+  }
+}
+
 .canvas--video-gen-pick .canvas__graph,
 .canvas--element-select .canvas__graph {
   cursor: crosshair;

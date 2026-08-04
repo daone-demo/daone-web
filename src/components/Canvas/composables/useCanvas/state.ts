@@ -154,6 +154,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const showImageDialogueCanvasPickMode = ref(false)
   const elementSelectContext = ref<'image-dialogue' | 'video-gen' | null>(null)
   const elementSelectReturnNodeId = ref('')
+  const imageMarkHintVisible = ref(false)
+  const imageMarkHints = ref<Array<{ left: number; top: number }>>([])
   const imageCropPos = ref({ left: 0, top: 0, width: 360, height: 420 })
   const imageResizeOverlay = ref({
     left: 0,
@@ -335,6 +337,8 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showImageDialogueCanvasPickMode,
     elementSelectContext,
     elementSelectReturnNodeId,
+    imageMarkHintVisible,
+    imageMarkHints,
     imageCropPos,
     imageResizeOverlay,
     showImageResizeOverlay,

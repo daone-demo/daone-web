@@ -92,6 +92,8 @@ type GridSplitCanvasApi = Pick<
     | 'onImageContextMenuAction'
     | 'imageContextMenuLocked'
     | 'showElementSelectBar'
+    | 'imageMarkHintVisible'
+    | 'imageMarkHints'
     | 'openProjectBrowser'
     | 'closeProjectBrowser'
   >

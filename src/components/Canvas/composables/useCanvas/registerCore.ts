@@ -24,7 +24,8 @@ import {
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
   getNodeVideoGenPromptPosition, getNodePromptPosition, getNodeSidePanelPosition, getNodeTextDownloadPosition,
-  getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition, getNodeToolbarPosition,
+  getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition,   getNodeToolbarPosition,
+  getImageMarkHintPosition,
   getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getImageNodeMediaScreenBox, getImageExpandOverlayLayout, syncImageNodeSizeToMediaAspect, startImageNodeCornerResize,
   hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, assignGroupId,
@@ -239,6 +240,8 @@ export function registerCore(bind: CanvasBindings) {
     showImageDialogueCanvasPickMode,
     elementSelectContext,
     elementSelectReturnNodeId,
+    imageMarkHintVisible,
+    imageMarkHints,
     imageCropPos,
     imageResizeOverlay,
     showImageResizeOverlay,
@@ -619,14 +622,7 @@ export function registerCore(bind: CanvasBindings) {
     if (selectedKind.value !== 'image' || !selectedNodeId.value) return false
     return canShowImageToolbar(getSelectedNodeData())
   })
-  const showElementSelectBar = computed(() => {
-    void toolbarRevision.value
-    if (!showElementSelectMode.value) return false
-    if (imageMarkRecognizing.value) return false
-    const g = graph.value
-    if (g && isImageMarkAnalyzing(g)) return false
-    return true
-  })
+  const showElementSelectBar = computed(() => false)
   const showTextFormatToolbar = computed(() => {
     void toolbarRevision.value
     if (showMultiSelectToolbar.value || showGroupToolbar.value) return false
@@ -5251,6 +5247,49 @@ export function registerCore(bind: CanvasBindings) {
     closeVideoGenPromptBar()
   }
 
+  let imageMarkHintTimer: ReturnType<typeof setTimeout> | null = null
+
+  function hideImageMarkHint() {
+    if (imageMarkHintTimer) {
+      clearTimeout(imageMarkHintTimer)
+      imageMarkHintTimer = null
+    }
+    imageMarkHintVisible.value = false
+    imageMarkHints.value = []
+  }
+
+  function computeImageMarkHintPositions() {
+    const g = graph.value
+    const overlayRoot = canvasRef.value
+    if (!g || !overlayRoot) return []
+
+    return resolveMarkableImageNodeIds()
+      .map((nodeId) => {
+        const cell = g.getCellById(nodeId)
+        if (!cell?.isNode()) return null
+        return getImageMarkHintPosition(g, cell as Node, overlayRoot)
+      })
+      .filter((item): item is { left: number; top: number } => item != null)
+  }
+
+  function updateImageMarkHintPositions() {
+    if (!imageMarkHintVisible.value) return
+    imageMarkHints.value = computeImageMarkHintPositions()
+  }
+
+  function showImageMarkHint() {
+    hideImageMarkHint()
+    const positions = computeImageMarkHintPositions()
+    if (!positions.length) return
+    imageMarkHints.value = positions
+    imageMarkHintVisible.value = true
+    imageMarkHintTimer = setTimeout(() => {
+      imageMarkHintVisible.value = false
+      imageMarkHints.value = []
+      imageMarkHintTimer = null
+    }, 3000)
+  }
+
   function resolveMarkableImageNodeIds(): string[] {
     const g = graph.value
     const returnId = elementSelectReturnNodeId.value
@@ -5324,6 +5363,7 @@ export function registerCore(bind: CanvasBindings) {
     exitImageDialogueCanvasPickMode()
     showElementSelectMode.value = true
     syncImageMarkTargets(true)
+    showImageMarkHint()
     bumpToolbarRevision()
   }
 
@@ -5334,6 +5374,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function exitElementSelectMode(options?: { force?: boolean }) {
+    hideImageMarkHint()
     syncImageMarkTargets(false)
     showElementSelectMode.value = false
     elementSelectContext.value = null
@@ -7885,6 +7926,7 @@ export function registerCore(bind: CanvasBindings) {
     if (!options?.skipImageResizeOverlay) {
       updateImageResizeOverlay()
     }
+    updateImageMarkHintPositions()
   }
 
   function paintImageResizeOverlay(
@@ -10014,6 +10056,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   onBeforeUnmount(() => {
+    hideImageMarkHint()
     window.removeEventListener('beforeunload', onPageUnload)
     window.removeEventListener('pagehide', onPageUnload)
     stopAutoSave()
@@ -10293,6 +10336,8 @@ export function registerCore(bind: CanvasBindings) {
     saveSkillSubmitting,
     showImageCreativeToolbar,
     showElementSelectBar,
+    imageMarkHintVisible,
+    imageMarkHints,
     showImageGenPromptBar,
     showImageToolbarCustomize,
     imageToolbarCustomizeSettings,

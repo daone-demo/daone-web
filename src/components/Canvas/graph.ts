@@ -1016,6 +1016,16 @@ export function getMultiSelectionToolbarPosition(
   }
 }
 
+/** 图片标记提示：节点左上角上方 */
+export function getImageMarkHintPosition(graph: Graph, node: Node, container: HTMLElement) {
+  const bbox = node.getBBox()
+  const offset = graphLocalToContainerOffset(graph, bbox.x, bbox.y, container)
+  return {
+    left: offset.left + 20,
+    top: offset.top - 65,
+  }
+}
+
 export function getNodeToolbarPosition(graph: Graph, node: Node, container: HTMLElement) {
   const bbox = node.getBBox()
   const box = getNodeOverlayScreenBox(graph, node, container)

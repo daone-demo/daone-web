@@ -52,10 +52,9 @@
 
     <CanvasEmptyHint v-if="nodeCount === 0" @focus-chat="emit('focus-chat')" />
 
-    <CanvasElementSelectBar
-      v-if="showElementSelectBar"
-      @return-node="returnFromElementSelect"
-      @exit="exitElementSelectMode"
+    <CanvasImageMarkHint
+      v-if="imageMarkHintVisible"
+      :positions="imageMarkHints"
     />
 
     <CanvasVideoGenPickHint v-if="showVideoGenCanvasPickMode || showImageDialogueCanvasPickMode" />
@@ -445,7 +444,7 @@ import CanvasGroupOverlay from './panels/CanvasGroupOverlay.vue'
 import CanvasGroupToolbar from './panels/CanvasGroupToolbar.vue'
 import CanvasSaveSkillPopover from './panels/CanvasSaveSkillPopover.vue'
 import ImageToolbarCustomizeModal from './panels/ImageToolbarCustomizeModal.vue'
-import CanvasElementSelectBar from './panels/CanvasElementSelectBar.vue'
+import CanvasImageMarkHint from './panels/CanvasImageMarkHint.vue'
 import CanvasVideoGenPickHint from './panels/CanvasVideoGenPickHint.vue'
 import CanvasNodeOverlays from './panels/CanvasNodeOverlays.vue'
 import CanvasImagePreview from './panels/CanvasImagePreview.vue'
@@ -692,6 +691,8 @@ const {
   onImageContextMenuAction,
   showEdgeDeleteButton,
   showElementSelectBar,
+  imageMarkHintVisible,
+  imageMarkHints,
   showElementSelectMode,
   showVideoGenCanvasPickMode,
   showImageDialogueCanvasPickMode,
