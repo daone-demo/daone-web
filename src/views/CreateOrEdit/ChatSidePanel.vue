@@ -191,7 +191,11 @@
             >
               <span class="chat-panel__copy-icon" aria-hidden="true" />
             </button>
-            <p v-if="item.tip" class="chat-panel__message-tip">{{ item.tip }}</p>
+            <div
+              v-if="item.tip"
+              class="chat-panel__message-tip"
+              v-html="renderMarkdown(item.tip)"
+            />
           </template>
         </article>
       </section>
@@ -487,6 +491,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { marked } from 'marked'
 import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
 import { useCanvasBgTheme } from '@/components/Canvas/useCanvasBgTheme'
@@ -511,6 +516,13 @@ import { getToken } from '@/utils/request'
 import api from '@/services/api';
 import { uploadAssetFile } from '@/components/Canvas/upload'
 import dayjs from 'dayjs'
+
+marked.setOptions({ breaks: true, gfm: true })
+
+function renderMarkdown(source: string): string {
+  const html = marked.parse(source || '', { async: false })
+  return typeof html === 'string' ? html : ''
+}
 
 const props = defineProps<{
   projectId?: string,
@@ -1303,6 +1315,13 @@ type StreamEvent = {
       totalSteps?: number
       allowCustom?: boolean
       options?: Array<{ label?: string; value?: string; description?: string }>
+      steps?: Array<{
+        name?: string
+        label?: string
+        question?: string
+        allowCustom?: boolean
+        options?: Array<{ label?: string; value?: string; description?: string }>
+      }>
     }
     [key: string]: unknown
   }
@@ -1484,15 +1503,15 @@ function collectGenerationTaskIds(payload: StreamEvent): string[] {
 }
 
 function extractGenerateImageTip(payload: StreamEvent): string | undefined {
-    const action = payload.agentActions?.find(
-      (item) => item.type === 'GENERATE_IMAGE' || item.tool === 'generate_image',
-    )
-    if (!action) return undefined
+  const action = payload.agentActions?.find(
+    (item) => item.type === 'GENERATE_IMAGE' || item.tool === 'generate_image',
+  )
+  if (!action) return undefined
 
-    const taskName = String(action.data?.taskName ?? '').trim()
-    const summary = String(action.summary ?? '').trim()
-    if (taskName && summary) return `${taskName}：${summary}`
-    return taskName || summary || '图片生成任务处理中...'
+  const taskName = String(action.data?.taskName ?? '').trim()
+  const summary = String(action.summary ?? '').trim()
+  if (taskName && summary) return `${taskName}：${summary}`
+  return taskName || summary || '图片生成任务处理中...'
 }
 
 function applyStreamAgentPayload(
@@ -1588,23 +1607,6 @@ function advanceLocalQuestionnaire(
     stepLabel: nextStep.label,
   }
   return true
-}
-
-function onQuestionnaireSelect(message: ChatMessage, option: QuestionnaireOption) {
-  if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
-
-  const hasMoreLocalSteps = advanceLocalQuestionnaire(message, option)
-  if (hasMoreLocalSteps) return
-
-  // 最后一步也写入答案后再统一拼接提交
-  if (!message.questionnaire?.steps?.length) {
-    recordQuestionnaireAnswer(message, option)
-  }
-
-  message.questionnaireAnswered = true
-  const submitContent = buildQuestionnaireSubmitContent(message) || option.label
-  const session = ensureActiveSession()
-  void onSendMessage(session, [], submitContent, [])
 }
 
 function parseStreamEvent(data: string): StreamEvent | null {
@@ -1779,10 +1781,8 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
         if (assistant.text.trim() || streamingMessageIds.value.has(assistant.id)) {
           return
         }
-        const iteration = payload.message
-        assistant.tip = iteration
-          ? `思考中...`
-          : '思考中...'
+        const thinkingMessage = typeof payload.message === 'string' ? payload.message.trim() : ''
+        assistant.tip = thinkingMessage || '思考中...'
         scrollMessagesToBottom()
         return
       }
@@ -1813,9 +1813,6 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
         applyStreamAgentPayload(assistant, payload)
 
         cancelTypewriter(assistant.id)
-        if (assistant.tip?.startsWith('思考中')) {
-          assistant.tip = undefined
-        }
         scrollMessagesToBottom()
         return
       }
@@ -1842,7 +1839,7 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
     onDone() {
       cancelTypewriter(assistantId)
       const assistant = resolveAssistant()
-      if (assistant?.tip?.startsWith('思考中')) {
+      if (assistant) {
         assistant.tip = undefined
       }
       if (assistant && !assistant.text.trim() && !assistant.questionnaire) {
@@ -1983,6 +1980,23 @@ async function copyMessage(text: string) {
   } catch {
     // ignore clipboard failures
   }
+}
+
+function onQuestionnaireSelect(message: ChatMessage, option: QuestionnaireOption) {
+  if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
+
+  const hasMoreLocalSteps = advanceLocalQuestionnaire(message, option)
+  if (hasMoreLocalSteps) return
+
+  // 最后一步也写入答案后再统一拼接提交
+  if (!message.questionnaire?.steps?.length) {
+    recordQuestionnaireAnswer(message, option)
+  }
+
+  message.questionnaireAnswered = true
+  const submitContent = buildQuestionnaireSubmitContent(message) || option.label
+  const session = ensureActiveSession()
+  void onSendMessage(session, [], submitContent, [])
 }
 
 function stopProcessing() {
@@ -2625,6 +2639,36 @@ defineExpose({
   color: #9ca3af;
   font-size: 12px;
   line-height: 1.5;
+  word-break: break-word;
+
+  :deep(p) {
+    margin: 0;
+  }
+
+  :deep(p + p) {
+    margin-top: 0.4em;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 0.4em 0;
+    padding-left: 1.2em;
+  }
+
+  :deep(code) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.92em;
+  }
+
+  :deep(strong) {
+    font-weight: 600;
+    color: inherit;
+  }
+
+  :deep(a) {
+    color: inherit;
+    text-decoration: underline;
+  }
 }
 
 .chat-panel__balance-card {
