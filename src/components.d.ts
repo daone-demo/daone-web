@@ -69,6 +69,7 @@ declare module 'vue' {
     ImageEditTextPanel: typeof import('./components/Canvas/ImageEditTextPanel.vue')['default']
     ImageEraseOverlay: typeof import('./components/Canvas/ImageEraseOverlay.vue')['default']
     ImageExpandOverlay: typeof import('./components/Canvas/ImageExpandOverlay.vue')['default']
+    ImageGenerationDetailModal: typeof import('./components/Canvas/panels/ImageGenerationDetailModal.vue')['default']
     ImageGenNode: typeof import('./components/Canvas/nodes/ImageGenNode.vue')['default']
     ImageGenPromptPanel: typeof import('./components/Canvas/ImageGenPromptPanel.vue')['default']
     ImageGenSettingsPopover: typeof import('./components/Canvas/ImageGenSettingsPopover.vue')['default']

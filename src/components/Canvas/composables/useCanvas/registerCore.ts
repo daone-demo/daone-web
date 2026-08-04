@@ -4149,16 +4149,9 @@ export function registerCore(bind: CanvasBindings) {
     if (data.kind !== 'image') return
 
     activeImageDialogueNodeId = nodeId
-    imageDialogueText.value = data.imageDialogueText ?? ''
-    imageDialogueSettings.value = data.imageDialogueSettings
-      ? normalizeImageDialogueSettings(data.imageDialogueSettings)
-      : {
-          modelKey: '',
-          aspectRatio: '',
-          resolution: '',
-          imageCount: 0,
-          workflowId: '',
-        }
+    imageDialogueText.value =
+      data.imageDialogueText?.trim() || data.genPrompt?.trim() || ''
+    imageDialogueSettings.value = normalizeImageDialogueSettings(data.imageDialogueSettings)
   }
 
   function persistImageDialogueFields(nodeId?: string) {

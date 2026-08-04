@@ -153,10 +153,15 @@
                 @mousedown.stop
                 @click.stop="onMarkPinClick(mark, $event)"
               >
-                <img
-                  src="@/assets/images/remove.png"
-                  class="image-node__mark-pin-interactive_remove"
-                />
+                <button
+                  type="button"
+                  class="image-node__mark-pin-remove"
+                  title="移除标记"
+                  @mousedown.stop
+                  @click.stop="onMarkRemoveClick(mark, $event)"
+                >
+                  <span class="image-node__mark-pin-remove-icon" aria-hidden="true" />
+                </button>
                 <svg 
                   data-v-243dd551=""
                   viewBox="0 0 24 24"
@@ -434,6 +439,14 @@ function onMarkPinClick(mark: ImageMarkItem, event: MouseEvent) {
   event.stopPropagation()
   const g = getGraph() as CanvasGraph
   g.__selectImageElementMark?.(mark.id)
+}
+
+function onMarkRemoveClick(mark: ImageMarkItem, event: MouseEvent) {
+  if (mark.pending) return
+  event.preventDefault()
+  event.stopPropagation()
+  const g = getGraph() as CanvasGraph
+  g.__removeImageElementMark?.(mark.id)
 }
 
 function onUploadInputChange(event: Event) {
@@ -725,24 +738,47 @@ onMounted(() => {
   &:hover:not(.image-node__mark-pin--analyzing) {
     transform: translate(-50%, -100%) scale(1.1);
   }
-  &_remove {
-    width: 5px !important;
-    height: auto;
-    cursor: pointer;
-    position: absolute;
-    right: 2px;
-    top: -10px;
-    z-index: 1;
-    opacity: 0;
-  }
 
   &--selected {
     filter: drop-shadow(0 0 0 2px #ef4444) drop-shadow(0 1px 2px rgba(15, 23, 42, 0.18));
   }
 }
-.image-node__mark-pin-interactive:hover {
-  .image-node__mark-pin-interactive_remove {
+
+.image-node__mark-pin-remove {
+  position: absolute;
+  top: -12px;
+  right: -8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.88);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    background: rgba(17, 24, 39, 0.98);
+  }
+}
+
+.image-node__mark-pin-remove-icon {
+  width: 8px;
+  height: 8px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' fill='none' viewBox='0 0 8 8'%3E%3Cpath stroke='%23fff' stroke-linecap='round' stroke-width='1.2' d='m1.8 1.8 4.4 4.4M6.2 1.8 1.8 6.2'/%3E%3C/svg%3E") center / 8px 8px no-repeat;
+}
+
+.image-node__mark-pin-interactive:hover,
+.image-node__mark-pin-interactive--selected {
+  .image-node__mark-pin-remove {
     opacity: 1;
+    pointer-events: auto;
   }
 }
 
