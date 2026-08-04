@@ -190,7 +190,11 @@
                       {{ BILL_STATUS_LABEL[bill.status as keyof typeof BILL_STATUS_LABEL] }}
                     </span>
                   </td>
-                  <td></td>
+                  <td>
+                    <div v-if="bill.status === 'PAID'">
+                      {{ INVOICE_STATUS_LABEL[bill.invoiceStatus as keyof typeof INVOICE_STATUS_LABEL] }}
+                    </div>
+                  </td>
                   <td>
                     <button
                       type="button"
@@ -204,7 +208,7 @@
                       type="button"
                       class="user-info__bill-action-link"
                       @click="openInvoiceModal(bill.orderNo)"
-                      v-if="bill.status === 'PAID'"
+                      v-if="bill.status === 'PAID' && bill.invoiceStatus === 'NONE'"
                     >
                       开票
                     </button>
@@ -564,6 +568,15 @@ const PAYMENT_METHODS: Array<{ key: PayMethod; label: string }> = [
   { key: 'WECHAT', label: '微信' },
   // { key: 'BANK_TRANSFER', label: '对公转账' },
 ]
+
+const INVOICE_STATUS_LABEL = {
+  'NONE': '未开票',
+  'PENDING': '待处理',
+  'PROCESSING': '开票中',
+  'ISSUED': '已开票',
+  'REJECTED': '已驳回',
+  'CANCELLED': '已取消',
+}
 
 const activeTab = ref<UserInfoTabKey>('account')
 const pointsFilter = ref<PointsLogFilterKey>('all')
