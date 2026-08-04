@@ -117,6 +117,7 @@ import {
   normalizeImageDialogueSettingsForModel,
   pickImageDialogueSettingsInput,
   createDefaultVideoDialogueSettings,
+  createDefaultImageDialogueSettings,
   isVideoNodeGenerating,
   resolveGenerationTaskWorkflowId,
 } from '../../constants'
@@ -2532,6 +2533,7 @@ export function registerCore(bind: CanvasBindings) {
         }),
         onError: (reason) => message.error(reason),
         onComplete: async (result) => {
+          resetSourceImageDialogueAfterSuccess(sourceNode, resultNode, result)
           if (!result.success || index !== 0) return
 
           const extraResults = result.extraResults ?? []
@@ -3275,6 +3277,7 @@ export function registerCore(bind: CanvasBindings) {
         }),
         onError: (reason) => message.error(reason),
         onComplete: async (result) => {
+          resetSourceImageDialogueAfterSuccess(sourceNode, resultNode, result)
           if (!result.success || index !== 0) return
 
           const allResults = result.allResults ?? []
@@ -3608,6 +3611,56 @@ export function registerCore(bind: CanvasBindings) {
     showImageDialogue.value = false
     activeImageDialogueNodeId = ''
     exitImageDialogueCanvasPickMode()
+  }
+
+  /** 生成成功后清空源节点对话框输入（文案/模型/参数/标记），结果节点溯源数据保持不变 */
+  function resetImageDialogueInputOnSourceNode(sourceNodeId: string) {
+    const g = graph.value
+    if (!g || !sourceNodeId) return
+
+    const cell = g.getCellById(sourceNodeId)
+    if (!cell?.isNode()) return
+
+    const node = cell as Node
+    const data = { ...(node.getData() as CanvasNodeData) }
+    const marks = [
+      ...(data.elementMarks ?? []),
+      ...(data.imageElementMarks ?? []),
+    ]
+    marks.forEach((mark) => removeImageMarkFromGraph(g, mark.id))
+
+    data.elementMarks = []
+    data.imageElementMarks = []
+    data.imageDialogueText = ''
+    data.genPrompt = ''
+    data.imageDialogueSettings = createDefaultImageDialogueSettings()
+    data.inputUpdated = false
+
+    node.setData(data, { overwrite: true })
+
+    const isActiveSource =
+      activeImageGenPromptNodeId.value === sourceNodeId ||
+      activeImageDialogueNodeId === sourceNodeId ||
+      (showImageDialogue.value && selectedNodeId.value === sourceNodeId)
+
+    if (isActiveSource) {
+      imageDialogueText.value = ''
+      imageGenPromptText.value = ''
+      imageDialogueSettings.value = createDefaultImageDialogueSettings()
+      clearImageElementMarkSelection()
+    }
+
+    bumpToolbarRevision()
+    scheduleHistoryPush()
+  }
+
+  function resetSourceImageDialogueAfterSuccess(
+    sourceNode: Node,
+    resultNode: Node,
+    result: { success: boolean },
+  ) {
+    if (!result.success || sourceNode.id === resultNode.id) return
+    resetImageDialogueInputOnSourceNode(sourceNode.id)
   }
 
   function getActiveImageDialogueTargetNodeId() {
@@ -4939,6 +4992,7 @@ export function registerCore(bind: CanvasBindings) {
             }),
             onError: (reason) => message.error(reason),
             onComplete: async (result) => {
+              resetSourceImageDialogueAfterSuccess(sourceNode, resultNode, result)
               if (!result.success) return
 
               const extraResults = result.extraResults ?? []
