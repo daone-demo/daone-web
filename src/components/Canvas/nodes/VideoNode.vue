@@ -22,7 +22,7 @@
     </button>
 
     <button
-      v-if="!hasVideoPreview && !isFileUploading"
+      v-if="!hasVideoPreview && !isFileUploading && !showTaskMeta"
       type="button"
       class="canvas-node__delete-float"
       title="删除节点"
@@ -31,6 +31,22 @@
     >
       ×
     </button>
+
+    <div v-if="showTaskMeta" class="video-node__meta canvas-node__meta">
+      <span class="video-node__title">
+        <span class="video-node__title-text">{{ headerTitle }}</span>
+      </span>
+      <button
+        v-if="isVideoGenerating"
+        type="button"
+        class="canvas-node__delete"
+        title="删除节点"
+        @mousedown.stop
+        @click="removeSelf"
+      >
+        ×
+      </button>
+    </div>
 
     <!-- <button
       v-if="data.mode === 'picker'"
@@ -223,6 +239,7 @@ import { useNodePortPlusStyle } from './useNodePortPlusStyle'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import { syncNodeViewData } from './syncNodeViewData'
 import { useVideoPlayer, formatVideoTime } from './useVideoPlayer'
+import { resolveVideoTaskTypeLabel } from '../canvasDescription'
 
 const getNode = inject<() => Node>('getNode')!
 const requestCanvasUpload = inject<(nodeId: string) => void>('requestCanvasUpload')
@@ -275,6 +292,24 @@ const hasVideoPreview = computed(
 )
 
 const isFileUploading = computed(() => isNodeFileUploading(data))
+
+const headerTitle = computed(() => {
+  if (data.videoGenTab) return resolveVideoTaskTypeLabel(data.videoGenTab)
+  const mode = data.videoDialogueSettings?.mode
+  if (mode) return resolveVideoTaskTypeLabel(mode)
+  if (data.title && data.title !== '视频节点' && data.title !== '生成失败') {
+    return data.title
+  }
+  return '视频生成'
+})
+
+const showTaskMeta = computed(() => {
+  if (data.mode === 'picker') return false
+  if (!isVideoGenerating.value && !hasVideoPreview.value) return false
+  if (isVideoGenerating.value) return true
+  if (data.videoGenTab || data.videoDialogueSettings || data.sourceNodeId) return true
+  return Boolean(data.title && data.title !== '视频节点')
+})
 
 const emptyStateLabel = computed(() =>
   data.title === '生成失败' ? '生成失败，点击重试' : '点击上传视频',
@@ -417,6 +452,30 @@ onBeforeUnmount(() => {
     justify-content: center;
     padding: 16px 12px 12px;
   }
+}
+
+.video-node__meta {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.video-node__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  color: #9ca3af;
+}
+
+.video-node__title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .video-node__upload-btn {

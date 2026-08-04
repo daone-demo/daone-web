@@ -220,7 +220,7 @@
             <a-pagination
               size="small"
               :total="orderTotal"
-              :show-total="orderTotal => `Total ${orderTotal} items`"
+              :show-total="pointsTotal => `共 ${pointsTotal} 条记录`"
               @change="onChangeOrderPage"
             />
           </a-flex>

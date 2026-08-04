@@ -97,12 +97,15 @@ export function resolveCanvasSaveType(
 export function resolveVideoTaskTypeLabel(mode?: string) {
   switch (mode) {
     case 'text-to-video':
+    case 'text2video':
       return '文生视频'
     case 'reference':
       return '全能参考'
     case 'image-to-video':
+    case 'img2video':
       return '图生视频'
     case 'first-last-frame':
+    case 'frames':
       return '首尾帧'
     case 'image-ref':
     case 'imageRef':
