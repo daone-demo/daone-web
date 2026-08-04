@@ -112,6 +112,7 @@ import {
   type VideoGenResolution,
   type VideoGenDuration,
   type ImageMarkItem,
+  canOpenImageDialogueOnNode,
   normalizeImageDialogueSettingsForModel,
   pickImageDialogueSettingsInput,
   createDefaultVideoDialogueSettings,
@@ -3662,11 +3663,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function canAutoOpenImageDialogue(data: CanvasNodeData) {
-    return (
-      data.kind === 'image' &&
-      Boolean(data.previewUrl?.trim()) &&
-      data.uploadState !== 'uploading'
-    )
+    return canOpenImageDialogueOnNode(data)
   }
 
   function canAutoOpenVideoDialogue(data: CanvasNodeData) {

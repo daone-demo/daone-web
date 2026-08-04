@@ -2761,6 +2761,15 @@ export function formatDimensions(width: number, height: number) {
   return `${width} × ${height}`
 }
 
+/** 图片节点是否可打开下方图片对话框（含图生图占位节点：无自身预览但有上游图源） */
+export function canOpenImageDialogueOnNode(data: CanvasNodeData): boolean {
+  if (data.kind !== 'image' || data.uploadState === 'uploading') return false
+  if (data.previewUrl?.trim()) return true
+  if (data.sourcePreviewUrl?.trim()) return true
+  return Array.isArray(data.imageSourceRefs) &&
+    data.imageSourceRefs.some((item) => item.previewUrl?.trim())
+}
+
 /** 用户本地文件正在上传（显示「上传中」时隐藏删除按钮） */
 export function isNodeFileUploading(data?: Partial<CanvasNodeData>) {
   if (!data || data.uploadState !== 'uploading') return false

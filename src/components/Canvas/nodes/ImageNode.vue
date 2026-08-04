@@ -238,7 +238,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Graph, Node } from '@antv/x6'
-import { CANVAS_IMAGE_NODE_DRAG_TYPE, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
+import { CANVAS_IMAGE_NODE_DRAG_TYPE, canOpenImageDialogueOnNode, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
 import type { CanvasNodeData, ImageMarkItem } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
@@ -419,7 +419,7 @@ function onPreviewClick() {
 
 function onPreviewDblClick() {
   cancelPendingUpload()
-  if (!data.previewUrl?.trim() || data.uploadState === 'uploading') return
+  if (!canOpenImageDialogueOnNode(data)) return
   const node = getNode()
   const g = node.model?.graph as CanvasGraph | undefined
   g?.__openImageDialogue?.(node.id)
