@@ -142,17 +142,13 @@
               />
             </div>
             <div v-if="item.text" class="chat-panel__message-bubble">
-              <div
-                v-if="item.role === 'assistant'"
-                class="chat-panel__message-markdown"
-                v-html="renderChatMarkdown(item.text)"
-              />
-              <p v-else class="chat-panel__message-text">{{ item.text }}</p>
-              <span
-                v-if="item.role === 'assistant' && streamingMessageIds.has(item.id)"
-                class="chat-panel__stream-caret"
-                aria-hidden="true"
-              />
+              <p class="chat-panel__message-text">
+                {{ item.text }}<span
+                  v-if="item.role === 'assistant' && streamingMessageIds.has(item.id)"
+                  class="chat-panel__stream-caret"
+                  aria-hidden="true"
+                />
+              </p>
             </div>
             <div
               v-if="item.questionnaire && !item.questionnaireAnswered"
@@ -510,7 +506,6 @@ import type {
   QuestionnaireStep,
 } from './chatTypes'
 import { CHAT_TIPS } from './chatTypes'
-import { renderChatMarkdown } from './chatMarkdown'
 import { useSSE } from '@/hooks/useSSE'
 import { getToken } from '@/utils/request'
 import api from '@/services/api';
@@ -1326,6 +1321,7 @@ type StreamEvent = {
       options?: Array<{ label?: string; value?: string; description?: string }>
       steps?: Array<{
         name?: string
+        label?: string
         question?: string
         allowCustom?: boolean
         options?: Array<{ label?: string; value?: string; description?: string }>
@@ -1354,6 +1350,7 @@ type QuestionnaireOptionSource = {
 
 type QuestionnaireStepSource = {
   name?: string
+  label?: string
   question?: string
   allowCustom?: boolean
   options?: QuestionnaireOptionSource[]
@@ -1393,6 +1390,7 @@ function normalizeQuestionnaireSteps(
     if (!options.length) return
     normalized.push({
       name: step.name,
+      label: step.label,
       question: step.question || '',
       allowCustom: step.allowCustom ?? false,
       options,
@@ -1429,6 +1427,7 @@ function normalizeQuestionnaire(
     steps: steps.length ? steps : undefined,
     stepQuestion,
     stepName: activeStep?.name,
+    stepLabel: activeStep?.label,
   }
 }
 
@@ -1525,6 +1524,47 @@ function applyStreamAgentPayload(
   }
 }
 
+function resolveQuestionnaireStepKey(step: QuestionnaireStep, index: number) {
+  return step.name || `step-${index + 1}`
+}
+
+function recordQuestionnaireAnswer(
+  message: ChatMessage,
+  option: QuestionnaireOption,
+) {
+  const questionnaire = message.questionnaire
+  if (!questionnaire) return
+
+  const answers = { ...(message.questionnaireAnswers ?? {}) }
+  const stepIndex = Math.max(0, questionnaire.step - 1)
+  const answerKey = questionnaire.stepName
+    || (questionnaire.steps?.[stepIndex]
+      ? resolveQuestionnaireStepKey(questionnaire.steps[stepIndex], stepIndex)
+      : `step-${questionnaire.step}`)
+  answers[answerKey] = option.value || option.label
+  message.questionnaireAnswers = answers
+}
+
+/** 按 steps 顺序拼成「平台: 淘宝/天猫\n受众: 年轻女性」 */
+function buildQuestionnaireSubmitContent(message: ChatMessage): string {
+  const questionnaire = message.questionnaire
+  const answers = message.questionnaireAnswers ?? {}
+  if (!questionnaire?.steps?.length) {
+    return Object.values(answers).filter(Boolean).join('\n')
+  }
+
+  return questionnaire.steps
+    .map((step, index) => {
+      const key = resolveQuestionnaireStepKey(step, index)
+      const value = answers[key]
+      if (!value) return ''
+      const label = step.label || step.name || `步骤${index + 1}`
+      return `${label}: ${value}`
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
 function advanceLocalQuestionnaire(
   message: ChatMessage,
   option: QuestionnaireOption,
@@ -1532,10 +1572,7 @@ function advanceLocalQuestionnaire(
   const questionnaire = message.questionnaire
   if (!questionnaire?.steps?.length) return false
 
-  const answers = { ...(message.questionnaireAnswers ?? {}) }
-  const answerKey = questionnaire.stepName || `step-${questionnaire.step}`
-  answers[answerKey] = option.label
-  message.questionnaireAnswers = answers
+  recordQuestionnaireAnswer(message, option)
 
   const nextStepIndex = questionnaire.step
   const nextStep = questionnaire.steps[nextStepIndex]
@@ -1548,27 +1585,9 @@ function advanceLocalQuestionnaire(
     options: nextStep.options,
     stepQuestion: nextStep.question,
     stepName: nextStep.name,
+    stepLabel: nextStep.label,
   }
   return true
-}
-
-function buildQuestionnaireSubmitContent(
-  message: ChatMessage,
-  option: QuestionnaireOption,
-): string {
-  const questionnaire = message.questionnaire
-  if (!questionnaire?.steps?.length) return option.label
-
-  const answers = message.questionnaireAnswers ?? {}
-  return questionnaire.steps
-    .map((step, index) => {
-      const key = step.name || `step-${index + 1}`
-      const value = answers[key]
-      if (!value) return ''
-      return `${key}: ${value}`
-    })
-    .filter(Boolean)
-    .join('\n')
 }
 
 function onQuestionnaireSelect(message: ChatMessage, option: QuestionnaireOption) {
@@ -1577,9 +1596,14 @@ function onQuestionnaireSelect(message: ChatMessage, option: QuestionnaireOption
   const hasMoreLocalSteps = advanceLocalQuestionnaire(message, option)
   if (hasMoreLocalSteps) return
 
+  // 最后一步也写入答案后再统一拼接提交
+  if (!message.questionnaire?.steps?.length) {
+    recordQuestionnaireAnswer(message, option)
+  }
+
   message.questionnaireAnswered = true
+  const submitContent = buildQuestionnaireSubmitContent(message) || option.label
   const session = ensureActiveSession()
-  const submitContent = buildQuestionnaireSubmitContent(message, option)
   void onSendMessage(session, [], submitContent, [])
 }
 
@@ -1755,7 +1779,10 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
         if (assistant.text.trim() || streamingMessageIds.value.has(assistant.id)) {
           return
         }
-        assistant.tip = String(payload.message ?? '').trim() || '思考中...'
+        const iteration = payload.message
+        assistant.tip = iteration
+          ? `思考中...`
+          : '思考中...'
         scrollMessagesToBottom()
         return
       }
@@ -1786,7 +1813,7 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
         applyStreamAgentPayload(assistant, payload)
 
         cancelTypewriter(assistant.id)
-        if (!extractGenerateImageTip(payload)) {
+        if (assistant.tip?.startsWith('思考中')) {
           assistant.tip = undefined
         }
         scrollMessagesToBottom()
@@ -2468,123 +2495,6 @@ defineExpose({
   font-size: 14px;
   line-height: 1.55;
   white-space: pre-wrap;
-}
-
-.chat-panel__message-markdown {
-  color: #111827;
-  font-size: 14px;
-  line-height: 1.55;
-  word-break: break-word;
-
-  :deep(p) {
-    margin: 0 0 0.75em;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
-
-  :deep(h1),
-  :deep(h2),
-  :deep(h3),
-  :deep(h4) {
-    margin: 0.9em 0 0.5em;
-    color: #111827;
-    font-weight: 600;
-    line-height: 1.35;
-
-    &:first-child {
-      margin-top: 0;
-    }
-  }
-
-  :deep(h1) {
-    font-size: 18px;
-  }
-
-  :deep(h2) {
-    font-size: 16px;
-  }
-
-  :deep(h3),
-  :deep(h4) {
-    font-size: 15px;
-  }
-
-  :deep(ul),
-  :deep(ol) {
-    margin: 0.5em 0 0.75em;
-    padding-left: 1.25em;
-  }
-
-  :deep(li) {
-    margin: 0.25em 0;
-  }
-
-  :deep(blockquote) {
-    margin: 0.75em 0;
-    padding: 0.25em 0 0.25em 0.75em;
-    border-left: 3px solid #d1d5db;
-    color: #4b5563;
-  }
-
-  :deep(code) {
-    padding: 0.1em 0.35em;
-    border-radius: 4px;
-    background: #e5e7eb;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.92em;
-  }
-
-  :deep(pre) {
-    margin: 0.75em 0;
-    padding: 10px 12px;
-    overflow-x: auto;
-    border-radius: 8px;
-    background: #e5e7eb;
-
-    code {
-      padding: 0;
-      background: transparent;
-    }
-  }
-
-  :deep(table) {
-    display: block;
-    width: 100%;
-    margin: 0.75em 0;
-    overflow-x: auto;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-
-  :deep(th),
-  :deep(td) {
-    padding: 6px 10px;
-    border: 1px solid #e5e7eb;
-    text-align: left;
-    vertical-align: top;
-  }
-
-  :deep(th) {
-    background: #f9fafb;
-    font-weight: 600;
-  }
-
-  :deep(hr) {
-    margin: 0.9em 0;
-    border: 0;
-    border-top: 1px solid #e5e7eb;
-  }
-
-  :deep(a) {
-    color: #2563eb;
-    text-decoration: underline;
-  }
-
-  :deep(strong) {
-    font-weight: 600;
-  }
 }
 
 .chat-panel__questionnaire {
@@ -3636,47 +3546,6 @@ defineExpose({
 
   .chat-panel__message-text {
     color: #e5e7eb;
-  }
-
-  .chat-panel__message-markdown {
-    color: #e5e7eb;
-
-    :deep(h1),
-    :deep(h2),
-    :deep(h3),
-    :deep(h4) {
-      color: #f3f4f6;
-    }
-
-    :deep(blockquote) {
-      border-left-color: #4b5563;
-      color: #9ca3af;
-    }
-
-    :deep(code) {
-      background: #3d3d45;
-    }
-
-    :deep(pre) {
-      background: #3d3d45;
-    }
-
-    :deep(th),
-    :deep(td) {
-      border-color: #3d3d45;
-    }
-
-    :deep(th) {
-      background: #252528;
-    }
-
-    :deep(hr) {
-      border-top-color: #3d3d45;
-    }
-
-    :deep(a) {
-      color: #60a5fa;
-    }
   }
 
   .chat-panel__questionnaire-step {

@@ -19,6 +19,8 @@ export interface QuestionnaireOption {
 
 export interface QuestionnaireStep {
   name?: string
+  /** 中文标签，用于拼接答案摘要，如「平台」「受众」 */
+  label?: string
   question: string
   allowCustom: boolean
   options: QuestionnaireOption[]
@@ -39,6 +41,8 @@ export interface Questionnaire {
   stepQuestion?: string
   /** 当前步骤 name，用于答案回传 */
   stepName?: string
+  /** 当前步骤中文标签 */
+  stepLabel?: string
 }
 
 export interface ChatMessage {
