@@ -2845,7 +2845,7 @@ export function isAiGeneratedCanvasNode(data?: Partial<CanvasNodeData> | null): 
   }
   if (String(data.generationTaskId ?? '').trim()) return true
   if (data.textGenState === 'loading' || data.textGenState === 'done') return true
-  if (data.kind === 'video' && data.uploadState === 'uploading' && data.generationTaskType === 'VIDEO') {
+  if (data.kind === 'video' && data.uploadState === 'uploading') {
     return true
   }
   return false

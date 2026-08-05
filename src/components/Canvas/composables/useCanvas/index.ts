@@ -108,6 +108,27 @@ type GridSplitCanvasApi = Pick<
     | 'closeProjectBrowser'
   > & {
     createNodeFromChatTask: (payload: ChatTaskCreatedPayload) => Node | null
+    overlayGroupSelection: import('vue').ComputedRef<
+      ReturnType<typeof import('../../nodeGroup').getGroupSelectionForNodeIds> | null
+    >
+    groupOverlayItems: import('vue').Ref<
+      Array<{
+        groupId: string
+        nodeIds: string[]
+        nodeCount: number
+        left: number
+        top: number
+        width: number
+        height: number
+      }>
+    >
+    onGroupOverlayDragStart: (payload: { event: MouseEvent; groupId: string }) => void
+    onGroupOverlayResizeStart: (payload: {
+      event: MouseEvent
+      handle: import('../../nodeGroup').GroupResizeHandle
+      groupId: string
+    }) => void
+    onGroupOverlaySelectGroup: (groupId: string) => void
   }
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {
@@ -151,5 +172,13 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     ...bind,
     TEXT_EDITOR_PLACEHOLDER,
     getNodeCount: () => bind.nodeCount.value,
-  } as unknown as ReturnType<typeof import('./_legacy').useCanvas> & GridSplitCanvasApi
+  } as unknown as Omit<
+    ReturnType<typeof import('./_legacy').useCanvas>,
+    | 'onGroupOverlayDragStart'
+    | 'overlayGroupSelection'
+    | 'groupOverlayItems'
+    | 'onGroupOverlayResizeStart'
+    | 'onGroupOverlaySelectGroup'
+  > &
+    GridSplitCanvasApi
 }

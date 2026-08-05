@@ -1731,9 +1731,7 @@ export function registerCore(bind: CanvasBindings) {
           videoCount: Number(settings?.videoCount ?? 1),
           mode: settings?.mode ?? 'text-to-video',
         },
-        refreshedSource.videoSourceRefs?.length
-          ? refreshedSource.videoSourceRefs
-          : liveSourceRefs,
+        liveSourceRefs,
         {
           capabilityCode: config.capabilityCode,
           parameters: singleTaskParameters,

@@ -528,7 +528,6 @@ const canvasRuntime = useCanvas(emit, {
 
 const {
   TEXT_EDITOR_PLACEHOLDER,
-  activeGroupSelection,
   overlayGroupSelection,
   activeProjectId,
   addMenuDropPoint,
