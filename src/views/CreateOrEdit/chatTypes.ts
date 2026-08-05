@@ -5,6 +5,8 @@ export interface ChatAttachment {
   fileName: string
   /** 媒体资源对应的素材库资源 ID（画布加入对话框时透传） */
   assetId?: string
+  /** 画布节点 ID（添加到智能体时透传，发送消息时一并提交） */
+  nodeId?: string
   /** 是否正在上传到 OSS */
   uploading?: boolean
   /** 上传失败时的错误信息 */

@@ -173,7 +173,12 @@ function focusChatPanel() {
   chatPanelRef.value?.focusInput()
 }
 
-function onAddToChat(payload: { previewUrl: string; fileName: string; assetId?: string }) {
+function onAddToChat(payload: {
+  previewUrl: string
+  fileName: string
+  assetId?: string
+  nodeId?: string
+}) {
   chatPanelCollapsed.value = false
   chatPanelRef.value?.addAttachmentFromCanvas(payload)
 }

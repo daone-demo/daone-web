@@ -84,6 +84,7 @@ declare module 'vue' {
     MarkLabelOptionMenu: typeof import('./components/Canvas/MarkLabelOptionMenu.vue')['default']
     MarkTagsEcho: typeof import('./components/Canvas/MarkTagsEcho.vue')['default']
     Model3DNode: typeof import('./components/Canvas/nodes/Model3DNode.vue')['default']
+    PaymentSuccess: typeof import('./components/PaymentSuccess/index.vue')['default']
     Points: typeof import('./components/Points/index.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

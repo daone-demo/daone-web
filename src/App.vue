@@ -86,12 +86,14 @@
       v-model:open="modalStore.comboVisible"
     />
     <Points v-model:open="modalStore.pointsVisible" />
+    <PaymentSuccess />
   </div>
 </template>
 
 <script setup lang="ts">
 import Combo from '@components/Combo/index.vue';
 import Points from '@components/Points/index.vue';
+import PaymentSuccess from '@components/PaymentSuccess/index.vue';
 import { useModalStore } from '@stores/useModal';
 import Login from '@components/Login/index.vue';
 import { useUserInfo } from '@stores/useUserInfo';

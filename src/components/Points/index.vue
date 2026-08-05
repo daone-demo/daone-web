@@ -440,7 +440,14 @@ function queryOrder() {
     const status = res?.status
     if (status === 'PAID') {
       stopOrderPolling()
-      message.success('支付成功')
+      const pkg = selectedPackage.value
+      modalStore.openPaymentSuccess({
+        kind: 'points',
+        productName: pkg ? `${pkg.grantPoints} 积分` : confirmPreview.value.title,
+        points: pkg?.grantPoints ?? confirmPreview.value.grantPoints,
+        pointsStatus: '已发放',
+        orderNo: orderNo.value,
+      })
       emit('recharge', selectedPackageId.value)
       loadUserProfile()
       closeConfirm()

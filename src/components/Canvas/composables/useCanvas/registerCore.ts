@@ -3804,6 +3804,7 @@ export function registerCore(bind: CanvasBindings) {
       previewUrl: data.previewUrl,
       fileName: data.fileName || data.title || 'image.jpg',
       assetId: resolveImageAssetId(data),
+      nodeId: id,
     })
   }
 
@@ -3822,6 +3823,7 @@ export function registerCore(bind: CanvasBindings) {
       previewUrl: data.previewUrl,
       fileName: data.fileName || data.title || 'video.jpg',
       assetId: data.assetId || data.sourceAssetId || '',
+      nodeId: id,
     })
   }
 

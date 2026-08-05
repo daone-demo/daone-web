@@ -2,7 +2,28 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 /** 全局可管理的弹窗类型，新增弹窗时在此扩展 */
-export type ModalKey = 'login' | 'combo' | 'updateProjectName' | 'points' | 'pointsLog'
+export type ModalKey =
+  | 'login'
+  | 'combo'
+  | 'updateProjectName'
+  | 'points'
+  | 'pointsLog'
+  | 'paymentSuccess'
+
+export type PaymentSuccessPayload = {
+  /** 套餐/商品名称，如「标准版VIP 连续包月」 */
+  productName?: string
+  /** 发放积分数量 */
+  points?: number | string
+  /** 积分状态文案，默认「已发放」 */
+  pointsStatus?: string
+  /** 会员有效期结束日期，如 2026-09-05 */
+  expireDate?: string
+  /** 订单编号 */
+  orderNo?: string
+  /** 订阅成功 / 积分充值成功 */
+  kind?: 'plan' | 'points'
+}
 
 type ModalPayloadMap = {
   login: undefined
@@ -10,6 +31,7 @@ type ModalPayloadMap = {
   points: undefined
   pointsLog: undefined
   updateProjectName: undefined
+  paymentSuccess: PaymentSuccessPayload
 }
 
 export const useModalStore = defineStore('modal', () => {
@@ -19,6 +41,7 @@ export const useModalStore = defineStore('modal', () => {
     points: false,
     pointsLog: false,
     updateProjectName: false,
+    paymentSuccess: false,
   })
 
   const payload = ref<Partial<ModalPayloadMap>>({})
@@ -84,6 +107,17 @@ export const useModalStore = defineStore('modal', () => {
     },
   })
 
+  const paymentSuccessVisible = computed({
+    get: () => visible.value.paymentSuccess,
+    set: (value: boolean) => {
+      if (value) {
+        openModal('paymentSuccess')
+      } else {
+        closeModal('paymentSuccess')
+      }
+    },
+  })
+
   function isModalOpen(key: ModalKey) {
     return visible.value[key]
   }
@@ -122,6 +156,11 @@ export const useModalStore = defineStore('modal', () => {
     }
   }
 
+  /** 打开支付成功弹框 */
+  function openPaymentSuccess(data: PaymentSuccessPayload) {
+    openModal('paymentSuccess', data)
+  }
+
   return {
     visible,
     payload,
@@ -132,10 +171,12 @@ export const useModalStore = defineStore('modal', () => {
     pointsVisible,
     pointsLogVisible,
     updateProjectNameVisible,
+    paymentSuccessVisible,
     isModalOpen,
     openModal,
     closeModal,
     getPayload,
     toggleModal,
+    openPaymentSuccess,
   }
 })

@@ -1136,7 +1136,7 @@ function toggleHistoryMenu() {
   }
 }
 
-function createAttachment(file: File, assetId?: string): ChatAttachment {
+function createAttachment(file: File, assetId?: string, nodeId?: string): ChatAttachment {
   const isImage = file.type.startsWith('image/')
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1144,6 +1144,7 @@ function createAttachment(file: File, assetId?: string): ChatAttachment {
     previewUrl: isImage ? URL.createObjectURL(file) : '',
     fileName: file.name,
     assetId,
+    nodeId,
     uploading: isImage && !assetId ? true : undefined,
   }
 }
@@ -1209,11 +1210,11 @@ function buildMessageText() {
   return [mentionText, skillPrefix, body].filter(Boolean).join(' ')
 }
 
-function addAttachments(files: File[], assetId?: string) {
+function addAttachments(files: File[], assetId?: string, nodeId?: string) {
   ensureActiveSession()
   files.forEach((file) => {
     if (!file.type.startsWith('image/') && !file.name.endsWith('.md')) return
-    const attachment = createAttachment(file, assetId)
+    const attachment = createAttachment(file, assetId, nodeId)
     attachments.value.push(attachment)
     if (file.type.startsWith('image/') && !assetId) {
       void uploadAttachmentToOss(attachment.id)
@@ -1221,25 +1222,43 @@ function addAttachments(files: File[], assetId?: string) {
   })
 }
 
-async function addAttachmentFromCanvas(payload: { previewUrl: string; fileName: string; assetId?: string }) {
+async function addAttachmentFromCanvas(payload: {
+  previewUrl: string
+  fileName: string
+  assetId?: string
+  nodeId?: string
+}) {
   ensureActiveSession()
   if (!payload.previewUrl) return
 
-  // 已存在相同资源时，仅聚焦输入框，避免重复添加
-  if (attachments.value.some((item) => item.previewUrl === payload.previewUrl)) {
+  // 已存在相同资源时，仅聚焦输入框，避免重复添加；若缺少 nodeId 则补上
+  const existing = attachments.value.find(
+    (item) =>
+      item.previewUrl === payload.previewUrl ||
+      (payload.nodeId && item.nodeId === payload.nodeId) ||
+      (payload.assetId && item.assetId === payload.assetId),
+  )
+  if (existing) {
+    if (payload.nodeId && !existing.nodeId) {
+      patchAttachment(existing.id, { nodeId: payload.nodeId })
+    }
+    if (payload.assetId && !existing.assetId) {
+      patchAttachment(existing.id, { assetId: payload.assetId })
+    }
     focusInput()
     return
   }
 
   const fileName = payload.fileName || 'canvas-image.jpg'
   const assetId = payload.assetId || undefined
+  const nodeId = payload.nodeId?.trim() || undefined
 
   try {
     const response = await fetch(payload.previewUrl, { mode: 'cors' })
     if (!response.ok) throw new Error(`fetch failed: ${response.status}`)
     const blob = await response.blob()
     const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' })
-    addAttachments([file], assetId)
+    addAttachments([file], assetId, nodeId)
   } catch (error) {
     // 跨域/网络失败时不静默丢弃，降级为远程链接附件，保证资源仍出现在对话框中
     console.warn('[ChatSidePanel] 拉取画布图片失败，降级为远程附件', error)
@@ -1249,6 +1268,7 @@ async function addAttachmentFromCanvas(payload: { previewUrl: string; fileName: 
       previewUrl: payload.previewUrl,
       fileName,
       assetId,
+      nodeId,
     })
   }
 
@@ -1778,7 +1798,12 @@ function streamAssistantText(
   return done
 }
 
-function startChatStream(session: ChatSession, text: string, assetIds: string[] = []) {
+function startChatStream(
+  session: ChatSession,
+  text: string,
+  assetIds: string[] = [],
+  options: { nodeId?: string; skillName?: string } = {},
+) {
   const chatId = session.chatId || props.currentSessionId
   if (!chatId) return
 
@@ -1816,6 +1841,8 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
   }
 
   const token = getToken()
+  const skillName = options.skillName?.trim()
+  const nodeId = options.nodeId?.trim()
   void connect({
     url: `${API_BASE}/chat-sessions/${chatId}/messages/stream`,
     method: 'POST',
@@ -1825,6 +1852,8 @@ function startChatStream(session: ChatSession, text: string, assetIds: string[] 
       content: text,
       stream: true,
       ...(assetIds.length ? { attachmentAssetIds: assetIds } : {}),
+      ...(skillName ? { skillName } : {}),
+      ...(nodeId ? { nodeId } : {}),
     },
     onMessage(data) {
       const payload = parseStreamEvent(data)
@@ -2055,8 +2084,14 @@ function sendMessage() {
       ].filter((id): id is string => Boolean(id)),
     ),
   )
+  const nodeId =
+    payloadAttachments.map((item) => item.nodeId?.trim()).find((id): id is string => Boolean(id)) ||
+    undefined
+  const skillName = String(
+    selectedSkill.value?.name ?? selectedSkill.value?.skillName ?? '',
+  ).trim() || undefined
 
-  void onSendMessage(session, payloadAttachments, text, assetIds)
+  void onSendMessage(session, payloadAttachments, text, assetIds, { nodeId, skillName })
 }
 
 async function onSendMessage(
@@ -2064,6 +2099,7 @@ async function onSendMessage(
   payloadAttachments: ChatAttachment[],
   text: string,
   assetIds: string[] = [],
+  options: { nodeId?: string; skillName?: string } = {},
 ) {
   const title = session.title === '新建对话'
     ? (text || payloadAttachments[0]?.fileName || '新建对话')
@@ -2101,7 +2137,7 @@ async function onSendMessage(
     scrollMessagesToBottom()
     if (text) {
       emit('send', { text, attachments: payloadAttachments })
-      startChatStream(session, text, assetIds)
+      startChatStream(session, text, assetIds, options)
     }
   } catch {
     // ensureChatSession 失败时由请求层提示

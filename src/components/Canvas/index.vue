@@ -481,7 +481,12 @@ import type { ImageCapability, WorkflowCategoryGroup, CanvasAssetDragPayload } f
 
 const emit = defineEmits<{
   'focus-chat': []
-  'add-to-chat': [payload: { previewUrl: string; fileName: string; assetId?: string }],
+  'add-to-chat': [payload: {
+    previewUrl: string
+    fileName: string
+    assetId?: string
+    nodeId?: string
+  }],
   'add-asset-to-chat': [payload: { id: string; role: string; name: string }],
   'new-project': []
   'rename-project': [projectId: string, name: string],

@@ -617,6 +617,9 @@ const orderTotal = ref(0);
 const orderPage = ref(1);
 const orderNo = ref('');
 const payUrl = ref('');
+const payingProductName = ref('');
+const payingBillKind = ref<'plan' | 'points'>('plan');
+const payingPoints = ref<number | undefined>(undefined);
 const showPayModal = ref(false);
 const payType = ref('');
 const selectedPayMethod = ref<PayMethod>('WECHAT')
@@ -668,6 +671,12 @@ function openInvoiceModal(orderNo: string) {
 
 async function openPayModal(key: string, payTypes: PayMethod) {
   orderNo.value = key;
+  const bill = orderList.value.find((item) => item.orderNo === key)
+  payingProductName.value = bill?.productName || bill?.type || ''
+  const productName = String(payingProductName.value)
+  payingBillKind.value = /积分/.test(productName) ? 'points' : 'plan'
+  const pointsMatch = productName.match(/(\d+)\s*积分/)
+  payingPoints.value = pointsMatch ? Number(pointsMatch[1]) : undefined
   showPayModal.value = true;
   selectedPayMethod.value = payTypes;
   try {
@@ -707,7 +716,23 @@ const queryOrder = () => {
     const status = res?.status
     if (status === 'PAID') {
       stopOrderPolling()
-      message.success('支付成功')
+      const periodEnd =
+        res?.currentPeriodEnd ||
+        res?.expireAt ||
+        res?.subscription?.currentPeriodEnd ||
+        profileState.value?.subscription?.currentPeriodEnd ||
+        ''
+      const expireDate = periodEnd
+        ? String(periodEnd).slice(0, 10)
+        : ''
+      modalStore.openPaymentSuccess({
+        kind: payingBillKind.value,
+        productName: payingProductName.value || res?.productName || '',
+        points: payingPoints.value ?? res?.grantPoints,
+        pointsStatus: '已发放',
+        expireDate: payingBillKind.value === 'plan' ? expireDate : undefined,
+        orderNo: orderNo.value,
+      })
       onLoadOrderList();
       close()
     } else if (status === 'REFUNDED') {
@@ -723,6 +748,8 @@ const close = () => {
   orderNo.value = ''
   payUrl.value = ''
   payType.value = '';
+  payingProductName.value = ''
+  payingPoints.value = undefined
   stopOrderPolling()
 }
 
