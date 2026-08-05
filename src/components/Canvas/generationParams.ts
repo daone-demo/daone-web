@@ -62,12 +62,14 @@ export function buildTextGenerationParams(input: {
   prompt: string
   parameters: Record<string, unknown>
   capabilityCode: string
+  referenceAssetIds?: string[]
 }): CanvasGenerationParams {
   return {
     taskType: 'TEXT',
     capabilityCode: input.capabilityCode,
     prompt: input.prompt.trim(),
     parameters: { ...input.parameters },
+    ...(input.referenceAssetIds?.length ? { referenceAssetIds: [...input.referenceAssetIds] } : {}),
   }
 }
 
@@ -174,7 +176,9 @@ export function persistNodeGenerationSnapshot(node: Node, snapshot: NodeGenerati
       data.sourceFileName = latest.fileName
       data.sourceAssetId = latest.assetId
     }
-    data.inputUpdated = data.imageSourceRefs.some((item) => Boolean(item.previewUrl?.trim()))
+    data.inputUpdated = data.imageSourceRefs.some(
+      (item) => Boolean(item.previewUrl?.trim() || item.assetId?.trim()),
+    )
   }
   if (videoSourceRefs?.length) {
     data.videoSourceRefs = videoSourceRefs.map((item) => ({ ...item }))
@@ -187,4 +191,20 @@ export function persistNodeGenerationSnapshot(node: Node, snapshot: NodeGenerati
   }
 
   node.setData(data, { overwrite: true })
+}
+
+/** 将源节点的生成参数快照复制到另一个节点（批量结果 / 额外占位节点） */
+export function cloneNodeGenerationSnapshot(fromNode: Node, toNode: Node) {
+  const fromData = fromNode.getData() as CanvasNodeData
+  if (!fromData.generationParams) return
+
+  persistNodeGenerationSnapshot(toNode, {
+    ...fromData.generationParams,
+    imageDialogueText: fromData.imageDialogueText,
+    imageDialogueSettings: fromData.imageDialogueSettings,
+    imageSourceRefs: fromData.imageSourceRefs,
+    elementMarks: fromData.elementMarks,
+    genPrompt: fromData.genPrompt,
+    genSeed: fromData.genSeed,
+  })
 }

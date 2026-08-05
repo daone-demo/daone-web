@@ -104,6 +104,7 @@ import {
   buildModelGenerationParams,
   buildTextGenerationParams,
   buildVideoGenerationParams,
+  cloneNodeGenerationSnapshot,
   imageDialogueSettingsFromPayload,
   persistNodeGenerationSnapshot,
 } from '../../generationParams'
@@ -1971,6 +1972,34 @@ export function registerCore(bind: CanvasBindings) {
     const reverseDetail = promptText.value.trim() || sourceData.fileName || sourceData.title || '图片反推'
     recordCanvasDescription(reverseDetail, '反推提示词')
     const resultNode = spawnTextPromptResultNode(g, sourceNode, { title })
+    const reverseInstruction = promptText.value.trim()
+    persistNodeGenerationSnapshot(resultNode, {
+      ...buildTextGenerationParams({
+        prompt: reverseInstruction,
+        capabilityCode: 'IMAGE_PROMPT_REVERSE',
+        parameters: {
+          assetId: event.assetId,
+          prompt: reverseInstruction,
+        },
+      }),
+      imageSourceRefs: [
+        {
+          nodeId: sourceNode.id,
+          assetId: event.assetId,
+          previewUrl: sourceData.previewUrl ?? '',
+          fileName: sourceData.fileName || sourceData.title || '',
+        },
+      ],
+      genPrompt: reverseInstruction,
+    })
+    resultNode.setData(
+      {
+        ...(resultNode.getData() as CanvasNodeData),
+        title: '反推提示词',
+        textPickerTask: 'img2prompt',
+      },
+      { overwrite: true },
+    )
 
     selectedNodeId.value = resultNode.id
     selectedKind.value = 'text'
@@ -2076,6 +2105,14 @@ export function registerCore(bind: CanvasBindings) {
         parameters: { assetId: event.assetId },
         referenceAssetIds: [event.assetId],
       }),
+      imageSourceRefs: [
+        {
+          nodeId: sourceNode.id,
+          assetId: event.assetId,
+          previewUrl: sourceData.previewUrl ?? '',
+          fileName: sourceData.fileName || sourceData.title || '',
+        },
+      ],
     })
 
     selectedNodeId.value = resultNode.id
@@ -2661,6 +2698,7 @@ export function registerCore(bind: CanvasBindings) {
             resultIndexOffset: 1,
             totalCount,
             placement: 'above',
+            snapshotSourceNode: primaryNode,
           })
 
           if (!extraNodes.length) return
@@ -3119,6 +3157,7 @@ export function registerCore(bind: CanvasBindings) {
       sourceFileName: string
       buildFileName: (sourceFileName: string) => string
       placement?: import('../../imageGen').ResultPlacement
+      snapshotSourceNode?: Node
     },
   ) {
     if (totalCount <= resultNodes.length) return
@@ -3131,22 +3170,25 @@ export function registerCore(bind: CanvasBindings) {
       totalCount,
       config.placement ?? 'right',
     )
+    const snapshotSource = config.snapshotSourceNode ?? resultNodes[0]
 
     for (let index = resultNodes.length; index < totalCount; index += 1) {
-      resultNodes.push(
-        spawnGenerationResultNode(g, sourceNode, {
-          title: config.title,
-          fileName: resolveGenerationResultFileName(
-            config.buildFileName,
-            config.sourceFileName,
-            index,
-            totalCount,
-          ),
-          centerPoint: plannedPoints[index],
-          layoutSlot: index,
-          layoutTotal: totalCount,
-        }),
-      )
+      const node = spawnGenerationResultNode(g, sourceNode, {
+        title: config.title,
+        fileName: resolveGenerationResultFileName(
+          config.buildFileName,
+          config.sourceFileName,
+          index,
+          totalCount,
+        ),
+        centerPoint: plannedPoints[index],
+        layoutSlot: index,
+        layoutTotal: totalCount,
+      })
+      if (snapshotSource) {
+        cloneNodeGenerationSnapshot(snapshotSource, node)
+      }
+      resultNodes.push(node)
     }
   }
 
@@ -3165,7 +3207,10 @@ export function registerCore(bind: CanvasBindings) {
     const totalCount = allResults.length
     if (totalCount <= 1) return []
 
-    ensureGenerationResultLoadingNodes(g, sourceNode, resultNodes, totalCount, config)
+    ensureGenerationResultLoadingNodes(g, sourceNode, resultNodes, totalCount, {
+      ...config,
+      snapshotSourceNode: resultNodes[0],
+    })
 
     const appliedNodes: Node[] = []
     const failedResults: { result: GenerationTaskResult; index: number }[] = []
@@ -3211,6 +3256,7 @@ export function registerCore(bind: CanvasBindings) {
         resultIndexOffset: item.index,
         totalCount,
         placement: config.placement,
+        snapshotSourceNode: resultNodes[0],
       })
       appliedNodes.push(...spawnedNodes)
     }
@@ -3229,6 +3275,7 @@ export function registerCore(bind: CanvasBindings) {
       resultIndexOffset: number
       totalCount: number
       placement?: import('../../imageGen').ResultPlacement
+      snapshotSourceNode?: Node
     },
   ): Promise<Node[]> {
     const nodes: Node[] = []
@@ -3262,11 +3309,49 @@ export function registerCore(bind: CanvasBindings) {
         mediaHeight: resolved.height ?? undefined,
         centerPoint: plannedPoints[pointIndex],
       })
+      if (config.snapshotSourceNode) {
+        cloneNodeGenerationSnapshot(config.snapshotSourceNode, node)
+      }
       pointIndex += 1
       nodes.push(node)
     }
 
     return nodes
+  }
+
+  function applyToolbarImageGenerationSnapshot(
+    targetNode: Node,
+    sourceNode: Node,
+    sourceData: CanvasNodeData,
+    config: {
+      capabilityCode: string
+      prompt: string
+      parameters: Record<string, unknown>
+      referenceAssetIds?: string[]
+      workflowId?: string | number | null
+    },
+  ) {
+    const provenanceRefs = getImageDialoguePreviewsForNode(sourceNode.id)
+    const provenancePrompt =
+      config.prompt.trim() ||
+      sourceData.imageDialogueText?.trim() ||
+      sourceData.genPrompt?.trim() ||
+      ''
+    const provenanceSettings = normalizeImageDialogueSettings(sourceData.imageDialogueSettings)
+    applyImageDialogueProvenance(targetNode, {
+      prompt: provenancePrompt,
+      settings: provenanceSettings,
+      sourceRefs: provenanceRefs.length
+        ? provenanceRefs
+        : seedImageDialogueRefs(sourceData, sourceNode.id),
+      generationParams: buildImageGenerationParams({
+        prompt: provenancePrompt,
+        capabilityCode: config.capabilityCode,
+        parameters: config.parameters,
+        workflowId: resolveGenerationTaskWorkflowId(config.workflowId) ?? undefined,
+        referenceAssetIds: config.referenceAssetIds?.length ? config.referenceAssetIds : undefined,
+      }),
+    })
   }
 
   async function runImageGenerationTask(
@@ -3339,31 +3424,17 @@ export function registerCore(bind: CanvasBindings) {
       )
     }
 
-    const provenanceRefs = getImageDialoguePreviewsForNode(sourceNode.id)
-    const provenancePrompt =
-      sourceData.imageDialogueText?.trim() ||
-      sourceData.genPrompt?.trim() ||
-      config.prompt?.trim() ||
-      ''
-    recordCanvasDescription(config.title, '')
-    const provenanceSettings = normalizeImageDialogueSettings(sourceData.imageDialogueSettings)
     const referenceAssetIds =
       config.resolveReferenceAssetIds?.(event) ??
       (event.assetId ? [event.assetId] : [])
-    const capabilityGenerationParams = buildImageGenerationParams({
-      prompt: provenancePrompt,
-      capabilityCode: config.capabilityCode,
-      parameters: singleTaskParameters,
-      referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
-    })
+    recordCanvasDescription(config.title, '')
     resultNodes.forEach((resultNode) => {
-      applyImageDialogueProvenance(resultNode, {
-        prompt: provenancePrompt,
-        settings: provenanceSettings,
-        sourceRefs: provenanceRefs.length
-          ? provenanceRefs
-          : seedImageDialogueRefs(sourceData, sourceNode.id),
-        generationParams: capabilityGenerationParams,
+      applyToolbarImageGenerationSnapshot(resultNode, sourceNode, sourceData, {
+        capabilityCode: config.capabilityCode,
+        prompt: config.prompt ?? '',
+        parameters: singleTaskParameters,
+        referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
+        workflowId: config.workflowId,
       })
     })
 
@@ -3427,14 +3498,20 @@ export function registerCore(bind: CanvasBindings) {
             sourceNode,
             resultNodes,
             apiResultCount,
-            distributionConfig,
+            {
+              ...distributionConfig,
+              snapshotSourceNode: primaryNode,
+            },
           )
           syncNodeCount()
           bumpToolbarRevision()
           updateNodeToolbar()
         },
         onTaskBound: () => persistGenerationTaskBinding(resultNode, {
-          detail: provenancePrompt,
+          detail:
+            config.prompt?.trim() ||
+            (resultNode.getData() as CanvasNodeData).genPrompt?.trim() ||
+            config.title,
           taskType: config.title,
         }),
         onError: (reason) => message.error(reason),
@@ -3953,7 +4030,7 @@ export function registerCore(bind: CanvasBindings) {
     },
   ) {
     const refs = options.sourceRefs
-      .filter((item) => item.previewUrl?.trim())
+      .filter((item) => item.previewUrl?.trim() || item.assetId?.trim())
       .map((item) => ({
         nodeId: item.nodeId,
         assetId: item.assetId,
@@ -5250,6 +5327,7 @@ export function registerCore(bind: CanvasBindings) {
                     buildFileName: () => sourceFileName,
                     resultIndexOffset: 1,
                     totalCount,
+                    snapshotSourceNode: resultNode,
                   },
                 )
 
@@ -9750,16 +9828,31 @@ export function registerCore(bind: CanvasBindings) {
     return outcome.success
   }
 
-  async function executeGroupAiTextImg2PromptTask(g: Graph, node: Node): Promise<boolean> {
+  async function executeGroupAiTextImg2PromptTask(
+    g: Graph,
+    node: Node,
+    refCtx?: GroupAiReferenceContext,
+  ): Promise<boolean> {
     const synced = syncTextNodeImageSource(g, node)
-    const referenceAssetIds = resolvePromptReferenceAssetIds(synced)
-    const assetId = referenceAssetIds[0] || resolveImageAssetId(synced) || ''
+    const liveIds = resolvePromptReferenceAssetIds(synced)
+    const referenceAssetIds =
+      refCtx?.referenceAssetIds?.length
+        ? refCtx.referenceAssetIds
+        : liveIds.length
+          ? liveIds
+          : []
+    const assetId =
+      referenceAssetIds[0] ||
+      (typeof refCtx?.parameters.assetId === 'string' ? refCtx.parameters.assetId : '') ||
+      resolveImageAssetId(synced) ||
+      ''
     if (!assetId) {
       message.warning('请先连接或上传参考图片')
       return false
     }
 
-    const prompt = synced.genPrompt?.trim() || IMG2PROMPT_DEFAULT_INSTRUCTION
+    const prompt =
+      refCtx?.prompt?.trim() || synced.genPrompt?.trim() || IMG2PROMPT_DEFAULT_INSTRUCTION
     const nextData = {
       ...(node.getData() as CanvasNodeData),
       mode: 'editor' as const,
@@ -9780,6 +9873,9 @@ export function registerCore(bind: CanvasBindings) {
         parameters: { assetId, prompt },
         referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : [assetId],
       }),
+      imageSourceRefs: refCtx?.sourceRefs?.length
+        ? refCtx.sourceRefs
+        : synced.imageSourceRefs,
       genPrompt: prompt,
     })
 
@@ -9945,6 +10041,7 @@ export function registerCore(bind: CanvasBindings) {
     task: GroupAiTask,
     refCtx: GroupAiReferenceContext,
     scopeIds: Set<string>,
+    finishedAssets: Map<string, string>,
   ): Promise<{ success: boolean; resultNodeId: string }> {
     selectedNodeId.value = task.nodeId
     selectedKind.value = (node.getData() as CanvasNodeData).kind
@@ -9960,7 +10057,7 @@ export function registerCore(bind: CanvasBindings) {
         }
       case 'textImg2Prompt':
         return {
-          success: await executeGroupAiTextImg2PromptTask(g, node),
+          success: await executeGroupAiTextImg2PromptTask(g, node, refCtx),
           resultNodeId: node.id,
         }
       case 'textCopy':
@@ -9983,7 +10080,7 @@ export function registerCore(bind: CanvasBindings) {
             target,
             { ...task, kind: 'imageDialogue', nodeId: target.id },
             scopeIds,
-            new Map(),
+            finishedAssets,
           ) ?? refCtx
         await syncGroupAiProvenance(target, targetCtx)
         selectedNodeId.value = target.id
@@ -10008,7 +10105,7 @@ export function registerCore(bind: CanvasBindings) {
             target,
             { ...task, kind: 'videoDialogue', nodeId: target.id },
             scopeIds,
-            new Map(),
+            finishedAssets,
           ) ?? refCtx
         selectedNodeId.value = target.id
         selectedKind.value = 'video'
@@ -10073,7 +10170,7 @@ export function registerCore(bind: CanvasBindings) {
             return { task, success: false, resultNodeId: task.nodeId, node }
           }
 
-          const outcome = await executeGroupAiTask(g, node, task, refCtx, scopeIds)
+          const outcome = await executeGroupAiTask(g, node, task, refCtx, scopeIds, finishedAssets)
           return { task, ...outcome, node }
         }),
       )

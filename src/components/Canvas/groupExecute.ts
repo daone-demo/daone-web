@@ -386,6 +386,23 @@ function resolveReferenceAssetIdFromNode(
   return resolveImageAssetId(data)
 }
 
+function resolveLiveAssetIdForRef(
+  graph: Graph,
+  ref: ImageSourceRef,
+  finishedAssets: Map<string, string>,
+): string {
+  if (ref.nodeId) {
+    const finished = finishedAssets.get(ref.nodeId)
+    if (finished) return finished
+    const cell = graph.getCellById(ref.nodeId)
+    if (cell?.isNode()) {
+      const live = resolveImageAssetId(cell.getData() as CanvasNodeData)
+      if (live) return live
+    }
+  }
+  return ref.assetId || ''
+}
+
 function buildSourceRefs(
   graph: Graph,
   node: Node,
@@ -419,14 +436,43 @@ function buildSourceRefs(
   if (!refs.length && data.imageSourceRefs?.length) {
     return data.imageSourceRefs.map((ref) => ({
       ...ref,
-      assetId:
-        (ref.nodeId ? finishedAssets.get(ref.nodeId) : undefined) ||
-        ref.assetId ||
-        '',
+      assetId: resolveLiveAssetIdForRef(graph, ref, finishedAssets),
     }))
   }
 
   return refs
+}
+
+/**
+ * 整组执行时优先用上游最新 assetId（含本轮刚完成的 finishedAssets），
+ * 避免继续使用 generationParams 里过期的 referenceAssetIds。
+ */
+function resolveLiveReferenceAssetIds(
+  graph: Graph,
+  data: CanvasNodeData,
+  sourceRefs: ImageSourceRef[],
+  scopeIds: Set<string>,
+  finishedAssets: Map<string, string>,
+  savedParams?: CanvasNodeData['generationParams'],
+): string[] {
+  const liveFromRefs = [
+    ...new Set(sourceRefs.map((ref) => ref.assetId).filter((id): id is string => Boolean(id))),
+  ]
+  if (liveFromRefs.length) return liveFromRefs
+
+  const fallback = resolveReferenceAssetIdFromNode(graph, data, scopeIds, finishedAssets)
+  if (fallback) return [fallback]
+
+  const saved = (savedParams?.referenceAssetIds ?? []).filter((id): id is string => Boolean(id))
+  return [...new Set(saved)]
+}
+
+function withPrimaryAssetId(
+  parameters: Record<string, unknown>,
+  primaryAssetId?: string,
+): Record<string, unknown> {
+  if (!primaryAssetId) return { ...parameters }
+  return { ...parameters, assetId: primaryAssetId }
 }
 
 /** 在组内查找文本节点连出的 AI 结果节点（整组执行时原地重跑，不新建） */
@@ -463,19 +509,15 @@ export function resolveGroupAiReferenceContext(
   const data = node.getData() as CanvasNodeData
   const savedParams = data.generationParams
   const sourceRefs = buildSourceRefs(graph, node, scopeIds, finishedAssets)
-  const referenceAssetIds = [
-    ...new Set(
-      [
-        ...(savedParams?.referenceAssetIds ?? []),
-        ...sourceRefs.map((ref) => ref.assetId),
-      ].filter((id): id is string => Boolean(id)),
-    ),
-  ]
-
-  if (!referenceAssetIds.length) {
-    const fallback = resolveReferenceAssetIdFromNode(graph, data, scopeIds, finishedAssets)
-    if (fallback) referenceAssetIds.push(fallback)
-  }
+  const referenceAssetIds = resolveLiveReferenceAssetIds(
+    graph,
+    data,
+    sourceRefs,
+    scopeIds,
+    finishedAssets,
+    savedParams,
+  )
+  const primaryAssetId = referenceAssetIds[0]
 
   const prompt =
     savedParams?.prompt?.trim() ||
@@ -488,35 +530,40 @@ export function resolveGroupAiReferenceContext(
   if (task.kind === 'imageCapability' || task.kind === 'imageDialogue') {
     if (task.kind === 'imageCapability') {
       if (!referenceAssetIds.length) return null
-      const primaryAssetId = referenceAssetIds[0]
       return {
         referenceAssetIds,
         sourceRefs,
         prompt,
-        parameters: {
-          ...(savedParams?.parameters ?? {}),
-          assetId: primaryAssetId,
-        },
+        parameters: withPrimaryAssetId(
+          { ...(savedParams?.parameters ?? {}) },
+          primaryAssetId,
+        ),
         taskTitle: resolveTitlePrefix(data.title) || data.title || '生成',
         capabilityCode: savedParams?.capabilityCode || task.capabilityCode,
       }
     }
 
-    // 文生图允许无参考图；图生图优先用已保存参数
+    // 文生图允许无参考图；图生图优先用已保存参数，但参考图始终取上游最新
     if (!prompt && !savedParams) return null
 
     const settings = data.imageDialogueSettings
-    const parameters: Record<string, unknown> = {
-      ...(savedParams?.parameters ?? {}),
-      model: savedParams?.parameters?.model ?? settings?.modelKey,
-      aspectRatio: savedParams?.parameters?.aspectRatio ?? settings?.aspectRatio,
-      count: Math.max(
-        1,
-        Math.floor(Number(savedParams?.parameters?.count ?? settings?.imageCount)) || 1,
-      ),
-    }
-    const resolution = savedParams?.parameters?.resolution ?? settings?.resolution
-    if (resolution) parameters.resolution = resolution
+    const parameters = withPrimaryAssetId(
+      {
+        ...(savedParams?.parameters ?? {}),
+        model: savedParams?.parameters?.model ?? settings?.modelKey,
+        aspectRatio: savedParams?.parameters?.aspectRatio ?? settings?.aspectRatio,
+        count: Math.max(
+          1,
+          Math.floor(Number(savedParams?.parameters?.count ?? settings?.imageCount)) || 1,
+        ),
+        ...(savedParams?.parameters?.resolution ?? settings?.resolution
+          ? {
+              resolution: savedParams?.parameters?.resolution ?? settings?.resolution,
+            }
+          : {}),
+      },
+      primaryAssetId,
+    )
 
     return {
       referenceAssetIds,
@@ -532,16 +579,17 @@ export function resolveGroupAiReferenceContext(
 
   if (task.kind === 'textImg2Prompt') {
     if (!referenceAssetIds.length) return null
+    const reversePrompt = data.genPrompt?.trim() || ''
     return {
       referenceAssetIds,
       sourceRefs,
-      prompt: data.genPrompt?.trim() || '',
+      prompt: reversePrompt,
       parameters: {
-        assetId: referenceAssetIds[0],
-        prompt: data.genPrompt?.trim() || '',
+        assetId: primaryAssetId,
+        prompt: reversePrompt,
       },
       taskTitle: '反推提示词',
-      capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+      capabilityCode: 'IMAGE_PROMPT_REVERSE',
     }
   }
 
@@ -562,18 +610,21 @@ export function resolveGroupAiReferenceContext(
       referenceAssetIds,
       sourceRefs,
       prompt: prompt || data.imageDialogueText?.trim() || data.genPrompt?.trim() || '',
-      parameters: {
-        ...(savedParams?.parameters ?? {}),
-        model: savedParams?.parameters?.model ?? data.imageDialogueSettings?.modelKey,
-        aspectRatio: savedParams?.parameters?.aspectRatio ?? data.imageDialogueSettings?.aspectRatio,
-        count: Math.max(
-          1,
-          Math.floor(
-            Number(savedParams?.parameters?.count ?? data.imageDialogueSettings?.imageCount),
-          ) || 1,
-        ),
-        resolution: savedParams?.parameters?.resolution ?? data.imageDialogueSettings?.resolution,
-      },
+      parameters: withPrimaryAssetId(
+        {
+          ...(savedParams?.parameters ?? {}),
+          model: savedParams?.parameters?.model ?? data.imageDialogueSettings?.modelKey,
+          aspectRatio: savedParams?.parameters?.aspectRatio ?? data.imageDialogueSettings?.aspectRatio,
+          count: Math.max(
+            1,
+            Math.floor(
+              Number(savedParams?.parameters?.count ?? data.imageDialogueSettings?.imageCount),
+            ) || 1,
+          ),
+          resolution: savedParams?.parameters?.resolution ?? data.imageDialogueSettings?.resolution,
+        },
+        primaryAssetId,
+      ),
       settings: data.imageDialogueSettings as ImageDialogueSettings | undefined,
       workflowId: savedParams?.workflowId ?? data.imageDialogueSettings?.workflowId,
       taskTitle: '文生图',
@@ -588,17 +639,19 @@ export function resolveGroupAiReferenceContext(
       referenceAssetIds,
       sourceRefs,
       prompt,
-      parameters: {
-        ...(savedParams?.parameters ?? {}),
-        mode: savedParams?.parameters?.mode ?? settings?.mode ?? 'text-to-video',
-        model: savedParams?.parameters?.model ?? settings?.modelKey,
-        ratio: savedParams?.parameters?.ratio ?? settings?.aspectRatio,
-        clarity: savedParams?.parameters?.clarity ?? settings?.resolution,
-        duration: savedParams?.parameters?.duration ?? settings?.duration,
-        generateAudio: savedParams?.parameters?.generateAudio ?? settings?.generateAudio,
-        videoCount: savedParams?.parameters?.videoCount ?? settings?.videoCount,
-        assetId: referenceAssetIds[0],
-      },
+      parameters: withPrimaryAssetId(
+        {
+          ...(savedParams?.parameters ?? {}),
+          mode: savedParams?.parameters?.mode ?? settings?.mode ?? 'text-to-video',
+          model: savedParams?.parameters?.model ?? settings?.modelKey,
+          ratio: savedParams?.parameters?.ratio ?? settings?.aspectRatio,
+          clarity: savedParams?.parameters?.clarity ?? settings?.resolution,
+          duration: savedParams?.parameters?.duration ?? settings?.duration,
+          generateAudio: savedParams?.parameters?.generateAudio ?? settings?.generateAudio,
+          videoCount: savedParams?.parameters?.videoCount ?? settings?.videoCount,
+        },
+        primaryAssetId,
+      ),
       taskTitle: task.kind === 'text2video' ? '文生视频' : '视频生成',
       capabilityCode: savedParams?.capabilityCode || VIDEO_GENERAL_CAPABILITY_CODE,
     }
