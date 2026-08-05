@@ -29,7 +29,9 @@ import {
   getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getImageNodeMediaScreenBox, getImageExpandOverlayLayout, syncImageNodeSizeToMediaAspect, startImageNodeCornerResize,
   hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions, formatDimensions,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, assignGroupId,
-  expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
+  getCompleteGroupSelection, getGroupGraphBBox, getGroupSelectionForNodeIds, getNodesInGroup,
+  listCanvasGroups, mergeStoryboardGroup, normalizeGroupMembership, resizeGroupGraphBox, syncGroupBySelectionBox, ungroupSelection,
+  type GroupResizeHandle,
   ensureImageTextEdge, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, applyRemoteVideoToNode, runUploadSimulation, uploadAssetFile, previewUrlToUploadFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, setCanvasUploadCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
@@ -230,7 +232,7 @@ export function registerCore(bind: CanvasBindings) {
     toolbarPos,
     multiSelectToolbarPos,
     groupToolbarPos,
-    groupOverlayBox,
+    groupOverlayItems,
     showSaveSkillPopover,
     saveSkillPopoverPos,
     saveSkillItems,
@@ -299,6 +301,7 @@ export function registerCore(bind: CanvasBindings) {
     modalStore,
     textEditorApis,
     groupOverlayDrag,
+    groupOverlayResize,
     groupMoveState,
   } = unpackBind(bind)
   const userInfoStore = useUserInfo();
@@ -389,6 +392,19 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     if (!g || selectedNodeIds.value.length < 2) return null
     return getCompleteGroupSelection(g, selectedNodeIds.value)
+  })
+
+  /** 与当前选中相关的分组（用于拖拽/缩放默认目标） */
+  const overlayGroupSelection = computed(() => {
+    void toolbarRevision.value
+    const g = graph.value
+    if (!g || !selectedNodeIds.value.length) return null
+    return getGroupSelectionForNodeIds(g, selectedNodeIds.value)
+  })
+
+  const showGroupOverlay = computed(() => {
+    if (imagePreviewUrl.value) return false
+    return groupOverlayItems.value.length > 0
   })
 
   const showGroupToolbar = computed(() => {
@@ -7838,21 +7854,56 @@ export function registerCore(bind: CanvasBindings) {
   function updateGroupToolbarPosition() {
     const g = graph.value
     const overlayRoot = canvasRef.value
-    const group = activeGroupSelection.value
-    if (!g || !overlayRoot || !group) {
-      groupOverlayBox.value = null
+    if (!g || !overlayRoot) {
+      groupOverlayItems.value = []
       return
     }
-    const box = getGroupScreenBox(g, group.nodeIds, overlayRoot)
-    groupOverlayBox.value = {
-      left: box.left,
-      top: box.top,
-      width: box.width,
-      height: box.height,
-    }
-    groupToolbarPos.value = {
-      left: box.centerX,
-      top: box.anchorTop - 10,
+
+    const groups = listCanvasGroups(g)
+    const resizingId = groupOverlayResize.active ? groupOverlayResize.groupId : ''
+
+    groupOverlayItems.value = groups.map((group) => {
+      if (resizingId && group.groupId === resizingId) {
+        const box = groupOverlayResize.currentBox
+        const topLeft = graphLocalToContainerOffset(g, box.x, box.y, overlayRoot)
+        const bottomRight = graphLocalToContainerOffset(
+          g,
+          box.x + box.width,
+          box.y + box.height,
+          overlayRoot,
+        )
+        return {
+          groupId: group.groupId,
+          nodeIds: group.nodeIds,
+          nodeCount: group.nodeIds.length,
+          left: topLeft.left,
+          top: topLeft.top,
+          width: Math.max(0, bottomRight.left - topLeft.left),
+          height: Math.max(0, bottomRight.top - topLeft.top),
+        }
+      }
+
+      const box = getGroupScreenBox(g, group.nodeIds, overlayRoot)
+      return {
+        groupId: group.groupId,
+        nodeIds: group.nodeIds,
+        nodeCount: group.nodeIds.length,
+        left: box.left,
+        top: box.top,
+        width: box.width,
+        height: box.height,
+      }
+    })
+
+    const active = activeGroupSelection.value
+    if (active) {
+      const item = groupOverlayItems.value.find((entry) => entry.groupId === active.groupId)
+      if (item) {
+        groupToolbarPos.value = {
+          left: item.left + item.width / 2,
+          top: item.top - 10,
+        }
+      }
     }
   }
 
@@ -8734,12 +8785,6 @@ export function registerCore(bind: CanvasBindings) {
     selectedNodeId.value = node.id
     selectedKind.value = data.kind
 
-    if (data.groupId && !multiSelect) {
-      cancelVideoToolbarDefer()
-      syncSelectionFromGraph()
-      return
-    }
-
     if (multiSelect) {
       cancelVideoToolbarDefer()
       syncSelectionFromGraph()
@@ -9278,6 +9323,7 @@ export function registerCore(bind: CanvasBindings) {
 
     selectGraphNodes(ids)
     bumpToolbarRevision()
+    updateNodeToolbar()
     scheduleHistoryPush()
   }
 
@@ -9292,6 +9338,7 @@ export function registerCore(bind: CanvasBindings) {
     const memberIds = getNodesInGroup(g, groupId).map((node) => node.id)
     selectGraphNodes(memberIds)
     bumpToolbarRevision()
+    updateNodeToolbar()
     scheduleHistoryPush()
   }
 
@@ -9302,7 +9349,6 @@ export function registerCore(bind: CanvasBindings) {
 
     const memberIds = [...group.nodeIds]
     ungroupSelection(g, memberIds)
-    groupOverlayBox.value = null
     selectGraphNodes(memberIds)
     bumpToolbarRevision()
     updateNodeToolbar()
@@ -9503,15 +9549,26 @@ export function registerCore(bind: CanvasBindings) {
     groupMoveState.lastY = pos.y
   }
 
-  function onGroupOverlayDragStart(event: MouseEvent) {
+  function resolveOverlayGroup(groupId?: string) {
+    const g = graph.value
+    if (!g) return null
+    if (groupId) {
+      const members = getNodesInGroup(g, groupId)
+      if (members.length < 2) return null
+      return { groupId, nodeIds: members.map((node) => node.id) }
+    }
+    return overlayGroupSelection.value
+  }
+
+  function onGroupOverlayDragStart(payload: { event: MouseEvent; groupId: string }) {
     const g = graph.value
     const root = canvasRef.value
-    const group = activeGroupSelection.value
+    const group = resolveOverlayGroup(payload.groupId)
     if (!g || !root || !group) return
 
     groupOverlayDrag.active = true
     groupOverlayDrag.nodeIds = [...group.nodeIds]
-    const local = clientPointToGraphLocal(g, event.clientX, event.clientY)
+    const local = clientPointToGraphLocal(g, payload.event.clientX, payload.event.clientY)
     groupOverlayDrag.lastGraphX = local.x
     groupOverlayDrag.lastGraphY = local.y
 
@@ -9537,6 +9594,79 @@ export function registerCore(bind: CanvasBindings) {
       groupOverlayDrag.active = false
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
+      scheduleHistoryPush()
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  function onGroupOverlaySelectGroup(groupId: string) {
+    const group = resolveOverlayGroup(groupId)
+    if (!group) return
+    selectGraphNodes(group.nodeIds)
+    bumpToolbarRevision()
+    nextTick(() => updateGroupToolbarPosition())
+  }
+
+  function onGroupOverlayResizeStart(payload: {
+    event: MouseEvent
+    handle: GroupResizeHandle
+    groupId: string
+  }) {
+    const g = graph.value
+    const group = resolveOverlayGroup(payload.groupId)
+    if (!g || !group) return
+
+    const startBox = getGroupGraphBBox(g, group.nodeIds)
+    const startPointer = clientPointToGraphLocal(g, payload.event.clientX, payload.event.clientY)
+
+    groupOverlayResize.active = true
+    groupOverlayResize.handle = payload.handle
+    groupOverlayResize.groupId = group.groupId
+    groupOverlayResize.startBox = { ...startBox }
+    groupOverlayResize.currentBox = { ...startBox }
+    groupOverlayResize.startPointerX = startPointer.x
+    groupOverlayResize.startPointerY = startPointer.y
+    updateGroupToolbarPosition()
+
+    const onMove = (moveEvent: MouseEvent) => {
+      if (!groupOverlayResize.active) return
+      const current = clientPointToGraphLocal(g, moveEvent.clientX, moveEvent.clientY)
+      const dx = current.x - groupOverlayResize.startPointerX
+      const dy = current.y - groupOverlayResize.startPointerY
+      groupOverlayResize.currentBox = resizeGroupGraphBox(
+        groupOverlayResize.startBox,
+        groupOverlayResize.handle as GroupResizeHandle,
+        dx,
+        dy,
+      )
+      updateGroupToolbarPosition()
+    }
+
+    const onUp = () => {
+      if (!groupOverlayResize.active) return
+      const box = { ...groupOverlayResize.currentBox }
+      const groupId = groupOverlayResize.groupId
+      groupOverlayResize.active = false
+      groupOverlayResize.handle = ''
+      groupOverlayResize.groupId = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+
+      const memberIds = syncGroupBySelectionBox(g, groupId, box)
+      if (memberIds.length >= 2) {
+        selectGraphNodes(memberIds)
+      } else if (memberIds.length === 1) {
+        selectGraphNodes(memberIds)
+      } else {
+        syncSelectionFromGraph()
+      }
+      bumpToolbarRevision()
+      nextTick(() => {
+        updateGroupToolbarPosition()
+        updateNodeToolbar()
+      })
       scheduleHistoryPush()
     }
 
@@ -9860,21 +9990,11 @@ export function registerCore(bind: CanvasBindings) {
         return
       }
 
-      const ids = getGraphSelectedNodeIds()
-      const expanded = expandSelectionToGroup(g, ids)
-      if (
-        expanded.length > 1 &&
-        (expanded.length !== ids.length || expanded.some((id, index) => id !== ids[index]))
-      ) {
-        selectGraphNodes(expanded)
-        return
-      }
-
+      // 始终刷新组框，确保打组框不依赖选中状态
       syncSelectionFromGraph()
       nextTick(() => {
-        if (showGroupToolbar.value) {
-          updateGroupToolbarPosition()
-        } else if (showMultiSelectToolbar.value) {
+        updateGroupToolbarPosition()
+        if (showMultiSelectToolbar.value) {
           updateMultiSelectToolbarPosition()
         }
         const gAfter = graph.value
@@ -10364,6 +10484,8 @@ export function registerCore(bind: CanvasBindings) {
 
   return {
     activeGroupSelection,
+    overlayGroupSelection,
+    showGroupOverlay,
     addElementGroupFromRecord,
     addFromMenu,
     appendImageDialogueDigitalHumanRef,
@@ -10530,6 +10652,8 @@ export function registerCore(bind: CanvasBindings) {
     onFileSelected,
     onGoHome,
     onGroupOverlayDragStart,
+    onGroupOverlayResizeStart,
+    onGroupOverlaySelectGroup,
     onImageCropComplete,
     onImageResizePointerDown,
     onImageDialogueAddCanvasNode,

@@ -57,14 +57,15 @@
       </button>
       <input
         v-if="!isGridSplitNode"
+        ref="uploadInputRef"
         type="file"
         class="image-node__file-input"
         accept="image/*"
         @change="onUploadInputChange"
       />
 
-      <!-- <button
-        v-if="!isGridSplitNode"
+      <button
+        v-if="showReplaceUploadBtn"
         type="button"
         class="image-node__upload-btn"
         :class="{ 'image-node__upload-btn--disabled': data.uploadState === 'uploading' }"
@@ -75,24 +76,23 @@
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          xmlns:xlink="http://www.w3.org/1999/xlink"
           aria-hidden="true"
           role="img"
-          class="iconify iconify--libtv pointer-events-none "
+          class="iconify iconify--libtv pointer-events-none"
           width="14"
           height="14"
           viewBox="0 0 19.8008 19.8006"
         >
           <path d="M1.80078 16.9003C1.80087 17.1919 1.91684 17.4714 2.12305 17.6776C2.32932 17.8838 2.60874 17.9999 2.90039 17.9999H16.9004C17.192 17.9999 17.4715 17.8838 17.6777 17.6776C17.8839 17.4714 17.9999 17.1919 18 16.9003V11.9999H19.8008V16.9003C19.8007 17.6693 19.4949 18.4073 18.9512 18.951C18.4073 19.4948 17.6694 19.8006 16.9004 19.8006H2.90039C2.13135 19.8006 1.39345 19.4948 0.849609 18.951C0.305837 18.4073 9.33702e-05 17.6693 0 16.9003V11.9999H1.80078V16.9003ZM9.33203 0.202009C9.68553 -0.086443 10.2076 -0.0660213 10.5371 0.263533L16.1729 5.90025L14.9004 7.17271L10.8008 3.07408V13.8006H9V3.07408L4.90039 7.17271L3.62793 5.90025L9.26367 0.263533L9.33203 0.202009Z" fill="currentColor"></path>
         </svg>
-      </button> -->
+      </button>
 
       <div
         class="image-node__preview"
         :class="{
           'image-node__preview--uploading': data.uploadState === 'uploading',
           'image-node__preview--dragover': isDragOver,
-          'image-node__preview--readonly': isGridSplitNode,
+          'image-node__preview--readonly': isGridSplitNode || isAiGenerated,
         }"
         @click="onPreviewClick"
         @dblclick.stop="onPreviewDblClick"
@@ -238,7 +238,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Graph, Node } from '@antv/x6'
-import { CANVAS_IMAGE_NODE_DRAG_TYPE, canOpenImageDialogueOnNode, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
+import { CANVAS_IMAGE_NODE_DRAG_TYPE, canOpenImageDialogueOnNode, canReplaceImageNodePreview, isAiGeneratedImageNode, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
 import type { CanvasNodeData, ImageMarkItem } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import { useNodeDelete } from './useNodeDelete'
@@ -270,8 +270,11 @@ const sizeRevision = ref(0)
 const data = reactive<CanvasNodeData>({ ...createEmptyNodeData(), kind: 'image', title: '图片节点', mode: 'editor' })
 const { displayUrl, isImageLoading, onImageLoad, onImageError } = useCanvasNodeImage(toRef(data, 'previewUrl'))
 const isGridSplitNode = computed(() => Boolean(data.gridSplitTile))
+const isAiGenerated = computed(() => isAiGeneratedImageNode(data))
+const showReplaceUploadBtn = computed(() => canReplaceImageNodePreview(data))
 const hasAdaptivePreview = computed(() => shouldAdaptImageNodeHeight(data))
 const isFileUploading = computed(() => isNodeFileUploading(data))
+const uploadInputRef = ref<HTMLInputElement | null>(null)
 
 const genProgressText = computed(() => {
   const progress = data.imageGenProgress ?? 0
@@ -358,7 +361,7 @@ function hasDraggedFiles(event: DragEvent) {
 }
 
 function onDragOver(event: DragEvent) {
-  if (isGridSplitNode.value) return
+  if (isGridSplitNode.value || isAiGenerated.value) return
   if (!hasDraggedFiles(event)) return
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   isDragOver.value = true
@@ -385,7 +388,7 @@ function uploadImageFile(file: File) {
 }
 
 function onDrop(event: DragEvent) {
-  if (isGridSplitNode.value) return
+  if (isGridSplitNode.value || isAiGenerated.value) return
   isDragOver.value = false
   const file = event.dataTransfer?.files?.[0]
   if (!file || !file.type.startsWith('image/')) return
@@ -447,6 +450,15 @@ function onMarkRemoveClick(mark: ImageMarkItem, event: MouseEvent) {
   event.stopPropagation()
   const g = getGraph() as CanvasGraph
   g.__removeImageElementMark?.(mark.id)
+}
+
+function onUploadClick() {
+  if (data.uploadState === 'uploading' || !showReplaceUploadBtn.value) return
+  cancelPendingUpload()
+  const input = uploadInputRef.value
+  if (!input) return
+  input.value = ''
+  input.click()
 }
 
 function onUploadInputChange(event: Event) {
@@ -662,6 +674,21 @@ onMounted(() => {
     opacity: 0.45;
     cursor: not-allowed;
     pointer-events: none;
+  }
+}
+
+.image-node--light {
+  .image-node__upload-btn {
+    border-color: #d1d5db;
+    background: rgba(255, 255, 255, 0.92);
+    color: #374151;
+
+    &:hover,
+    &--active {
+      background: #fff;
+      border-color: #6b7cff;
+      color: #111827;
+    }
   }
 }
 

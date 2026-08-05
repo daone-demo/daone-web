@@ -356,9 +356,14 @@ export async function runUploadSimulation(graphNode: Node, file: File) {
   data.uploadProgress = 0
   data.fileName = file.name
   data.mode = 'editor'
-  if (data.kind === 'video') {
+  if (data.kind === 'image' || data.kind === 'video') {
     delete data.generationTaskType
     delete data.generationTaskId
+  }
+  if (data.kind === 'image') {
+    data.imageGenState = 'idle'
+    data.imageGenProgress = 0
+    delete data.imageGenTask
   }
 
   if (file.type.startsWith('image/')) {
@@ -420,6 +425,15 @@ async function finishUpload(
   data.uploadProgress = 100
   data.previewUrl = previewUrl
   data.mode = 'editor'
+  if (data.kind === 'image' || data.kind === 'video') {
+    delete data.generationTaskType
+    delete data.generationTaskId
+  }
+  if (data.kind === 'image') {
+    data.imageGenState = 'idle'
+    data.imageGenProgress = 0
+    delete data.imageGenTask
+  }
   notifyCanvasUploadComplete({
     fileName: file.name || data.fileName || data.title || '文件',
     kind: data.kind,

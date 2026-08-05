@@ -32,6 +32,15 @@ export type CanvasBindings = CanvasState & {
     lastGraphY: number
     nodeIds: string[]
   }
+  groupOverlayResize: {
+    active: boolean
+    handle: import('../../nodeGroup').GroupResizeHandle | ''
+    groupId: string
+    startBox: { x: number; y: number; width: number; height: number }
+    currentBox: { x: number; y: number; width: number; height: number }
+    startPointerX: number
+    startPointerY: number
+  }
   groupMoveState: {
     anchorId: string
     lastX: number
@@ -42,6 +51,8 @@ export type CanvasBindings = CanvasState & {
   currentProjectName: ComputedRef<string>
   canvasBgThemeLabel: ComputedRef<string>
   activeGroupSelection: ComputedRef<ReturnType<typeof import('../../nodeGroup').getCompleteGroupSelection> | null>
+  overlayGroupSelection: ComputedRef<ReturnType<typeof import('../../nodeGroup').getGroupSelectionForNodeIds> | null>
+  showGroupOverlay: ComputedRef<boolean>
   showGroupToolbar: ComputedRef<boolean>
   showPromptBar: ComputedRef<boolean>
   showImageGenPromptBar: ComputedRef<boolean>

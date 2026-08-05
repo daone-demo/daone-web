@@ -123,6 +123,15 @@ function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBinding
       lastGraphY: 0,
       nodeIds: [] as string[],
     },
+    groupOverlayResize: {
+      active: false,
+      handle: '' as import('../../nodeGroup').GroupResizeHandle | '',
+      groupId: '',
+      startBox: { x: 0, y: 0, width: 0, height: 0 },
+      currentBox: { x: 0, y: 0, width: 0, height: 0 },
+      startPointerX: 0,
+      startPointerY: 0,
+    },
     groupMoveState: {
       anchorId: '',
       lastX: 0,

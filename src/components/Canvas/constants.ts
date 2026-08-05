@@ -2794,6 +2794,25 @@ export function isPortrait(width: number, height: number) {
   return height > width
 }
 
+/** 是否为 AI 生成的图片节点（不可手动替换原图） */
+export function isAiGeneratedImageNode(data?: Partial<CanvasNodeData> | null): boolean {
+  if (!data || data.kind !== 'image') return false
+  if (data.imageGenState === 'loading' || data.imageGenState === 'done') return true
+  if (data.generationTaskType === 'IMAGE') return true
+  if (String(data.generationTaskId ?? '').trim()) return true
+  return false
+}
+
+/** 非 AI 生成且已有预览图的图片节点，可重新上传替换 */
+export function canReplaceImageNodePreview(data?: Partial<CanvasNodeData> | null): boolean {
+  if (!data || data.kind !== 'image') return false
+  if (!data.previewUrl?.trim()) return false
+  if (data.compactPreview) return false
+  if (data.gridSplitTile) return false
+  if (isAiGeneratedImageNode(data)) return false
+  return true
+}
+
 /** 图片生成任务进行中、尚无预览图时，按源图媒体比例占位 */
 export function shouldAdaptImageGenerationPlaceholder(data?: Partial<CanvasNodeData>) {
   if (!data) return false

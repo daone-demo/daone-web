@@ -104,10 +104,16 @@ export {
   assignGroupId,
   expandSelectionToGroup,
   getCompleteGroupSelection,
+  getGroupGraphBBox,
+  getGroupSelectionForNodeIds,
   getNodesInGroup,
+  listCanvasGroups,
   mergeStoryboardGroup,
   normalizeGroupMembership,
+  resizeGroupGraphBox,
+  syncGroupBySelectionBox,
   ungroupSelection,
+  type GroupResizeHandle,
 } from '../../nodeGroup'
 export {
   ensureImageTextEdge,

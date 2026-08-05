@@ -139,12 +139,17 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
   const saveSkillPopoverPos = ref({ left: 0, top: 0 })
   const saveSkillItems = ref<Array<{ nodeId: string; label: string }>>([])
   const saveSkillSubmitting = ref(false)
-  const groupOverlayBox = ref<{
-    left: number
-    top: number
-    width: number
-    height: number
-  } | null>(null)
+  const groupOverlayItems = ref<
+    Array<{
+      groupId: string
+      nodeIds: string[]
+      nodeCount: number
+      left: number
+      top: number
+      width: number
+      height: number
+    }>
+  >([])
   const dialoguePos = ref({ left: 0, top: 0, width: 360 })
   const promptPos = ref({ left: 0, top: 0, width: 360 })
   const imageGenPromptPos = ref({ left: 0, top: 0, width: 480 })
@@ -327,7 +332,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     saveSkillPopoverPos,
     saveSkillItems,
     saveSkillSubmitting,
-    groupOverlayBox,
+    groupOverlayItems,
     dialoguePos,
     promptPos,
     imageGenPromptPos,

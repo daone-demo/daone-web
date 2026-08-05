@@ -3910,6 +3910,18 @@
   z-index: 4;
   pointer-events: none;
 
+  &--active {
+    z-index: 5;
+
+    .canvas__group-frame {
+      border-color: #6b7280;
+    }
+
+    .canvas__group-label {
+      color: #4b5563;
+    }
+  }
+
   &--light {
     .canvas__group-label {
       color: #6b7280;
@@ -3924,6 +3936,16 @@
       border-color: #d1d5db;
       background: #fff;
     }
+
+    &.canvas__group-overlay--active {
+      .canvas__group-frame {
+        border-color: #9ca3af;
+      }
+
+      .canvas__group-label {
+        color: #374151;
+      }
+    }
   }
 }
 
@@ -3935,7 +3957,13 @@
   line-height: 1;
   color: #9ca3af;
   white-space: nowrap;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+
+  &:active {
+    cursor: grabbing;
+  }
 }
 
 .canvas__group-frame {
@@ -3944,31 +3972,29 @@
   border: 1px solid #9ca3af;
   border-radius: 2px;
   background: rgba(255, 255, 255, 0.08);
-  cursor: grab;
-  pointer-events: auto;
-
-  &:active {
-    cursor: grabbing;
-  }
+  /* 穿透点击，组内节点可继续操作 */
+  pointer-events: none;
 }
 
 .canvas__group-handle {
   position: absolute;
-  width: 8px;
-  height: 8px;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
   border: 1px solid #9ca3af;
   border-radius: 50%;
   background: #fff;
-  pointer-events: none;
+  pointer-events: auto;
+  box-sizing: border-box;
 
-  &--nw { top: -4px; left: -4px; }
-  &--n { top: -4px; left: 50%; transform: translateX(-50%); }
-  &--ne { top: -4px; right: -4px; }
-  &--e { top: 50%; right: -4px; transform: translateY(-50%); }
-  &--se { bottom: -4px; right: -4px; }
-  &--s { bottom: -4px; left: 50%; transform: translateX(-50%); }
-  &--sw { bottom: -4px; left: -4px; }
-  &--w { top: 50%; left: -4px; transform: translateY(-50%); }
+  &--nw { top: -5px; left: -5px; cursor: nwse-resize; }
+  &--n { top: -5px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+  &--ne { top: -5px; right: -5px; cursor: nesw-resize; }
+  &--e { top: 50%; right: -5px; transform: translateY(-50%); cursor: ew-resize; }
+  &--se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+  &--s { bottom: -5px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+  &--sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+  &--w { top: 50%; left: -5px; transform: translateY(-50%); cursor: ew-resize; }
 }
 
 .canvas__group-toolbar {

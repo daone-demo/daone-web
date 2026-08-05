@@ -82,11 +82,16 @@
     />
 
     <CanvasGroupOverlay
-      v-if="showGroupToolbar && groupOverlayBox"
-      :box="groupOverlayBox"
-      :node-count="activeGroupSelection?.nodeIds.length ?? 0"
+      v-for="item in groupOverlayItems"
+      :key="item.groupId"
+      :group-id="item.groupId"
+      :box="item"
+      :node-count="item.nodeCount"
+      :active="overlayGroupSelection?.groupId === item.groupId"
       :is-light="canvasBgTheme === 'light'"
       @drag-start="onGroupOverlayDragStart"
+      @resize-start="onGroupOverlayResizeStart"
+      @select-group="onGroupOverlaySelectGroup"
     />
 
     <CanvasGroupToolbar
@@ -517,6 +522,7 @@ const canvasRuntime = useCanvas(emit, {
 const {
   TEXT_EDITOR_PLACEHOLDER,
   activeGroupSelection,
+  overlayGroupSelection,
   activeProjectId,
   addMenuDropPoint,
   addMenuPos,
@@ -562,7 +568,7 @@ const {
   onVideoGenAspectRatioChange,
   goUserCenter,
   gridVisible,
-  groupOverlayBox,
+  groupOverlayItems,
   groupToolbarPos,
   handleExportCanvas,
   handleEdgeDeletePointerEnter,
@@ -635,6 +641,8 @@ const {
   onFileSelected,
   onGoHome,
   onGroupOverlayDragStart,
+  onGroupOverlayResizeStart,
+  onGroupOverlaySelectGroup,
   onImageCropComplete,
   onImageResizePointerDown,
   onImageGridSplitComplete,
