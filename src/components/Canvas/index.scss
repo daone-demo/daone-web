@@ -19,11 +19,11 @@
   color: #f3f4f6;
 
   &--bg-light {
-    --canvas-page-bg: #e8eaed;
-    --canvas-graph-bg: #e8eaed;
-    --canvas-group-bg: rgba(255, 255, 255, 0.92);
+    --canvas-page-bg: #0000000d;
+    --canvas-graph-bg: #0000000d;
+    --canvas-group-bg: transparent;
     --canvas-group-border: rgba(100, 116, 139, 0.42);
-    --canvas-group-bg-active: rgba(255, 255, 255, 0.98);
+    --canvas-group-bg-active: transparent;
     --canvas-group-border-active: rgba(71, 85, 105, 0.55);
     --canvas-group-handle-bg: #fff;
     --canvas-group-handle-border: rgba(71, 85, 105, 0.28);
@@ -1944,7 +1944,8 @@
 .canvas--bg-light {
   .canvas__back-to-nodes-bar {
     border-color: rgba(15, 23, 42, 0.12);
-    background: rgba(255, 255, 255, 0.92);
+    // background: rgba(255, 255, 255, 0.2);
+    background: #0000000d;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
   }
 
@@ -3957,6 +3958,14 @@
       color: #374151;
     }
   }
+}
+
+.canvas__group-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: auto;
+  cursor: default;
 }
 
 .canvas__group-label {
