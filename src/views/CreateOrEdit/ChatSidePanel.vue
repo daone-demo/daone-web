@@ -271,7 +271,7 @@
               @keydown.enter.prevent="selectSkillChip"
               @keydown.space.prevent="selectSkillChip"
             >/{{ selectedSkill.displayName }}</span>
-            <span v-if="!message.trim()" class="chat-panel__skill-tab-hint">Tab</span>
+            <!-- <span v-if="!message.trim()" class="chat-panel__skill-tab-hint">Tab</span> -->
           </div>
 
           <div v-if="assetMentions.length" class="chat-panel__asset-mentions">
