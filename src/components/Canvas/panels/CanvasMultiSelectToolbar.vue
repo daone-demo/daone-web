@@ -32,6 +32,10 @@
       <span class="canvas__multi-select-icon" data-icon="assets" aria-hidden="true" />
       保存到资产
     </button>
+    <button type="button" class="canvas__multi-select-btn" title="批量下载" @click="emit('batch-download')">
+      <span class="canvas__multi-select-icon" data-icon="download" aria-hidden="true" />
+      批量下载
+    </button>
     <button type="button" class="canvas__multi-select-btn" title="创建副本" @click="emit('duplicate')">
       <span class="canvas__multi-select-icon" data-icon="duplicate" aria-hidden="true" />
       创建副本
@@ -75,6 +79,7 @@ defineProps<{
 const emit = defineEmits<{
   layout: [direction: GroupLayoutDirection]
   'save-to-assets': []
+  'batch-download': []
   duplicate: []
   copy: []
   group: []

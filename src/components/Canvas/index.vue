@@ -65,6 +65,7 @@
       :is-light="canvasBgTheme === 'light'"
       @layout="handleMultiSelectLayout"
       @save-to-assets="handleMultiSelectSaveToAssets"
+      @batch-download="handleMultiSelectBatchDownload"
       @duplicate="duplicateSelectedNodes"
       @copy="copySelectedNodes"
       @group="handleMultiSelectGroup"
@@ -582,6 +583,7 @@ const {
   handleMultiSelectGroup,
   handleMultiSelectLayout,
   handleMultiSelectSaveToAssets,
+  handleMultiSelectBatchDownload,
   handleRedo,
   handleSaveCanvas,
   handleTidyCanvas,

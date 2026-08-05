@@ -48,7 +48,7 @@ import {
 } from '../../canvasDescription'
 import { buildProjectCanvasPayloadFromVersionDetail } from '../../canvasHistoryRecords'
 import { addElementGroupRecordToCanvas } from '../../elementGroupCanvas'
-import { downloadCanvasMedia } from '../../mediaDownload'
+import { downloadCanvasMedia, buildCanvasMediaDownloadItems, downloadCanvasMediaBatch } from '../../mediaDownload'
 import {
   appendElementMarkToNode,
   appendImageMarkToNode,
@@ -9209,6 +9209,64 @@ export function registerCore(bind: CanvasBindings) {
     showAssetsPanel.value = true
   }
 
+  async function runBatchDownloadForNodeIds(nodeIds: string[]) {
+    const g = graph.value
+    if (!g || !nodeIds.length) return
+
+    const nodes = nodeIds
+      .map((id) => g.getCellById(id))
+      .filter((cell): cell is Node => cell != null && cell.isNode())
+      .map((node) => node.getData() as CanvasNodeData)
+
+    const items = buildCanvasMediaDownloadItems(nodes)
+    if (!items.length) {
+      message.warning('当前选中没有可下载的图片、视频或模型文件')
+      return
+    }
+
+    const closeLoading = message.loading(`正在准备下载 0/${items.length}...`, 0)
+    let hideLoading = closeLoading
+    try {
+      const result = await downloadCanvasMediaBatch(items, {
+        onProgress: (current, total) => {
+          hideLoading()
+          hideLoading = message.loading(
+            current >= total ? '正在打包下载...' : `正在准备下载 ${current}/${total}...`,
+            0,
+          )
+        },
+      })
+      hideLoading()
+
+      if (!result.success) {
+        message.error('批量下载失败，请稍后重试')
+        return
+      }
+      if (result.failed > 0) {
+        message.warning(
+          result.packagedAsZip
+            ? `已打包下载 ${result.success}/${result.total} 个文件`
+            : `已下载 ${result.success}/${result.total} 个文件`,
+        )
+        return
+      }
+      message.success(
+        result.packagedAsZip
+          ? `已成功打包下载 ${result.success} 个文件`
+          : `已成功下载 ${result.success} 个文件`,
+      )
+    } catch {
+      hideLoading()
+      message.error('批量下载失败，请稍后重试')
+    }
+  }
+
+  function handleMultiSelectBatchDownload() {
+    const ids = selectedNodeIds.value
+    if (ids.length < 2) return
+    void runBatchDownloadForNodeIds(ids)
+  }
+
   function handleMultiSelectGroup() {
     const g = graph.value
     const ids = selectedNodeIds.value
@@ -9284,52 +9342,9 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function handleGroupBatchDownload() {
-    const g = graph.value
     const group = activeGroupSelection.value
-    if (!g || !group) return
-
-    const targets = group.nodeIds
-      .map((id) => {
-        const node = g.getCellById(id)
-        if (!node?.isNode()) return null
-        const data = node.getData() as CanvasNodeData
-        if (!data.previewUrl) return null
-        return data
-      })
-      .filter((item): item is CanvasNodeData => Boolean(item))
-
-    if (!targets.length) {
-      message.warning('当前分组没有可下载的图片或视频')
-      return
-    }
-
-    void (async () => {
-      let success = 0
-      for (let index = 0; index < targets.length; index += 1) {
-        const data = targets[index]
-        const isVideo = data.kind === 'video'
-        try {
-          await downloadCanvasMedia({
-            url: data.previewUrl,
-            fallbackName: isVideo
-              ? `group-video-${index + 1}.mp4`
-              : `group-image-${index + 1}`,
-          })
-          success += 1
-          // 避免浏览器连续触发下载被拦截
-          if (index < targets.length - 1) {
-            await new Promise((resolve) => window.setTimeout(resolve, 280))
-          }
-        } catch {
-          // 单个失败不中断批次
-        }
-      }
-      if (!success) {
-        message.error('批量下载失败，请稍后重试')
-      } else if (success < targets.length) {
-        message.warning(`已下载 ${success}/${targets.length} 个文件`)
-      }
-    })()
+    if (!group) return
+    void runBatchDownloadForNodeIds(group.nodeIds)
   }
 
   function handleGroupSaveToSkill() {
@@ -10466,6 +10481,7 @@ export function registerCore(bind: CanvasBindings) {
     handleMultiSelectGroup,
     handleMultiSelectLayout,
     handleMultiSelectSaveToAssets,
+    handleMultiSelectBatchDownload,
     handleNodeClick,
     handleNodeDataChange,
     handleNodeEdgeLinked,

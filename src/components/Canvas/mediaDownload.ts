@@ -1,5 +1,30 @@
+import JSZip from 'jszip'
 import { resolveOriginalMediaDownloadUrl } from './cloudImageProcess'
+import { buildMediaProxyCandidates } from './mediaProxy'
 import { runWithoutLeaveConfirm } from '@/utils/leaveGuard'
+import type { CanvasNodeData, NodeKind } from './constants'
+
+const DOWNLOADABLE_MEDIA_KINDS = new Set<NodeKind>(['image', 'video', 'model3d', 'audio'])
+
+const DEFAULT_MEDIA_EXTENSIONS: Record<NodeKind, string> = {
+  image: '.png',
+  video: '.mp4',
+  model3d: '.glb',
+  audio: '.mp3',
+  text: '.txt',
+}
+
+export interface CanvasMediaDownloadItem {
+  url: string
+  fileName: string
+}
+
+export interface CanvasMediaBatchDownloadResult {
+  total: number
+  success: number
+  failed: number
+  packagedAsZip: boolean
+}
 
 function fileNameFromUrl(url: string): string {
   try {
@@ -16,21 +41,139 @@ function resolveDownloadFileName(
   fileName: string | undefined,
   fallbackName: string,
 ): string {
-  return fileNameFromUrl(downloadUrl) || fileName?.trim() || fallbackName
+  return fileName?.trim() || fileNameFromUrl(downloadUrl) || fallbackName
 }
 
-function triggerLinkDownload(url: string, fileName: string, openInNewTab = false) {
+function sanitizeDownloadFileName(name: string): string {
+  return name.replace(/[\\/:*?"<>|]/g, '_').trim()
+}
+
+function ensureFileExtension(name: string, kind: NodeKind): string {
+  const trimmed = sanitizeDownloadFileName(name)
+  if (!trimmed) return `canvas-${kind}${DEFAULT_MEDIA_EXTENSIONS[kind] || ''}`
+  if (/\.[a-z0-9]{2,5}$/i.test(trimmed)) return trimmed
+  return `${trimmed}${DEFAULT_MEDIA_EXTENSIONS[kind] || ''}`
+}
+
+function uniqueDownloadFileName(name: string, used: Set<string>): string {
+  const normalized = sanitizeDownloadFileName(name)
+  if (!used.has(normalized.toLowerCase())) {
+    used.add(normalized.toLowerCase())
+    return normalized
+  }
+
+  const dot = normalized.lastIndexOf('.')
+  const base = dot > 0 ? normalized.slice(0, dot) : normalized
+  const ext = dot > 0 ? normalized.slice(dot) : ''
+
+  let index = 2
+  while (used.has(`${base} (${index})${ext}`.toLowerCase())) {
+    index += 1
+  }
+
+  const next = `${base} (${index})${ext}`
+  used.add(next.toLowerCase())
+  return next
+}
+
+function isSameOriginUrl(url: string): boolean {
+  try {
+    return new URL(url, window.location.href).origin === window.location.origin
+  } catch {
+    return false
+  }
+}
+
+function formatBatchZipName() {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `画布批量下载-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.zip`
+}
+
+export function isDownloadableCanvasNode(data?: Partial<CanvasNodeData> | null): data is CanvasNodeData {
+  if (!data?.previewUrl?.trim()) return false
+  if (!data.kind || !DOWNLOADABLE_MEDIA_KINDS.has(data.kind)) return false
+  if (data.uploadState === 'uploading') return false
+  if (data.imageGenState === 'loading') return false
+  return true
+}
+
+export function resolveCanvasMediaFileName(
+  data: CanvasNodeData,
+  index: number,
+  usedNames = new Set<string>(),
+): string {
+  const preferred = data.fileName?.trim() || data.title?.trim()
+  const fallback = `canvas-${data.kind}-${index + 1}${DEFAULT_MEDIA_EXTENSIONS[data.kind] || ''}`
+  const withExt = ensureFileExtension(preferred || fallback, data.kind)
+  return uniqueDownloadFileName(withExt, usedNames)
+}
+
+export function buildCanvasMediaDownloadItems(
+  nodes: CanvasNodeData[],
+): CanvasMediaDownloadItem[] {
+  const usedNames = new Set<string>()
+  return nodes
+    .filter(isDownloadableCanvasNode)
+    .map((data, index) => ({
+      url: data.previewUrl,
+      fileName: resolveCanvasMediaFileName(data, index, usedNames),
+    }))
+}
+
+function triggerLinkDownload(url: string, fileName: string) {
   const anchor = document.createElement('a')
   anchor.href = url
-  if (!openInNewTab) {
-    anchor.download = fileName
-  } else {
-    anchor.target = '_blank'
-    anchor.rel = 'noopener noreferrer'
-  }
+  anchor.download = fileName
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
+}
+
+async function fetchMediaBlob(sourceUrl: string): Promise<Blob> {
+  const trimmed = sourceUrl.trim()
+  if (!trimmed) {
+    throw new Error('无可下载资源')
+  }
+
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
+    const response = await fetch(trimmed)
+    if (!response.ok) {
+      throw new Error(`download failed: ${response.status}`)
+    }
+    return response.blob()
+  }
+
+  const downloadUrl = resolveOriginalMediaDownloadUrl(trimmed)
+  const candidates = [
+    ...buildMediaProxyCandidates(downloadUrl),
+    ...(isSameOriginUrl(downloadUrl) ? [downloadUrl] : []),
+    downloadUrl,
+  ]
+
+  let lastError: unknown
+  for (const candidate of [...new Set(candidates)]) {
+    try {
+      const response = await fetch(candidate)
+      if (!response.ok) {
+        throw new Error(`download failed: ${response.status}`)
+      }
+      return await response.blob()
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError ?? new Error('download failed')
+}
+
+function triggerBlobDownload(blob: Blob, fileName: string) {
+  const blobUrl = URL.createObjectURL(blob)
+  try {
+    triggerLinkDownload(blobUrl, fileName)
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000)
+  }
 }
 
 /** 通过资源链接触发浏览器下载，避免当前页跳转触发离开确认 */
@@ -47,22 +190,62 @@ export async function downloadCanvasMedia(options: {
 
     const downloadUrl = resolveOriginalMediaDownloadUrl(sourceUrl)
     const fileName = resolveDownloadFileName(downloadUrl, options.fileName, options.fallbackName)
-
-    try {
-      const response = await fetch(downloadUrl)
-      if (!response.ok) {
-        throw new Error(`download failed: ${response.status}`)
-      }
-      const blob = await response.blob()
-      const blobUrl = URL.createObjectURL(blob)
-      try {
-        triggerLinkDownload(blobUrl, fileName)
-      } finally {
-        window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
-      }
-    } catch {
-      // 跨域或拉取失败时在新标签页打开，避免当前 SPA 页面跳转
-      triggerLinkDownload(downloadUrl, fileName, true)
-    }
+    const blob = await fetchMediaBlob(sourceUrl)
+    triggerBlobDownload(blob, fileName)
   })
+}
+
+export async function downloadCanvasMediaBatch(
+  items: CanvasMediaDownloadItem[],
+  options: {
+    onProgress?: (current: number, total: number) => void
+  } = {},
+): Promise<CanvasMediaBatchDownloadResult> {
+  const total = items.length
+  if (!total) {
+    return { total: 0, success: 0, failed: 0, packagedAsZip: false }
+  }
+
+  if (total === 1) {
+    try {
+      await downloadCanvasMedia({
+        url: items[0].url,
+        fileName: items[0].fileName,
+        fallbackName: items[0].fileName,
+      })
+      options.onProgress?.(1, 1)
+      return { total: 1, success: 1, failed: 0, packagedAsZip: false }
+    } catch {
+      return { total: 1, success: 0, failed: 1, packagedAsZip: false }
+    }
+  }
+
+  const zip = new JSZip()
+  let success = 0
+  let failed = 0
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]
+    options.onProgress?.(index, total)
+    try {
+      const blob = await fetchMediaBlob(item.url)
+      zip.file(item.fileName, blob)
+      success += 1
+    } catch {
+      failed += 1
+    }
+  }
+
+  options.onProgress?.(total, total)
+
+  if (!success) {
+    return { total, success, failed, packagedAsZip: false }
+  }
+
+  await runWithoutLeaveConfirm(async () => {
+    const zipBlob = await zip.generateAsync({ type: 'blob' })
+    triggerBlobDownload(zipBlob, formatBatchZipName())
+  })
+
+  return { total, success, failed, packagedAsZip: true }
 }

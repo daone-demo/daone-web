@@ -3369,6 +3369,24 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     showAssetsPanel.value = true
   }
 
+  function handleMultiSelectBatchDownload() {
+    const g = graph.value
+    const ids = selectedNodeIds.value
+    if (!g || ids.length < 2) return
+
+    ids.forEach((id, index) => {
+      const node = g.getCellById(id)
+      if (!node?.isNode()) return
+      const data = node.getData() as CanvasNodeData
+      if (!data.previewUrl) return
+      const link = document.createElement('a')
+      link.href = data.previewUrl
+      link.download = data.fileName || `canvas-${data.kind}-${index + 1}`
+      link.rel = 'noopener'
+      link.click()
+    })
+  }
+
   function handleMultiSelectGroup() {
     const g = graph.value
     const ids = selectedNodeIds.value
@@ -4182,6 +4200,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     handleMultiSelectGroup,
     handleMultiSelectLayout,
     handleMultiSelectSaveToAssets,
+    handleMultiSelectBatchDownload,
     handleNodeClick,
     handleNodeDataChange,
     handleNodeEdgeLinked,
