@@ -16,6 +16,7 @@ import {
 } from './constants'
 import { getGroupBoxNodeIds } from './nodeGroup'
 import { syncTextNodeImageSource } from './textPrompt'
+import { findIncomingTextNodes, plainTextFromNodeContent } from './videoGen'
 
 export type GroupAiTaskKind =
   | 'imageCapability'
@@ -106,24 +107,44 @@ export function resolveImageCapabilityFromNode(data: CanvasNodeData): { code: st
 
   const prompt = data.imageDialogueText?.trim() || data.genPrompt?.trim() || ''
   const hasDialogueConfig = Boolean(
-    data.imageDialogueSettings?.modelKey ||
+    data.generationParams ||
+      data.imageDialogueSettings?.modelKey ||
       data.imageDialogueSettings?.aspectRatio ||
       data.imageDialogueSettings?.workflowId,
   )
   if (prompt || hasDialogueConfig || data.imageSourceRefs?.length) {
-    return { code: IMAGE_GENERAL_CAPABILITY_CODE, label: '图生图' }
+    return { code: IMAGE_GENERAL_CAPABILITY_CODE, label: data.title === '文生图' ? '文生图' : '图生图' }
   }
 
   return null
 }
 
+function isImg2PromptTextNode(data: CanvasNodeData): boolean {
+  if (data.textPickerTask === 'img2prompt') return true
+  const title = data.title?.trim() || ''
+  if (title === '反推提示词' || resolveTitlePrefix(title) === '反推提示词') return true
+  const capabilityCode = data.generationParams?.capabilityCode?.trim()
+  if (capabilityCode === 'IMAGE_PROMPT_REVERSE') return true
+  return false
+}
+
 function resolveTextTaskKind(data: CanvasNodeData): GroupAiTaskKind | null {
+  if (isImg2PromptTextNode(data)) return 'textImg2Prompt'
+
   const pickerTask = data.textPickerTask
-  if (pickerTask === 'img2prompt') return 'textImg2Prompt'
   if (pickerTask === 'text2video') return 'text2video'
   if (pickerTask === 'text2image') return 'text2image'
   if ((pickerTask === 'write' || !pickerTask) && data.genPrompt?.trim()) return 'textCopy'
   return null
+}
+
+function resolveIncomingTextPrompt(graph: Graph, nodeId: string): string {
+  for (const textNode of findIncomingTextNodes(graph, nodeId)) {
+    const data = textNode.getData() as CanvasNodeData
+    const text = plainTextFromNodeContent(data.content)
+    if (text) return text
+  }
+  return ''
 }
 
 function resolveGroupAiTask(graph: Graph, node: Node, scopeIds: Set<string>): GroupAiTask | null {
@@ -324,7 +345,7 @@ function resolveReferenceAssetIdFromNode(
 function buildSourceRefs(
   graph: Graph,
   node: Node,
-  scopeIds: Set<string>,
+  _scopeIds: Set<string>,
   finishedAssets: Map<string, string>,
 ): ImageSourceRef[] {
   const data = node.getData() as CanvasNodeData
@@ -364,6 +385,30 @@ function buildSourceRefs(
   return refs
 }
 
+/** 在组内查找文本节点连出的 AI 结果节点（整组执行时原地重跑，不新建） */
+export function findGroupOutgoingAiResultNode(
+  graph: Graph,
+  sourceNodeId: string,
+  scopeIds: Set<string>,
+  kind: 'image' | 'video',
+): Node | null {
+  let candidate: Node | null = null
+  for (const edge of graph.getEdges()) {
+    if (edge.getSourceCellId() !== sourceNodeId) continue
+    const targetId = edge.getTargetCellId()
+    if (!targetId || !scopeIds.has(targetId)) continue
+    const target = graph.getCellById(targetId)
+    if (!target?.isNode()) continue
+    const data = target.getData() as CanvasNodeData
+    if (data.kind !== kind) continue
+    if (!isAiGeneratedCanvasNode(data) && data.title !== '文生图' && data.title !== '文生视频') {
+      continue
+    }
+    candidate = target as Node
+  }
+  return candidate
+}
+
 export function resolveGroupAiReferenceContext(
   graph: Graph,
   node: Node,
@@ -372,12 +417,14 @@ export function resolveGroupAiReferenceContext(
   finishedAssets: Map<string, string>,
 ): GroupAiReferenceContext | null {
   const data = node.getData() as CanvasNodeData
+  const savedParams = data.generationParams
   const sourceRefs = buildSourceRefs(graph, node, scopeIds, finishedAssets)
   const referenceAssetIds = [
     ...new Set(
-      sourceRefs
-        .map((ref) => ref.assetId)
-        .filter((id): id is string => Boolean(id)),
+      [
+        ...(savedParams?.referenceAssetIds ?? []),
+        ...sourceRefs.map((ref) => ref.assetId),
+      ].filter((id): id is string => Boolean(id)),
     ),
   ]
 
@@ -387,33 +434,45 @@ export function resolveGroupAiReferenceContext(
   }
 
   const prompt =
+    savedParams?.prompt?.trim() ||
     data.imageDialogueText?.trim() ||
     data.genPrompt?.trim() ||
     data.videoDialogueText?.trim() ||
+    resolveIncomingTextPrompt(graph, node.id) ||
     ''
 
   if (task.kind === 'imageCapability' || task.kind === 'imageDialogue') {
-    if (!referenceAssetIds.length) return null
-
     if (task.kind === 'imageCapability') {
+      if (!referenceAssetIds.length) return null
       const primaryAssetId = referenceAssetIds[0]
       return {
         referenceAssetIds,
         sourceRefs,
         prompt,
-        parameters: { assetId: primaryAssetId },
+        parameters: {
+          ...(savedParams?.parameters ?? {}),
+          assetId: primaryAssetId,
+        },
         taskTitle: resolveTitlePrefix(data.title) || data.title || '生成',
-        capabilityCode: task.capabilityCode,
+        capabilityCode: savedParams?.capabilityCode || task.capabilityCode,
       }
     }
 
+    // 文生图允许无参考图；图生图优先用已保存参数
+    if (!prompt && !savedParams) return null
+
     const settings = data.imageDialogueSettings
     const parameters: Record<string, unknown> = {
-      model: settings?.modelKey,
-      aspectRatio: settings?.aspectRatio,
-      count: Math.max(1, settings?.imageCount ?? 1),
+      ...(savedParams?.parameters ?? {}),
+      model: savedParams?.parameters?.model ?? settings?.modelKey,
+      aspectRatio: savedParams?.parameters?.aspectRatio ?? settings?.aspectRatio,
+      count: Math.max(
+        1,
+        Math.floor(Number(savedParams?.parameters?.count ?? settings?.imageCount)) || 1,
+      ),
     }
-    if (settings?.resolution) parameters.resolution = settings.resolution
+    const resolution = savedParams?.parameters?.resolution ?? settings?.resolution
+    if (resolution) parameters.resolution = resolution
 
     return {
       referenceAssetIds,
@@ -421,9 +480,9 @@ export function resolveGroupAiReferenceContext(
       prompt,
       parameters,
       settings: settings as ImageDialogueSettings | undefined,
-      workflowId: settings?.workflowId,
-      taskTitle: data.title || '图生图',
-      capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+      workflowId: savedParams?.workflowId ?? settings?.workflowId,
+      taskTitle: data.title || '文生图',
+      capabilityCode: savedParams?.capabilityCode || IMAGE_GENERAL_CAPABILITY_CODE,
     }
   }
 
@@ -454,41 +513,50 @@ export function resolveGroupAiReferenceContext(
   }
 
   if (task.kind === 'text2image') {
+    if (!prompt && !savedParams) return null
     return {
       referenceAssetIds,
       sourceRefs,
-      prompt: data.imageDialogueText?.trim() || data.genPrompt?.trim() || '',
+      prompt: prompt || data.imageDialogueText?.trim() || data.genPrompt?.trim() || '',
       parameters: {
-        model: data.imageDialogueSettings?.modelKey,
-        aspectRatio: data.imageDialogueSettings?.aspectRatio,
-        count: Math.max(1, data.imageDialogueSettings?.imageCount ?? 1),
-        resolution: data.imageDialogueSettings?.resolution,
+        ...(savedParams?.parameters ?? {}),
+        model: savedParams?.parameters?.model ?? data.imageDialogueSettings?.modelKey,
+        aspectRatio: savedParams?.parameters?.aspectRatio ?? data.imageDialogueSettings?.aspectRatio,
+        count: Math.max(
+          1,
+          Math.floor(
+            Number(savedParams?.parameters?.count ?? data.imageDialogueSettings?.imageCount),
+          ) || 1,
+        ),
+        resolution: savedParams?.parameters?.resolution ?? data.imageDialogueSettings?.resolution,
       },
       settings: data.imageDialogueSettings as ImageDialogueSettings | undefined,
-      workflowId: data.imageDialogueSettings?.workflowId,
+      workflowId: savedParams?.workflowId ?? data.imageDialogueSettings?.workflowId,
       taskTitle: '文生图',
-      capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+      capabilityCode: savedParams?.capabilityCode || IMAGE_GENERAL_CAPABILITY_CODE,
     }
   }
 
   if (task.kind === 'text2video' || task.kind === 'videoDialogue') {
+    if (!prompt && !savedParams) return null
     const settings = data.videoDialogueSettings
     return {
       referenceAssetIds,
       sourceRefs,
       prompt,
       parameters: {
-        mode: settings?.mode ?? 'text-to-video',
-        model: settings?.modelKey,
-        ratio: settings?.aspectRatio,
-        clarity: settings?.resolution,
-        duration: settings?.duration,
-        generateAudio: settings?.generateAudio,
-        videoCount: settings?.videoCount,
+        ...(savedParams?.parameters ?? {}),
+        mode: savedParams?.parameters?.mode ?? settings?.mode ?? 'text-to-video',
+        model: savedParams?.parameters?.model ?? settings?.modelKey,
+        ratio: savedParams?.parameters?.ratio ?? settings?.aspectRatio,
+        clarity: savedParams?.parameters?.clarity ?? settings?.resolution,
+        duration: savedParams?.parameters?.duration ?? settings?.duration,
+        generateAudio: savedParams?.parameters?.generateAudio ?? settings?.generateAudio,
+        videoCount: savedParams?.parameters?.videoCount ?? settings?.videoCount,
         assetId: referenceAssetIds[0],
       },
       taskTitle: task.kind === 'text2video' ? '文生视频' : '视频生成',
-      capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
+      capabilityCode: savedParams?.capabilityCode || VIDEO_GENERAL_CAPABILITY_CODE,
     }
   }
 
@@ -509,6 +577,6 @@ export function buildGroupExecuteConfirmContent(taskCount: number, credits: numb
 
   return {
     main: `即将对组内 ${taskCount} 个生成节点依次执行，预计消耗 ${credits} 积分，是否继续？`,
-    hint: '将按连线依赖顺序执行：上游 AI 节点完成后才会触发下游；参考非 AI 节点资源及已保存的溯源参数。',
+    hint: '将按连线依赖顺序，在组内已有 AI 节点上原地重新生成，不会新建节点；上游完成后才会触发下游。',
   }
 }

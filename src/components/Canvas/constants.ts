@@ -131,18 +131,22 @@ export interface CanvasNodeData {
   textPickerTask?: 'img2prompt' | 'text2video' | 'text2image' | 'write' | ''
   /** 自由输入提示词生成后，底部输入框保持显示 */
   promptBarPinned?: boolean
-  textGenState?: 'idle' | 'loading' | 'done'
+  textGenState?: 'idle' | 'loading' | 'done' | 'failed'
   /** 图片反推提示词生成进度（0-100），loading 时用于显示「准备中 / 生成中 X%」 */
   textGenProgress?: number
   linkedImageNodeId?: string
-  /** 文生图节点生成态：idle 待生成 / loading 生成中 / done 已生成 */
-  imageGenState?: 'idle' | 'loading' | 'done'
+  /** 文生图节点生成态：idle 待生成 / loading 生成中 / done 已生成 / failed 生成失败 */
+  imageGenState?: 'idle' | 'loading' | 'done' | 'failed'
+  /** 生成失败时的说明文案（展示在节点失败面板） */
+  generationFailMessage?: string
   /** 文生图生成进度（0-100） */
   imageGenProgress?: number
   /** 关联的后端生成任务 ID，用于多任务并发追踪与刷新后恢复 */
   generationTaskId?: string
   /** 关联生成任务类型，刷新后用于恢复轮询 */
   generationTaskType?: 'IMAGE' | 'TEXT' | 'MODEL' | 'VIDEO'
+  /** AI 生成任务完整参数快照（提示词、模型、工作流、参考图等，随节点持久化） */
+  generationParams?: CanvasGenerationParams
   /** 视频时长（秒） */
   durationSeconds?: number
   /** 图片元素标记（显示在图片节点上的识别框） */
@@ -275,6 +279,23 @@ export const TEXT_PROMPT_MODEL_MENU: TextPromptModelItem[] = [
 
 export const TEXT_PROMPT_PLACEHOLDER =
   '写下你想讲的故事、场景或角色设定。例如：一个来自未来的机器人，在城市屋顶看星星。'
+
+export const DEFAULT_GENERATION_FAIL_MESSAGE =
+  '输出内容未通过安全审核,积分将会在10分钟内返还,请修改描述或者素材后重试'
+
+export function normalizeGenerationFailMessage(_errorMessage?: string): string {
+  return DEFAULT_GENERATION_FAIL_MESSAGE
+}
+
+export function resolveGenerationFailMessage(_data?: Partial<CanvasNodeData> | null): string {
+  return DEFAULT_GENERATION_FAIL_MESSAGE
+}
+
+export function isCanvasGenerationFailed(data?: Partial<CanvasNodeData> | null): boolean {
+  if (!data) return false
+  if (data.imageGenState === 'failed' || data.textGenState === 'failed') return true
+  return data.title === '生成失败'
+}
 
 export function createEmptyNodeData(): CanvasNodeData {
   return {
@@ -665,6 +686,16 @@ export function normalizeImageCapabilities(
 }
 
 export const IMAGE_GENERAL_CAPABILITY_CODE = 'IMAGE_GENERAL_V1'
+
+/** AI 生成任务完整参数快照（随节点 data 持久化，用于溯源与重试） */
+export interface CanvasGenerationParams {
+  taskType: 'IMAGE' | 'TEXT' | 'MODEL' | 'VIDEO'
+  capabilityCode: string
+  prompt: string
+  parameters: Record<string, unknown>
+  workflowId?: string | number
+  referenceAssetIds?: string[]
+}
 
 /** 图片对话面板生成设置（持久化到节点 data） */
 export interface ImageDialogueSettings {

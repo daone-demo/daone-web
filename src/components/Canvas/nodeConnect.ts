@@ -176,7 +176,12 @@ function getConnectSpawnConfig(
       }
       return {
         kind: 'image',
-        overrides: { mode: 'editor', imageGenTask: 'picker', imageGenState: 'idle' },
+        overrides: {
+          mode: 'editor',
+          imageGenTask: 'picker',
+          imageGenState: 'idle',
+          title: '文生图',
+        },
       }
     case 'video':
       return { kind: 'video', overrides: { mode: 'picker' } }

@@ -410,7 +410,7 @@ export function spawnText2ImgNode(
     mode: 'editor',
     imageGenTask: 'picker',
     imageGenState: 'idle',
-    title: '图片节点',
+    title: '文生图',
     sourceNodeId: sourceNode.id,
     genSeed: 58,
   }
@@ -583,16 +583,30 @@ export function spawnGenerationResultNode(
   return node
 }
 
+/** 生图进行中节点左上角标签：有图片输入源为图生图，否则为文生图 */
+export function resolveImageGenerationProgressLabel(
+  data: Partial<CanvasNodeData> | null | undefined,
+): '文生图' | '图生图' {
+  if (!data) return '文生图'
+  if (data.imageGenTask === 'img2img') return '图生图'
+
+  const hasImageInput = Boolean(
+    data.sourcePreviewUrl?.trim() ||
+      data.sourceAssetId?.trim() ||
+      data.imageSourceRefs?.some((ref) => ref.assetId?.trim() || ref.previewUrl?.trim()) ||
+      (data.generationParams?.referenceAssetIds?.length ?? 0) > 0,
+  )
+
+  return hasImageInput ? '图生图' : '文生图'
+}
+
 /** 图片生成失败、尚未成片的节点（可原地重试） */
 export function isImageGenerationFailedNode(data: CanvasNodeData | undefined): boolean {
   if (!data || data.kind !== 'image') return false
   if (data.imageGenState === 'loading') return false
+  if (data.imageGenState === 'failed') return true
 
-  const markedFailed = Boolean(
-    data.title === '生成失败' ||
-      data.generationTaskId ||
-      (data.mode === 'editor' && data.generationTaskType === 'IMAGE'),
-  )
+  const markedFailed = data.title === '生成失败'
   if (!markedFailed) return false
 
   if (!data.previewUrl?.trim()) return true
@@ -635,6 +649,7 @@ export function resetImageGenerationNodeForRetry(
   data.imageGenTask = undefined
   delete data.generationTaskId
   delete data.generationTaskType
+  delete data.generationFailMessage
   if (options.prompt) {
     data.genPrompt = options.prompt
   }
@@ -653,15 +668,47 @@ export function isImageGenerationUploadPlaceholderNode(data: CanvasNodeData | un
   return data.mode === 'picker' || data.imageGenTask === 'picker' || data.imageGenTask === 'img2img'
 }
 
+/** 文生图占位节点：由文本连线拉出、尚无成片 */
+export function isText2ImagePlaceholderNode(data: CanvasNodeData | undefined): boolean {
+  if (!data || data.kind !== 'image') return false
+  if (data.previewUrl?.trim()) return false
+  if (data.uploadState === 'uploading' || data.imageGenState === 'loading') return false
+  if (data.mode === 'editor' && data.imageGenTask === 'picker') return true
+  return data.title === '文生图'
+}
+
+/** 文本节点提交文生图时，优先复用已连出的空占位/失败节点 */
+export function resolveText2ImageGenerationTargetNode(
+  graph: Graph,
+  sourceNode: Node,
+): Node | null {
+  const outgoing = findOutgoingGenNode(graph, sourceNode.id)
+  if (outgoing) {
+    const data = outgoing.getData() as CanvasNodeData
+    if (
+      !data.previewUrl?.trim() &&
+      (isText2ImagePlaceholderNode(data) || isImageGenerationFailedNode(data))
+    ) {
+      return outgoing
+    }
+  }
+
+  return findReusableImageGenerationNode(graph, sourceNode)
+}
+
 /** 图生图对话提交：仅上传占位 / 失败重试节点原地生成；已有成片的节点新建子节点 */
 export function shouldGenerateImageInPlaceOnNode(
   data: CanvasNodeData,
   options: { requestedCount: number; hasReferenceImages: boolean },
 ): boolean {
   if (options.requestedCount !== 1 || data.kind !== 'image') return false
-  if (!options.hasReferenceImages) return false
   if (data.previewUrl?.trim() && !isImageGenerationFailedNode(data)) return false
-  return isImageGenerationUploadPlaceholderNode(data) || isImageGenerationFailedNode(data)
+
+  if (options.hasReferenceImages) {
+    return isImageGenerationUploadPlaceholderNode(data) || isImageGenerationFailedNode(data)
+  }
+
+  return isText2ImagePlaceholderNode(data) || isImageGenerationFailedNode(data)
 }
 
 function resolveImageGenerationLayoutSourceNode(node: Node): Node {

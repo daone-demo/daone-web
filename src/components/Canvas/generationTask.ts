@@ -1,7 +1,7 @@
 import type { Graph, Node } from '@antv/x6'
 import api from '@/services/api'
 import type { CanvasNodeData } from './constants'
-import { parseVideoAspectRatioValue } from './constants'
+import { normalizeGenerationFailMessage, parseVideoAspectRatioValue } from './constants'
 import { resolveImageNaturalSizeCached } from './imageDisplayUrl'
 import { syncNodeShapeFromData, getNodeSize, refreshCanvasNodeView } from './graph'
 import { resolveVideoNaturalSize } from './upload'
@@ -417,9 +417,10 @@ export function applyTextGenerationResultToNode(
 
 export function markTextGenerationNodeFailed(node: Node, errorMessage?: string) {
   const data = { ...(node.getData() as CanvasNodeData) }
-  data.textGenState = 'idle'
+  data.textGenState = 'failed'
   data.textGenProgress = 0
-  if (errorMessage) data.title = '生成失败'
+  data.title = '生成失败'
+  data.generationFailMessage = normalizeGenerationFailMessage(errorMessage)
   setNodeData(node, data)
 }
 
@@ -494,8 +495,8 @@ export function markVideoGenerationNodeFailed(node: Node, errorMessage?: string)
   data.uploadState = 'idle'
   data.uploadProgress = 0
   delete data.generationTaskType
-  delete data.generationTaskId
-  if (errorMessage) data.title = '生成失败'
+  data.title = '生成失败'
+  data.generationFailMessage = normalizeGenerationFailMessage(errorMessage)
   setNodeData(node, data)
 }
 
@@ -607,9 +608,10 @@ export async function applyGenerationResultToNode(
 export function markGenerationNodeFailed(node: Node, errorMessage?: string) {
   if (!isNodeOnGraph(node)) return
   const data = { ...(node.getData() as CanvasNodeData) }
-  data.imageGenState = 'idle'
+  data.imageGenState = 'failed'
   data.imageGenProgress = 0
-  data.title = errorMessage ? `生成失败` : data.title
+  data.title = '生成失败'
+  data.generationFailMessage = normalizeGenerationFailMessage(errorMessage)
   setNodeData(node, data)
 }
 
@@ -1082,20 +1084,28 @@ function shouldResumeNode(data: CanvasNodeData) {
   const videoLoading = data.kind === 'video' && data.uploadState === 'uploading'
   if (!imageLoading && !textLoading && !videoLoading) return false
 
+  if (data.kind === 'image' && imageLoading) return true
+  if (data.kind === 'text' && textLoading) return true
+  if (data.kind === 'model3d' && imageLoading) return true
+  if (data.kind === 'video' && videoLoading) return true
+
+  return false
+}
+
+function isNodeAwaitingGenerationResume(data: CanvasNodeData) {
+  const taskId = String(data.generationTaskId ?? '').trim()
+  const imageLoading = data.imageGenState === 'loading'
+  const textLoading = data.textGenState === 'loading'
+  const videoLoading = data.kind === 'video' && data.uploadState === 'uploading'
+
+  if (taskId && (imageLoading || textLoading || videoLoading)) return true
+
   if (data.kind === 'image' && imageLoading && !data.previewUrl) return true
   if (data.kind === 'text' && textLoading && !String(data.content || '').trim()) return true
   if (data.kind === 'model3d' && imageLoading && !data.previewUrl) return true
   if (data.kind === 'video' && videoLoading && !data.previewUrl) return true
 
   return false
-}
-
-function isNodeAwaitingGenerationResume(data: CanvasNodeData) {
-  const imageLoading = data.imageGenState === 'loading' && !data.previewUrl
-  const textLoading = data.textGenState === 'loading' && !String(data.content || '').trim()
-  const videoLoading =
-    data.kind === 'video' && data.uploadState === 'uploading' && !data.previewUrl
-  return imageLoading || textLoading || videoLoading
 }
 
 function inferGenerationTaskType(

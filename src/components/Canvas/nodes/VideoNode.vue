@@ -22,7 +22,7 @@
     </button>
 
     <button
-      v-if="!hasVideoPreview && !isFileUploading && !showTaskMeta"
+      v-if="((!hasVideoPreview && !isFileUploading && !showTaskMeta) || isGenerationFailed) && !isVideoGenerating"
       type="button"
       class="canvas-node__delete-float"
       title="删除节点"
@@ -207,6 +207,17 @@
       </div>
     </div>
 
+    <div
+      v-else-if="isGenerationFailed"
+      class="video-node__body video-node__body--failed"
+    >
+      <CanvasGenerationFailPanel
+        :message="failMessage"
+        :task-id="data.generationTaskId"
+        :light="isLightTheme"
+      />
+    </div>
+
     <div v-else class="video-node__body video-node__body--media">
       <div v-if="data.uploadState === 'uploading' && !isVideoGenerating" class="video-node__uploading">
         <span class="video-node__spinner" aria-hidden="true" />
@@ -231,8 +242,9 @@
 import { computed, inject, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import type { Node } from '@antv/x6'
 import type { CanvasNodeData } from '../constants'
-import { isNodeFileUploading } from '../constants'
+import { isCanvasGenerationFailed, isNodeFileUploading, resolveGenerationFailMessage } from '../constants'
 import type { CanvasGraph } from '../graph'
+import CanvasGenerationFailPanel from './CanvasGenerationFailPanel.vue'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
 import { useNodePortPlusStyle } from './useNodePortPlusStyle'
@@ -292,6 +304,15 @@ const hasVideoPreview = computed(
 )
 
 const isFileUploading = computed(() => isNodeFileUploading(data))
+
+const isGenerationFailed = computed(
+  () =>
+    isCanvasGenerationFailed(data) &&
+    !hasVideoPreview.value &&
+    !isVideoGenerating.value,
+)
+
+const failMessage = computed(() => resolveGenerationFailMessage(data))
 
 const headerTitle = computed(() => {
   if (data.videoGenTab) return resolveVideoTaskTypeLabel(data.videoGenTab)
@@ -567,12 +588,17 @@ onBeforeUnmount(() => {
 }
 
 .video-node__body--media,
-.video-node__body--generating {
+.video-node__body--generating,
+.video-node__body--failed {
   align-items: stretch;
   justify-content: center;
   padding: 0;
   color: #9ca3af;
   font-size: 14px;
+}
+
+.video-node__body--failed {
+  background: #ffffff;
 }
 
 .video-node__uploading {

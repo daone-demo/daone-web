@@ -49,6 +49,13 @@
         <span class="model3d-node__spinner" aria-hidden="true" />
         <span>{{ genHintText }}</span>
       </div>
+      <div v-else-if="isGenerationFailed" class="model3d-node__overlay model3d-node__overlay--failed">
+        <CanvasGenerationFailPanel
+          :message="failMessage"
+          :task-id="data.generationTaskId"
+          :light="isLightTheme"
+        />
+      </div>
       <div v-else-if="loadState === 'loading'" class="model3d-node__overlay">
         <span class="model3d-node__spinner" aria-hidden="true" />
         <span>加载 3D 模型…</span>
@@ -73,6 +80,8 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import type { CanvasNodeData } from '../constants'
+import { isCanvasGenerationFailed, resolveGenerationFailMessage } from '../constants'
+import CanvasGenerationFailPanel from './CanvasGenerationFailPanel.vue'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
 import { useNodePortPlusStyle } from './useNodePortPlusStyle'
@@ -107,6 +116,9 @@ const genHintText = computed(() => {
   if (progress >= 100) return '即将完成...'
   return `生成中 ${progress}%`
 })
+
+const isGenerationFailed = computed(() => isCanvasGenerationFailed(data))
+const failMessage = computed(() => resolveGenerationFailMessage(data))
 
 let renderer: THREE.WebGLRenderer | null = null
 let scene: THREE.Scene | null = null
@@ -389,6 +401,11 @@ onBeforeUnmount(() => {
 .model3d-node__overlay--generating {
   @include node-generating-background();
   color: #8a8a8a;
+}
+
+.model3d-node__overlay--failed {
+  background: #ffffff;
+  color: #6b7280;
 }
 
 .model3d-node__overlay--error {

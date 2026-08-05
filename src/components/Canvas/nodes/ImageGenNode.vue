@@ -30,7 +30,7 @@
       ×
     </button>
 
-    <div v-if="!isEmptyUpload" class="image-gen-node__meta canvas-node__meta">
+    <div v-if="!isEmptyUpload && !isGenerationFailed" class="image-gen-node__meta canvas-node__meta">
       <span class="image-gen-node__title">
         <span v-if="data.imageGenTask === 'img2img'" class="image-gen-node__title-icon">图</span>
         <span class="image-gen-node__title-text">{{ headerTitle }}</span>
@@ -61,7 +61,20 @@
       </div>
 
       <div
-        v-else-if="data.imageGenState"
+        v-else-if="isGenerationFailed"
+        class="image-gen-node__picker"
+      >
+        <div class="image-gen-node__preview image-gen-node__preview--empty image-gen-node__preview--failed">
+          <CanvasGenerationFailPanel
+            :message="failMessage"
+            :task-id="data.generationTaskId"
+            :light="isLightTheme"
+          />
+        </div>
+      </div>
+
+      <div
+        v-else-if="data.imageGenState && data.imageGenState !== 'failed'"
         class="image-gen-node__picker"
       >
         <div
@@ -151,6 +164,9 @@ import { useNodePortPlusStyle } from './useNodePortPlusStyle'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import { syncNodeViewData } from './syncNodeViewData'
 import { useCanvasNodeImage } from './useCanvasNodeImage'
+import CanvasGenerationFailPanel from './CanvasGenerationFailPanel.vue'
+import { isImageGenerationFailedNode, resolveImageGenerationProgressLabel } from '../imageGen'
+import { resolveGenerationFailMessage } from '../constants'
 
 const { isLightTheme } = useCanvasBgTheme()
 const getNode = inject<() => Node>('getNode')!
@@ -170,8 +186,12 @@ const data = reactive<CanvasNodeData>({
 const { displayUrl, isImageLoading, onImageLoad, onImageError } = useCanvasNodeImage(toRef(data, 'previewUrl'))
 
 const headerTitle = computed(() => {
+  if (data.imageGenState === 'loading') {
+    return resolveImageGenerationProgressLabel(data)
+  }
   if (data.imageGenTask === 'img2img') return '图生图'
   if (data.imageGenTask === 'hd') return '图片高清'
+  if (data.imageGenTask === 'picker' && data.mode === 'editor') return '文生图'
   return data.title
 })
 
@@ -181,6 +201,12 @@ const isEmptyUpload = computed(
     !data.previewUrl &&
     !data.imageGenState,
 )
+
+const isGenerationFailed = computed(
+  () => isImageGenerationFailedNode(data) && !data.previewUrl?.trim(),
+)
+
+const failMessage = computed(() => resolveGenerationFailMessage(data))
 
 const genProgressText = computed(() => {
   const progress = data.imageGenProgress ?? 0
@@ -333,6 +359,14 @@ onMounted(() => {
     flex: 1;
     min-height: 140px;
     cursor: pointer;
+  }
+
+  &--failed {
+    flex: 1;
+    min-height: 140px;
+    cursor: default;
+    background: #ffffff;
+    color: #6b7280;
   }
 
   &--generating {

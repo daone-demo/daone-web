@@ -35,6 +35,7 @@ declare module 'vue' {
     CanvasEdgeDeleteButton: typeof import('./components/Canvas/panels/CanvasEdgeDeleteButton.vue')['default']
     CanvasElementSelectBar: typeof import('./components/Canvas/panels/CanvasElementSelectBar.vue')['default']
     CanvasEmptyHint: typeof import('./components/Canvas/panels/CanvasEmptyHint.vue')['default']
+    CanvasGenerationFailPanel: typeof import('./components/Canvas/nodes/CanvasGenerationFailPanel.vue')['default']
     CanvasGroupOverlay: typeof import('./components/Canvas/panels/CanvasGroupOverlay.vue')['default']
     CanvasGroupOverlayBackground: typeof import('./components/Canvas/panels/CanvasGroupOverlayBackground.vue')['default']
     CanvasGroupToolbar: typeof import('./components/Canvas/panels/CanvasGroupToolbar.vue')['default']

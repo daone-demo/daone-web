@@ -1,0 +1,93 @@
+.canvas-gen-fail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 20px 16px;
+  box-sizing: border-box;
+  text-align: center;
+  color: #6b7280;
+  user-select: none;
+}
+
+.canvas-gen-fail__icon {
+  flex-shrink: 0;
+  color: #ff4d4f;
+  margin-bottom: 8px;
+}
+
+.canvas-gen-fail__title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #ff4d4f;
+}
+
+.canvas-gen-fail__message {
+  margin: 0;
+  max-width: 220px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #9ca3af;
+  word-break: break-word;
+}
+
+.canvas-gen-fail__task {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  max-width: 100%;
+}
+
+.canvas-gen-fail__task-label {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #c4c4c4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-gen-fail__copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #c4c4c4;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+
+  &:hover {
+    color: #9ca3af;
+    background: rgba(0, 0, 0, 0.04);
+  }
+}
+
+.canvas-gen-fail--light {
+  color: #6b7280;
+
+  .canvas-gen-fail__message {
+    color: #9ca3af;
+  }
+
+  .canvas-gen-fail__task-label,
+  .canvas-gen-fail__copy {
+    color: #c4c4c4;
+  }
+
+  .canvas-gen-fail__copy:hover {
+    color: #6b7280;
+    background: rgba(0, 0, 0, 0.05);
+  }
+}

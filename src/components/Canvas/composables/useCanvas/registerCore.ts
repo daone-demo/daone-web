@@ -18,7 +18,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, getImageGenerationPlaceholderSize, findReusableImageGenerationNode, resetImageGenerationNodeForRetry, isImageGenerationFailedNode, shouldGenerateImageInPlaceOnNode, prepareImageNodeForInPlaceGeneration, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
+  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, getImageGenerationPlaceholderSize, findReusableImageGenerationNode, resetImageGenerationNodeForRetry, isImageGenerationFailedNode, shouldGenerateImageInPlaceOnNode, prepareImageNodeForInPlaceGeneration, resolveText2ImageGenerationTargetNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
   getConnectMenuPosition, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -99,6 +99,14 @@ import {
   type GenerationTaskResult,
   type GenerationTaskType,
 } from '../../generationTask'
+import {
+  buildImageGenerationParams,
+  buildModelGenerationParams,
+  buildTextGenerationParams,
+  buildVideoGenerationParams,
+  imageDialogueSettingsFromPayload,
+  persistNodeGenerationSnapshot,
+} from '../../generationParams'
 import type { CanvasElementGroupDragPayload } from '../../constants'
 import {
   resolveImageAssetId,
@@ -122,6 +130,7 @@ import {
   type VideoGenResolution,
   type VideoGenDuration,
   type ImageMarkItem,
+  type CanvasGenerationParams,
   canOpenImageDialogueOnNode,
   hasPersistedImageDialogueProvenance,
   normalizeImageDialogueSettingsForModel,
@@ -150,6 +159,7 @@ import {
   buildGroupExecuteConfirmContent,
   collectGroupAiTasks,
   estimateGroupExecuteCredits,
+  findGroupOutgoingAiResultNode,
   resolveGroupAiReferenceContext,
   sortGroupAiTasksByDependency,
   type GroupAiReferenceContext,
@@ -625,19 +635,45 @@ export function registerCore(bind: CanvasBindings) {
       mode: VideoDialogueSettings['mode']
     },
     sourceRefs?: ReturnType<typeof getVideoSourceRefs>,
+    extra?: {
+      capabilityCode?: string
+      parameters?: Record<string, unknown>
+      referenceAssetIds?: string[]
+    },
   ) {
     const g = graph.value
-    const data = { ...(node.getData() as CanvasNodeData) }
     const refs =
       sourceRefs ??
       (g ? getVideoSourceRefs(g, node.id) : [])
     const settings = buildVideoDialogueSettingsFromPayload(payload)
-    data.genPrompt = payload.prompt
-    data.videoDialogueText = payload.prompt
-    data.videoDialogueSettings = { ...settings }
-    data.videoSourceRefs = toPersistedVideoSourceRefs(refs)
-    data.videoGenAspectRatio = payload.ratio
-    node.setData(data, { overwrite: true })
+    const parameters = extra?.parameters ?? {
+      mode: payload.mode,
+      model: payload.model,
+      ratio: payload.ratio,
+      clarity: toVideoApiClarity(payload.clarity),
+      duration: payload.duration,
+      generateAudio: payload.generateAudio,
+      videoCount: payload.videoCount,
+    }
+    persistNodeGenerationSnapshot(node, {
+      ...buildVideoGenerationParams({
+        prompt: payload.prompt,
+        capabilityCode: extra?.capabilityCode ?? VIDEO_GENERAL_CAPABILITY_CODE,
+        parameters,
+        referenceAssetIds: extra?.referenceAssetIds,
+      }),
+      videoDialogueText: payload.prompt,
+      videoDialogueSettings: settings,
+      videoSourceRefs: toPersistedVideoSourceRefs(refs),
+      genPrompt: payload.prompt,
+    })
+    node.setData(
+      {
+        ...(node.getData() as CanvasNodeData),
+        videoGenAspectRatio: payload.ratio as VideoGenAspectRatio,
+      },
+      { overwrite: true },
+    )
   }
 
   function getActiveVideoTargetNodeId() {
@@ -1679,6 +1715,31 @@ export function registerCore(bind: CanvasBindings) {
     updateNodeToolbar()
     scheduleHistoryPush()
 
+    resultNodes.forEach((resultNode) => {
+      const settings = refreshedSource.videoDialogueSettings
+      applyVideoGenerationProvenance(
+        resultNode,
+        {
+          prompt,
+          model: settings?.modelKey ?? '',
+          ratio: String(settings?.aspectRatio ?? '16:9'),
+          clarity: String(settings?.resolution ?? '720p'),
+          duration: Number(settings?.duration ?? 5),
+          generateAudio: Boolean(settings?.generateAudio),
+          videoCount: Number(settings?.videoCount ?? 1),
+          mode: settings?.mode ?? 'text-to-video',
+        },
+        refreshedSource.videoSourceRefs?.length
+          ? refreshedSource.videoSourceRefs
+          : liveSourceRefs,
+        {
+          capabilityCode: config.capabilityCode,
+          parameters: singleTaskParameters,
+          referenceAssetIds,
+        },
+      )
+    })
+
     void Promise.all(
       resultNodes.map(async (resultNode, index) => {
         const nodeFileName = buildIndexedFileName(index)
@@ -2006,6 +2067,14 @@ export function registerCore(bind: CanvasBindings) {
     const resultNode = spawnModel3DResultNode(g, sourceNode, {
       title,
       fileName: `${event.label?.trim() || '图片转3D'}.glb`,
+    })
+    persistNodeGenerationSnapshot(resultNode, {
+      ...buildModelGenerationParams({
+        prompt: '',
+        capabilityCode: 'IMAGE_TO_3D',
+        parameters: { assetId: event.assetId },
+        referenceAssetIds: [event.assetId],
+      }),
     })
 
     selectedNodeId.value = resultNode.id
@@ -2449,17 +2518,21 @@ export function registerCore(bind: CanvasBindings) {
       shouldGenerateImageInPlaceOnNode(sourceData, { requestedCount, hasReferenceImages })
         ? sourceNode
         : null
+    const inPlaceTitle =
+      inPlaceTarget && !hasReferenceImages && sourceData.kind === 'image'
+        ? '文生图'
+        : title
 
     if (inPlaceTarget) {
       if (isImageGenerationFailedNode(sourceData)) {
         resetImageGenerationNodeForRetry(inPlaceTarget, {
-          title,
+          title: inPlaceTitle,
           fileName: buildIndexedFileName(0),
           prompt,
         })
       } else {
         prepareImageNodeForInPlaceGeneration(inPlaceTarget, {
-          title,
+          title: inPlaceTitle,
           fileName: buildIndexedFileName(0),
           prompt,
         })
@@ -2506,6 +2579,18 @@ export function registerCore(bind: CanvasBindings) {
         settings: provenanceSettings,
         sourceRefs: provenanceRefs,
         elementMarks: dialogueElementMarks.length ? dialogueElementMarks : undefined,
+        generationParams: buildImageGenerationParams({
+          prompt,
+          capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+          parameters: taskParameters,
+          workflowId: resolveGenerationTaskWorkflowId(payload.workflowId, payload.workflow) ?? undefined,
+          referenceAssetIds:
+            referenceAssetIds.length > 0
+              ? referenceAssetIds
+              : assetId
+                ? [assetId]
+                : undefined,
+        }),
       })
     })
 
@@ -2811,6 +2896,28 @@ export function registerCore(bind: CanvasBindings) {
       updateNodeToolbar()
       scheduleHistoryPush()
 
+      resultNodes.forEach((resultNode) => {
+        applyVideoGenerationProvenance(
+          resultNode,
+          {
+            prompt,
+            model: payload.model,
+            ratio: payload.ratio,
+            clarity: payload.clarity,
+            duration: payload.duration,
+            generateAudio: payload.generateAudio,
+            videoCount: 1,
+            mode: resolvedMode,
+          },
+          submitCtx.refs,
+          {
+            capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
+            parameters,
+            referenceAssetIds: imageAssetIds.length ? imageAssetIds : undefined,
+          },
+        )
+      })
+
       void Promise.all(
         resultNodes.map(async (resultNode, index) => {
           const nodeFileName = resolveGenerationResultFileName(
@@ -2892,6 +2999,26 @@ export function registerCore(bind: CanvasBindings) {
       { overwrite: true },
     )
     connectRefsToVideoNode(targetNode)
+
+    applyVideoGenerationProvenance(
+      targetNode,
+      {
+        prompt,
+        model: payload.model,
+        ratio: payload.ratio,
+        clarity: payload.clarity,
+        duration: payload.duration,
+        generateAudio: payload.generateAudio,
+        videoCount: payload.videoCount,
+        mode: resolvedMode,
+      },
+      submitCtx.refs,
+      {
+        capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
+        parameters,
+        referenceAssetIds: imageAssetIds.length ? imageAssetIds : undefined,
+      },
+    )
 
     selectedNodeId.value = targetNode.id
     selectedKind.value = 'video'
@@ -3219,6 +3346,15 @@ export function registerCore(bind: CanvasBindings) {
       ''
     recordCanvasDescription(config.title, '')
     const provenanceSettings = normalizeImageDialogueSettings(sourceData.imageDialogueSettings)
+    const referenceAssetIds =
+      config.resolveReferenceAssetIds?.(event) ??
+      (event.assetId ? [event.assetId] : [])
+    const capabilityGenerationParams = buildImageGenerationParams({
+      prompt: provenancePrompt,
+      capabilityCode: config.capabilityCode,
+      parameters: singleTaskParameters,
+      referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
+    })
     resultNodes.forEach((resultNode) => {
       applyImageDialogueProvenance(resultNode, {
         prompt: provenancePrompt,
@@ -3226,6 +3362,7 @@ export function registerCore(bind: CanvasBindings) {
         sourceRefs: provenanceRefs.length
           ? provenanceRefs
           : seedImageDialogueRefs(sourceData, sourceNode.id),
+        generationParams: capabilityGenerationParams,
       })
     })
 
@@ -3238,10 +3375,6 @@ export function registerCore(bind: CanvasBindings) {
     bumpToolbarRevision()
     updateNodeToolbar()
     scheduleHistoryPush()
-
-    const referenceAssetIds =
-      config.resolveReferenceAssetIds?.(event) ??
-      (event.assetId ? [event.assetId] : [])
 
     const distributionConfig = {
       title: config.title,
@@ -3815,9 +3948,9 @@ export function registerCore(bind: CanvasBindings) {
       settings?: ImageDialogueSettings
       sourceRefs: ImageSourceRef[]
       elementMarks?: ImageMarkItem[]
+      generationParams?: CanvasGenerationParams
     },
   ) {
-    const data = { ...(targetNode.getData() as CanvasNodeData) }
     const refs = options.sourceRefs
       .filter((item) => item.previewUrl?.trim())
       .map((item) => ({
@@ -3827,6 +3960,23 @@ export function registerCore(bind: CanvasBindings) {
         fileName: item.fileName ?? '',
       }))
 
+    const prompt = options.prompt.trim()
+    if (options.generationParams) {
+      persistNodeGenerationSnapshot(targetNode, {
+        ...options.generationParams,
+        prompt: options.generationParams.prompt || prompt,
+        imageDialogueText: prompt,
+        imageDialogueSettings: options.settings,
+        imageSourceRefs: refs,
+        elementMarks: options.elementMarks?.length
+          ? options.elementMarks.map((mark) => ({ ...mark }))
+          : undefined,
+        genPrompt: prompt,
+      })
+      return
+    }
+
+    const data = { ...(targetNode.getData() as CanvasNodeData) }
     data.imageSourceRefs = refs
     const latest = refs[refs.length - 1]
     if (latest) {
@@ -3837,7 +3987,6 @@ export function registerCore(bind: CanvasBindings) {
     }
     data.inputUpdated = refs.length > 0
 
-    const prompt = options.prompt.trim()
     if (prompt) {
       data.imageDialogueText = prompt
       data.genPrompt = prompt
@@ -4376,7 +4525,9 @@ export function registerCore(bind: CanvasBindings) {
       data.imageDialogueText = imageDialogueText.value
       data.imageDialogueSettings = { ...imageDialogueSettings.value }
     } else {
-      data.genPrompt = imageGenPromptText.value
+      data.imageDialogueText = imageDialogueText.value || imageGenPromptText.value
+      data.imageDialogueSettings = { ...imageDialogueSettings.value }
+      data.genPrompt = imageGenPromptText.value || imageDialogueText.value
     }
     cell.setData(data)
   }
@@ -4776,6 +4927,17 @@ export function registerCore(bind: CanvasBindings) {
           textGenProgress: 0,
         }
         cell.setData(loadingData, { overwrite: true })
+        persistNodeGenerationSnapshot(cell as Node, {
+          ...buildTextGenerationParams({
+            prompt: promptText.value.trim(),
+            capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+            parameters: {
+              assetId,
+              prompt: promptText.value.trim(),
+            },
+          }),
+          genPrompt: promptText.value.trim(),
+        })
 
         const idempotencyKey =
           typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -4883,23 +5045,6 @@ export function registerCore(bind: CanvasBindings) {
           genPrompt: trimmedPrompt,
           centerPoint: plannedPoints[0],
         })
-        applyVideoGenerationProvenance(resultNode, {
-          prompt: trimmedPrompt,
-          model: text2videoSettings.modelKey,
-          ratio: text2videoSettings.aspectRatio,
-          clarity: text2videoSettings.resolution,
-          duration: text2videoSettings.duration,
-          generateAudio: text2videoSettings.generateAudio,
-          videoCount: text2videoSettings.videoCount,
-          mode: text2videoSettings.mode,
-        }, [])
-        closeTextPromptBar()
-
-        const idempotencyKey =
-          typeof crypto !== 'undefined' && 'randomUUID' in crypto
-            ? crypto.randomUUID()
-            : `text2video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-
         const videoParameters: Record<string, unknown> = {
           mode: videoPayload?.mode ?? 'text-to-video',
           model: videoPayload?.model,
@@ -4909,6 +5054,30 @@ export function registerCore(bind: CanvasBindings) {
           generateAudio: videoPayload?.generateAudio ?? true,
           videoCount: videoPayload?.videoCount ?? 1,
         }
+        applyVideoGenerationProvenance(
+          resultNode,
+          {
+            prompt: trimmedPrompt,
+            model: text2videoSettings.modelKey,
+            ratio: text2videoSettings.aspectRatio,
+            clarity: text2videoSettings.resolution,
+            duration: text2videoSettings.duration,
+            generateAudio: text2videoSettings.generateAudio,
+            videoCount: text2videoSettings.videoCount,
+            mode: text2videoSettings.mode,
+          },
+          [],
+          {
+            capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
+            parameters: videoParameters,
+          },
+        )
+        closeTextPromptBar()
+
+        const idempotencyKey =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `text2video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         try {
           const created = normalizeGenerationTaskDetail(
@@ -4967,18 +5136,40 @@ export function registerCore(bind: CanvasBindings) {
         }
 
         persistPromptBarDraft()
-        const imagePreviewSize = getNodeSize('image', 'editor', {
-          kind: 'image',
-          mode: 'editor',
-          imageGenState: 'loading',
-        })
-        const [imageCenterPoint] = planOutgoingResultPoints(g, cell as Node, imagePreviewSize, 1, 'right')
-        const resultNode = spawnGenerationResultNode(g, cell as Node, {
-          title: '文生图',
-          fileName: '文生图.png',
-          centerPoint: imageCenterPoint,
-        })
         closeTextPromptBar()
+
+        const sourceNode = cell as Node
+        const existingTarget = resolveText2ImageGenerationTargetNode(g, sourceNode)
+        let resultNode: Node
+
+        if (existingTarget) {
+          resultNode = existingTarget
+          if (isImageGenerationFailedNode(resultNode.getData() as CanvasNodeData)) {
+            resetImageGenerationNodeForRetry(resultNode, {
+              title: '文生图',
+              fileName: '文生图.png',
+              prompt: trimmedPrompt,
+            })
+          } else {
+            prepareImageNodeForInPlaceGeneration(resultNode, {
+              title: '文生图',
+              fileName: '文生图.png',
+              prompt: trimmedPrompt,
+            })
+          }
+        } else {
+          const imagePreviewSize = getNodeSize('image', 'editor', {
+            kind: 'image',
+            mode: 'editor',
+            imageGenState: 'loading',
+          })
+          const [imageCenterPoint] = planOutgoingResultPoints(g, sourceNode, imagePreviewSize, 1, 'right')
+          resultNode = spawnGenerationResultNode(g, sourceNode, {
+            title: '文生图',
+            fileName: '文生图.png',
+            centerPoint: imageCenterPoint,
+          })
+        }
 
         const imageParameters: Record<string, unknown> = {
           model: imagePayload?.model,
@@ -4988,9 +5179,26 @@ export function registerCore(bind: CanvasBindings) {
         if (imagePayload?.resolution) {
           imageParameters.resolution = imagePayload.resolution
         }
+        const text2ImageSettings = normalizeImageDialogueSettings(
+          imageDialogueSettingsFromPayload(imagePayload),
+        )
+        const text2ImageGenerationParams = buildImageGenerationParams({
+          prompt: trimmedPrompt,
+          capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+          parameters: imageParameters,
+          workflowId: resolveGenerationTaskWorkflowId(
+            imagePayload?.workflowId,
+            imagePayload?.workflow,
+          ) ?? undefined,
+        })
+        applyImageDialogueProvenance(resultNode, {
+          prompt: trimmedPrompt,
+          settings: text2ImageSettings,
+          sourceRefs: [],
+          generationParams: text2ImageGenerationParams,
+        })
 
         try {
-          const sourceNode = cell as Node
           const sourceFileName = '文生图.png'
           const started = await startImageGenerationOnNode(resultNode, {
             title: '文生图',
@@ -5094,6 +5302,14 @@ export function registerCore(bind: CanvasBindings) {
           textPickerTask: '' as const,
         }
         cell.setData(loadingData, { overwrite: true })
+        persistNodeGenerationSnapshot(cell as Node, {
+          ...buildTextGenerationParams({
+            prompt: trimmedPrompt,
+            capabilityCode: 'TEXT_COPY_V1',
+            parameters: { style: 'creative' },
+          }),
+          genPrompt: trimmedPrompt,
+        })
 
         const idempotencyKey =
           typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -5180,20 +5396,47 @@ export function registerCore(bind: CanvasBindings) {
     imageGenSubmitting.value = true
     persistImageGenPrompt()
 
+    const syncedData = node.getData() as CanvasNodeData
+    const settings = normalizeImageDialogueSettings(
+      syncedData.imageDialogueSettings ?? imageDialogueSettings.value,
+    )
+    const taskParameters: Record<string, unknown> = {
+      model: settings.modelKey,
+      aspectRatio: settings.aspectRatio,
+      count: Math.max(1, settings.imageCount ?? 1),
+    }
+    if (settings.resolution) {
+      taskParameters.resolution = settings.resolution
+    }
+
+    const referenceAssetIds = resolvePromptReferenceAssetIds(syncedData)
+    persistNodeGenerationSnapshot(node, {
+      ...buildImageGenerationParams({
+        prompt,
+        capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+        parameters: taskParameters,
+        workflowId: settings.workflowId,
+        referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
+      }),
+      imageDialogueText: prompt,
+      imageDialogueSettings: settings,
+      genPrompt: prompt,
+      genSeed: syncedData.genSeed ?? imageGenSeed.value,
+    })
+
     node.setData({
-      ...currentData,
+      ...(node.getData() as CanvasNodeData),
       imageGenState: 'loading',
       imageGenProgress: 0,
       genPrompt: prompt,
     }, { overwrite: true })
     closeImageGenPromptBar()
 
-    const referenceAssetIds = resolvePromptReferenceAssetIds(currentData)
-    const fileName = currentData.fileName || currentData.title || '文生图.png'
+    const fileName = syncedData.fileName || syncedData.title || '文生图.png'
 
     try {
       const outcome = await runImageGenerationOnNode(node, {
-        title: currentData.title || '文生图',
+        title: syncedData.title || '文生图',
         fileName,
         createTask: async () => {
           const idempotencyKey =
@@ -9421,96 +9664,26 @@ export function registerCore(bind: CanvasBindings) {
           content.hint,
         ),
       ]),
-      onOk: async () => {
+      onOk: () => {
         if (!tasks.length) return
-        groupExecuting = true
-        try {
-          await runGroupAiGenerationPipeline(g, group.groupId, tasks)
-          message.success('整组执行已完成')
-        } catch {
-          message.error('整组执行未完成，请检查节点状态后重试')
-        } finally {
-          groupExecuting = false
-          bumpToolbarRevision()
-          updateNodeToolbar()
-        }
+        void (async () => {
+          groupExecuting = true
+          try {
+            await runGroupAiGenerationPipeline(g, group.groupId, tasks)
+            message.success('整组执行已完成')
+          } catch {
+            message.error('整组执行未完成，请检查节点状态后重试')
+          } finally {
+            groupExecuting = false
+            bumpToolbarRevision()
+            updateNodeToolbar()
+          }
+        })()
       },
     })
   }
 
   let groupExecuting = false
-
-  function isGroupGenerationActive(data: CanvasNodeData): boolean {
-    return (
-      data.imageGenState === 'loading' ||
-      data.textGenState === 'loading' ||
-      isVideoNodeGenerating(data)
-    )
-  }
-
-  function isGroupGenerationFailed(data: CanvasNodeData): boolean {
-    if (data.imageGenState === 'failed' || data.title === '生成失败') return true
-    if (
-      data.textGenState === 'idle' &&
-      data.generationTaskId &&
-      !String(data.content ?? '').replace(/<[^>]+>/g, '').trim()
-    ) {
-      return true
-    }
-    return false
-  }
-
-  async function waitForGroupNodeDataCondition(
-    node: Node,
-    readState: (data: CanvasNodeData) => boolean | null,
-    timeoutMs = 120000,
-  ): Promise<boolean> {
-    const evaluate = () => readState(node.getData() as CanvasNodeData)
-    const immediate = evaluate()
-    if (immediate !== null) return immediate
-
-    return new Promise((resolve) => {
-      const deadline = Date.now() + timeoutMs
-      const onChange = () => {
-        const result = evaluate()
-        if (result !== null) {
-          node.off('change:data', onChange)
-          resolve(result)
-          return
-        }
-        if (Date.now() >= deadline) {
-          node.off('change:data', onChange)
-          resolve(false)
-        }
-      }
-      node.on('change:data', onChange)
-    })
-  }
-
-  async function waitForGroupSpawnedGenerationComplete(g: Graph, nodeId: string): Promise<boolean> {
-    if (!nodeId) return false
-    const cell = g.getCellById(nodeId)
-    if (!cell?.isNode()) return false
-
-    const node = cell as Node
-    const started = await waitForGroupNodeDataCondition(
-      node,
-      (data) => {
-        if (isGroupGenerationActive(data)) return true
-        if (isGroupGenerationFailed(data)) return false
-        return null
-      },
-      15000,
-    )
-    if (!started) return false
-
-    return waitForGroupNodeDataCondition(node, (data) => {
-      if (isGroupGenerationActive(data)) return null
-      if (isGroupGenerationFailed(data)) return false
-      if (data.kind === 'video' && data.generationTaskId && !data.previewUrl?.trim()) return false
-      return true
-    })
-  }
 
   async function syncGroupAiProvenance(
     node: Node,
@@ -9522,6 +9695,13 @@ export function registerCore(bind: CanvasBindings) {
       settings: refCtx.settings,
       sourceRefs: refCtx.sourceRefs,
       elementMarks: data.elementMarks,
+      generationParams: buildImageGenerationParams({
+        prompt: refCtx.prompt,
+        capabilityCode: refCtx.capabilityCode,
+        parameters: refCtx.parameters,
+        workflowId: refCtx.workflowId ?? undefined,
+        referenceAssetIds: refCtx.referenceAssetIds,
+      }),
     })
   }
 
@@ -9579,15 +9759,28 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     const prompt = synced.genPrompt?.trim() || IMG2PROMPT_DEFAULT_INSTRUCTION
-    node.setData(
-      {
-        ...(node.getData() as CanvasNodeData),
-        mode: 'editor',
-        textGenState: 'loading',
-        textGenProgress: 0,
-      },
-      { overwrite: true },
-    )
+    const nextData = {
+      ...(node.getData() as CanvasNodeData),
+      mode: 'editor' as const,
+      title: '反推提示词',
+      textPickerTask: 'img2prompt' as const,
+      textGenState: 'loading' as const,
+      textGenProgress: 0,
+      content: '',
+      generationFailMessage: undefined,
+    }
+    delete nextData.generationTaskId
+    delete nextData.generationTaskType
+    node.setData(nextData, { overwrite: true })
+    persistNodeGenerationSnapshot(node, {
+      ...buildTextGenerationParams({
+        prompt,
+        capabilityCode: 'IMAGE_PROMPT_REVERSE',
+        parameters: { assetId, prompt },
+        referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : [assetId],
+      }),
+      genPrompt: prompt,
+    })
 
     const idempotencyKey =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -9599,8 +9792,8 @@ export function registerCore(bind: CanvasBindings) {
         await api.createGenerationTask<GenerationTaskDetail>(
           {
             taskType: 'TEXT',
-            capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
-            prompt,
+            capabilityCode: 'IMAGE_PROMPT_REVERSE',
+            prompt: '',
             parameters: { assetId, prompt },
             projectId: activeProjectId.value,
             nodeId: node.id,
@@ -9623,8 +9816,8 @@ export function registerCore(bind: CanvasBindings) {
       })
       if (!succeeded) return false
 
-      const nextData = { ...(node.getData() as CanvasNodeData), genPrompt: prompt }
-      node.setData(nextData, { overwrite: true })
+      node.setData({ ...(node.getData() as CanvasNodeData), genPrompt: prompt }, { overwrite: true })
+      persistGenerationTaskBinding(node, { detail: prompt, taskType: '反推提示词' })
       return true
     } catch (error) {
       markTextGenerationNodeFailed(node)
@@ -9750,6 +9943,7 @@ export function registerCore(bind: CanvasBindings) {
     node: Node,
     task: GroupAiTask,
     refCtx: GroupAiReferenceContext,
+    scopeIds: Set<string>,
   ): Promise<boolean> {
     selectedNodeId.value = task.nodeId
     selectedKind.value = (node.getData() as CanvasNodeData).kind
@@ -9764,14 +9958,49 @@ export function registerCore(bind: CanvasBindings) {
         return executeGroupAiTextImg2PromptTask(g, node)
       case 'textCopy':
         return executeGroupAiTextCopyTask(node)
-      case 'text2image':
+      case 'text2image': {
+        // 整组执行：在组内已有文生图节点上原地重跑，绝不新建节点
+        const target =
+          findGroupOutgoingAiResultNode(g, task.nodeId, scopeIds, 'image') ??
+          ((node.getData() as CanvasNodeData).kind === 'image' ? node : null)
+        if (!target) {
+          message.warning('组内未找到可重跑的文生图节点，已跳过')
+          return false
+        }
+        const targetCtx =
+          resolveGroupAiReferenceContext(
+            g,
+            target,
+            { ...task, kind: 'imageDialogue', nodeId: target.id },
+            scopeIds,
+            new Map(),
+          ) ?? refCtx
+        await syncGroupAiProvenance(target, targetCtx)
+        selectedNodeId.value = target.id
+        selectedKind.value = 'image'
+        syncNodeSelectionHighlight(target.id)
+        return executeGroupAiImageTask(target, targetCtx)
+      }
       case 'text2video': {
-        activePickerNodeId.value = task.nodeId
-        loadPromptBarContext(task.nodeId)
-        modelType.value = task.kind === 'text2video' ? 'text2video' : 'text2image'
-        await submitTextPrompt()
-        await nextTick()
-        return waitForGroupSpawnedGenerationComplete(g, selectedNodeId.value)
+        const target =
+          findGroupOutgoingAiResultNode(g, task.nodeId, scopeIds, 'video') ??
+          ((node.getData() as CanvasNodeData).kind === 'video' ? node : null)
+        if (!target) {
+          message.warning('组内未找到可重跑的文生视频节点，已跳过')
+          return false
+        }
+        const targetCtx =
+          resolveGroupAiReferenceContext(
+            g,
+            target,
+            { ...task, kind: 'videoDialogue', nodeId: target.id },
+            scopeIds,
+            new Map(),
+          ) ?? refCtx
+        selectedNodeId.value = target.id
+        selectedKind.value = 'video'
+        syncNodeSelectionHighlight(target.id)
+        return executeGroupAiVideoTask(target, targetCtx)
       }
       case 'videoDialogue':
         return executeGroupAiVideoTask(node, refCtx)
@@ -9795,22 +10024,31 @@ export function registerCore(bind: CanvasBindings) {
         throw new Error('group execute missing reference')
       }
 
-      const succeeded = await executeGroupAiTask(g, node, task, refCtx)
+      const succeeded = await executeGroupAiTask(g, node, task, refCtx, scopeIds)
       if (!succeeded) {
         throw new Error('group execute failed')
       }
 
-      let assetId = resolveImageAssetId(node.getData() as CanvasNodeData)
-      if (!assetId && selectedNodeId.value) {
-        const resultCell = g.getCellById(selectedNodeId.value)
-        if (resultCell?.isNode()) {
-          assetId = resolveImageAssetId(resultCell.getData() as CanvasNodeData)
-        }
+      const resultNodeId =
+        task.kind === 'text2image' || task.kind === 'text2video'
+          ? selectedNodeId.value || task.nodeId
+          : task.nodeId
+      const resultCell = g.getCellById(resultNodeId)
+      let assetId = ''
+      if (resultCell?.isNode()) {
+        assetId = resolveImageAssetId(resultCell.getData() as CanvasNodeData)
       }
-      if (assetId) finishedAssets.set(node.id, assetId)
+      if (!assetId) {
+        assetId = resolveImageAssetId(node.getData() as CanvasNodeData)
+      }
+      if (assetId) finishedAssets.set(task.nodeId, assetId)
+      if (assetId && resultNodeId !== task.nodeId) {
+        finishedAssets.set(resultNodeId, assetId)
+      }
 
       bumpToolbarRevision()
       updateGroupToolbarPosition()
+      persistGenerationTaskBinding()
     }
 
     scheduleHistoryPush()

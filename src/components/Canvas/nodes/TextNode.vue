@@ -114,6 +114,17 @@
       </button>
     </div>
 
+    <div
+      v-else-if="isGenerationFailed"
+      class="text-node__body text-node__body--failed"
+    >
+      <CanvasGenerationFailPanel
+        :message="failMessage"
+        :task-id="data.generationTaskId"
+        :light="isLightTheme"
+      />
+    </div>
+
     <div v-else class="text-node__body text-node__body--editor">
       <div
         ref="editorRef"
@@ -169,7 +180,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import type { Node } from '@antv/x6'
 import api, { type PromptTranslationData } from '@/services/api'
@@ -177,11 +188,14 @@ import { isRequestError } from '@/utils/request'
 import {
   TEXT_EDITOR_PLACEHOLDER,
   TEXT_PICKER_TRY_ACTIONS,
+  isCanvasGenerationFailed,
+  resolveGenerationFailMessage,
   type CanvasNodeData,
   type TextFormatCommand,
 } from '../constants'
 import { createEmptyNodeData } from '../constants'
 import type { CanvasGraph } from '../graph'
+import CanvasGenerationFailPanel from './CanvasGenerationFailPanel.vue'
 import { useNodeConnect } from './useNodeConnect'
 import { useNodePortPlusStyle } from './useNodePortPlusStyle'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
@@ -270,6 +284,11 @@ const data = reactive<CanvasNodeData>({
   kind: 'text',
   title: '文本节点',
 })
+
+const isGenerationFailed = computed(
+  () => data.mode === 'editor' && isCanvasGenerationFailed(data),
+)
+const failMessage = computed(() => resolveGenerationFailMessage(data))
 
 let resizeState: {
   startX: number
@@ -1207,6 +1226,15 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   padding: 16px 16px 40px;
+}
+
+.text-node__body--failed {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: #ffffff;
 }
 
 .text-node__skeleton--lg {

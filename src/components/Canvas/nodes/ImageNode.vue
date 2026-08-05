@@ -40,7 +40,7 @@
       <span class="image-node__title">
         <!-- <span class="image-node__title-icon">▣</span> -->
         <i class="iconfont icon-tupian" style="font-size: 18px;" />
-        <span class="image-node__title-text">{{ data.title }}</span>
+        <span class="image-node__title-text">{{ metaTitle }}</span>
       </span>
     </div>
 
@@ -93,6 +93,7 @@
           'image-node__preview--uploading': data.uploadState === 'uploading',
           'image-node__preview--dragover': isDragOver,
           'image-node__preview--readonly': isGridSplitNode || isAiGenerated,
+          'image-node__preview--failed': isGenerationFailed,
         }"
         @click="onPreviewClick"
         @dblclick.stop="onPreviewDblClick"
@@ -226,6 +227,13 @@
           </div>
           <!-- <span v-if="showUploadSuccess" class="image-node__success">上传成功</span> -->
         </template>
+        <template v-else-if="isGenerationFailed">
+          <CanvasGenerationFailPanel
+            :message="failMessage"
+            :task-id="data.generationTaskId"
+            :light="isLightTheme"
+          />
+        </template>
         <template v-else>
           <i class="iconfont icon-shangchuantupian1" style="font-size: 36px;"></i>
           <span>{{ isDragOver ? '松开以上传图片' : '点击或拖拽图片到此处上传' }}</span>
@@ -238,9 +246,11 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Graph, Node } from '@antv/x6'
-import { CANVAS_IMAGE_NODE_DRAG_TYPE, canOpenImageDialogueOnNode, canReplaceImageNodePreview, isAiGeneratedImageNode, isNodeFileUploading, isPortrait, shouldAdaptImageNodeHeight } from '../constants'
+import { CANVAS_IMAGE_NODE_DRAG_TYPE, canOpenImageDialogueOnNode, canReplaceImageNodePreview, isAiGeneratedImageNode, isNodeFileUploading, isPortrait, resolveGenerationFailMessage, shouldAdaptImageNodeHeight } from '../constants'
 import type { CanvasNodeData, ImageMarkItem } from '../constants'
 import { createEmptyNodeData } from '../constants'
+import { isImageGenerationFailedNode, resolveImageGenerationProgressLabel } from '../imageGen'
+import CanvasGenerationFailPanel from './CanvasGenerationFailPanel.vue'
 import { useNodeDelete } from './useNodeDelete'
 import { useNodeConnect } from './useNodeConnect'
 import { useNodePortPlusStyle } from './useNodePortPlusStyle'
@@ -271,6 +281,10 @@ const data = reactive<CanvasNodeData>({ ...createEmptyNodeData(), kind: 'image',
 const { displayUrl, isImageLoading, onImageLoad, onImageError } = useCanvasNodeImage(toRef(data, 'previewUrl'))
 const isGridSplitNode = computed(() => Boolean(data.gridSplitTile))
 const isAiGenerated = computed(() => isAiGeneratedImageNode(data))
+const isGenerationFailed = computed(
+  () => isImageGenerationFailedNode(data) && !data.previewUrl?.trim(),
+)
+const failMessage = computed(() => resolveGenerationFailMessage(data))
 const showReplaceUploadBtn = computed(() => canReplaceImageNodePreview(data))
 const hasAdaptivePreview = computed(() => shouldAdaptImageNodeHeight(data))
 const isFileUploading = computed(() => isNodeFileUploading(data))
@@ -281,6 +295,13 @@ const genProgressText = computed(() => {
   if (progress <= 0) return '准备中...'
   if (progress >= 100) return '即将完成...'
   return `${progress}%`
+})
+
+const metaTitle = computed(() => {
+  if (data.imageGenState === 'loading') {
+    return resolveImageGenerationProgressLabel(data)
+  }
+  return data.title
 })
 
 function applyImageNaturalSize(size: { width: number; height: number }, previewUrl: string) {
@@ -981,6 +1002,12 @@ onMounted(() => {
 
 .image-node__preview--readonly {
   cursor: default;
+}
+
+.image-node__preview--failed {
+  cursor: default;
+  background: #ffffff;
+  color: #6b7280;
 }
 
 .image-node__preview--dragover {

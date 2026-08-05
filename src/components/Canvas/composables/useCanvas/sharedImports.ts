@@ -33,6 +33,7 @@ export {
   isImageGenerationFailedNode,
   findReusableImageGenerationNode,
   resetImageGenerationNodeForRetry,
+  resolveText2ImageGenerationTargetNode,
   shouldGenerateImageInPlaceOnNode,
   prepareImageNodeForInPlaceGeneration,
   spawnCompletedImageResultNode,
