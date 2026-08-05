@@ -3630,9 +3630,9 @@
 
   .canvas__image-resize-overlay {
     position: absolute;
-    z-index: 0;
+    z-index: 5;
     box-sizing: border-box;
-    border: 1.5px solid #6b7cff;
+    border: none;
     border-radius: 2px;
     pointer-events: none;
 
@@ -3640,18 +3640,31 @@
       display: none;
       pointer-events: none;
     }
+
+    &--frame {
+      border: 1.5px solid #6b7cff;
+    }
   }
 
   .canvas__image-resize-size {
     position: absolute;
-    left: 50%;
-    bottom: -18px;
-    transform: translateX(-50%);
+    right: 0;
+    bottom: -22px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
     font-size: 11px;
-    line-height: 1;
-    color: #9ca3af;
+    line-height: 1.4;
+    color: #6b7280;
     white-space: nowrap;
     pointer-events: none;
+  }
+
+  &.canvas--bg-light .canvas__image-resize-size {
+    background: rgba(255, 255, 255, 0.96);
+    color: #6b7280;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
   }
 
   .canvas__image-resize-handle {

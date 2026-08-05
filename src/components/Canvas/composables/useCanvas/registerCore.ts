@@ -27,7 +27,7 @@ import {
   getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition,   getNodeToolbarPosition,
   getImageMarkHintPosition,
   getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getImageNodeMediaScreenBox, getImageExpandOverlayLayout, syncImageNodeSizeToMediaAspect, startImageNodeCornerResize,
-  hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions,
+  hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions, formatDimensions,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, assignGroupId,
   expandSelectionToGroup, getCompleteGroupSelection, getNodesInGroup, mergeStoryboardGroup, normalizeGroupMembership, ungroupSelection,
   ensureImageTextEdge, syncTextNodeImageSource,
@@ -7954,8 +7954,70 @@ export function registerCore(bind: CanvasBindings) {
     nodeOverlaysRef.value?.applyImageResizeOverlayBox(box)
   }
 
+  function shouldHideImageDimensionOverlay() {
+    return (
+      showImageCrop.value ||
+      showImageGridSplit.value ||
+      showImageErase.value ||
+      showImageInpaint.value ||
+      showImageExpand.value ||
+      showImageEditText.value ||
+      showImageDialogue.value ||
+      showVideoDialogue.value ||
+      showPromptBar.value ||
+      showImageGenPromptBar.value ||
+      showVideoGenPromptBar.value
+    )
+  }
+
   function updateImageResizeOverlay() {
-    paintImageResizeOverlay(null)
+    const g = graph.value
+    const overlayRoot = canvasRef.value
+    const id = selectedNodeId.value
+
+    if (
+      !g ||
+      !overlayRoot ||
+      !id ||
+      selectedNodeIds.value.length > 1 ||
+      shouldHideImageDimensionOverlay()
+    ) {
+      paintImageResizeOverlay(null)
+      return
+    }
+
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) {
+      paintImageResizeOverlay(null)
+      return
+    }
+
+    const data = cell.getData() as CanvasNodeData
+    if (data.kind !== 'image' || !data.previewUrl?.trim()) {
+      paintImageResizeOverlay(null)
+      return
+    }
+
+    if (!data.mediaWidth || !data.mediaHeight) {
+      paintImageResizeOverlay(null)
+      return
+    }
+
+    if (data.uploadState === 'uploading' || data.imageGenState === 'loading') {
+      paintImageResizeOverlay(null)
+      return
+    }
+
+    const node = cell as Node
+    const box = getImageNodeMediaScreenBox(g, node, overlayRoot)
+    paintImageResizeOverlay({
+      left: box.left,
+      top: box.top,
+      width: box.width,
+      height: box.height,
+      dimensionLabel: formatDimensions(data.mediaWidth, data.mediaHeight),
+      nodeId: id,
+    })
   }
 
   function onImageResizePointerDown(event: MouseEvent, corner: ImageResizeCorner) {
@@ -9615,6 +9677,7 @@ export function registerCore(bind: CanvasBindings) {
 
   function onScrollerScroll() {
     updateNodeToolbar({ skipImageResizeOverlay: true })
+    updateImageResizeOverlay()
     updateEdgeDeleteButtonPosition()
     syncViewportNodeVisibility()
   }
@@ -9740,11 +9803,13 @@ export function registerCore(bind: CanvasBindings) {
       updateEdgeDeleteButtonPosition()
       syncViewportNodeVisibility()
       updateNodeToolbar({ skipImageResizeOverlay: true })
+      updateImageResizeOverlay()
     })
     instance.on('translate', () => {
       updateEdgeDeleteButtonPosition()
       syncViewportNodeVisibility()
       updateNodeToolbar({ skipImageResizeOverlay: true })
+      updateImageResizeOverlay()
     })
     instance.on('node:moving', ({ node }) => {
       syncGroupedNodeMove(node)

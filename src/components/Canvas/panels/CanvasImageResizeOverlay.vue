@@ -2,20 +2,25 @@
   <div
     ref="rootRef"
     class="canvas__image-resize-overlay"
-    :class="{ 'canvas__image-resize-overlay--hidden': !visible }"
+    :class="{
+      'canvas__image-resize-overlay--hidden': !visible,
+      'canvas__image-resize-overlay--frame': showFrame,
+    }"
     :style="boxStyle"
     @mousedown.stop
   >
     <span v-if="dimensionLabel" class="canvas__image-resize-size">{{ dimensionLabel }}</span>
-    <button
-      v-for="handle in handles"
-      :key="handle.corner"
-      type="button"
-      class="canvas__image-resize-handle"
-      :class="`canvas__image-resize-handle--${handle.corner}`"
-      :title="handle.title"
-      @mousedown.stop="emit('resize-start', $event, handle.corner)"
-    />
+    <template v-if="showFrame">
+      <button
+        v-for="handle in handles"
+        :key="handle.corner"
+        type="button"
+        class="canvas__image-resize-handle"
+        :class="`canvas__image-resize-handle--${handle.corner}`"
+        :title="handle.title"
+        @mousedown.stop="emit('resize-start', $event, handle.corner)"
+      />
+    </template>
   </div>
 </template>
 
@@ -30,11 +35,17 @@ export type ImageResizeOverlayBox = {
   height: number
 }
 
-const props = defineProps<{
-  visible: boolean
-  box: ImageResizeOverlayBox
-  dimensionLabel: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    visible: boolean
+    box: ImageResizeOverlayBox
+    dimensionLabel: string
+    showFrame?: boolean
+  }>(),
+  {
+    showFrame: false,
+  },
+)
 
 const emit = defineEmits<{
   'resize-start': [event: MouseEvent, corner: ImageResizeCorner]

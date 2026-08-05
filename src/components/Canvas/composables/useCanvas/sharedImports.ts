@@ -20,6 +20,7 @@ export {
   type TextFormatCommand,
   type VideoHdMagnification,
   type ConnectMenuKey,
+  formatDimensions,
 } from '../../constants'
 export { default as exampleImage } from '@assets/hero.png'
 export {
