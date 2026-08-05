@@ -1,6 +1,6 @@
-import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, h } from 'vue'
 import { isNavigationFailure, NavigationFailureType } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import type { Edge, Graph, Node } from '@antv/x6'
 import type { CanvasBindings } from './types'
 import type { UploadFilter } from './state'
@@ -75,6 +75,7 @@ import {
   findNodeByGenerationTaskId,
   followModelGenerationTaskOnNode,
   followTextGenerationTaskOnNode,
+  followVideoGenerationTaskOnNode,
   isGenerationTaskTerminal,
   markGenerationNodeFailed,
   markTextGenerationNodeFailed,
@@ -145,6 +146,15 @@ import {
 } from '../../skillStorage'
 import type { AssetCenterItem } from '../../assetCenterData'
 import type { GroupLayoutDirection, ImageResizeCorner } from './sharedImports'
+import {
+  buildGroupExecuteConfirmContent,
+  collectGroupAiTasks,
+  estimateGroupExecuteCredits,
+  resolveGroupAiReferenceContext,
+  sortGroupAiTasksByDependency,
+  type GroupAiReferenceContext,
+  type GroupAiTask,
+} from '../../groupExecute'
 import type { ProjectCanvasResponse, ProjectVersionDetailResponse } from '@/services/api'
 import { isRequestError } from '@/utils/request'
 import type { Project } from '@/stores/useProject'
@@ -9390,7 +9400,420 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function handleGroupExecute() {
-    // 整组执行：后续可接入流水线批量运行
+    const g = graph.value
+    const group = overlayGroupSelection.value
+    if (!g || !group || groupExecuting) return
+
+    const tasks = sortGroupAiTasksByDependency(collectGroupAiTasks(g, group.groupId))
+    const credits = estimateGroupExecuteCredits(tasks)
+    const content = buildGroupExecuteConfirmContent(tasks.length, credits)
+
+    Modal.confirm({
+      title: '整组执行',
+      okText: '开始执行',
+      cancelText: '取消',
+      centered: true,
+      content: h('div', [
+        h('p', { style: { margin: '0 0 8px', lineHeight: '1.6', color: '#111827' } }, content.main),
+        h(
+          'p',
+          { style: { margin: 0, color: '#9ca3af', fontSize: '13px', lineHeight: '1.5' } },
+          content.hint,
+        ),
+      ]),
+      onOk: async () => {
+        if (!tasks.length) return
+        groupExecuting = true
+        try {
+          await runGroupAiGenerationPipeline(g, group.groupId, tasks)
+          message.success('整组执行已完成')
+        } catch {
+          message.error('整组执行未完成，请检查节点状态后重试')
+        } finally {
+          groupExecuting = false
+          bumpToolbarRevision()
+          updateNodeToolbar()
+        }
+      },
+    })
+  }
+
+  let groupExecuting = false
+
+  function isGroupGenerationActive(data: CanvasNodeData): boolean {
+    return (
+      data.imageGenState === 'loading' ||
+      data.textGenState === 'loading' ||
+      isVideoNodeGenerating(data)
+    )
+  }
+
+  function isGroupGenerationFailed(data: CanvasNodeData): boolean {
+    if (data.imageGenState === 'failed' || data.title === '生成失败') return true
+    if (
+      data.textGenState === 'idle' &&
+      data.generationTaskId &&
+      !String(data.content ?? '').replace(/<[^>]+>/g, '').trim()
+    ) {
+      return true
+    }
+    return false
+  }
+
+  async function waitForGroupNodeDataCondition(
+    node: Node,
+    readState: (data: CanvasNodeData) => boolean | null,
+    timeoutMs = 120000,
+  ): Promise<boolean> {
+    const evaluate = () => readState(node.getData() as CanvasNodeData)
+    const immediate = evaluate()
+    if (immediate !== null) return immediate
+
+    return new Promise((resolve) => {
+      const deadline = Date.now() + timeoutMs
+      const onChange = () => {
+        const result = evaluate()
+        if (result !== null) {
+          node.off('change:data', onChange)
+          resolve(result)
+          return
+        }
+        if (Date.now() >= deadline) {
+          node.off('change:data', onChange)
+          resolve(false)
+        }
+      }
+      node.on('change:data', onChange)
+    })
+  }
+
+  async function waitForGroupSpawnedGenerationComplete(g: Graph, nodeId: string): Promise<boolean> {
+    if (!nodeId) return false
+    const cell = g.getCellById(nodeId)
+    if (!cell?.isNode()) return false
+
+    const node = cell as Node
+    const started = await waitForGroupNodeDataCondition(
+      node,
+      (data) => {
+        if (isGroupGenerationActive(data)) return true
+        if (isGroupGenerationFailed(data)) return false
+        return null
+      },
+      15000,
+    )
+    if (!started) return false
+
+    return waitForGroupNodeDataCondition(node, (data) => {
+      if (isGroupGenerationActive(data)) return null
+      if (isGroupGenerationFailed(data)) return false
+      if (data.kind === 'video' && data.generationTaskId && !data.previewUrl?.trim()) return false
+      return true
+    })
+  }
+
+  async function syncGroupAiProvenance(
+    node: Node,
+    refCtx: GroupAiReferenceContext,
+  ) {
+    const data = node.getData() as CanvasNodeData
+    applyImageDialogueProvenance(node, {
+      prompt: refCtx.prompt,
+      settings: refCtx.settings,
+      sourceRefs: refCtx.sourceRefs,
+      elementMarks: data.elementMarks,
+    })
+  }
+
+  async function executeGroupAiImageTask(
+    node: Node,
+    refCtx: GroupAiReferenceContext,
+  ): Promise<boolean> {
+    const data = node.getData() as CanvasNodeData
+    const title = refCtx.taskTitle || data.title || '生成'
+    const fileName = data.fileName || `${title}.png`
+    const prompt = refCtx.prompt
+
+    prepareImageNodeForInPlaceGeneration(node, { title, fileName, prompt })
+
+    const outcome = await runImageGenerationOnNode(node, {
+      title,
+      fileName,
+      createTask: async () => {
+        const idempotencyKey =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `group-ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+        const created = await api.createGenerationTask<GenerationTaskDetail>(
+          {
+            taskType: 'IMAGE',
+            capabilityCode: refCtx.capabilityCode,
+            prompt,
+            parameters: refCtx.parameters,
+            projectId: activeProjectId.value,
+            nodeId: node.id,
+            referenceAssetIds: refCtx.referenceAssetIds.length ? refCtx.referenceAssetIds : undefined,
+            workflowId: resolveGenerationTaskWorkflowId(refCtx.workflowId),
+          },
+          idempotencyKey,
+        )
+        userInfoStore.queryPointAccount()
+        return created
+      },
+      onTaskBound: () =>
+        persistGenerationTaskBinding(node, { detail: prompt || title, taskType: title }),
+      onError: (reason) => message.error(reason),
+    })
+
+    return outcome.success
+  }
+
+  async function executeGroupAiTextImg2PromptTask(g: Graph, node: Node): Promise<boolean> {
+    const synced = syncTextNodeImageSource(g, node)
+    const referenceAssetIds = resolvePromptReferenceAssetIds(synced)
+    const assetId = referenceAssetIds[0] || resolveImageAssetId(synced) || ''
+    if (!assetId) {
+      message.warning('请先连接或上传参考图片')
+      return false
+    }
+
+    const prompt = synced.genPrompt?.trim() || IMG2PROMPT_DEFAULT_INSTRUCTION
+    node.setData(
+      {
+        ...(node.getData() as CanvasNodeData),
+        mode: 'editor',
+        textGenState: 'loading',
+        textGenProgress: 0,
+      },
+      { overwrite: true },
+    )
+
+    const idempotencyKey =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `group-img2prompt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    try {
+      const created = normalizeGenerationTaskDetail(
+        await api.createGenerationTask<GenerationTaskDetail>(
+          {
+            taskType: 'TEXT',
+            capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+            prompt,
+            parameters: { assetId, prompt },
+            projectId: activeProjectId.value,
+            nodeId: node.id,
+            referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : [assetId],
+          },
+          idempotencyKey,
+        ),
+      )
+
+      const taskId = created.id
+      if (!taskId) throw new Error('创建反推提示词任务失败')
+
+      userInfoStore.queryPointAccount()
+      bindGenerationTaskId(node, taskId, 'TEXT')
+      persistGenerationTaskBinding(node, { detail: prompt, taskType: '反推提示词' })
+
+      const succeeded = await followTextGenerationTaskOnNode(node, taskId, {
+        toHtml: plainTextToEditorHtml,
+        onError: (reason) => message.error(reason),
+      })
+      if (!succeeded) return false
+
+      const nextData = { ...(node.getData() as CanvasNodeData), genPrompt: prompt }
+      node.setData(nextData, { overwrite: true })
+      return true
+    } catch (error) {
+      markTextGenerationNodeFailed(node)
+      message.error(isRequestError(error) ? error.message : '反推提示词失败，请稍后重试')
+      return false
+    }
+  }
+
+  async function executeGroupAiTextCopyTask(node: Node): Promise<boolean> {
+    const data = node.getData() as CanvasNodeData
+    const trimmedPrompt = data.genPrompt?.trim() || ''
+    if (!trimmedPrompt) return false
+
+    node.setData(
+      {
+        ...data,
+        mode: 'editor',
+        textGenState: 'loading',
+        textGenProgress: 0,
+        promptBarPinned: true,
+        textPickerTask: '',
+      },
+      { overwrite: true },
+    )
+
+    const idempotencyKey =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `group-text-copy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    try {
+      const created = normalizeGenerationTaskDetail(
+        await api.createGenerationTask<GenerationTaskDetail>(
+          {
+            taskType: 'TEXT',
+            capabilityCode: 'TEXT_COPY_V1',
+            prompt: trimmedPrompt,
+            parameters: { style: 'creative' },
+            projectId: activeProjectId.value,
+            nodeId: node.id,
+          },
+          idempotencyKey,
+        ),
+      )
+
+      const taskId = created.id
+      if (!taskId) throw new Error('创建文案生成任务失败')
+
+      userInfoStore.queryPointAccount()
+      bindGenerationTaskId(node, taskId, 'TEXT')
+      persistGenerationTaskBinding(node, { detail: trimmedPrompt, taskType: '自由创作' })
+
+      return followTextGenerationTaskOnNode(node, taskId, {
+        toHtml: plainTextToEditorHtml,
+        onError: (reason) => message.error(reason),
+      })
+    } catch (error) {
+      markTextGenerationNodeFailed(node)
+      message.error(isRequestError(error) ? error.message : '文本生成失败，请稍后重试')
+      return false
+    }
+  }
+
+  async function executeGroupAiVideoTask(
+    node: Node,
+    refCtx: GroupAiReferenceContext,
+  ): Promise<boolean> {
+    const data = node.getData() as CanvasNodeData
+    const prompt = refCtx.prompt
+    if (!prompt) return false
+
+    resetVideoGenerationNodeForRetry(node, {
+      title: refCtx.taskTitle,
+      fileName: data.fileName || `${refCtx.taskTitle}.mp4`,
+      prompt,
+    })
+
+    const idempotencyKey =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `group-video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    try {
+      const created = normalizeGenerationTaskDetail(
+        await api.createGenerationTask<GenerationTaskDetail>(
+          {
+            taskType: 'VIDEO',
+            capabilityCode: refCtx.capabilityCode,
+            prompt: toVideoApiPrompt(prompt),
+            parameters: {
+              ...refCtx.parameters,
+              clarity: toVideoApiClarity(String(refCtx.parameters.clarity ?? '720P')),
+            },
+            projectId: activeProjectId.value,
+            nodeId: node.id,
+            referenceAssetIds: refCtx.referenceAssetIds.length ? refCtx.referenceAssetIds : undefined,
+          },
+          idempotencyKey,
+        ),
+      )
+
+      const taskId = created.id
+      if (!taskId) throw new Error('创建视频生成任务失败')
+
+      userInfoStore.queryPointAccount()
+      bindGenerationTaskId(node, taskId, 'VIDEO')
+      persistGenerationTaskBinding(node, { detail: prompt, taskType: refCtx.taskTitle })
+
+      return followVideoGenerationTaskOnNode(node, taskId, {
+        title: refCtx.taskTitle,
+        fileName: data.fileName || `${refCtx.taskTitle}.mp4`,
+        onError: (reason) => message.error(reason),
+      })
+    } catch (error) {
+      markVideoGenerationNodeFailed(node)
+      message.error(isRequestError(error) ? error.message : '视频生成失败，请稍后重试')
+      return false
+    }
+  }
+
+  async function executeGroupAiTask(
+    g: Graph,
+    node: Node,
+    task: GroupAiTask,
+    refCtx: GroupAiReferenceContext,
+  ): Promise<boolean> {
+    selectedNodeId.value = task.nodeId
+    selectedKind.value = (node.getData() as CanvasNodeData).kind
+    syncNodeSelectionHighlight(task.nodeId)
+
+    switch (task.kind) {
+      case 'imageCapability':
+      case 'imageDialogue':
+        await syncGroupAiProvenance(node, refCtx)
+        return executeGroupAiImageTask(node, refCtx)
+      case 'textImg2Prompt':
+        return executeGroupAiTextImg2PromptTask(g, node)
+      case 'textCopy':
+        return executeGroupAiTextCopyTask(node)
+      case 'text2image':
+      case 'text2video': {
+        activePickerNodeId.value = task.nodeId
+        loadPromptBarContext(task.nodeId)
+        modelType.value = task.kind === 'text2video' ? 'text2video' : 'text2image'
+        await submitTextPrompt()
+        await nextTick()
+        return waitForGroupSpawnedGenerationComplete(g, selectedNodeId.value)
+      }
+      case 'videoDialogue':
+        return executeGroupAiVideoTask(node, refCtx)
+      default:
+        return false
+    }
+  }
+
+  async function runGroupAiGenerationPipeline(g: Graph, groupId: string, tasks: GroupAiTask[]) {
+    const scopeIds = new Set(getGroupBoxNodeIds(g, groupId))
+    const finishedAssets = new Map<string, string>()
+
+    for (const task of tasks) {
+      const cell = g.getCellById(task.nodeId)
+      if (!cell?.isNode()) continue
+
+      const node = cell as Node
+      const refCtx = resolveGroupAiReferenceContext(g, node, task, scopeIds, finishedAssets)
+      if (!refCtx) {
+        message.warning(`节点「${(node.getData() as CanvasNodeData).title || task.nodeId}」缺少可用参考资源，已跳过`)
+        throw new Error('group execute missing reference')
+      }
+
+      const succeeded = await executeGroupAiTask(g, node, task, refCtx)
+      if (!succeeded) {
+        throw new Error('group execute failed')
+      }
+
+      let assetId = resolveImageAssetId(node.getData() as CanvasNodeData)
+      if (!assetId && selectedNodeId.value) {
+        const resultCell = g.getCellById(selectedNodeId.value)
+        if (resultCell?.isNode()) {
+          assetId = resolveImageAssetId(resultCell.getData() as CanvasNodeData)
+        }
+      }
+      if (assetId) finishedAssets.set(node.id, assetId)
+
+      bumpToolbarRevision()
+      updateGroupToolbarPosition()
+    }
+
+    scheduleHistoryPush()
   }
 
   function handleGroupAddToToolbox() {
@@ -9566,6 +9989,27 @@ export function registerCore(bind: CanvasBindings) {
       return { groupId, nodeIds: members.map((node) => node.id) }
     }
     return overlayGroupSelection.value
+  }
+
+  function findGroupIdAtContainerPoint(clientX: number, clientY: number): string | null {
+    const root = canvasRef.value
+    if (!root || !groupOverlayItems.value.length) return null
+
+    const rect = root.getBoundingClientRect()
+    const x = clientX - rect.left
+    const y = clientY - rect.top
+    const hits = groupOverlayItems.value.filter(
+      (item) =>
+        x >= item.left &&
+        x <= item.left + item.width &&
+        y >= item.top &&
+        y <= item.top + item.height,
+    )
+    if (!hits.length) return null
+
+    const activeId = overlayGroupSelection.value?.groupId
+    const activeHit = hits.find((item) => item.groupId === activeId)
+    return (activeHit ?? hits[hits.length - 1]).groupId
   }
 
   function onGroupOverlayDragStart(payload: { event: MouseEvent; groupId: string }) {
@@ -10050,8 +10494,13 @@ export function registerCore(bind: CanvasBindings) {
       handleMediaNodeContextMenu(node.id, e.clientX, e.clientY, e)
     })
     canvasRef.value?.addEventListener('contextmenu', onCanvasImageContextMenuCapture, true)
-    instance.on('blank:click', () => {
+    instance.on('blank:click', ({ e }: { e: MouseEvent }) => {
       clearImageElementMarkSelection()
+      const groupId = findGroupIdAtContainerPoint(e.clientX, e.clientY)
+      if (groupId) {
+        onGroupOverlaySelectGroup(groupId)
+        return
+      }
       dismissOneCanvasLayer()
     })
     instance.on('node:change:data', handleNodeDataChange)

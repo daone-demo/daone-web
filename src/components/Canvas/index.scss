@@ -3960,14 +3960,6 @@
   }
 }
 
-.canvas__group-hit {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: auto;
-  cursor: default;
-}
-
 .canvas__group-label {
   position: absolute;
   top: 10px;

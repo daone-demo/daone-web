@@ -7,11 +7,13 @@
         format="YYYY-MM-DD"
         allow-clear
         placeholder="选择日期"
+        size="small"
         @update:value="onDateChange"
       />
     </template>
     <a-select
       :value="type"
+      size="small"
       style="width: 100px"
       @update:value="onTypeChange"
     >

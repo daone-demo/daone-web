@@ -1638,6 +1638,8 @@ export const IMAGE_DIALOGUE_PLACEHOLDER =
 export const IMAGE_DIALOGUE_MODEL_LABEL = 'Lib Image'
 export const IMAGE_DIALOGUE_QUALITY_LABEL = '自适应 · 标准画质 · 2K'
 export const IMAGE_DIALOGUE_CREDITS = '22'
+export const GROUP_EXECUTE_IMG2PROMPT_CREDITS = 6
+export const GROUP_EXECUTE_TEXT_COPY_CREDITS = 6
 export const IMAGE_DIALOGUE_COUNT_OPTIONS = [1, 2, 4] as const
 
 export const IMAGE_STYLE_PANEL_SEARCH_PLACEHOLDER = '搜索想要的风格、灵感、视觉'
