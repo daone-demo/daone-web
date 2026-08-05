@@ -91,7 +91,10 @@ export interface ChatTaskCreatedPayload {
   taskName?: string
   prompt?: string
   capabilityCode?: string
+  /** 服务端预分配的结果节点 ID */
   nodeId?: string
+  /** 画布上的上游节点 ID，创建结果节点后自动连线 */
+  parentNodeId?: string
 }
 
 export const CHAT_TIPS = [

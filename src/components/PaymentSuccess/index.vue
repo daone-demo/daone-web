@@ -20,7 +20,7 @@
 
         <img
           class="payment-success__mascot"
-          :src="mascotSrc"
+          src="@assets/images/logo_black.png"
           alt=""
           aria-hidden="true"
         />
@@ -94,7 +94,6 @@
 import { computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { useModalStore, type PaymentSuccessPayload } from '@stores/useModal'
-import mascotSrc from '@assets/images/payment-success-mascot.png'
 
 const modalStore = useModalStore()
 

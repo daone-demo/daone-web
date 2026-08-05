@@ -142,12 +142,25 @@
               />
             </div>
             <div v-if="item.text" class="chat-panel__message-bubble">
-              <p class="chat-panel__message-text">
-                {{ item.text }}<span
-                  v-if="item.role === 'assistant' && streamingMessageIds.has(item.id)"
+              <div
+                v-if="item.role === 'assistant'"
+                class="chat-panel__message-text chat-panel__message-text--markdown"
+              >
+                <div
+                  class="chat-panel__message-markdown"
+                  v-html="renderMarkdown(item.text)"
+                />
+                <span
+                  v-if="streamingMessageIds.has(item.id)"
                   class="chat-panel__stream-caret"
                   aria-hidden="true"
                 />
+              </div>
+              <p
+                v-else
+                class="chat-panel__message-text"
+              >
+                {{ item.text }}
               </p>
             </div>
             <div
@@ -171,8 +184,9 @@
                 :key="`${item.questionnaire.step}-${option.value}`"
                 type="button"
                 class="chat-panel__questionnaire-option"
+                :class="{ 'is-selected': isQuestionnaireOptionSelected(item, option) }"
                 :disabled="isStreaming || isSending"
-                @click="onQuestionnaireSelect(item, option)"
+                @click="onQuestionnaireOptionPick(item, option)"
               >
                 <span class="chat-panel__questionnaire-option-label">{{ option.label }}</span>
                 <span
@@ -180,6 +194,38 @@
                   class="chat-panel__questionnaire-option-desc"
                 >{{ option.description }}</span>
               </button>
+              <div
+                v-if="item.questionnaire.allowCustom"
+                class="chat-panel__questionnaire-custom"
+              >
+                <input
+                  type="text"
+                  class="chat-panel__questionnaire-custom-input"
+                  :value="getQuestionnaireCustomDraft(item)"
+                  :disabled="isStreaming || isSending"
+                  placeholder="在此处输入自定义内容"
+                  @input="onQuestionnaireCustomInput(item, ($event.target as HTMLInputElement).value)"
+                >
+              </div>
+              <div class="chat-panel__questionnaire-nav">
+                <button
+                  v-if="item.questionnaire.step > 1"
+                  type="button"
+                  class="chat-panel__questionnaire-nav-btn"
+                  :disabled="isStreaming || isSending"
+                  @click="onQuestionnairePrev(item)"
+                >
+                  上一步
+                </button>
+                <button
+                  type="button"
+                  class="chat-panel__questionnaire-nav-btn chat-panel__questionnaire-nav-btn--primary"
+                  :disabled="isStreaming || isSending || !hasQuestionnaireCurrentAnswer(item)"
+                  @click="onQuestionnaireNext(item)"
+                >
+                  {{ isQuestionnaireLastStep(item) ? '提交' : '下一步' }}
+                </button>
+              </div>
             </div>
             <button
               v-if="item.role === 'user' && item.text"
@@ -194,8 +240,38 @@
             <div
               v-if="item.tip"
               class="chat-panel__message-tip"
-              v-html="renderMarkdown(item.tip)"
-            />
+            >
+              <div
+                v-if="shouldAnimateTip(item)"
+                class="chat-panel__thinking"
+              >
+                <span
+                  v-if="item.role === 'user'"
+                  class="chat-panel__thinking-dots"
+                  aria-hidden="true"
+                >
+                  <span
+                    v-for="dotIndex in 5"
+                    :key="dotIndex"
+                    class="chat-panel__thinking-dot"
+                    :style="{ animationDelay: `${(dotIndex - 1) * 0.14}s` }"
+                  />
+                </span>
+                <span class="chat-panel__thinking-text">
+                  <span
+                    v-for="(segment, index) in splitTipSegments(item.tip)"
+                    :key="`${index}-${segment.char}`"
+                    class="chat-panel__thinking-char"
+                    :class="{ 'is-space': segment.isSpace }"
+                    :style="{ animationDelay: `${index * 0.055}s` }"
+                  >{{ segment.char }}</span>
+                </span>
+              </div>
+              <div
+                v-else
+                v-html="renderMarkdown(item.tip)"
+              />
+            </div>
           </template>
         </article>
       </section>
@@ -526,6 +602,18 @@ marked.setOptions({ breaks: true, gfm: true })
 function renderMarkdown(source: string): string {
   const html = marked.parse(source || '', { async: false })
   return typeof html === 'string' ? html : ''
+}
+
+function shouldAnimateTip(item: ChatMessage): boolean {
+  if (!item.tip?.trim()) return false
+  return isStreaming.value || isProcessing.value
+}
+
+function splitTipSegments(text: string) {
+  return Array.from(text).map((char) => ({
+    char: char === ' ' ? '\u00A0' : char,
+    isSpace: char === ' ',
+  }))
 }
 
 const props = defineProps<{
@@ -1399,6 +1487,7 @@ type StreamEvent = {
   taskType?: string
   capabilityCode?: string
   nodeId?: string
+  parentNodeId?: string
   taskName?: string
   prompt?: string
 }
@@ -1618,21 +1707,83 @@ function resolveQuestionnaireStepKey(step: QuestionnaireStep, index: number) {
   return step.name || `step-${index + 1}`
 }
 
-function recordQuestionnaireAnswer(
-  message: ChatMessage,
-  option: QuestionnaireOption,
-) {
+function resolveCurrentQuestionnaireAnswerKey(message: ChatMessage): string | null {
   const questionnaire = message.questionnaire
-  if (!questionnaire) return
+  if (!questionnaire) return null
 
-  const answers = { ...(message.questionnaireAnswers ?? {}) }
   const stepIndex = Math.max(0, questionnaire.step - 1)
-  const answerKey = questionnaire.stepName
+  return questionnaire.stepName
     || (questionnaire.steps?.[stepIndex]
       ? resolveQuestionnaireStepKey(questionnaire.steps[stepIndex], stepIndex)
       : `step-${questionnaire.step}`)
-  answers[answerKey] = option.value || option.label
+}
+
+function getQuestionnaireCurrentAnswer(message: ChatMessage): string {
+  const answerKey = resolveCurrentQuestionnaireAnswerKey(message)
+  if (!answerKey) return ''
+  return String(message.questionnaireAnswers?.[answerKey] ?? '').trim()
+}
+
+function hasQuestionnaireCurrentAnswer(message: ChatMessage): boolean {
+  return Boolean(getQuestionnaireCurrentAnswer(message))
+}
+
+function isQuestionnaireLastStep(message: ChatMessage): boolean {
+  const questionnaire = message.questionnaire
+  if (!questionnaire) return true
+  if (!questionnaire.steps?.length) return true
+  return questionnaire.step >= questionnaire.totalSteps
+}
+
+function isQuestionnaireOptionSelected(
+  message: ChatMessage,
+  option: QuestionnaireOption,
+): boolean {
+  const answer = getQuestionnaireCurrentAnswer(message)
+  if (!answer) return false
+  return answer === (option.value || option.label)
+}
+
+function getQuestionnaireCustomDraft(message: ChatMessage): string {
+  const answer = getQuestionnaireCurrentAnswer(message)
+  if (!answer) return ''
+  const matched = message.questionnaire?.options.some(
+    (option) => (option.value || option.label) === answer,
+  )
+  return matched ? '' : answer
+}
+
+function setQuestionnaireAnswer(message: ChatMessage, value: string) {
+  const answerKey = resolveCurrentQuestionnaireAnswerKey(message)
+  if (!answerKey) return
+
+  const answers = { ...(message.questionnaireAnswers ?? {}) }
+  const trimmed = value.trim()
+  if (trimmed) {
+    answers[answerKey] = trimmed
+  } else {
+    delete answers[answerKey]
+  }
   message.questionnaireAnswers = answers
+}
+
+function applyQuestionnaireStep(message: ChatMessage, stepIndex: number): boolean {
+  const questionnaire = message.questionnaire
+  if (!questionnaire?.steps?.length) return false
+
+  const nextStep = questionnaire.steps[stepIndex]
+  if (!nextStep) return false
+
+  message.questionnaire = {
+    ...questionnaire,
+    step: stepIndex + 1,
+    allowCustom: nextStep.allowCustom,
+    options: nextStep.options,
+    stepQuestion: nextStep.question,
+    stepName: nextStep.name,
+    stepLabel: nextStep.label,
+  }
+  return true
 }
 
 /** 按 steps 顺序拼成「平台: 淘宝/天猫\n受众: 年轻女性」 */
@@ -1653,31 +1804,6 @@ function buildQuestionnaireSubmitContent(message: ChatMessage): string {
     })
     .filter(Boolean)
     .join('\n')
-}
-
-function advanceLocalQuestionnaire(
-  message: ChatMessage,
-  option: QuestionnaireOption,
-): boolean {
-  const questionnaire = message.questionnaire
-  if (!questionnaire?.steps?.length) return false
-
-  recordQuestionnaireAnswer(message, option)
-
-  const nextStepIndex = questionnaire.step
-  const nextStep = questionnaire.steps[nextStepIndex]
-  if (!nextStep) return false
-
-  message.questionnaire = {
-    ...questionnaire,
-    step: nextStepIndex + 1,
-    allowCustom: nextStep.allowCustom,
-    options: nextStep.options,
-    stepQuestion: nextStep.question,
-    stepName: nextStep.name,
-    stepLabel: nextStep.label,
-  }
-  return true
 }
 
 function parseStreamEvent(data: string): StreamEvent | null {
@@ -1890,6 +2016,7 @@ function startChatStream(
           prompt: payload.prompt,
           capabilityCode: payload.capabilityCode,
           nodeId: payload.nodeId,
+          parentNodeId: payload.parentNodeId,
         })
         scrollMessagesToBottom()
         return
@@ -2154,21 +2281,47 @@ async function copyMessage(text: string) {
   }
 }
 
-function onQuestionnaireSelect(message: ChatMessage, option: QuestionnaireOption) {
+function onQuestionnaireOptionPick(message: ChatMessage, option: QuestionnaireOption) {
   if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
+  setQuestionnaireAnswer(message, option.value || option.label)
+}
 
-  const hasMoreLocalSteps = advanceLocalQuestionnaire(message, option)
-  if (hasMoreLocalSteps) return
+function onQuestionnaireCustomInput(message: ChatMessage, value: string) {
+  if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
+  setQuestionnaireAnswer(message, value)
+}
 
-  // 最后一步也写入答案后再统一拼接提交
-  if (!message.questionnaire?.steps?.length) {
-    recordQuestionnaireAnswer(message, option)
-  }
+function onQuestionnairePrev(message: ChatMessage) {
+  if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
+  const questionnaire = message.questionnaire
+  if (!questionnaire || questionnaire.step <= 1) return
+  applyQuestionnaireStep(message, questionnaire.step - 2)
+}
+
+function submitQuestionnaire(message: ChatMessage) {
+  if (!hasQuestionnaireCurrentAnswer(message)) return
 
   message.questionnaireAnswered = true
-  const submitContent = buildQuestionnaireSubmitContent(message) || option.label
+  const submitContent = buildQuestionnaireSubmitContent(message)
+    || getQuestionnaireCurrentAnswer(message)
   const session = ensureActiveSession()
   void onSendMessage(session, [], submitContent, [])
+}
+
+function onQuestionnaireNext(message: ChatMessage) {
+  if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
+  if (!hasQuestionnaireCurrentAnswer(message)) return
+
+  const questionnaire = message.questionnaire
+  if (!questionnaire) return
+
+  // 无多步数据或已是最后一步：直接提交
+  if (!questionnaire.steps?.length || isQuestionnaireLastStep(message)) {
+    submitQuestionnaire(message)
+    return
+  }
+
+  applyQuestionnaireStep(message, questionnaire.step)
 }
 
 function stopProcessing() {
@@ -2681,6 +2834,137 @@ defineExpose({
   font-size: 14px;
   line-height: 1.55;
   white-space: pre-wrap;
+
+  &--markdown {
+    white-space: normal;
+  }
+}
+
+.chat-panel__message-markdown {
+  display: block;
+  word-break: break-word;
+
+  :deep(> *:first-child) {
+    margin-top: 0;
+  }
+
+  :deep(> *:last-child) {
+    margin-bottom: 0;
+  }
+
+  :deep(p) {
+    margin: 0;
+  }
+
+  :deep(p + p) {
+    margin-top: 0.55em;
+  }
+
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4),
+  :deep(h5),
+  :deep(h6) {
+    margin: 0.7em 0 0.35em;
+    color: inherit;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  :deep(h1) { font-size: 1.2em; }
+  :deep(h2) { font-size: 1.12em; }
+  :deep(h3) { font-size: 1.05em; }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 0.45em 0;
+    padding-left: 1.3em;
+  }
+
+  :deep(li) {
+    margin: 0.2em 0;
+  }
+
+  :deep(li > p) {
+    margin: 0;
+  }
+
+  :deep(blockquote) {
+    margin: 0.5em 0;
+    padding: 0.15em 0 0.15em 0.85em;
+    border-left: 3px solid #d1d5db;
+    color: #4b5563;
+  }
+
+  :deep(hr) {
+    margin: 0.75em 0;
+    border: 0;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  :deep(a) {
+    color: #2563eb;
+    text-decoration: underline;
+  }
+
+  :deep(strong) {
+    font-weight: 600;
+  }
+
+  :deep(em) {
+    font-style: italic;
+  }
+
+  :deep(code) {
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    background: rgba(17, 24, 39, 0.06);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.92em;
+  }
+
+  :deep(pre) {
+    margin: 0.55em 0;
+    padding: 10px 12px;
+    overflow-x: auto;
+    border-radius: 8px;
+    background: #111827;
+    color: #f9fafb;
+  }
+
+  :deep(pre code) {
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 0.88em;
+    line-height: 1.5;
+  }
+
+  :deep(table) {
+    width: 100%;
+    margin: 0.55em 0;
+    border-collapse: collapse;
+    font-size: 0.95em;
+  }
+
+  :deep(th),
+  :deep(td) {
+    padding: 6px 8px;
+    border: 1px solid #e5e7eb;
+    text-align: left;
+  }
+
+  :deep(th) {
+    background: rgba(17, 24, 39, 0.04);
+    font-weight: 600;
+  }
+
+  :deep(img) {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+  }
 }
 
 .chat-panel__questionnaire {
@@ -2727,6 +3011,11 @@ defineExpose({
     background: #f9fafb;
   }
 
+  &.is-selected {
+    border-color: #111827;
+    background: #f3f4f6;
+  }
+
   &:disabled {
     opacity: 0.55;
     cursor: not-allowed;
@@ -2743,6 +3032,82 @@ defineExpose({
   color: #6b7280;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.chat-panel__questionnaire-custom {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.chat-panel__questionnaire-custom-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.15s ease;
+
+  &::placeholder {
+    color: #9ca3af;
+  }
+
+  &:focus {
+    border-color: #111827;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.chat-panel__questionnaire-nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.chat-panel__questionnaire-nav-btn {
+  min-width: 72px;
+  padding: 8px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+
+  &:hover:not(:disabled) {
+    border-color: #d1d5db;
+    background: #f9fafb;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  &--primary {
+    border-color: #111827;
+    background: #111827;
+    color: #fff;
+
+    &:hover:not(:disabled) {
+      border-color: #000;
+      background: #000;
+      color: #fff;
+    }
+  }
 }
 
 .chat-panel__stream-caret {
@@ -2840,6 +3205,84 @@ defineExpose({
   :deep(a) {
     color: inherit;
     text-decoration: underline;
+  }
+}
+
+.chat-panel__thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+}
+
+.chat-panel__thinking-dots {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 12px;
+  padding-bottom: 1px;
+}
+
+.chat-panel__thinking-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  transform: translate3d(0, 0, 0);
+  animation: chat-panel-thinking-dot-wave 1.15s ease-in-out infinite;
+}
+
+.chat-panel__thinking-text {
+  display: inline;
+  line-height: 1.5;
+}
+
+.chat-panel__thinking-char {
+  display: inline-block;
+  opacity: 0.52;
+  transform: translate3d(0, 0, 0);
+  animation: chat-panel-thinking-char-wave 1.35s ease-in-out infinite;
+
+  &.is-space {
+    min-width: 0.28em;
+  }
+}
+
+@keyframes chat-panel-thinking-dot-wave {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.35;
+  }
+
+  35% {
+    transform: translate3d(0, -4px, 0);
+    opacity: 1;
+  }
+
+  70% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.55;
+  }
+}
+
+@keyframes chat-panel-thinking-char-wave {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.52;
+  }
+
+  40% {
+    transform: translate3d(0, -2px, 0);
+    opacity: 0.95;
+  }
+
+  75% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.62;
   }
 }
 
@@ -3764,6 +4207,39 @@ defineExpose({
     color: #e5e7eb;
   }
 
+  .chat-panel__message-markdown {
+    :deep(blockquote) {
+      border-left-color: #4b4b55;
+      color: #9ca3af;
+    }
+
+    :deep(hr) {
+      border-top-color: #3d3d45;
+    }
+
+    :deep(a) {
+      color: #93c5fd;
+    }
+
+    :deep(code) {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    :deep(pre) {
+      background: #111827;
+      color: #f3f4f6;
+    }
+
+    :deep(th),
+    :deep(td) {
+      border-color: #3d3d45;
+    }
+
+    :deep(th) {
+      background: rgba(255, 255, 255, 0.04);
+    }
+  }
+
   .chat-panel__questionnaire-step {
     color: #9ca3af;
   }
@@ -3781,10 +4257,52 @@ defineExpose({
       border-color: #4b4b55;
       background: #2a2a30;
     }
+
+    &.is-selected {
+      border-color: #e5e7eb;
+      background: #323238;
+    }
   }
 
   .chat-panel__questionnaire-option-desc {
     color: #9ca3af;
+  }
+
+  .chat-panel__questionnaire-custom-input {
+    border-color: #3d3d45;
+    background: #252528;
+    color: #e5e7eb;
+
+    &::placeholder {
+      color: #6b7280;
+    }
+
+    &:focus {
+      border-color: #9ca3af;
+    }
+  }
+
+  .chat-panel__questionnaire-nav-btn {
+    border-color: #3d3d45;
+    background: #252528;
+    color: #e5e7eb;
+
+    &:hover:not(:disabled) {
+      border-color: #4b4b55;
+      background: #2a2a30;
+    }
+
+    &--primary {
+      border-color: #e5e7eb;
+      background: #e5e7eb;
+      color: #111827;
+
+      &:hover:not(:disabled) {
+        border-color: #fff;
+        background: #fff;
+        color: #111827;
+      }
+    }
   }
 
   .chat-panel__message-tip {

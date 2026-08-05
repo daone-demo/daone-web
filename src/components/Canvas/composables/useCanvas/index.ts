@@ -16,6 +16,7 @@ type ChatTaskCreatedPayload = {
   prompt?: string
   capabilityCode?: string
   nodeId?: string
+  parentNodeId?: string
 }
 
 type GridSplitCanvasApi = Pick<

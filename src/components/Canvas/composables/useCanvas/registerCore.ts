@@ -10950,6 +10950,7 @@ export function registerCore(bind: CanvasBindings) {
     prompt?: string
     capabilityCode?: string
     nodeId?: string
+    parentNodeId?: string
   }) {
     const g = graph.value
     if (!g) return null
@@ -10958,7 +10959,10 @@ export function registerCore(bind: CanvasBindings) {
     if (!taskId) return null
 
     const existingByTask = findNodeByGenerationTaskId(g, taskId)
-    if (existingByTask) return existingByTask
+    if (existingByTask) {
+      linkChatTaskNodeToParent(g, existingByTask, payload.parentNodeId)
+      return existingByTask
+    }
 
     const preferredNodeId = String(payload.nodeId ?? '').trim()
     const canUsePreferredId =
@@ -10973,6 +10977,7 @@ export function registerCore(bind: CanvasBindings) {
         const taskType = normalizeChatTaskType(payload.taskType)
         bindGenerationTaskId(existingNode, taskId, taskType)
         followChatTaskOnNode(existingNode, taskId, taskType, payload)
+        linkChatTaskNodeToParent(g, existingNode, payload.parentNodeId)
         scheduleHistoryPush()
         return existingNode
       }
@@ -10981,6 +10986,22 @@ export function registerCore(bind: CanvasBindings) {
     const taskType = normalizeChatTaskType(payload.taskType)
     const title = String(payload.taskName || '').trim() || '生成中'
     const prompt = String(payload.prompt || '').trim()
+    const parentNodeId = String(payload.parentNodeId ?? '').trim()
+    const parentCell = parentNodeId ? g.getCellById(parentNodeId) : null
+    const parentNode = parentCell?.isNode() ? (parentCell as Node) : null
+    const parentData = parentNode
+      ? (parentNode.getData() as CanvasNodeData)
+      : null
+    const sourceOverrides: Partial<CanvasNodeData> = parentNode && parentData
+      ? {
+          sourceNodeId: parentNode.id,
+          sourcePreviewUrl: parentData.previewUrl ?? '',
+          sourceFileName: parentData.fileName ?? '',
+          sourceAssetId: parentData.assetId,
+          inputUpdated: Boolean(parentData.previewUrl),
+        }
+      : {}
+
     const center = getGraphCenter()
     const stacking = g.getNodes().filter((node) => {
       const data = node.getData() as CanvasNodeData
@@ -10990,90 +11011,126 @@ export function registerCore(bind: CanvasBindings) {
         || data.uploadState === 'uploading'
       )
     }).length
-    const point = { x: center.x + stacking * 48, y: center.y + stacking * 36 }
+    const fallbackPoint = { x: center.x + stacking * 48, y: center.y + stacking * 36 }
     const nodeOptions = canUsePreferredId ? { id: preferredNodeId } : undefined
 
     let node: Node
     if (taskType === 'VIDEO') {
-      node = addCanvasNode(
-        g,
-        'video',
-        point,
-        {
-          mode: 'editor',
-          uploadState: 'uploading',
-          uploadProgress: 0,
-          generationTaskType: 'VIDEO',
-          title,
-          fileName: `${title}.mp4`,
-          previewUrl: '',
-          genPrompt: prompt,
-          videoDialogueText: prompt,
-        },
-        nodeOptions,
-      )
+      const overrides: Partial<CanvasNodeData> = {
+        mode: 'editor',
+        uploadState: 'uploading',
+        uploadProgress: 0,
+        generationTaskType: 'VIDEO',
+        title,
+        fileName: `${title}.mp4`,
+        previewUrl: '',
+        genPrompt: prompt,
+        videoDialogueText: prompt,
+        ...sourceOverrides,
+      }
+      const size = getNodeSize('video', 'editor', overrides)
+      const point = parentNode
+        ? planOutgoingResultPoints(g, parentNode, size, 1, 'right')[0] || fallbackPoint
+        : fallbackPoint
+      node = addCanvasNode(g, 'video', point, overrides, nodeOptions)
     } else if (taskType === 'TEXT') {
-      node = addCanvasNode(
-        g,
-        'text',
-        point,
-        {
-          mode: 'editor',
-          textGenState: 'loading',
-          textGenProgress: 0,
-          generationTaskType: 'TEXT',
-          title,
-          content: '',
-          genPrompt: prompt,
-        },
-        nodeOptions,
-      )
+      const overrides: Partial<CanvasNodeData> = {
+        mode: 'editor',
+        textGenState: 'loading',
+        textGenProgress: 0,
+        generationTaskType: 'TEXT',
+        title,
+        content: '',
+        genPrompt: prompt,
+        ...sourceOverrides,
+      }
+      const size = getNodeSize('text', 'editor', overrides)
+      const point = parentNode
+        ? planOutgoingResultPoints(g, parentNode, size, 1, 'right')[0] || fallbackPoint
+        : fallbackPoint
+      node = addCanvasNode(g, 'text', point, overrides, nodeOptions)
     } else if (taskType === 'MODEL') {
-      node = addCanvasNode(
-        g,
-        'model3d',
-        point,
-        {
-          mode: 'editor',
-          imageGenState: 'loading',
-          imageGenProgress: 0,
-          generationTaskType: 'MODEL',
-          title,
-          fileName: `${title}.glb`,
-          previewUrl: '',
-          mediaWidth: 320,
-          mediaHeight: 360,
-          genPrompt: prompt,
-        },
-        nodeOptions,
-      )
+      const overrides: Partial<CanvasNodeData> = {
+        mode: 'editor',
+        imageGenState: 'loading',
+        imageGenProgress: 0,
+        generationTaskType: 'MODEL',
+        title,
+        fileName: `${title}.glb`,
+        previewUrl: '',
+        mediaWidth: 320,
+        mediaHeight: 360,
+        genPrompt: prompt,
+        ...sourceOverrides,
+      }
+      const size = getNodeSize('model3d', 'editor', overrides)
+      const point = parentNode
+        ? planOutgoingResultPoints(g, parentNode, size, 1, 'right')[0] || fallbackPoint
+        : fallbackPoint
+      node = addCanvasNode(g, 'model3d', point, overrides, nodeOptions)
     } else {
-      node = addCanvasNode(
-        g,
-        'image',
-        point,
-        {
-          mode: 'editor',
-          imageGenTask: 'picker',
-          imageGenState: 'loading',
-          imageGenProgress: 0,
-          generationTaskType: 'IMAGE',
-          title,
-          fileName: `${title}.png`,
-          previewUrl: '',
-          genPrompt: prompt,
-        },
-        nodeOptions,
-      )
+      const overrides: Partial<CanvasNodeData> = {
+        mode: 'editor',
+        imageGenTask: 'picker',
+        imageGenState: 'loading',
+        imageGenProgress: 0,
+        generationTaskType: 'IMAGE',
+        title,
+        fileName: `${title}.png`,
+        previewUrl: '',
+        genPrompt: prompt,
+        ...sourceOverrides,
+      }
+      const size = getNodeSize('image', 'editor', overrides)
+      const point = parentNode
+        ? planOutgoingResultPoints(g, parentNode, size, 1, 'right')[0] || fallbackPoint
+        : fallbackPoint
+      node = addCanvasNode(g, 'image', point, overrides, nodeOptions)
     }
 
     bindGenerationTaskId(node, taskId, taskType)
     followChatTaskOnNode(node, taskId, taskType, { taskName: title, prompt })
+    linkChatTaskNodeToParent(g, node, parentNodeId)
     selectGraphNodes(node)
     syncNodeCount()
     scheduleHistoryPush()
     ensureInfiniteCanvasArea(g)
     return node
+  }
+
+  /** 将对话任务结果节点连到服务端返回的 parentNodeId */
+  function linkChatTaskNodeToParent(
+    g: Graph,
+    targetNode: Node,
+    parentNodeIdRaw?: string,
+  ) {
+    const parentNodeId = String(parentNodeIdRaw ?? '').trim()
+    if (!parentNodeId || parentNodeId === targetNode.id) return
+
+    const parentCell = g.getCellById(parentNodeId)
+    if (!parentCell?.isNode()) return
+
+    const exists = g.getEdges().some(
+      (edge) =>
+        edge.getSourceCellId() === parentNodeId
+        && edge.getTargetCellId() === targetNode.id,
+    )
+    if (exists) return
+
+    connectGenEdge(g, parentNodeId, targetNode.id)
+
+    const parentData = parentCell.getData() as CanvasNodeData
+    const targetData = { ...(targetNode.getData() as CanvasNodeData) }
+    if (!targetData.sourceNodeId) {
+      targetData.sourceNodeId = parentNodeId
+      targetData.sourcePreviewUrl = parentData.previewUrl ?? targetData.sourcePreviewUrl ?? ''
+      targetData.sourceFileName = parentData.fileName ?? targetData.sourceFileName ?? ''
+      if (parentData.assetId && !targetData.sourceAssetId) {
+        targetData.sourceAssetId = parentData.assetId
+      }
+      targetData.inputUpdated = Boolean(parentData.previewUrl)
+      targetNode.setData(targetData)
+    }
   }
 
   function normalizeChatTaskType(raw?: string): GenerationTaskType {
