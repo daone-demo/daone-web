@@ -297,12 +297,11 @@
                 v-model="invoiceForm.invoiceTitle"
                 class="user-info__invoice-input"
                 type="text"
-                placeholder="请输入单位名称"
+                placeholder="请输入抬头名称"
                 v-else
               />
             </div>
           </div>
-
           <div class="user-info__invoice-row">
             <div class="user-info__invoice-field" v-if="invoiceType == 'COMPANY'">
               <label class="user-info__invoice-label">纳税人识别号</label>
@@ -315,12 +314,12 @@
             </div>
 
             <div class="user-info__invoice-field">
-              <label class="user-info__invoice-label">联系方式</label>
+              <label class="user-info__invoice-label">邮箱</label>
               <input
                 v-model="invoiceForm.contact"
                 class="user-info__invoice-input"
                 type="text"
-                placeholder="请输入联系方式"
+                placeholder="请输入邮箱"
               />
             </div>
           </div>

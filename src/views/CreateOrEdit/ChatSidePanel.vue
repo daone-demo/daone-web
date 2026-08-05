@@ -230,7 +230,10 @@
               >
                 <span class="chat-panel__skill-picker-name">{{ skill.name }}</span>
                 <span class="chat-panel__skill-picker-cmd">/{{ skill.command }}</span>
-                <span class="chat-panel__skill-picker-desc">{{ skill.description }}</span>
+                <span
+                  v-if="skill.description"
+                  class="chat-panel__skill-picker-desc"
+                >{{ skill.description }}</span>
               </li>
               <li v-if="!filteredChatSkills.length" class="chat-panel__skill-picker-empty">暂无可用 Skill</li>
             </ul>
@@ -249,11 +252,11 @@
 
           <Teleport to="body">
             <div
-              v-if="hoveredSkill && showSkillMenu"
+              v-if="hoveredSkill && showSkillMenu && skillTooltipText"
               class="chat-panel__skill-tooltip"
               :style="skillTooltipStyle"
             >
-              {{ hoveredSkill.detail || hoveredSkill.description }}
+              {{ skillTooltipText }}
             </div>
           </Teleport>
 
@@ -603,6 +606,11 @@ const selectedSkill = ref<any>(null)
 const skillChipSelected = ref(false)
 const hoveredSkill = ref<any>(null)
 const skillTooltipStyle = ref<Record<string, string>>({})
+const skillTooltipText = computed(() => {
+  const skill = hoveredSkill.value
+  if (!skill) return ''
+  return String(skill.detail || skill.description || '').trim()
+})
 const historySearch = ref('')
 const isProcessing = ref(false)
 const isSending = ref(false)
