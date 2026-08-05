@@ -28,10 +28,10 @@
         </button>
       </div>
     </div>
-    <button type="button" class="canvas__multi-select-btn" title="保存到资产" @click="emit('save-to-assets')">
+    <!-- <button type="button" class="canvas__multi-select-btn" title="保存到资产" @click="emit('save-to-assets')">
       <span class="canvas__multi-select-icon" data-icon="assets" aria-hidden="true" />
       保存到资产
-    </button>
+    </button> -->
     <button type="button" class="canvas__multi-select-btn" title="批量下载" @click="emit('batch-download')">
       <span class="canvas__multi-select-icon" data-icon="download" aria-hidden="true" />
       批量下载

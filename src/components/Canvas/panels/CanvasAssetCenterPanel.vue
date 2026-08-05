@@ -5,7 +5,7 @@
     @mousedown.stop
   >
     <header class="canvas__asset-center-header">
-      <h2 class="canvas__asset-center-title">我的skill</h2>
+      <h2 class="canvas__asset-center-title">我的工作流</h2>
       <div class="canvas__asset-center-actions">
         <button type="button" class="canvas__asset-center-icon-btn" title="筛选" aria-label="筛选">
           <span class="canvas__asset-center-icon canvas__asset-center-icon--filter" aria-hidden="true" />
