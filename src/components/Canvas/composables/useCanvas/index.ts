@@ -1,5 +1,6 @@
 import { useModalStore } from '@stores/useModal'
 import { useRouter } from 'vue-router'
+import type { Node } from '@antv/x6'
 import { TEXT_EDITOR_PLACEHOLDER } from '../../constants'
 import { createCanvasState } from './state'
 import type { CanvasBindings, CanvasDomRefs, CanvasEmit } from './types'
@@ -7,6 +8,15 @@ import type { CanvasState } from './state'
 import { registerCore } from './registerCore'
 
 export type { CanvasEmit, CanvasDomRefs } from './types'
+
+type ChatTaskCreatedPayload = {
+  taskId: string | number
+  taskType?: string
+  taskName?: string
+  prompt?: string
+  capabilityCode?: string
+  nodeId?: string
+}
 
 type GridSplitCanvasApi = Pick<
   CanvasState,
@@ -96,7 +106,9 @@ type GridSplitCanvasApi = Pick<
     | 'imageMarkHints'
     | 'openProjectBrowser'
     | 'closeProjectBrowser'
-  >
+  > & {
+    createNodeFromChatTask: (payload: ChatTaskCreatedPayload) => Node | null
+  }
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {
   const state = createCanvasState(emit, domRefs)

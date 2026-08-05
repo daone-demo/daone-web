@@ -36,7 +36,7 @@
       <span class="canvas__group-icon" data-icon="execute" aria-hidden="true" />
       整组执行
     </button>
-    <button 
+    <!-- <button 
       type="button"
       class="canvas__group-btn"
       title="添加到工具箱"
@@ -44,7 +44,7 @@
     >
       <span class="canvas__group-icon" data-icon="toolbox" aria-hidden="true" />
       添加到工具箱
-    </button>
+    </button> -->
     <!-- <button 
       type="button"
       class="canvas__group-btn"
@@ -66,11 +66,11 @@
     <button 
       type="button"
       class="canvas__group-btn"
-      title="保存为Skill"
+      title="保存到工作流"
       @click="emit('save-to-skill')"
     >
       <span class="canvas__group-icon" data-icon="skill" aria-hidden="true" />
-      保存为Skill
+      保存到工作流
     </button>
     <button 
       type="button"
