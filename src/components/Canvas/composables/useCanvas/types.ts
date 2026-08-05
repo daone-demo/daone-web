@@ -43,6 +43,7 @@ export type CanvasBindings = CanvasState & {
   }
   groupMoveState: {
     anchorId: string
+    draggingNodeId: string
     lastX: number
     lastY: number
   }

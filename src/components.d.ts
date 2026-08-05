@@ -36,6 +36,7 @@ declare module 'vue' {
     CanvasElementSelectBar: typeof import('./components/Canvas/panels/CanvasElementSelectBar.vue')['default']
     CanvasEmptyHint: typeof import('./components/Canvas/panels/CanvasEmptyHint.vue')['default']
     CanvasGroupOverlay: typeof import('./components/Canvas/panels/CanvasGroupOverlay.vue')['default']
+    CanvasGroupOverlayBackground: typeof import('./components/Canvas/panels/CanvasGroupOverlayBackground.vue')['default']
     CanvasGroupToolbar: typeof import('./components/Canvas/panels/CanvasGroupToolbar.vue')['default']
     CanvasHeader: typeof import('./components/Canvas/panels/CanvasHeader.vue')['default']
     CanvasHiddenFileInput: typeof import('./components/Canvas/panels/CanvasHiddenFileInput.vue')['default']

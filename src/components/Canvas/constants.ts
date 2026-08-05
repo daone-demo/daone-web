@@ -2803,6 +2803,21 @@ export function isAiGeneratedImageNode(data?: Partial<CanvasNodeData> | null): b
   return false
 }
 
+/** 是否为 AI 任务生成的画布节点（图/文/视频/模型等） */
+export function isAiGeneratedCanvasNode(data?: Partial<CanvasNodeData> | null): boolean {
+  if (!data) return false
+  if (isAiGeneratedImageNode(data)) return true
+  if (data.generationTaskType === 'VIDEO' || data.generationTaskType === 'TEXT' || data.generationTaskType === 'MODEL') {
+    return true
+  }
+  if (String(data.generationTaskId ?? '').trim()) return true
+  if (data.textGenState === 'loading' || data.textGenState === 'done') return true
+  if (data.kind === 'video' && data.uploadState === 'uploading' && data.generationTaskType === 'VIDEO') {
+    return true
+  }
+  return false
+}
+
 /** 非 AI 生成且已有预览图的图片节点，可重新上传替换 */
 export function canReplaceImageNodePreview(data?: Partial<CanvasNodeData> | null): boolean {
   if (!data || data.kind !== 'image') return false

@@ -29,8 +29,10 @@ import {
   getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getImageNodeMediaScreenBox, getImageExpandOverlayLayout, syncImageNodeSizeToMediaAspect, startImageNodeCornerResize,
   hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions, formatDimensions,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, assignGroupId,
-  getCompleteGroupSelection, getGroupGraphBBox, getGroupSelectionForNodeIds, getNodesInGroup,
-  listCanvasGroups, mergeStoryboardGroup, normalizeGroupMembership, resizeGroupGraphBox, syncGroupBySelectionBox, ungroupSelection,
+  getCompleteGroupSelection, getGroupBoxNodeIds, getGroupDisplayMemberCount, getGroupGraphBBox,
+  getGroupSelectionForNodeIds, getNodesInGroup, listCanvasGroups, mergeStoryboardGroup,
+  normalizeGroupMembership, reconcileGroupMembershipAfterNodeMove, resizeGroupGraphBox,
+  syncGroupBySelectionBox, ungroupSelection,
   type GroupResizeHandle,
   ensureImageTextEdge, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, applyRemoteVideoToNode, runUploadSimulation, uploadAssetFile, previewUrlToUploadFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, setCanvasUploadCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
@@ -7851,6 +7853,18 @@ export function registerCore(bind: CanvasBindings) {
     multiSelectToolbarPos.value = getMultiSelectionToolbarPosition(g, ids, overlayRoot)
   }
 
+  function resolveGroupDragPreviewNode(groupId: string) {
+    const g = graph.value
+    const draggingId = groupMoveState.draggingNodeId
+    if (!g || !draggingId) return null
+    const draggingNode = g.getCellById(draggingId)
+    if (!draggingNode?.isNode()) return null
+    const data = draggingNode.getData() as CanvasNodeData
+    if (data.groupId === groupId) return draggingNode as Node
+    const boxNodeIds = getGroupBoxNodeIds(g, groupId)
+    return boxNodeIds.includes(draggingNode.id) ? (draggingNode as Node) : null
+  }
+
   function updateGroupToolbarPosition() {
     const g = graph.value
     const overlayRoot = canvasRef.value
@@ -7883,11 +7897,18 @@ export function registerCore(bind: CanvasBindings) {
         }
       }
 
-      const box = getGroupScreenBox(g, group.nodeIds, overlayRoot)
+      const draggingNode = resolveGroupDragPreviewNode(group.groupId)
+      const draggingMember =
+        draggingNode && (draggingNode.getData() as CanvasNodeData).groupId === group.groupId
+          ? draggingNode
+          : null
+      const boxNodeIds = getGroupBoxNodeIds(g, group.groupId, draggingMember)
+      const nodeCount = getGroupDisplayMemberCount(g, group.groupId, draggingMember)
+      const box = getGroupScreenBox(g, boxNodeIds, overlayRoot)
       return {
         groupId: group.groupId,
         nodeIds: group.nodeIds,
-        nodeCount: group.nodeIds.length,
+        nodeCount,
         left: box.left,
         top: box.top,
         width: box.width,
@@ -9515,38 +9536,25 @@ export function registerCore(bind: CanvasBindings) {
     }
   }
 
-  function syncGroupedNodeMove(node: Node) {
+  function syncGroupedNodeMove(_node: Node) {
+    // 组内节点允许单独拖拽；整组平移仅通过组标签拖拽（onGroupOverlayDragStart）
+  }
+
+  function handleGroupedNodeMoved(node: Node) {
     const g = graph.value
     if (!g) return
 
-    const data = node.getData() as CanvasNodeData
-    if (!data.groupId) {
-      groupMoveState.anchorId = ''
+    const result = reconcileGroupMembershipAfterNodeMove(g, node)
+    if (!result) {
+      const data = node.getData() as CanvasNodeData
+      if (data.groupId) updateGroupToolbarPosition()
       return
     }
 
-    const members = getNodesInGroup(g, data.groupId)
-    if (members.length < 2) return
-
-    const pos = node.getPosition()
-    if (groupMoveState.anchorId !== node.id) {
-      groupMoveState.anchorId = node.id
-      groupMoveState.lastX = pos.x
-      groupMoveState.lastY = pos.y
-      return
+    if (result.removed) {
+      bumpToolbarRevision()
     }
-
-    const dx = pos.x - groupMoveState.lastX
-    const dy = pos.y - groupMoveState.lastY
-    if (!dx && !dy) return
-
-    members.forEach((member) => {
-      if (member.id === node.id) return
-      const memberPos = member.getPosition()
-      member.position(memberPos.x + dx, memberPos.y + dy)
-    })
-    groupMoveState.lastX = pos.x
-    groupMoveState.lastY = pos.y
+    updateGroupToolbarPosition()
   }
 
   function resolveOverlayGroup(groupId?: string) {
@@ -9618,7 +9626,7 @@ export function registerCore(bind: CanvasBindings) {
     const group = resolveOverlayGroup(payload.groupId)
     if (!g || !group) return
 
-    const startBox = getGroupGraphBBox(g, group.nodeIds)
+    const startBox = getGroupGraphBBox(g, getGroupBoxNodeIds(g, group.groupId))
     const startPointer = clientPointToGraphLocal(g, payload.event.clientX, payload.event.clientY)
 
     groupOverlayResize.active = true
@@ -9959,15 +9967,16 @@ export function registerCore(bind: CanvasBindings) {
     instance.on('node:moving', ({ node }) => {
       syncGroupedNodeMove(node)
       snapGridSplitNodePosition(instance, node)
-      if (activeGroupSelection.value) {
-        updateGroupToolbarPosition()
-      }
+      groupMoveState.draggingNodeId = node.id
+      updateGroupToolbarPosition()
       updateNodeToolbar()
       updateEdgeDeleteButtonPosition()
     })
     instance.on('node:moved', ({ node }) => {
       snapGridSplitNodePosition(instance, node)
       groupMoveState.anchorId = ''
+      groupMoveState.draggingNodeId = ''
+      handleGroupedNodeMoved(node)
       updateNodeToolbar()
       syncViewportNodeVisibility()
       scheduleHistoryPush()

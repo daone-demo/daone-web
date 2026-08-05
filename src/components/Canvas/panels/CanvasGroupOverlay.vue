@@ -1,10 +1,7 @@
 <template>
   <div
     class="canvas__group-overlay"
-    :class="{
-      'canvas__group-overlay--light': isLight,
-      'canvas__group-overlay--active': active,
-    }"
+    :class="{ 'canvas__group-overlay--active': active }"
     :style="overlayStyle"
   >
     <div
@@ -14,16 +11,15 @@
     >
       分组 {{ nodeCount }} 个节点
     </div>
-    <div class="canvas__group-frame">
-      <span
-        v-for="handle in handles"
-        :key="handle"
-        class="canvas__group-handle"
-        :class="`canvas__group-handle--${handle}`"
-        :data-handle="handle"
-        @mousedown.stop="onHandleMouseDown($event, handle)"
-      />
-    </div>
+    <span
+      v-for="handle in handles"
+      v-show="active"
+      :key="handle"
+      class="canvas__group-handle"
+      :class="`canvas__group-handle--${handle}`"
+      :data-handle="handle"
+      @mousedown.stop="onHandleMouseDown($event, handle)"
+    />
   </div>
 </template>
 
@@ -36,7 +32,6 @@ const props = defineProps<{
   box: { left: number; top: number; width: number; height: number }
   nodeCount: number
   active?: boolean
-  isLight?: boolean
 }>()
 
 const emit = defineEmits<{

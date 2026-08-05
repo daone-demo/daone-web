@@ -48,6 +48,13 @@
       @open-project-browser="openProjectBrowser"
     />
 
+    <CanvasGroupOverlayBackground
+      v-for="item in groupOverlayItems"
+      :key="`group-bg-${item.groupId}`"
+      :box="item"
+      :active="overlayGroupSelection?.groupId === item.groupId"
+    />
+
     <div ref="graphRef" class="canvas__graph" />
 
     <CanvasEmptyHint v-if="nodeCount === 0" @focus-chat="emit('focus-chat')" />
@@ -88,7 +95,6 @@
       :box="item"
       :node-count="item.nodeCount"
       :active="overlayGroupSelection?.groupId === item.groupId"
-      :is-light="canvasBgTheme === 'light'"
       @drag-start="onGroupOverlayDragStart"
       @resize-start="onGroupOverlayResizeStart"
       @select-group="onGroupOverlaySelectGroup"
@@ -447,6 +453,7 @@ import CanvasNodeToolbar from './panels/CanvasNodeToolbar.vue'
 import CanvasMultiSelectToolbar from './panels/CanvasMultiSelectToolbar.vue'
 import CanvasEdgeDeleteButton from './panels/CanvasEdgeDeleteButton.vue'
 import CanvasGroupOverlay from './panels/CanvasGroupOverlay.vue'
+import CanvasGroupOverlayBackground from './panels/CanvasGroupOverlayBackground.vue'
 import CanvasGroupToolbar from './panels/CanvasGroupToolbar.vue'
 import CanvasSaveSkillPopover from './panels/CanvasSaveSkillPopover.vue'
 import ImageToolbarCustomizeModal from './panels/ImageToolbarCustomizeModal.vue'

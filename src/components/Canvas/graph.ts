@@ -761,7 +761,7 @@ export function createGraph(container: HTMLElement): CanvasGraph {
   const graph = new Graph({
     container,
     autoResize: true,
-    background: { color: '#141416' },
+    background: { color: 'transparent' },
     grid: {
       visible: true,
       size: 16,

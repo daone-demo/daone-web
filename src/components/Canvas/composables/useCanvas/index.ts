@@ -134,6 +134,7 @@ function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBinding
     },
     groupMoveState: {
       anchorId: '',
+      draggingNodeId: '',
       lastX: 0,
       lastY: 0,
     },

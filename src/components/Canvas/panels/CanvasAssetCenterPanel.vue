@@ -7,17 +7,14 @@
     <header class="canvas__asset-center-header">
       <h2 class="canvas__asset-center-title">我的工作流</h2>
       <div class="canvas__asset-center-actions">
-        <button type="button" class="canvas__asset-center-icon-btn" title="筛选" aria-label="筛选">
-          <span class="canvas__asset-center-icon canvas__asset-center-icon--filter" aria-hidden="true" />
-        </button>
         <button
           type="button"
-          class="canvas__asset-center-icon-btn"
-          title="收起"
-          aria-label="收起"
+          class="canvas-history__close"
+          title="关闭"
+          aria-label="关闭历史记录"
           @click="emit('close')"
         >
-          <span class="canvas__asset-center-icon canvas__asset-center-icon--collapse" aria-hidden="true" />
+          ×
         </button>
       </div>
     </header>
@@ -269,3 +266,27 @@ function onDragEnd() {
   }, 0)
 }
 </script>
+<style scoped>
+
+
+.canvas-history__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: #f3f4f6;
+    color: #111827;
+  }
+}
+</style>

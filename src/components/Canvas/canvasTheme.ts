@@ -51,19 +51,19 @@ type ScrollerPlugin = {
   container: HTMLElement
 }
 
-/** 同步 Scroller 各层背景，避免仅主绘图区变色、边距区域仍为深色 */
-function syncScrollerCanvasTheme(graph: Graph, pageBg: string, graphBg: string) {
+/** 同步 Scroller 各层背景：画布底色由 .canvas 容器承担，图区透明以便组框层可见 */
+function syncScrollerCanvasTheme(graph: Graph) {
   const scroller = graph.getPlugin('scroller') as unknown as ScrollerPlugin | null
   if (!scroller) return
 
-  scroller.drawBackground({ color: graphBg })
-  scroller.container.style.backgroundColor = pageBg
+  scroller.drawBackground({ color: 'transparent' })
+  scroller.container.style.backgroundColor = 'transparent'
 
   const bgEl = scroller.container.querySelector(
     '.x6-graph-scroller-background',
   ) as HTMLElement | null
   if (bgEl) {
-    bgEl.style.backgroundColor = graphBg
+    bgEl.style.backgroundColor = 'transparent'
   }
 }
 
@@ -76,11 +76,11 @@ export function applyCanvasBgTheme(
   if (!graph) return
 
   const meta = getCanvasBgThemeMeta(theme)
-  const bgOptions = { color: meta.graphBg }
+  const bgOptions = { color: 'transparent' }
 
   // 须走 Graph API，才能更新 Scroller 插件承载的全画布背景
   graph.drawBackground(bgOptions)
-  syncScrollerCanvasTheme(graph, meta.pageBg, meta.graphBg)
+  syncScrollerCanvasTheme(graph)
 
   if (gridVisible) {
     graph.setGridSize(16)
