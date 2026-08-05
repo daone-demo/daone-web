@@ -3,6 +3,7 @@
     class="image-gen-node"
     :class="{
       'image-gen-node--selected': data.isSelected,
+      'image-gen-node--grouped': Boolean(data.groupId),
       'image-gen-node--img2img': data.imageGenTask === 'img2img',
       'image-gen-node--light': isLightTheme,
       'image-gen-node--card-only': isEmptyUpload,

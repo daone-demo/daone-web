@@ -161,6 +161,7 @@ import {
   estimateGroupExecuteCredits,
   findGroupOutgoingAiResultNode,
   resolveGroupAiReferenceContext,
+  groupGroupAiTasksByDependencyLevel,
   sortGroupAiTasksByDependency,
   type GroupAiReferenceContext,
   type GroupAiTask,
@@ -9944,7 +9945,7 @@ export function registerCore(bind: CanvasBindings) {
     task: GroupAiTask,
     refCtx: GroupAiReferenceContext,
     scopeIds: Set<string>,
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; resultNodeId: string }> {
     selectedNodeId.value = task.nodeId
     selectedKind.value = (node.getData() as CanvasNodeData).kind
     syncNodeSelectionHighlight(task.nodeId)
@@ -9953,11 +9954,20 @@ export function registerCore(bind: CanvasBindings) {
       case 'imageCapability':
       case 'imageDialogue':
         await syncGroupAiProvenance(node, refCtx)
-        return executeGroupAiImageTask(node, refCtx)
+        return {
+          success: await executeGroupAiImageTask(node, refCtx),
+          resultNodeId: node.id,
+        }
       case 'textImg2Prompt':
-        return executeGroupAiTextImg2PromptTask(g, node)
+        return {
+          success: await executeGroupAiTextImg2PromptTask(g, node),
+          resultNodeId: node.id,
+        }
       case 'textCopy':
-        return executeGroupAiTextCopyTask(node)
+        return {
+          success: await executeGroupAiTextCopyTask(node),
+          resultNodeId: node.id,
+        }
       case 'text2image': {
         // 整组执行：在组内已有文生图节点上原地重跑，绝不新建节点
         const target =
@@ -9965,7 +9975,7 @@ export function registerCore(bind: CanvasBindings) {
           ((node.getData() as CanvasNodeData).kind === 'image' ? node : null)
         if (!target) {
           message.warning('组内未找到可重跑的文生图节点，已跳过')
-          return false
+          return { success: false, resultNodeId: task.nodeId }
         }
         const targetCtx =
           resolveGroupAiReferenceContext(
@@ -9979,7 +9989,10 @@ export function registerCore(bind: CanvasBindings) {
         selectedNodeId.value = target.id
         selectedKind.value = 'image'
         syncNodeSelectionHighlight(target.id)
-        return executeGroupAiImageTask(target, targetCtx)
+        return {
+          success: await executeGroupAiImageTask(target, targetCtx),
+          resultNodeId: target.id,
+        }
       }
       case 'text2video': {
         const target =
@@ -9987,7 +10000,7 @@ export function registerCore(bind: CanvasBindings) {
           ((node.getData() as CanvasNodeData).kind === 'video' ? node : null)
         if (!target) {
           message.warning('组内未找到可重跑的文生视频节点，已跳过')
-          return false
+          return { success: false, resultNodeId: task.nodeId }
         }
         const targetCtx =
           resolveGroupAiReferenceContext(
@@ -10000,50 +10013,84 @@ export function registerCore(bind: CanvasBindings) {
         selectedNodeId.value = target.id
         selectedKind.value = 'video'
         syncNodeSelectionHighlight(target.id)
-        return executeGroupAiVideoTask(target, targetCtx)
+        return {
+          success: await executeGroupAiVideoTask(target, targetCtx),
+          resultNodeId: target.id,
+        }
       }
       case 'videoDialogue':
-        return executeGroupAiVideoTask(node, refCtx)
+        return {
+          success: await executeGroupAiVideoTask(node, refCtx),
+          resultNodeId: node.id,
+        }
       default:
-        return false
+        return { success: false, resultNodeId: task.nodeId }
+    }
+  }
+
+  function recordGroupTaskFinishedAsset(
+    g: Graph,
+    task: GroupAiTask,
+    resultNodeId: string,
+    node: Node,
+    finishedAssets: Map<string, string>,
+  ) {
+    const resultCell = g.getCellById(resultNodeId)
+    let assetId = ''
+    if (resultCell?.isNode()) {
+      assetId = resolveImageAssetId(resultCell.getData() as CanvasNodeData)
+    }
+    if (!assetId) {
+      assetId = resolveImageAssetId(node.getData() as CanvasNodeData)
+    }
+    if (!assetId) return
+
+    finishedAssets.set(task.nodeId, assetId)
+    if (resultNodeId !== task.nodeId) {
+      finishedAssets.set(resultNodeId, assetId)
     }
   }
 
   async function runGroupAiGenerationPipeline(g: Graph, groupId: string, tasks: GroupAiTask[]) {
     const scopeIds = new Set(getGroupBoxNodeIds(g, groupId))
     const finishedAssets = new Map<string, string>()
+    const levels = groupGroupAiTasksByDependencyLevel(tasks)
 
-    for (const task of tasks) {
-      const cell = g.getCellById(task.nodeId)
-      if (!cell?.isNode()) continue
+    for (const levelTasks of levels) {
+      const outcomes = await Promise.all(
+        levelTasks.map(async (task) => {
+          const cell = g.getCellById(task.nodeId)
+          if (!cell?.isNode()) {
+            return { task, success: false, resultNodeId: task.nodeId, node: null as Node | null }
+          }
 
-      const node = cell as Node
-      const refCtx = resolveGroupAiReferenceContext(g, node, task, scopeIds, finishedAssets)
-      if (!refCtx) {
-        message.warning(`节点「${(node.getData() as CanvasNodeData).title || task.nodeId}」缺少可用参考资源，已跳过`)
-        throw new Error('group execute missing reference')
-      }
+          const node = cell as Node
+          const refCtx = resolveGroupAiReferenceContext(g, node, task, scopeIds, finishedAssets)
+          if (!refCtx) {
+            message.warning(
+              `节点「${(node.getData() as CanvasNodeData).title || task.nodeId}」缺少可用参考资源，已跳过`,
+            )
+            return { task, success: false, resultNodeId: task.nodeId, node }
+          }
 
-      const succeeded = await executeGroupAiTask(g, node, task, refCtx, scopeIds)
-      if (!succeeded) {
+          const outcome = await executeGroupAiTask(g, node, task, refCtx, scopeIds)
+          return { task, ...outcome, node }
+        }),
+      )
+
+      if (outcomes.some((outcome) => !outcome.success)) {
         throw new Error('group execute failed')
       }
 
-      const resultNodeId =
-        task.kind === 'text2image' || task.kind === 'text2video'
-          ? selectedNodeId.value || task.nodeId
-          : task.nodeId
-      const resultCell = g.getCellById(resultNodeId)
-      let assetId = ''
-      if (resultCell?.isNode()) {
-        assetId = resolveImageAssetId(resultCell.getData() as CanvasNodeData)
-      }
-      if (!assetId) {
-        assetId = resolveImageAssetId(node.getData() as CanvasNodeData)
-      }
-      if (assetId) finishedAssets.set(task.nodeId, assetId)
-      if (assetId && resultNodeId !== task.nodeId) {
-        finishedAssets.set(resultNodeId, assetId)
+      for (const outcome of outcomes) {
+        if (!outcome.node) continue
+        recordGroupTaskFinishedAsset(
+          g,
+          outcome.task,
+          outcome.resultNodeId,
+          outcome.node,
+          finishedAssets,
+        )
       }
 
       bumpToolbarRevision()

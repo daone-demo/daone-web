@@ -26,7 +26,7 @@
   .image-node:hover &,
   .video-node:hover &,
   .text-node--selected &,
-  .image-node--selected &,
+  .image-node--selected:not(.image-node--grouped) &,
   .video-node--selected &,
   .text-node:focus-within &,
   .image-node:focus-within &,
@@ -77,9 +77,9 @@
   .video-node:hover &,
   .image-gen-node:hover &,
   .text-node--selected &,
-  .image-node--selected &,
+  .image-node--selected:not(.image-node--grouped) &,
   .video-node--selected &,
-  .image-gen-node--selected & {
+  .image-gen-node--selected:not(.image-gen-node--grouped) & {
     opacity: 1;
   }
 

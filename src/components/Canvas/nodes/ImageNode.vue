@@ -4,6 +4,7 @@
     :class="{
       'image-node--portrait': isPortraitLayout,
       'image-node--selected': data.isSelected,
+      'image-node--grouped': Boolean(data.groupId),
       'image-node--light': isLightTheme,
       'image-node--card-only': !data.previewUrl,
       'image-node--compact': data.compactPreview,
@@ -1062,8 +1063,8 @@ onMounted(() => {
 
   &:not(.image-node--grid-split):hover .image-node__scale-btn,
   &:not(.image-node--grid-split):hover .canvas-node__delete-float,
-  &:not(.image-node--grid-split).image-node--selected .image-node__scale-btn,
-  &:not(.image-node--grid-split).image-node--selected .canvas-node__delete-float,
+  &:not(.image-node--grid-split).image-node--selected:not(.image-node--grouped) .image-node__scale-btn,
+  &:not(.image-node--grid-split).image-node--selected:not(.image-node--grouped) .canvas-node__delete-float,
   .image-node__scale-btn--active {
     opacity: 1;
   }

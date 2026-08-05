@@ -311,6 +311,50 @@ export function sortGroupAiTasksByDependency(tasks: GroupAiTask[]): GroupAiTask[
   return orderedIds.map((id) => taskMap.get(id)!)
 }
 
+/** 按依赖层级分组：同层节点互不依赖，可并行执行 */
+export function groupGroupAiTasksByDependencyLevel(tasks: GroupAiTask[]): GroupAiTask[][] {
+  if (tasks.length <= 1) return [tasks]
+
+  const taskMap = new Map(tasks.map((task) => [task.nodeId, task]))
+  const inDegree = new Map<string, number>()
+  const adjacency = new Map<string, string[]>()
+
+  tasks.forEach((task) => {
+    inDegree.set(task.nodeId, 0)
+    adjacency.set(task.nodeId, [])
+  })
+
+  tasks.forEach((task) => {
+    task.dependsOn.forEach((depId) => {
+      if (!taskMap.has(depId)) return
+      adjacency.get(depId)?.push(task.nodeId)
+      inDegree.set(task.nodeId, (inDegree.get(task.nodeId) ?? 0) + 1)
+    })
+  })
+
+  const levels: GroupAiTask[][] = []
+  let ready = tasks.filter((task) => (inDegree.get(task.nodeId) ?? 0) === 0)
+
+  while (ready.length) {
+    levels.push(ready)
+    const nextReady: GroupAiTask[] = []
+    for (const task of ready) {
+      for (const nextId of adjacency.get(task.nodeId) ?? []) {
+        const nextDegree = (inDegree.get(nextId) ?? 0) - 1
+        inDegree.set(nextId, nextDegree)
+        if (nextDegree === 0) {
+          const nextTask = taskMap.get(nextId)
+          if (nextTask) nextReady.push(nextTask)
+        }
+      }
+    }
+    ready = nextReady
+  }
+
+  if (levels.flat().length !== tasks.length) return [tasks]
+  return levels
+}
+
 function resolveReferenceAssetIdFromNode(
   graph: Graph,
   data: CanvasNodeData,
@@ -576,7 +620,7 @@ export function buildGroupExecuteConfirmContent(taskCount: number, credits: numb
   }
 
   return {
-    main: `即将对组内 ${taskCount} 个生成节点依次执行，预计消耗 ${credits} 积分，是否继续？`,
-    hint: '将按连线依赖顺序，在组内已有 AI 节点上原地重新生成，不会新建节点；上游完成后才会触发下游。',
+    main: `即将对组内 ${taskCount} 个生成节点分批执行，预计消耗 ${credits} 积分，是否继续？`,
+    hint: '同一层级的节点将并行执行；有上下游依赖时，会等上游完成后再执行下游。均在组内已有 AI 节点上原地重新生成，不会新建节点。',
   }
 }
