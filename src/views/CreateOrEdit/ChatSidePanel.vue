@@ -1987,6 +1987,8 @@ function startChatStream(
 
   // 收到 task_status=RUNNING 后，后台任务仍在执行；流结束/网络抖动时不当作请求失败
   let awaitingRunningTask = false
+  // 已收到任意 SSE 事件（如 agent_thinking），连接中断时不展示硬失败
+  let streamHasProgress = false
 
   const rememberTaskId = (assistant: ChatMessage, taskId: unknown) => {
     const normalized = String(taskId ?? '').trim()
@@ -2015,6 +2017,7 @@ function startChatStream(
       const payload = parseStreamEvent(data)
       if (!payload) return
 
+      streamHasProgress = true
       const eventName = resolveStreamEventName(payload, sseEvent)
 
       if (eventName === 'task_created') {
@@ -2156,10 +2159,13 @@ function startChatStream(
     onDone() {
       cancelTypewriter(assistantId)
       const assistant = resolveAssistant()
-      if (awaitingRunningTask) {
-        // 任务仍在 RUNNING：保留处理中 tip，不把流结束当成失败
+      const keepProcessingTip =
+        awaitingRunningTask
+        || (streamHasProgress && Boolean(assistant?.tip?.trim()) && !assistant?.text.trim())
+
+      if (keepProcessingTip) {
         if (assistant && !assistant.tip) {
-          setMessageTip(assistant, '处理中...')
+          setMessageTip(assistant, '处理中...', true)
         }
         scrollMessagesToBottom()
         return
@@ -2184,10 +2190,13 @@ function startChatStream(
         assistant.text = ''
         setMessageTip(assistant, undefined)
         awaitingRunningTask = false
-      } else if (awaitingRunningTask) {
-        // RUNNING 期间 SSE 抖动/对端关闭：不展示「请求失败」
+      } else if (
+        awaitingRunningTask
+        || (streamHasProgress && Boolean(assistant.tip?.trim()) && !assistant.text.trim())
+      ) {
+        // 已收到 agent_thinking / 任务进度等：SSE 抖动或中途断开时不展示「请求失败」
         if (!assistant.tip) {
-          setMessageTip(assistant, '处理中...')
+          setMessageTip(assistant, '处理中...', true)
         }
       } else if (!assistant.text.trim()) {
         assistant.text = '请求失败，请稍后重试。'
