@@ -8,7 +8,8 @@
             <div class="user-info__name-row">
               <h1 class="user-info__name">{{ profileState.nickname }}</h1>
               <span class="user-info__vip-badge" v-if="profileState.vipName">
-                <span class="user-info__vip-icon" aria-hidden="true" />
+                <!-- <span class="user-info__vip-icon" aria-hidden="true" /> -->
+                <i class="iconfont icon-huiyuanjifen" style="font-size: 14px;color: rgb(255, 198, 0);"></i>
                 {{profileState.vipName}}
               </span>
               <!-- <span class="user-info__plan">{{ USER_PROFILE.plan }}</span> -->
@@ -50,7 +51,7 @@
                   class="user-info__upgrade-btn"
                   @click="openComboModal"
                 >
-                  <span class="user-info__upgrade-icon" aria-hidden="true" />
+                  <i class="iconfont icon-huiyuanjifen" style="font-size: 18px;color: rgb(255, 198, 0);"></i>
                   升级
                 </button>
               </div>

@@ -2078,7 +2078,6 @@
   display: grid;
   grid-template-columns: repeat(2, 5px);
   gap: 3px;
-
   i {
     display: block;
     width: 5px;
@@ -2098,7 +2097,6 @@
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: #d1d5db;
   font-size: 16px;
   line-height: 1;
   cursor: pointer;

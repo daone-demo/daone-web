@@ -1619,6 +1619,7 @@ export type ImageContextMenuIcon =
   | 'icon-yulan1'
   | 'icon-shanchu'
   | 'icon-baocun1'
+  | 'icon-geren'
 
 export type ImageContextMenuItem = {
   key: string
@@ -1632,7 +1633,7 @@ export const IMAGE_CONTEXT_MENU_SECTIONS: ImageContextMenuItem[][] = [
   [
     { key: 'chat', label: '对话', icon: 'icon-duihuaqipao' },
     { key: 'send-agent', label: '添加到智能体', icon: 'icon-contact-customer-service' },
-    { key: 'send-model', label: '添加到我的模特', icon: 'send-model' },
+    { key: 'send-model', label: '添加到我的模特', icon: 'icon-geren' },
   ],
   [
     { key: 'preview', label: '预览', icon: 'icon-yulan1' },

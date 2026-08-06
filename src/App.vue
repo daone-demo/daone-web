@@ -27,7 +27,7 @@
             title="首页"
             @click="goHome"
           >
-            <i class="iconfont icon-shouye" style="font-size: 18px;" />
+            <i class="iconfont icon-shouye" style="font-size: 18px;color: #000000;" />
           </button>
         </a-popover>
         <a-popover placement="right">
@@ -41,7 +41,7 @@
             title="项目"
             @click="onDoAction('project')"
           >
-            <i class="iconfont icon-wenjianjia" style="font-size: 18px;" />
+            <i class="iconfont icon-wenjianjia" style="font-size: 18px;color: #000000;" />
           </button>
         </a-popover>
         <a-popover placement="right">
@@ -55,7 +55,7 @@
             title="个人主页"
             @click="onDoAction('userInfo')"
           >
-            <i class="iconfont icon-geren" style="font-size: 18px;" />
+            <i class="iconfont icon-geren" style="font-size: 18px;color: #000000;" />
           </button>
         </a-popover>
         <a-popover placement="right">
@@ -72,7 +72,7 @@
             />
           </template>
           <button type="button" class="app-sidebar__btn" title="帮助">
-            <i class="iconfont icon-zhuyi1" style="font-size: 18px;" />
+            <i class="iconfont icon-zhuyi1" style="font-size: 18px;color: #000000;"></i>
           </button>
         </a-popover>
       </nav>

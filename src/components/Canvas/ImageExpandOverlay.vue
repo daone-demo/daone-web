@@ -843,7 +843,7 @@ onBeforeUnmount(() => {
   display: inline-block;
   width: 14px;
   height: 14px;
-  background: currentColor;
+  background: #000000;
   mask-size: contain;
   mask-repeat: no-repeat;
   mask-position: center;

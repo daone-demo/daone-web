@@ -1,7 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import 'ant-design-vue/dist/reset.css'
-import './styles/iconfont.css'
 import './icon/iconfont.css'
 import './style.css'
 import App from './App.vue'
