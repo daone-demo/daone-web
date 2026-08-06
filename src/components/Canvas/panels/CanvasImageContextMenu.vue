@@ -61,10 +61,10 @@ function resolveLabel(item: ImageContextMenuItem) {
   return item.label
 }
 
-function resolveIcon(item: ImageContextMenuItem) {
-  if (item.key === 'lock' && props.nodeLocked) {
-    return 'unlock'
-  }
-  return item.icon
-}
+// function resolveIcon(item: ImageContextMenuItem) {
+//   if (item.key === 'lock' && props.nodeLocked) {
+//     return 'unlock'
+//   }
+//   return item.icon
+// }
 </script>
