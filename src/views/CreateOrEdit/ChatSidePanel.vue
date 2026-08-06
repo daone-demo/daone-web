@@ -475,9 +475,16 @@
                   >
                     <span
                       class="chat-panel__model-picker-icon"
-                      :data-icon="model.icon"
+                      :class="{ 'chat-panel__model-picker-icon--font': isDialogueModelIconfont(model.icon) }"
+                      :data-icon="isDialogueModelIconfont(model.icon) ? undefined : model.icon"
                       aria-hidden="true"
-                    />
+                    >
+                      <i
+                        v-if="isDialogueModelIconfont(model.icon)"
+                        class="iconfont"
+                        :class="normalizeDialogueModelIcon(model.icon)"
+                      />
+                    </span>
                     <span class="chat-panel__model-picker-main">
                       <span class="chat-panel__model-picker-name">{{ model.label }}</span>
                       <span v-if="model.subtitle" class="chat-panel__model-picker-sub">{{ model.subtitle }}</span>
@@ -579,8 +586,10 @@ import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
 import { useCanvasBgTheme } from '@/components/Canvas/useCanvasBgTheme'
 import {
+  isDialogueModelIconfont,
   listImageDialogueModelEntries,
   listVideoDialogueModelEntries,
+  normalizeDialogueModelIcon,
   type ImageCapability,
   type ChatTools,
 } from '@/components/Canvas/constants'
@@ -791,10 +800,15 @@ function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function resolveChatModelIcon(apiIcon: string | undefined, fallback: string): string {
+  const normalized = normalizeDialogueModelIcon(apiIcon)
+  return normalized || fallback
+}
+
 function parseModelsFromCapability(
   capability: ImageCapability | null | undefined,
   category: ChatModelCategory,
-  icon: string,
+  fallbackIcon: string,
 ): ChatModelItem[] {
   if (!capability?.parameters) return []
 
@@ -805,7 +819,7 @@ function parseModelsFromCapability(
       value: entry.key,
       label: entry.label,
       subtitle: entry.resolutions[entry.resolutions.length - 1] || undefined,
-      icon,
+      icon: resolveChatModelIcon(entry.icon, fallbackIcon),
     }))
   }
 
@@ -816,7 +830,7 @@ function parseModelsFromCapability(
       value: entry.key,
       label: entry.label,
       subtitle: entry.resolutions[entry.resolutions.length - 1]?.label || undefined,
-      icon,
+      icon: resolveChatModelIcon(entry.icon, fallbackIcon),
     }))
   }
 
@@ -835,7 +849,7 @@ function parseModelsFromCapability(
         category,
         value,
         label,
-        icon,
+        icon: resolveChatModelIcon(typeof row.icon === 'string' ? row.icon : undefined, fallbackIcon),
       })
     })
     return result
@@ -851,7 +865,7 @@ function parseModelsFromCapability(
       category,
       value,
       label: value,
-      icon,
+      icon: fallbackIcon,
     }))
 }
 
@@ -3817,6 +3831,22 @@ defineExpose({
 
   &[data-icon='audio'] {
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='currentColor'%3E%3Cpath d='M8 2a3 3 0 0 0-3 3v4.17A2.5 2.5 0 0 0 6.5 13 2.5 2.5 0 0 0 9 10.5V5a1 1 0 1 1 2 0v5.5a4.5 4.5 0 0 1-4 4.47V14h2a1 1 0 1 1 0 2H7a1 1 0 1 1 0-2h1v-1.03A6.5 6.5 0 0 1 13 10.5V5a3 3 0 0 0-6 0z'/%3E%3C/svg%3E");
+  }
+
+  &--font {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background: #f3f4f6;
+    mask-image: none;
+
+    .iconfont {
+      font-size: 16px;
+      line-height: 1;
+      color: #374151;
+    }
   }
 }
 

@@ -1148,7 +1148,9 @@ function resolveImageDialogueModelIcon(key: string, index: number): ImageDialogu
 /** 接口 icon 与本地 iconfont 类名不一致时的别名 */
 const DIALOGUE_MODEL_ICON_ALIASES: Record<string, string> = {
   'icon-jinengAI': 'icon-jimengAI',
+  'icon-JimengAI': 'icon-jimengAI',
   'icon-nano-banana-pro': 'icon-nano-banana',
+  'icon-huoshanyingying': 'icon-huoshanyinqing',
 }
 
 /** 规范化接口返回的模型 icon（iconfont 类名） */
