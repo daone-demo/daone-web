@@ -2373,6 +2373,36 @@ function startNewChat() {
   focusInput()
 }
 
+function resetForProject() {
+  close()
+  isProcessing.value = false
+  isSending.value = false
+  typewriterHandles.forEach((handle) => handle.cancel())
+  typewriterHandles.clear()
+  streamingMessageIds.value = new Set()
+  messageLoadSeqByChatId.clear()
+  showHistoryMenu.value = false
+  showAutoMenu.value = false
+  closeModelMenu()
+  closeSkillMenu()
+  clearSelectedSkill()
+
+  sessions.value.forEach((session) => {
+    session.draft.attachments.forEach((item) => {
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+    })
+  })
+
+  clearAttachments()
+  clearAssetMentions()
+  message.value = ''
+
+  const fresh = createSession('新建对话', true)
+  sessions.value = [fresh]
+  activeSessionId.value = fresh.id
+  loadSessionDraft(fresh)
+}
+
 function focusInput() {
   collapsed.value = false
   nextTick(() => inputRef.value?.focus())
@@ -2402,6 +2432,14 @@ onMounted(() => {
   activeSessionId.value = initial.id
   document.addEventListener('mousedown', onDocumentMouseDown, true)
 })
+
+watch(
+  () => props.projectId,
+  (nextId, prevId) => {
+    if (!prevId || prevId === nextId) return
+    resetForProject()
+  },
+)
 
 watch(
   () => [props.historySessions, props.currentSessionId] as const,
@@ -2472,6 +2510,7 @@ defineExpose({
   endProcessing,
   focusInput,
   startNewChat,
+  resetForProject,
   addAttachmentFromCanvas,
   addSkillFile,
   insertAssetMention,

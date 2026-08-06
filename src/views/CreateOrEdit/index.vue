@@ -328,9 +328,11 @@ const onLoadChatModels = async () => {
   // console.log('chatModels', res);
 }
 
-const onLoadHistorySessions = async () => {
+const onLoadHistorySessions = async (options?: { forceSelectFirst?: boolean }) => {
   if (!currentProjectId.value) {
     sessionName.value = '新建对话'
+    historySessions.value = []
+    currentSessionId.value = ''
     return
   }
 
@@ -340,19 +342,21 @@ const onLoadHistorySessions = async () => {
   if (historySessions.value.length) {
     const first = historySessions.value[0]
     sessionName.value = first?.title || '新建对话'
-    // 仅在尚未选中会话时，默认切到第一条历史
-    if (!currentSessionId.value) {
+    if (!currentSessionId.value || options?.forceSelectFirst) {
       currentSessionId.value = first.id;
-      await onLoadChatSession(first.id);
     }
   } else {
     sessionName.value = '新建对话'
+    currentSessionId.value = ''
   }
 }
 
-const onLoadChatSession = async (sessionId: string) => {
-  const res = await api.queryChatSession(sessionId);
-  console.log('chatSession', res);
+async function reloadChatForCurrentProject() {
+  chatPanelRef.value?.resetForProject?.()
+  currentSessionId.value = ''
+  sessionName.value = '新建对话'
+  historySessions.value = []
+  await onLoadHistorySessions({ forceSelectFirst: true })
 }
 
 const onSetCurrentSessionId = (sessionId: string) => {
@@ -537,12 +541,15 @@ function onRefreshKeydown(event: KeyboardEvent) {
 
 watch(
   () => route.params.id,
-  (newId, oldId) => {
+  async (newId, oldId) => {
     if (pageLoading.value) return
     if (typeof newId === 'string' && newId.trim() && newId !== oldId) {
-      void onLoadProjectCanvas(newId).catch((error) => {
-        console.error('[CreateOrEdit] load project canvas failed', error)
-      })
+      try {
+        await onLoadProjectCanvas(newId)
+        await reloadChatForCurrentProject()
+      } catch (error) {
+        console.error('[CreateOrEdit] load project failed', error)
+      }
     }
   },
 )
