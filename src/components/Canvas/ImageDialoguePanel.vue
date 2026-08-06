@@ -309,7 +309,6 @@ import {
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
   IMAGE_DIALOGUE_PLACEHOLDER,
-  IMAGE_DIALOGUE_CREDITS,
   IMAGE_DIALOGUE_MODEL_MENU,
   buildImageDialogueModelsFromCapabilities,
   buildImageWorkflowOptionGroups,

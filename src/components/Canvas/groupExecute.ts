@@ -683,7 +683,7 @@ export function estimateGroupExecuteCredits(tasks: GroupAiTask[]): number {
   return tasks.reduce((sum, task) => sum + task.creditCost, 0)
 }
 
-export function buildGroupExecuteConfirmContent(taskCount: number, credits: number) {
+export function buildGroupExecuteConfirmContent(taskCount: number, _credits: number) {
   if (taskCount <= 0) {
     return {
       main: '即将对组内 0 个生成节点依次执行，是否继续？',
