@@ -9,15 +9,7 @@ import { registerCore } from './registerCore'
 
 export type { CanvasEmit, CanvasDomRefs } from './types'
 
-type ChatTaskCreatedPayload = {
-  taskId: string | number
-  taskType?: string
-  taskName?: string
-  prompt?: string
-  capabilityCode?: string
-  nodeId?: string
-  parentNodeId?: string
-}
+import type { ChatTaskCreatedPayload } from '../../chatGenerationTask'
 
 type GridSplitCanvasApi = Pick<
   CanvasState,

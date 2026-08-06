@@ -54,6 +54,8 @@ export interface ChatMessage {
   kind?: 'text' | 'balance_error'
   attachments?: ChatAttachment[]
   tip?: string
+  /** agent_thinking 推送时开启 tip 海浪抖动动效 */
+  tipWave?: boolean
   questionnaire?: Questionnaire
   questionnaireAnswered?: boolean
   /** 多步问卷已选答案：stepName/stepIndex -> label */
@@ -85,17 +87,7 @@ export interface ChatSendPayload {
 }
 
 /** 对话 SSE task_created 事件，用于在画布创建生成节点 */
-export interface ChatTaskCreatedPayload {
-  taskId: string | number
-  taskType?: string
-  taskName?: string
-  prompt?: string
-  capabilityCode?: string
-  /** 服务端预分配的结果节点 ID */
-  nodeId?: string
-  /** 画布上的上游节点 ID，创建结果节点后自动连线 */
-  parentNodeId?: string
-}
+export type { ChatTaskCreatedPayload } from '@/components/Canvas/chatGenerationTask'
 
 export const CHAT_TIPS = [
   '提示：将文件拖入工作区即可作为素材使用。',

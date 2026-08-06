@@ -71,8 +71,15 @@ import {
 } from '../../imageMarkUtils'
 import { toVideoApiPrompt } from '../../promptMention'
 import {
+  attachChatTaskToNode,
+  followChatGenerationTaskOnNode,
+  linkChatTaskNodeToParent,
+  normalizeChatTaskType,
+  resolveChatTaskTargetNode,
+  type ChatTaskCreatedPayload,
+} from '../../chatGenerationTask'
+import {
   bindGenerationTaskId,
-  findNodeByGenerationTaskId,
   followModelGenerationTaskOnNode,
   followTextGenerationTaskOnNode,
   followVideoGenerationTaskOnNode,
@@ -91,13 +98,10 @@ import {
   setGenerationTaskSettledHandler,
   setGenerationTaskSucceededHandler,
   startImageGenerationOnNode,
-  startImageGenerationTaskFollow,
-  startTextGenerationTaskFollow,
   startVideoGenerationTaskFollow,
   resolveGenerationResultPreview,
   type GenerationTaskDetail,
   type GenerationTaskResult,
-  type GenerationTaskType,
 } from '../../generationTask'
 import {
   buildImageGenerationParams,
@@ -10942,45 +10946,26 @@ export function registerCore(bind: CanvasBindings) {
     })
   }
 
-  /** 对话 SSE task_created：在画布新建节点、绑定 taskId，并复用现有轮询回写逻辑 */
-  function createNodeFromChatTask(payload: {
-    taskId: string | number
-    taskType?: string
-    taskName?: string
-    prompt?: string
-    capabilityCode?: string
-    nodeId?: string
-    parentNodeId?: string
-  }) {
+  /** 对话 SSE task_created：在画布新建/关联节点、绑定 taskId 并轮询 getGenerationTask */
+  function createNodeFromChatTask(payload: ChatTaskCreatedPayload) {
     const g = graph.value
     if (!g) return null
 
     const taskId = String(payload.taskId ?? '').trim()
     if (!taskId) return null
 
-    const existingByTask = findNodeByGenerationTaskId(g, taskId)
-    if (existingByTask) {
-      linkChatTaskNodeToParent(g, existingByTask, payload.parentNodeId)
-      return existingByTask
-    }
-
-    const preferredNodeId = String(payload.nodeId ?? '').trim()
-    const canUsePreferredId =
-      Boolean(preferredNodeId)
-      && preferredNodeId !== '字符串值'
-      && !g.getCellById(preferredNodeId)
-
-    if (preferredNodeId && preferredNodeId !== '字符串值') {
-      const existingCell = g.getCellById(preferredNodeId)
-      if (existingCell?.isNode()) {
-        const existingNode = existingCell as Node
-        const taskType = normalizeChatTaskType(payload.taskType)
-        bindGenerationTaskId(existingNode, taskId, taskType)
-        followChatTaskOnNode(existingNode, taskId, taskType, payload)
-        linkChatTaskNodeToParent(g, existingNode, payload.parentNodeId)
-        scheduleHistoryPush()
-        return existingNode
-      }
+    const existing = resolveChatTaskTargetNode(g, payload)
+    if (existing) {
+      attachChatTaskToNode(g, existing, payload, {
+        onError: (reason) => message.error(reason),
+        onComplete: () => {
+          syncNodeCount()
+          scheduleHistoryPush()
+        },
+        toHtml: plainTextToEditorHtml,
+      })
+      scheduleHistoryPush()
+      return existing
     }
 
     const taskType = normalizeChatTaskType(payload.taskType)
@@ -11001,6 +10986,12 @@ export function registerCore(bind: CanvasBindings) {
           inputUpdated: Boolean(parentData.previewUrl),
         }
       : {}
+
+    const preferredNodeId = String(payload.nodeId ?? '').trim()
+    const canUsePreferredId =
+      Boolean(preferredNodeId)
+      && preferredNodeId !== '字符串值'
+      && !g.getCellById(preferredNodeId)
 
     const center = getGraphCenter()
     const stacking = g.getNodes().filter((node) => {
@@ -11088,106 +11079,20 @@ export function registerCore(bind: CanvasBindings) {
       node = addCanvasNode(g, 'image', point, overrides, nodeOptions)
     }
 
-    bindGenerationTaskId(node, taskId, taskType)
-    followChatTaskOnNode(node, taskId, taskType, { taskName: title, prompt })
+    followChatGenerationTaskOnNode(node, payload, {
+      onError: (reason) => message.error(reason),
+      onComplete: () => {
+        syncNodeCount()
+        scheduleHistoryPush()
+      },
+      toHtml: plainTextToEditorHtml,
+    })
     linkChatTaskNodeToParent(g, node, parentNodeId)
     selectGraphNodes(node)
     syncNodeCount()
     scheduleHistoryPush()
     ensureInfiniteCanvasArea(g)
     return node
-  }
-
-  /** 将对话任务结果节点连到服务端返回的 parentNodeId */
-  function linkChatTaskNodeToParent(
-    g: Graph,
-    targetNode: Node,
-    parentNodeIdRaw?: string,
-  ) {
-    const parentNodeId = String(parentNodeIdRaw ?? '').trim()
-    if (!parentNodeId || parentNodeId === targetNode.id) return
-
-    const parentCell = g.getCellById(parentNodeId)
-    if (!parentCell?.isNode()) return
-
-    const exists = g.getEdges().some(
-      (edge) =>
-        edge.getSourceCellId() === parentNodeId
-        && edge.getTargetCellId() === targetNode.id,
-    )
-    if (exists) return
-
-    connectGenEdge(g, parentNodeId, targetNode.id)
-
-    const parentData = parentCell.getData() as CanvasNodeData
-    const targetData = { ...(targetNode.getData() as CanvasNodeData) }
-    if (!targetData.sourceNodeId) {
-      targetData.sourceNodeId = parentNodeId
-      targetData.sourcePreviewUrl = parentData.previewUrl ?? targetData.sourcePreviewUrl ?? ''
-      targetData.sourceFileName = parentData.fileName ?? targetData.sourceFileName ?? ''
-      if (parentData.assetId && !targetData.sourceAssetId) {
-        targetData.sourceAssetId = parentData.assetId
-      }
-      targetData.inputUpdated = Boolean(parentData.previewUrl)
-      targetNode.setData(targetData)
-    }
-  }
-
-  function normalizeChatTaskType(raw?: string): GenerationTaskType {
-    const type = String(raw || 'IMAGE').trim().toUpperCase()
-    if (type === 'VIDEO') return 'VIDEO'
-    if (type === 'TEXT') return 'TEXT'
-    if (type === 'MODEL' || type === 'MODEL3D' || type === '3D') return 'MODEL'
-    return 'IMAGE'
-  }
-
-  function followChatTaskOnNode(
-    node: Node,
-    taskId: string,
-    taskType: GenerationTaskType,
-    payload: { taskName?: string; prompt?: string },
-  ) {
-    const title = String(payload.taskName || '').trim() || '生成中'
-    const onError = (reason: string) => message.error(reason)
-    const onComplete = () => {
-      syncNodeCount()
-      scheduleHistoryPush()
-    }
-
-    if (taskType === 'VIDEO') {
-      startVideoGenerationTaskFollow(node, taskId, {
-        title,
-        fileName: `${title}.mp4`,
-        onError,
-        onComplete: () => onComplete(),
-      })
-      return
-    }
-
-    if (taskType === 'TEXT') {
-      startTextGenerationTaskFollow(node, taskId, {
-        title,
-        toHtml: plainTextToEditorHtml,
-        onError,
-        onComplete: () => onComplete(),
-      })
-      return
-    }
-
-    if (taskType === 'MODEL') {
-      void followModelGenerationTaskOnNode(node, taskId, {
-        title,
-        onError,
-      }).finally(() => onComplete())
-      return
-    }
-
-    startImageGenerationTaskFollow(node, taskId, {
-      title,
-      fileName: `${title}.png`,
-      onError,
-      onComplete: () => onComplete(),
-    })
   }
 
   function addImageFromFile(

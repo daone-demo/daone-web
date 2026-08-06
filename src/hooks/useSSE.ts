@@ -5,7 +5,7 @@ type SSEOptions = {
   method?: 'GET' | 'POST'
   body?: unknown
   headers?: Record<string, string>
-  onMessage?: (data: string) => void
+  onMessage?: (data: string, event?: string) => void
   onOpen?: () => void
   onError?: (error: unknown) => void
   onDone?: () => void
@@ -81,6 +81,7 @@ export function useSSE() {
 
       const decoder = new TextDecoder()
       let buffer = ''
+      let pendingEvent = ''
 
       while (true) {
         const { done, value } = await reader.read()
@@ -92,7 +93,18 @@ export function useSSE() {
 
         for (const line of lines) {
           const trimmed = line.trim()
-          if (!trimmed || trimmed.startsWith(':') || !trimmed.startsWith('data:')) continue
+          if (!trimmed) {
+            pendingEvent = ''
+            continue
+          }
+          if (trimmed.startsWith(':')) continue
+
+          if (trimmed.startsWith('event:')) {
+            pendingEvent = trimmed.slice(6).trim()
+            continue
+          }
+
+          if (!trimmed.startsWith('data:')) continue
 
           const data = trimmed.slice(5).trim()
           if (data === '[DONE]') {
@@ -101,7 +113,8 @@ export function useSSE() {
             return
           }
 
-          options.onMessage?.(data)
+          const eventName = pendingEvent || undefined
+          options.onMessage?.(data, eventName)
         }
       }
 

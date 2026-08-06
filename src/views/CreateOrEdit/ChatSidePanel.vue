@@ -244,6 +244,7 @@
               <div
                 v-if="shouldAnimateTip(item)"
                 class="chat-panel__thinking"
+                :class="{ 'chat-panel__thinking--wave': item.tipWave }"
               >
                 <span
                   v-if="item.role === 'user'"
@@ -263,7 +264,7 @@
                     :key="`${index}-${segment.char}`"
                     class="chat-panel__thinking-char"
                     :class="{ 'is-space': segment.isSpace }"
-                    :style="{ animationDelay: `${index * 0.055}s` }"
+                    :style="{ animationDelay: `${index * 0.06}s` }"
                   >{{ segment.char }}</span>
                 </span>
               </div>
@@ -606,7 +607,14 @@ function renderMarkdown(source: string): string {
 
 function shouldAnimateTip(item: ChatMessage): boolean {
   if (!item.tip?.trim()) return false
+  // agent_thinking：始终做海浪抖动；其它 tip 仅在流式/处理中时动画
+  if (item.tipWave) return true
   return isStreaming.value || isProcessing.value
+}
+
+function setMessageTip(message: ChatMessage, tip?: string, tipWave = false) {
+  message.tip = tip
+  message.tipWave = tip ? tipWave : undefined
 }
 
 function splitTipSegments(text: string) {
@@ -1695,11 +1703,11 @@ function applyStreamAgentPayload(
 
   const generateTip = extractGenerateImageTip(payload)
   if (generateTip) {
-    assistant.tip = generateTip
+    setMessageTip(assistant, generateTip)
   } else if (payload.agentStatus && payload.agentStatus !== 'NEED_INPUT') {
-    assistant.tip = undefined
+    setMessageTip(assistant, undefined)
   } else if (questionnaire) {
-    assistant.tip = undefined
+    setMessageTip(assistant, undefined)
   }
 }
 
@@ -1814,6 +1822,27 @@ function parseStreamEvent(data: string): StreamEvent | null {
   }
 }
 
+/** 合并 SSE event 行与 JSON 内 event 字段；兼容 task_created 仅带 taskId/nodeId 的载荷 */
+function resolveStreamEventName(payload: StreamEvent, sseEvent?: string): string {
+  const fromPayload = String(payload.event ?? '').trim()
+  if (fromPayload) return fromPayload
+
+  const fromSse = String(sseEvent ?? '').trim()
+  if (fromSse && fromSse !== 'message') return fromSse
+
+  const taskId = String(payload.taskId ?? '').trim()
+  if (
+    taskId
+    && !payload.status
+    && (payload.nodeId || payload.parentNodeId)
+    && (payload.taskType || payload.capabilityCode)
+  ) {
+    return 'task_created'
+  }
+
+  return fromSse
+}
+
 function pickStreamText(payload: StreamEvent): string {
   return (
     payload.content
@@ -1852,7 +1881,7 @@ function cancelTypewriter(messageId: string) {
 
 /** 将整段文本以打字机效果流式写入助手消息 */
 function streamAssistantText(
-  assistant: { id: string; text: string; tip?: string },
+  assistant: ChatMessage,
   fullText: string,
   mode: 'replace' | 'append' = 'replace',
 ) {
@@ -1871,7 +1900,7 @@ function streamAssistantText(
       target = base + fullText
     }
   } else if (fullText === assistant.text) {
-    assistant.tip = undefined
+    setMessageTip(assistant, undefined)
     return Promise.resolve()
   } else if (fullText.startsWith(assistant.text) && assistant.text) {
     base = assistant.text
@@ -1882,7 +1911,7 @@ function streamAssistantText(
     target = fullText
   }
 
-  assistant.tip = undefined
+  setMessageTip(assistant, undefined)
 
   let cancelled = false
   let index = base.length
@@ -1942,6 +1971,7 @@ function startChatStream(
     text: '',
     kind: 'text',
     tip: '思考中...',
+    tipWave: true,
   })
   scrollMessagesToBottom()
 
@@ -1981,34 +2011,43 @@ function startChatStream(
       ...(skillName ? { skillName } : {}),
       ...(nodeId ? { nodeId } : {}),
     },
-    onMessage(data) {
+    onMessage(data, sseEvent) {
       const payload = parseStreamEvent(data)
       if (!payload) return
 
-      const assistant = resolveAssistant()
-      if (!assistant) return
+      const eventName = resolveStreamEventName(payload, sseEvent)
 
-      const eventName = payload.event || ''
+      const assistant = resolveAssistant()
+      // task_created 需同步画布，即使助手消息已被替换也不应中断
+      if (!assistant && eventName !== 'task_created') return
 
       if (eventName === 'user_message') {
         return
       }
 
       if (eventName === 'agent_thinking') {
-        if (assistant.text.trim() || streamingMessageIds.value.has(assistant.id)) {
+        // 正文打字机进行中时不打断；已有正文时仍可更新思考态 tip（海浪动效）
+        if (streamingMessageIds.value.has(assistant.id)) {
           return
         }
         const thinkingMessage = typeof payload.message === 'string' ? payload.message.trim() : ''
-        assistant.tip = thinkingMessage || '思考中...'
+        setMessageTip(assistant, thinkingMessage || '思考中...', true)
         scrollMessagesToBottom()
         return
       }
 
       if (eventName === 'task_created') {
-        rememberTaskId(assistant, payload.taskId)
-        awaitingRunningTask = true
-        const taskName = typeof payload.taskName === 'string' ? payload.taskName.trim() : ''
-        assistant.tip = taskName ? `已创建任务「${taskName}」，处理中...` : '已创建生成任务，处理中...'
+        if (assistant) {
+          rememberTaskId(assistant, payload.taskId)
+          awaitingRunningTask = true
+          const taskName = typeof payload.taskName === 'string' ? payload.taskName.trim() : ''
+          setMessageTip(
+            assistant,
+            taskName ? `已创建任务「${taskName}」，处理中...` : '已创建生成任务，处理中...',
+          )
+        } else {
+          awaitingRunningTask = true
+        }
         emit('task-created', {
           taskId: payload.taskId as string | number,
           taskType: payload.taskType,
@@ -2022,26 +2061,28 @@ function startChatStream(
         return
       }
 
+      if (!assistant) return
+
       if (eventName === 'task_status' || eventName === 'task_progress') {
         rememberTaskId(assistant, payload.taskId)
 
         if (eventName === 'task_status') {
           if (isRunningTaskStatus(payload.status)) {
             awaitingRunningTask = true
-            assistant.tip = resolveTaskStatusTip(payload)
+            setMessageTip(assistant, resolveTaskStatusTip(payload))
           } else if (isTerminalTaskStatus(payload.status)) {
             awaitingRunningTask = false
             const tip = resolveTaskStatusTip(payload)
             const failed = /FAIL|ERROR|CANCEL/i.test(String(payload.status || ''))
             if (failed) {
-              assistant.tip = tip
+              setMessageTip(assistant, tip)
             } else if (!assistant.text.trim()) {
-              assistant.tip = tip
+              setMessageTip(assistant, tip)
             } else {
-              assistant.tip = undefined
+              setMessageTip(assistant, undefined)
             }
           } else {
-            assistant.tip = resolveTaskStatusTip(payload)
+            setMessageTip(assistant, resolveTaskStatusTip(payload))
           }
         } else {
           // task_progress：任务仍在推进，保持等待态
@@ -2052,9 +2093,9 @@ function startChatStream(
             && typeof payload.total === 'number'
             && payload.total > 0
           ) {
-            assistant.tip = `${progressTip}（${payload.completed}/${payload.total}）`
+            setMessageTip(assistant, `${progressTip}（${payload.completed}/${payload.total}）`)
           } else {
-            assistant.tip = progressTip
+            setMessageTip(assistant, progressTip)
           }
         }
 
@@ -2110,7 +2151,7 @@ function startChatStream(
         // delta / content 增量：直接追加
         cancelTypewriter(assistant.id)
         assistant.text += chunk
-        assistant.tip = undefined
+        setMessageTip(assistant, undefined)
         scrollMessagesToBottom()
       }
     },
@@ -2120,13 +2161,13 @@ function startChatStream(
       if (awaitingRunningTask) {
         // 任务仍在 RUNNING：保留处理中 tip，不把流结束当成失败
         if (assistant && !assistant.tip) {
-          assistant.tip = '处理中...'
+          setMessageTip(assistant, '处理中...')
         }
         scrollMessagesToBottom()
         return
       }
       if (assistant) {
-        assistant.tip = undefined
+        setMessageTip(assistant, undefined)
       }
       if (assistant && !assistant.text.trim() && !assistant.questionnaire) {
         assistant.text = '暂无回复，请稍后重试。'
@@ -2143,18 +2184,18 @@ function startChatStream(
       if (isBalanceError(errorMessage)) {
         assistant.kind = 'balance_error'
         assistant.text = ''
-        assistant.tip = undefined
+        setMessageTip(assistant, undefined)
         awaitingRunningTask = false
       } else if (awaitingRunningTask) {
         // RUNNING 期间 SSE 抖动/对端关闭：不展示「请求失败」
         if (!assistant.tip) {
-          assistant.tip = '处理中...'
+          setMessageTip(assistant, '处理中...')
         }
       } else if (!assistant.text.trim()) {
         assistant.text = '请求失败，请稍后重试。'
-        assistant.tip = errorMessage
+        setMessageTip(assistant, errorMessage)
       } else {
-        assistant.tip = errorMessage
+        setMessageTip(assistant, errorMessage)
       }
 
       scrollMessagesToBottom()
@@ -3280,12 +3321,20 @@ defineExpose({
 
 .chat-panel__thinking-char {
   display: inline-block;
-  opacity: 0.52;
+  will-change: transform, opacity;
   transform: translate3d(0, 0, 0);
-  animation: chat-panel-thinking-char-wave 1.35s ease-in-out infinite;
+  animation: chat-panel-thinking-char-wave 1.2s ease-in-out infinite;
 
   &.is-space {
     min-width: 0.28em;
+  }
+}
+
+.chat-panel__thinking--wave {
+  .chat-panel__thinking-char {
+    opacity: 0.55;
+    animation-name: chat-panel-thinking-sea-wave;
+    animation-duration: 1.05s;
   }
 }
 
@@ -3311,7 +3360,7 @@ defineExpose({
   0%,
   100% {
     transform: translate3d(0, 0, 0);
-    opacity: 0.52;
+    opacity: 0.55;
   }
 
   40% {
@@ -3321,7 +3370,31 @@ defineExpose({
 
   75% {
     transform: translate3d(0, 0, 0);
-    opacity: 0.62;
+    opacity: 0.65;
+  }
+}
+
+/* agent_thinking：逐字海浪上下起伏 */
+@keyframes chat-panel-thinking-sea-wave {
+  0%,
+  100% {
+    transform: translate3d(0, 1.5px, 0);
+    opacity: 0.45;
+  }
+
+  25% {
+    transform: translate3d(0, -3.5px, 0);
+    opacity: 1;
+  }
+
+  50% {
+    transform: translate3d(0, 1px, 0);
+    opacity: 0.6;
+  }
+
+  75% {
+    transform: translate3d(0, -2.5px, 0);
+    opacity: 0.9;
   }
 }
 
