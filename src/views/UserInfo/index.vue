@@ -146,6 +146,7 @@
                 :total="pointsTotal"
                 :show-total="pointsTotal => `共 ${pointsTotal} 条记录`"
                 @change="onChangePointsPage"
+                :locale="PAGINATION_LOCALE"
               />
             </a-flex>
           </div>
@@ -228,6 +229,7 @@
               :total="orderTotal"
               :show-total="pointsTotal => `共 ${pointsTotal} 条记录`"
               @change="onChangeOrderPage"
+              :locale="PAGINATION_LOCALE"
             />
           </a-flex>
         </div>
@@ -533,6 +535,8 @@ import tools from '@/utils/tools';
 import dayjs from 'dayjs';
 import { message, type SelectProps } from 'ant-design-vue';
 import { useNeedReloadPointsStore } from '@stores/useNeedReload';
+import zhCN from 'ant-design-vue/es/locale/zh_CN'
+const PAGINATION_LOCALE = zhCN.Pagination
 const needReloadPointsStore = useNeedReloadPointsStore();
 
 watch(needReloadPointsStore.getNeedReloadPoints, (newVal) => {

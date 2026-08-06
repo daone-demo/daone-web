@@ -13,7 +13,7 @@
       type="button"
       class="canvas__tool-btn"
       :class="{ 'canvas__tool-btn--active': showAssetsPanel }"
-      title="我的素材"
+      title="素材中心"
       @click="emit('toggle-assets-panel')"
     >
       <i class="iconfont icon-lishijilu1" style="font-size: 18px;" />

@@ -169,8 +169,8 @@
             <span class="canvas__user-menu-profile-main">
               <span class="canvas__user-menu-name">{{ userInfoStore.userInfo?.nickname }}</span>
               <span class="canvas__user-menu-badge">
-                <span class="canvas__user-menu-vip" aria-hidden="true">VIP</span>
-                {{ userRole }}
+                <span class="canvas__user-menu-vip" v-if="userInfoStore.userInfo?.vipName" aria-hidden="true">VIP</span>
+                {{ userInfoStore.userInfo?.vipName ?? '未订阅' }}
               </span>
             </span>
             <span class="canvas__user-menu-chevron" aria-hidden="true" />
@@ -194,11 +194,11 @@
               class="canvas__user-menu-item"
               @click="emit('user-menu-action', item.key)"
             >
-              <span
+              <!-- <span
                 class="canvas__user-menu-item-icon"
                 :class="`canvas__user-menu-item-icon--${item.key}`"
                 aria-hidden="true"
-              />
+              /> -->
               <span>{{ item.label }}</span>
             </button>
           </nav>
@@ -228,6 +228,7 @@ const router = useRouter();
 
 // const router = useRouter();
 const userInfoStore = useUserInfo();
+console.log('userInfoStore123', userInfoStore.userInfo);
 
 export type CanvasProjectItem = {
   id: string
