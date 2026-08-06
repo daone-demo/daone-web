@@ -23,7 +23,8 @@
           class="canvas__group-layout-menu-item"
           @click="onLayout(item.key)"
         >
-          <span class="canvas__group-icon" :data-icon="item.icon" aria-hidden="true" />
+          <!-- <span class="canvas__group-icon" :data-icon="item.icon" aria-hidden="true" /> -->
+          <i class="iconfont" :class="item.icon" style="font-size: 18px;"></i>
           {{ item.label }}
         </button>
       </div>
@@ -33,7 +34,8 @@
       class="canvas__group-btn"
       title="整组执行" @click="emit('execute')"
     >
-      <span class="canvas__group-icon" data-icon="execute" aria-hidden="true" />
+      <!-- <span class="canvas__group-icon" data-icon="execute" aria-hidden="true" /> -->
+      <i class="iconfont icon-yunhang" style="font-size: 18px;"></i>
       整组执行
     </button>
     <!-- <button 
@@ -60,7 +62,8 @@
       title="解组"
       @click="emit('ungroup')"
     >
-      <span class="canvas__group-icon" data-icon="ungroup" aria-hidden="true" />
+      <!-- <span class="canvas__group-icon" data-icon="ungroup" aria-hidden="true" /> -->
+      <i class="iconfont icon-jiezu" style="font-size: 18px;"></i>
       解组
     </button>
     <button 
@@ -69,7 +72,8 @@
       title="保存到工作流"
       @click="emit('save-to-skill')"
     >
-      <span class="canvas__group-icon" data-icon="skill" aria-hidden="true" />
+      <!-- <span class="canvas__group-icon" data-icon="skill" aria-hidden="true" /> -->
+      <i class="iconfont icon-baocunwenjian" style="font-size: 18px;"></i>
       保存到工作流
     </button>
     <button 
@@ -78,7 +82,8 @@
       title="批量下载"
       @click="emit('batch-download')"
     >
-      <span class="canvas__group-icon" data-icon="download" aria-hidden="true" />
+      <!-- <span class="canvas__group-icon" data-icon="download" aria-hidden="true" /> -->
+      <i class="iconfont icon-batch-download" style="font-size: 18px;"></i>
       批量下载
     </button>
   </div>
@@ -104,9 +109,9 @@ const emit = defineEmits<{
 }>()
 
 const LAYOUT_MENU_ITEMS: { key: GroupLayoutDirection; label: string; icon: string }[] = [
-  { key: 'grid', label: '宫格排列', icon: 'layout-grid' },
-  { key: 'horizontal', label: '水平排列', icon: 'layout-horizontal' },
-  { key: 'vertical', label: '垂直排列', icon: 'layout-vertical' },
+  { key: 'grid', label: '宫格排列', icon: 'icon-pailie-xian' },
+  { key: 'horizontal', label: '水平排列', icon: 'icon-wuxian' },
+  { key: 'vertical', label: '垂直排列', icon: 'icon-chuizhiduiqi' },
 ]
 
 const showLayoutMenu = ref(false)

@@ -5,6 +5,7 @@
       class="canvas__node-toolbar-addToDialog-img"
       @click="emit('action', item.key, undefined, item.label)"
     />
+    <!-- <i class="iconfont icon-contact-customer-service" @click="emit('action', item.key, undefined, item.label)" style="font-size: 18px;"></i> -->
   </div>
   <div v-else-if="item.key === 'hd'" class="canvas__node-toolbar-hd">
     <button

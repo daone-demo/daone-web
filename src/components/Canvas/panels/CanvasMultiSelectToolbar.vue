@@ -33,11 +33,11 @@
       保存到资产
     </button> -->
     <button type="button" class="canvas__multi-select-btn" title="批量下载" @click="emit('batch-download')">
-      <span class="canvas__multi-select-icon" data-icon="download" aria-hidden="true" />
+      <i class="iconfont icon-batch-download" style="font-size: 18px;"></i>
       批量下载
     </button>
     <button type="button" class="canvas__multi-select-btn" title="创建副本" @click="emit('duplicate')">
-      <span class="canvas__multi-select-icon" data-icon="duplicate" aria-hidden="true" />
+      <i class="iconfont icon-fuzhi1" style="font-size: 18px;"></i>
       创建副本
     </button>
     <!-- <button type="button" class="canvas__multi-select-btn canvas__multi-select-btn--icon" title="复制" @click="emit('copy')">
@@ -50,7 +50,7 @@
         title="打组"
         @click="emit('group')"
       >
-        <span class="canvas__multi-select-icon" data-icon="group" aria-hidden="true" />
+        <i class="iconfont icon-bangdingshebei" style="font-size: 18px;"></i>
         打组
       </button>
       <!-- <div v-if="showGroupMenu" class="canvas__multi-select-menu" @mousedown.stop>
