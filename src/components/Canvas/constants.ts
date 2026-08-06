@@ -2851,9 +2851,10 @@ export function isAiGeneratedCanvasNode(data?: Partial<CanvasNodeData> | null): 
   return false
 }
 
-/** 非 AI 生成且已有预览图的图片节点，可重新上传替换 */
+/** 组内非 AI 生成且已有预览图的图片节点，可重新上传替换 */
 export function canReplaceImageNodePreview(data?: Partial<CanvasNodeData> | null): boolean {
   if (!data || data.kind !== 'image') return false
+  if (!String(data.groupId ?? '').trim()) return false
   if (!data.previewUrl?.trim()) return false
   if (data.compactPreview) return false
   if (data.gridSplitTile) return false
