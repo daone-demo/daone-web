@@ -86,21 +86,45 @@ export function useMaterialAssets(
     }
   }
 
+  function resolveCategoryId(item: any): string {
+    return String(item?.id ?? item?.code ?? '')
+  }
+
+  /** 选中一级类目，并默认选中其下二级类目的第一个 */
+  function applyPrimaryCategory(categoryId: string | number) {
+    const normalizedId = String(categoryId ?? '')
+    activeCategoryCode.value = normalizedId
+    const primary = materialCategories.value.find(
+      (item: any) => resolveCategoryId(item) === normalizedId,
+    )
+    const children = (primary?.children ?? []) as any[]
+    if (children.length > 0) {
+      materialSubCategories.value = [
+        { id: 'all', code: 'all', name: '全部' },
+        ...children.filter((item: any) => resolveCategoryId(item) !== 'all'),
+      ]
+      // 默认选中二级类目第一个（含「全部」）
+      const firstSubId = resolveCategoryId(materialSubCategories.value[0]) || 'all'
+      activeSubCategoryCode.value = firstSubId
+      materialCode.value = firstSubId === 'all' ? normalizedId : firstSubId
+    } else {
+      materialSubCategories.value = []
+      activeSubCategoryCode.value = ''
+      materialCode.value = normalizedId
+    }
+  }
+
   async function onLoadMaterialCategories() {
     const res: any = await api.queryMaterialCategories()
-    materialCategories.value = res
-    activeCategoryCode.value = res[0]?.code ?? ''
-    materialSubCategories.value =
-      materialCategories.value.find((item: any) => item.code === res[0]?.code)?.children ?? []
-    if (materialSubCategories.value.length > 0) {
-      materialSubCategories.value = [
-        { code: 'all', name: '全部' },
-        ...materialSubCategories.value.filter((item: any) => item.code !== 'all'),
-      ]
-      activeSubCategoryCode.value = 'all'
-      materialCode.value = activeCategoryCode.value
+    materialCategories.value = Array.isArray(res) ? res : []
+    const firstCategoryId = resolveCategoryId(materialCategories.value[0])
+    if (firstCategoryId) {
+      applyPrimaryCategory(firstCategoryId)
     } else {
-      materialCode.value = activeCategoryCode.value
+      activeCategoryCode.value = ''
+      activeSubCategoryCode.value = ''
+      materialSubCategories.value = []
+      materialCode.value = ''
     }
     resetMaterialList()
     await onLoadMaterials()
@@ -196,27 +220,17 @@ export function useMaterialAssets(
     }
   }
 
-  function selectPrimaryCategory(code: string) {
-    activeCategoryCode.value = code
-    materialSubCategories.value =
-      materialCategories.value.find((item: any) => item.id === code)?.children ?? []
-    if (materialSubCategories.value.length > 0) {
-      materialSubCategories.value = [
-        { id: 'all', name: '全部' },
-        ...materialSubCategories.value.filter((item: any) => item.id !== 'all'),
-      ]
-      activeSubCategoryCode.value = 'all'
-      materialCode.value = activeCategoryCode.value
-    } else {
-      materialCode.value = activeCategoryCode.value
-    }
+  function selectPrimaryCategory(categoryId: string | number) {
+    applyPrimaryCategory(categoryId)
     resetMaterialList()
     void onLoadMaterials()
   }
 
-  function selectSubCategory(code: string) {
-    activeSubCategoryCode.value = code
-    materialCode.value = code === 'all' ? activeCategoryCode.value : code
+  function selectSubCategory(subCategoryId: string | number) {
+    const normalizedId = String(subCategoryId ?? '')
+    activeSubCategoryCode.value = normalizedId
+    materialCode.value =
+      normalizedId === 'all' ? activeCategoryCode.value : normalizedId
     resetMaterialList()
     void onLoadMaterials()
   }
