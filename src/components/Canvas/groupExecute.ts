@@ -147,6 +147,17 @@ function resolveIncomingTextPrompt(graph: Graph, nodeId: string): string {
   return ''
 }
 
+/** 上游 AI 文本（含反推提示词）重新生成后的最新文案，供下游文生图作为 prompt */
+function resolveIncomingAiTextPrompt(graph: Graph, nodeId: string): string {
+  for (const textNode of findIncomingTextNodes(graph, nodeId)) {
+    const data = textNode.getData() as CanvasNodeData
+    if (!isAiGeneratedCanvasNode(data) && !isImg2PromptTextNode(data)) continue
+    const text = plainTextFromNodeContent(data.content)
+    if (text) return text
+  }
+  return ''
+}
+
 function resolveGroupAiTask(graph: Graph, node: Node, scopeIds: Set<string>): GroupAiTask | null {
   const data = node.getData() as CanvasNodeData
   if (!isAiGeneratedCanvasNode(data)) return null
@@ -519,12 +530,20 @@ export function resolveGroupAiReferenceContext(
   )
   const primaryAssetId = referenceAssetIds[0]
 
+  const incomingTextPrompt = resolveIncomingTextPrompt(graph, node.id)
+  // 整组执行：文生图优先使用上游 AI 反推/文本节点最新 content，避免沿用节点旧 prompt
+  const incomingAiTextPrompt =
+    task.kind === 'imageDialogue' || task.kind === 'text2image'
+      ? resolveIncomingAiTextPrompt(graph, node.id)
+      : ''
+
   const prompt =
+    incomingAiTextPrompt ||
     savedParams?.prompt?.trim() ||
     data.imageDialogueText?.trim() ||
     data.genPrompt?.trim() ||
     data.videoDialogueText?.trim() ||
-    resolveIncomingTextPrompt(graph, node.id) ||
+    incomingTextPrompt ||
     ''
 
   if (task.kind === 'imageCapability' || task.kind === 'imageDialogue') {
