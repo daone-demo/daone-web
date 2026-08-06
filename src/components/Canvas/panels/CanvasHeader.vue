@@ -52,11 +52,6 @@
                 :class="{ 'canvas__project-doc--active': project.id === activeProjectId }"
                 aria-hidden="true"
               />
-              <!-- <i
-                class="canvas__project-status"
-                :class="project.saved ? 'canvas__project-status--saved' : 'canvas__project-status--unsaved'"
-                aria-hidden="true"
-              /> -->
               <span class="canvas__project-name">{{ project.title }}</span>
               <i
                 class="iconfont icon-zhongmingming"
@@ -83,7 +78,7 @@
         title="新建"
         @click="emit('new-project')"
       >
-        +
+        <i class="iconfont icon-black" style="font-size: 18px;"></i>
       </button>
       <span class="canvas__brand-divider" aria-hidden="true" />
       <div class="canvas__brand-group">
@@ -103,7 +98,7 @@
           :disabled="!canRedo"
           @click="emit('redo')"
         >
-          <i class="iconfont icon-xiayibu"></i>
+          <i class="iconfont icon-xiayibu1"></i>
         </button>
       </div>
       <span class="canvas__brand-divider" aria-hidden="true" />
@@ -113,7 +108,7 @@
             <span>保存当前内容</span>
           </template>
           <button type="button" class="canvas__brand-icon-btn" @click="emit('save')">
-            <i class="iconfont icon-baocun" style="font-size: 18px;"></i>
+            <i class="iconfont icon-baocun1" style="font-size: 18px;"></i>
           </button>
         </a-popover>
         <a-popover placement="bottom">
@@ -125,7 +120,8 @@
             class="canvas__brand-icon-btn"
             @click="emit('open-project-browser')"
           >
-            <span class="canvas__brand-icon canvas__brand-icon--folder" aria-hidden="true" />
+            <!-- <span class="canvas__brand-icon canvas__brand-icon--folder" aria-hidden="true" /> -->
+            <i class="iconfont icon-wenjianjia" style="font-size: 18px;"></i>
           </button>
         </a-popover>
       </div>

@@ -7,7 +7,7 @@
       title="添加节点"
       @click="emit('toggle-add-menu')"
     >
-      <i class="iconfont icon-tianjia" style="font-size: 18px;" />
+      <i class="iconfont icon-tianjiajia" style="font-size: 18px;" />
     </button>
     <button
       type="button"
@@ -16,16 +16,16 @@
       title="素材中心"
       @click="emit('toggle-assets-panel')"
     >
-      <i class="iconfont icon-lishijilu1" style="font-size: 18px;" />
+      <i class="iconfont icon-icon-project" style="font-size: 18px;" />
     </button>
     <button
       type="button"
       class="canvas__tool-btn"
       :class="{ 'canvas__tool-btn--active': showAssetCenterPanel }"
-      title="资产中心"
+      title="我的工作流"
       @click="emit('toggle-asset-center-panel')"
     >
-      <i class="iconfont icon-gongzuoliucheng" style="font-size: 18px;" />
+      <i class="iconfont icon-gongzuoliu" style="font-size: 18px;" />
     </button>
     <button
       type="button"
@@ -35,7 +35,7 @@
       @click="emit('toggle-history-panel')"
     >
       <!-- <span class="canvas__history-icon" aria-hidden="true" /> -->
-      <i class="iconfont icon-lishijilu1" style="font-size: 18px;" />
+      <i class="iconfont icon-lishi" style="font-size: 18px;" />
     </button>
     <a-popover placement="right">
       <template #content>
@@ -46,7 +46,7 @@
         class="canvas__tool-btn"
         title="帮助"
       >
-        <i class="iconfont icon-question-circle" style="font-size: 18px;" />
+        <i class="iconfont icon-yiwen2x-copy" style="font-size: 18px;" />
       </button>
     </a-popover>
   </div>
