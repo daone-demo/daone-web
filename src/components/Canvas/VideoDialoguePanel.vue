@@ -142,9 +142,16 @@
           >
             <span
               class="video-dialogue__model-item-icon"
-              :data-icon="model.icon"
+              :class="{ 'video-dialogue__model-item-icon--font': isDialogueModelIconfont(model.icon) }"
+              :data-icon="isDialogueModelIconfont(model.icon) ? undefined : model.icon"
               aria-hidden="true"
-            />
+            >
+              <i
+                v-if="isDialogueModelIconfont(model.icon)"
+                class="iconfont"
+                :class="normalizeDialogueModelIcon(model.icon)"
+              />
+            </span>
             <span class="video-dialogue__model-item-name">{{ model.name }}</span>
           </button>
         </div>
@@ -253,6 +260,8 @@ import {
   buildVideoDialogueModelsFromCapabilities,
   buildVideoWorkflowOptionGroups,
   formatVideoGenSettings,
+  isDialogueModelIconfont,
+  normalizeDialogueModelIcon,
   normalizeVideoDialogueSettingsForModel,
   resolveVideoDialogueModelApiValue,
   type ChatTools,
@@ -361,6 +370,7 @@ watch(
 const modelMenu = computed(() =>
   buildVideoDialogueModelsFromCapabilities(props.chatTools),
 )
+console.log('modelMenu_video', buildVideoDialogueModelsFromCapabilities(props.chatTools))
 const selectedModelName = computed(
   () =>
     modelMenu.value.find((model) => model.key === selectedModelKey.value)?.name ??
@@ -1114,6 +1124,19 @@ onBeforeUnmount(() => {
   &[data-icon='happy-horse'],
   &[data-icon='wan'] {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 18 18'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.3' d='M4 13V8M9 13V5M14 13v-3'/%3E%3C/svg%3E");
+  }
+
+  &--font {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-image: none;
+
+    .iconfont {
+      font-size: 16px;
+      line-height: 1;
+      color: #6b7280;
+    }
   }
 }
 

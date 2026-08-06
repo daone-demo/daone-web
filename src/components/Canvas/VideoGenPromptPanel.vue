@@ -228,9 +228,16 @@
           >
             <span
               class="video-gen-prompt-panel__model-item-icon"
-              :data-icon="model.icon"
+              :class="{ 'video-gen-prompt-panel__model-item-icon--font': isDialogueModelIconfont(model.icon) }"
+              :data-icon="isDialogueModelIconfont(model.icon) ? undefined : model.icon"
               aria-hidden="true"
-            />
+            >
+              <i
+                v-if="isDialogueModelIconfont(model.icon)"
+                class="iconfont"
+                :class="normalizeDialogueModelIcon(model.icon)"
+              />
+            </span>
             <span class="video-gen-prompt-panel__model-item-name">{{ model.name }}</span>
           </button>
         </div>
@@ -378,6 +385,8 @@ import {
   buildVideoDialogueCountOptionsFromCapabilities,
   buildVideoDialogueModelsFromCapabilities,
   formatVideoGenSettings,
+  isDialogueModelIconfont,
+  normalizeDialogueModelIcon,
   normalizeVideoDialogueSettingsForModel,
   resolveVideoDialogueModelApiValue,
   type ChatTools,
@@ -1504,6 +1513,23 @@ onBeforeUnmount(() => {
 
   .video-gen-prompt-panel--light & {
     background-color: #f3f4f6;
+  }
+
+  &--font {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-image: none;
+
+    .iconfont {
+      font-size: 16px;
+      line-height: 1;
+      color: #9ca3af;
+    }
+  }
+
+  .video-gen-prompt-panel--light &--font .iconfont {
+    color: #6b7280;
   }
 }
 

@@ -1085,6 +1085,7 @@ function parseCapabilityStringArray(value: unknown): string[] {
 function parseCapabilityModelOptions(value: unknown): Array<{
   value: string
   label: string
+  icon?: string
   duration?: string
   desc?: string
   badge?: string
@@ -1093,6 +1094,7 @@ function parseCapabilityModelOptions(value: unknown): Array<{
   const result: Array<{
     value: string
     label: string
+    icon?: string
     duration?: string
     desc?: string
     badge?: string
@@ -1114,6 +1116,7 @@ function parseCapabilityModelOptions(value: unknown): Array<{
     result.push({
       value: valueText,
       label: labelText,
+      icon: typeof row.icon === 'string' && row.icon.trim() ? row.icon.trim() : undefined,
       duration: typeof row.duration === 'string' ? row.duration : undefined,
       desc:
         typeof row.desc === 'string'
@@ -1140,6 +1143,34 @@ function resolveImageDialogueModelIcon(key: string, index: number): ImageDialogu
   if (lower.includes('navo')) return 'navo'
   if (lower.includes('gpt') || lower.includes('gemini') || lower.includes('image')) return 'lib'
   return index === 0 ? 'lib' : 'seedream'
+}
+
+/** 接口 icon 与本地 iconfont 类名不一致时的别名 */
+const DIALOGUE_MODEL_ICON_ALIASES: Record<string, string> = {
+  'icon-jinengAI': 'icon-jimengAI',
+  'icon-nano-banana-pro': 'icon-nano-banana',
+}
+
+/** 规范化接口返回的模型 icon（iconfont 类名） */
+export function normalizeDialogueModelIcon(icon?: string | null): string {
+  const text = String(icon ?? '').trim()
+  if (!text) return ''
+  return DIALOGUE_MODEL_ICON_ALIASES[text] ?? text
+}
+
+/** 是否为 iconfont 类名（如 icon-ChatGPT） */
+export function isDialogueModelIconfont(icon?: string | null): boolean {
+  return normalizeDialogueModelIcon(icon).startsWith('icon-')
+}
+
+function resolveImageDialogueModelItemIcon(
+  apiIcon: string | undefined,
+  key: string,
+  index: number,
+): ImageDialogueModelIcon | string {
+  const normalized = normalizeDialogueModelIcon(apiIcon)
+  if (normalized) return normalized
+  return resolveImageDialogueModelIcon(key, index)
 }
 
 function parseCapabilityCountRange(parameters?: Record<string, unknown>): number[] {
@@ -1187,6 +1218,9 @@ export type ImageDialogueAspectRatioOption = {
 export type ImageDialogueModelEntry = {
   key: string
   label: string
+  icon?: string
+  desc?: string
+  badge?: string
   ratios: string[]
   resolutions: string[]
   countOptions: number[]
@@ -1251,10 +1285,26 @@ function parseImageCapabilityModelEntry(
   )
   const resolutions = parseImageModelResolutions(row.resolution)
   const countOptions = parseCapabilityCountRange({ count: row.count })
+  const icon = normalizeDialogueModelIcon(typeof row.icon === 'string' ? row.icon : '')
+  const desc =
+    typeof row.desc === 'string'
+      ? row.desc
+      : typeof row.description === 'string'
+        ? row.description
+        : undefined
+  const badge =
+    typeof row.badge === 'string'
+      ? row.badge
+      : typeof row.tag === 'string'
+        ? row.tag
+        : undefined
 
   return {
     key: value,
     label,
+    ...(icon ? { icon } : {}),
+    ...(desc ? { desc } : {}),
+    ...(badge ? { badge } : {}),
     ratios: ratios.length ? ratios : fallback.ratios,
     resolutions: resolutions.length ? resolutions : fallback.resolutions,
     countOptions: countOptions.length ? countOptions : fallback.countOptions,
@@ -1281,6 +1331,9 @@ export function listImageDialogueModelEntries(
     return modelOptions.map((item) => ({
       key: item.value,
       label: item.label,
+      ...(item.icon ? { icon: normalizeDialogueModelIcon(item.icon) } : {}),
+      ...(item.desc ? { desc: item.desc } : {}),
+      ...(item.badge ? { badge: item.badge } : {}),
       ...fallback,
     }))
   }
@@ -1362,7 +1415,9 @@ export function buildImageDialogueModelsFromCapabilities(
       key: item.key,
       name: item.label,
       duration: '',
-      icon: resolveImageDialogueModelIcon(item.key || item.label, index),
+      icon: resolveImageDialogueModelItemIcon(item.icon, item.key || item.label, index),
+      ...(item.desc ? { desc: item.desc } : {}),
+      ...(item.badge ? { badge: item.badge } : {}),
     }))
   }
 
@@ -1757,7 +1812,7 @@ export type ImageDialogueModelItem = {
   key: string
   name: string
   duration: string
-  icon: ImageDialogueModelIcon
+  icon: ImageDialogueModelIcon | string
   desc?: string
   badge?: string
 }
@@ -2131,6 +2186,7 @@ export type VideoDialogueResolutionOption = {
 export type VideoDialogueModelEntry = {
   key: string
   label: string
+  icon?: string
   duration: VideoDialogueDurationRange
   ratios: string[]
   resolutions: VideoDialogueResolutionOption[]
@@ -2217,10 +2273,12 @@ function parseVideoCapabilityModelEntry(
   const countOptions = parseCapabilityCountRange({
     count: row.videoCount ?? row.count,
   })
+  const icon = normalizeDialogueModelIcon(typeof row.icon === 'string' ? row.icon : '')
 
   return {
     key: value,
     label,
+    ...(icon ? { icon } : {}),
     duration: row.duration ? duration : fallback.duration,
     ratios: ratios.length ? ratios : fallback.ratios,
     resolutions: resolutions.length ? resolutions : fallback.resolutions,
@@ -2275,6 +2333,7 @@ export function listVideoDialogueModelEntries(
     return modelOptions.map((item) => ({
       key: item.value,
       label: item.label,
+      ...(item.icon ? { icon: normalizeDialogueModelIcon(item.icon) } : {}),
       ...fallback,
     }))
   }
@@ -2397,7 +2456,7 @@ export type VideoDialogueModelIcon = 'lib' | 'seedream' | 'seedance' | 'kling' |
 export type VideoDialogueModelItem = {
   key: string
   name: string
-  icon: VideoDialogueModelIcon
+  icon: VideoDialogueModelIcon | string
 }
 
 export const VIDEO_DIALOGUE_MODEL_MENU: VideoDialogueModelItem[] = [
@@ -2510,6 +2569,16 @@ function resolveVideoDialogueModelIcon(key: string, index: number): VideoDialogu
   return index === 0 ? 'lib' : 'seedream'
 }
 
+function resolveVideoDialogueModelItemIcon(
+  apiIcon: string | undefined,
+  key: string,
+  index: number,
+): VideoDialogueModelIcon | string {
+  const normalized = normalizeDialogueModelIcon(apiIcon)
+  if (normalized) return normalized
+  return resolveVideoDialogueModelIcon(key, index)
+}
+
 export function buildVideoDialogueCountOptionsFromCapabilities(
   source: VideoDialogueSource,
   modelKey?: string | null,
@@ -2532,7 +2601,7 @@ export function buildVideoDialogueModelsFromCapabilities(
   return entries.map((entry, index) => ({
     key: entry.key,
     name: entry.label,
-    icon: resolveVideoDialogueModelIcon(entry.key || entry.label, index),
+    icon: resolveVideoDialogueModelItemIcon(entry.icon, entry.key || entry.label, index),
   }))
 }
 

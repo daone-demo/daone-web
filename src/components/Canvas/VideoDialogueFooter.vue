@@ -28,9 +28,16 @@
           >
             <span
               class="video-dialogue-footer__model-item-icon"
-              :data-icon="model.icon"
+              :class="{ 'video-dialogue-footer__model-item-icon--font': isDialogueModelIconfont(model.icon) }"
+              :data-icon="isDialogueModelIconfont(model.icon) ? undefined : model.icon"
               aria-hidden="true"
-            />
+            >
+              <i
+                v-if="isDialogueModelIconfont(model.icon)"
+                class="iconfont"
+                :class="normalizeDialogueModelIcon(model.icon)"
+              />
+            </span>
             <span class="video-dialogue-footer__model-item-name">{{ model.name }}</span>
           </button>
         </div>
@@ -123,6 +130,8 @@ import {
   VIDEO_GEN_DURATIONS,
   buildVideoDialogueModelsFromCapabilities,
   formatVideoGenSettings,
+  isDialogueModelIconfont,
+  normalizeDialogueModelIcon,
   normalizeVideoDialogueSettingsForModel,
   resolveVideoDialogueModelApiValue,
   type ChatTools,
@@ -384,6 +393,19 @@ onBeforeUnmount(() => {
 
   &[data-icon='lib'] {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' viewBox='0 0 18 18'%3E%3Ccircle cx='9' cy='9' r='6' stroke='%236b7280' stroke-width='1.3'/%3E%3Ccircle cx='9' cy='9' r='2.2' stroke='%236b7280' stroke-width='1.3'/%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-width='1.3' d='M9 3v1.6M9 13.4V15M3 9h1.6M13.4 9H15'/%3E%3C/svg%3E");
+  }
+
+  &--font {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-image: none;
+
+    .iconfont {
+      font-size: 18px;
+      line-height: 1;
+      color: #6b7280;
+    }
   }
 }
 

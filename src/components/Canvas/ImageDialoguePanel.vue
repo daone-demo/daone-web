@@ -120,7 +120,18 @@
             :class="{ 'image-dialogue__model--active': showModelMenu }"
             @click="toggleModelMenu"
           >
-            <span class="image-dialogue__model-icon" aria-hidden="true" />
+            <span
+              class="image-dialogue__model-icon"
+              :class="{ 'image-dialogue__model-icon--font': isDialogueModelIconfont(selectedModelIcon) }"
+              :data-icon="isDialogueModelIconfont(selectedModelIcon) ? undefined : selectedModelIcon"
+              aria-hidden="true"
+            >
+              <i
+                v-if="isDialogueModelIconfont(selectedModelIcon)"
+                class="iconfont"
+                :class="normalizeDialogueModelIcon(selectedModelIcon)"
+              />
+            </span>
             {{ selectedModelName }}
             <span class="image-dialogue__model-caret" aria-hidden="true" />
           </button>
@@ -139,9 +150,16 @@
             >
               <span
                 class="image-dialogue__model-item-icon"
-                :data-icon="model.icon"
+                :class="{ 'image-dialogue__model-item-icon--font': isDialogueModelIconfont(model.icon) }"
+                :data-icon="isDialogueModelIconfont(model.icon) ? undefined : model.icon"
                 aria-hidden="true"
-              />
+              >
+                <i
+                  v-if="isDialogueModelIconfont(model.icon)"
+                  class="iconfont"
+                  :class="normalizeDialogueModelIcon(model.icon)"
+                />
+              </span>
               <span class="image-dialogue__model-item-main">
                 <span class="image-dialogue__model-item-name">
                   {{ model.name }}
@@ -296,7 +314,9 @@ import {
   buildImageDialogueModelsFromCapabilities,
   buildImageWorkflowOptionGroups,
   buildImageWorkflowOptions,
+  isDialogueModelIconfont,
   isMyModelWorkflow,
+  normalizeDialogueModelIcon,
   normalizeImageDialogueSettingsForModel,
   pickImageDialogueSettingsInput,
   resolveImageDialogueModelApiValue,
@@ -589,12 +609,17 @@ const selectedWorkflowRecord = computed(() =>
 const modelMenu = computed(() =>
   buildImageDialogueModelsFromCapabilities(props.chatTools),
 )
-console.log('modelMenu', buildImageDialogueModelsFromCapabilities(props.chatTools))
 const selectedModelName = computed(
   () =>
     modelMenu.value.find((model) => model.key === selectedModelKey.value)?.name ??
     modelMenu.value[0]?.name ??
     IMAGE_DIALOGUE_MODEL_MENU[0].name,
+)
+const selectedModelIcon = computed(
+  () =>
+    modelMenu.value.find((model) => model.key === selectedModelKey.value)?.icon ??
+    modelMenu.value[0]?.icon ??
+    IMAGE_DIALOGUE_MODEL_MENU[0].icon,
 )
 
 const qualityLabel = computed(() => {
@@ -1392,6 +1417,19 @@ function onDocumentMouseDown(event: MouseEvent) {
   width: 14px;
   height: 14px;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' viewBox='0 0 14 14'%3E%3Cpath fill='%237c8cff' d='M7 1.5 8.3 5 11.8 6.3 8.3 7.6 7 11.1 5.7 7.6 2.2 6.3 5.7 5z'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
+
+  &--font {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+
+    .iconfont {
+      font-size: 14px;
+      line-height: 1;
+      color: #7c8cff;
+    }
+  }
 }
 
 .image-dialogue__model-caret {
@@ -1494,6 +1532,19 @@ function onDocumentMouseDown(event: MouseEvent) {
 
   &[data-icon='mj'] {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' viewBox='0 0 18 18'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.3' d='M9 3v9M9 12 4 11c.8 2 2.7 3 5 3s4.2-1 5-3zM9 5.5c1.6.4 3 1.8 3.4 3.5'/%3E%3C/svg%3E");
+  }
+
+  &--font {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-image: none;
+
+    .iconfont {
+      font-size: 18px;
+      line-height: 1;
+      color: #6b7280;
+    }
   }
 }
 
