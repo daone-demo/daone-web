@@ -132,6 +132,7 @@
                 :page-size="pageSize"
                 :total="total"
                 :page-size-options="PAGE_SIZE_OPTIONS"
+                :locale="PAGINATION_LOCALE"
                 show-size-changer
                 @change="onPaginationChange"
               />
@@ -147,6 +148,7 @@
 import { computed, createVNode, onMounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { Modal } from 'ant-design-vue'
+import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import { ExclamationCircleFilled, MoreOutlined } from '@ant-design/icons-vue'
 import api from '@/services/api'
 import type { CanvasProjectItem } from './CanvasHeader.vue'
@@ -157,7 +159,8 @@ const PROJECT_BROWSER_TABS = [
 
 type ProjectBrowserTabKey = (typeof PROJECT_BROWSER_TABS)[number]['key']
 
-const PAGE_SIZE_OPTIONS: (string | number)[] = ['8', '16', '24']
+const PAGE_SIZE_OPTIONS: (string | number)[] = ['10', '20', '30']
+const PAGINATION_LOCALE = zhCN.Pagination
 
 defineProps<{
   activeProjectId: string
