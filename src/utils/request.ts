@@ -179,7 +179,7 @@ const HTTP_TIMEOUT = Number(import.meta.env.VITE_HTTP_TIMEOUT) || 60_000
 
 const instance: AxiosInstance = axios.create({
   // baseURL: import.meta.env.DEV ? '/api/v1' : import.meta.env.VITE_API_BASE_URL || '/api/v1',
-  baseURL: 'https://api.dev.daoneai.com/api/v1',
+  baseURL: 'https://api.daoneai.com/api/v1',
   timeout: HTTP_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',

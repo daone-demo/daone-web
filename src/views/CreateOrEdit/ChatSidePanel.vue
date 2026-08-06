@@ -645,7 +645,7 @@ const props = defineProps<{
   aiSkills?: any[]
 }>()
 
-const API_BASE = 'https://api.dev.daoneai.com/api/v1';
+const API_BASE = 'https://api.daoneai.com/api/v1';
 
 const { loading, connected, connect, close } = useSSE()
 const isStreaming = computed(() => loading.value || connected.value)
