@@ -174,7 +174,8 @@
 
           <div class="canvas__user-menu-balance">
             <span class="canvas__user-menu-balance-left">
-              <span class="canvas__user-menu-balance-icon" aria-hidden="true" />
+              <!-- <span class="canvas__user-menu-balance-icon" aria-hidden="true" /> -->
+              <i class="iconfont icon-huiyuanjifen" style="font-size: 18px;"></i>
               <span class="canvas__user-menu-balance-value">{{ userInfoStore?.pointAccount?.available || 0 }}</span>
             </span>
             <button type="button" class="canvas__user-menu-buy" @click="emit('open-combo')">

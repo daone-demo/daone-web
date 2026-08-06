@@ -294,7 +294,7 @@
           @mousedown.stop
           @click.stop="emit('toggle-canvas-pick')"
         >
-          <i class="iconfont icon-shubiaojiantou" />
+          <i class="iconfont icon-shubiaoxuanze" />
         </button>
       </a-tooltip>
       <span class="video-gen-prompt-panel__tools">

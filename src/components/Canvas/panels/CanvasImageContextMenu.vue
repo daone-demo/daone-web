@@ -16,11 +16,17 @@
         :class="{ 'canvas__image-context-menu-item--danger': item.danger }"
         @click="emit('select', item.key)"
       >
-        <span
+        <!-- <span
           class="canvas__image-context-menu-icon"
           :class="`canvas__image-context-menu-icon--${resolveIcon(item)}`"
           aria-hidden="true"
-        />
+        /> -->
+        <img
+          v-if="item.key == 'send-agent'"
+          src="@assets/images/addToDialog.png"
+          style="width: 18px; height: auto;"
+        >
+        <i class="iconfont" :class="item.icon" v-if="item.key != 'send-agent' && item.icon" style="font-size: 16px;"></i>
         <span class="canvas__image-context-menu-label">{{ resolveLabel(item) }}</span>
       </button>
     </template>

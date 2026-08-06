@@ -87,25 +87,6 @@ const sessionName = ref('');
 const chatTools = ref<any>({});
 const workflows = ref<WorkflowCategoryGroup[]>([]);
 const page = ref(1);
-// const ImageIcon = ref({
-//   IMAGE_REMOVE_BG: 'icon-koutu2', // 抠图
-//   quick: '', // 快速
-//   precise: '', // 精准
-//   IMAGE_HD: '', // 高清
-//   '2K': '', // 2K
-//   '4K': '', // 4K
-//   IMAGE_CROP: 'icon-caijian', // 智能裁剪
-//   IMAGE_INPAINT: 'icon-xiugai', // 局部修改
-//   IMAGE_PREVIEW: 'icon-yulan1', // 预览
-//   IMAGE_GRID9: 'icon-jiugongge1', // 九宫格
-//   IMAGE_REVERSE: 'icon-AIchaoqingfangda', // 扩图
-//   IMAGE_EDIT_TEXT: 'icon-bianjiwenzi', // 编辑文本
-//   IMAGE_LAYER_SPLIT: 'icon-anniu_duocengsaomiao_duoceng', // 图层分离
-//   IMAGE_GRID_SPLIT: 'icon-chaikai', // 宫格拆分
-//   IMAGE_TO_3D: '', // 图片转3D
-//   IMAGE_PROMPT_REVERSE: 'icon-tishici', //反推提示词
-//   IMAGE_TOPAZ_ENHANCE: 'icon-gaoqingxidu', // 图葩增强
-// })
 
 type CanvasExpose = {
   addImagesFromFiles: (files: File[]) => Promise<Node[]>
@@ -384,6 +365,7 @@ const onLoadAiCapabilities = async (key: string) => {
       break
     case 'IMAGE':
       ImageCapabilities.value = list
+      console.log('ImageCapabilities', ImageCapabilities.value);
       break
     case 'VIDEO':
       VideoCapabilities.value = list

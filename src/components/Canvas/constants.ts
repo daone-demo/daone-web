@@ -1606,7 +1606,7 @@ export type ImageContextMenuIcon =
   | 'layer-bottom'
   | 'data-advisor'
   | 'parse'
-  | 'chat'
+  | 'icon-duihuaqipao'
   | 'send-agent'
   | 'preview'
   | 'download'
@@ -1614,6 +1614,11 @@ export type ImageContextMenuIcon =
   | 'copy-image'
   | 'save'
   | 'delete'
+  | 'icon-contact-customer-service'
+  | 'icon-xiazai'
+  | 'icon-yulan1'
+  | 'icon-shanchu'
+  | 'icon-baocun1'
 
 export type ImageContextMenuItem = {
   key: string
@@ -1625,35 +1630,35 @@ export type ImageContextMenuItem = {
 /** 图片节点右键菜单分组 */
 export const IMAGE_CONTEXT_MENU_SECTIONS: ImageContextMenuItem[][] = [
   [
-    { key: 'chat', label: '对话', icon: 'chat' },
-    { key: 'send-agent', label: '添加到智能体', icon: 'send-agent' },
+    { key: 'chat', label: '对话', icon: 'icon-duihuaqipao' },
+    { key: 'send-agent', label: '添加到智能体', icon: 'icon-contact-customer-service' },
     { key: 'send-model', label: '添加到我的模特', icon: 'send-model' },
   ],
   [
-    { key: 'preview', label: '预览', icon: 'preview' },
-    { key: 'download', label: '下载', icon: 'download' },
+    { key: 'preview', label: '预览', icon: 'icon-yulan1' },
+    { key: 'download', label: '下载', icon: 'icon-xiazai' },
     // { key: 'copy-image', label: '复制图片', icon: 'copy-image' },
   ],
   [
-    { key: 'save', label: '保存', icon: 'save' },
-    { key: 'delete', label: '删除', icon: 'delete', danger: true },
+    { key: 'save', label: '保存', icon: 'icon-baocun1' },
+    { key: 'delete', label: '删除', icon: 'icon-shanchu', danger: true },
   ],
 ]
 
 /** 视频节点右键菜单分组（与图片节点结构一致） */
 export const VIDEO_CONTEXT_MENU_SECTIONS: ImageContextMenuItem[][] = [
   [
-    { key: 'chat', label: '对话', icon: 'chat' },
-    { key: 'send-agent', label: '添加到智能体', icon: 'send-agent' },
+    { key: 'chat', label: '对话', icon: 'icon-duihuaqipao' },
+    { key: 'send-agent', label: '添加到智能体', icon: 'icon-contact-customer-service' },
   ],
   [
-    { key: 'preview', label: '预览', icon: 'preview' },
-    { key: 'download', label: '下载', icon: 'download' },
+    { key: 'preview', label: '预览', icon: 'icon-yulan1' },
+    { key: 'download', label: '下载', icon: 'icon-xiazai' },
     // { key: 'copy-video', label: '复制视频', icon: 'copy-image' },
   ],
   [
-    { key: 'save', label: '保存', icon: 'save' },
-    { key: 'delete', label: '删除', icon: 'delete', danger: true },
+    { key: 'save', label: '保存', icon: 'icon-baocun1' },
+    { key: 'delete', label: '删除', icon: 'icon-shanchu', danger: true },
   ],
 ]
 

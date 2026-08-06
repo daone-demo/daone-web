@@ -57,6 +57,7 @@
           @mousedown.stop
           @click.stop="toggleVideoSettings"
         >
+        <i class="iconfont icon-ic_suodingkuangaobi" style="font-size: 16px;"></i>
           {{ videoSettingsLabel }}
           <span class="video-dialogue-footer__select-arrow" aria-hidden="true" />
         </button>

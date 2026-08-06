@@ -179,7 +179,8 @@
       title="删除节点"
       @click="emitCmd('delete')"
     >
-      <span class="canvas__node-toolbar-icon" data-icon="delete" aria-hidden="true" />
+      <!-- <span class="canvas__node-toolbar-icon" data-icon="delete" aria-hidden="true" /> -->
+      <i class="iconfont icon-shanchu" style="font-size: 18px;"></i>
     </button>
   </div>
 </template>

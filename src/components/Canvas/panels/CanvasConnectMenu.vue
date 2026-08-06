@@ -14,7 +14,7 @@
       :disabled="item.disabled"
       @click="emit('select', item)"
     >
-      <i class="iconfont" :class="item.icon" style="font-size: 18px;"></i>
+      <!-- <i class="iconfont" :class="item.icon" style="font-size: 18px;"></i> -->
       <span class="canvas__connect-label">
         {{ item.label }}
         <em

@@ -71,7 +71,7 @@
               disabled
               title="下载"
             >
-              <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" />
+            <i class="iconfont icon-xiazai" style="font-size: 14px;"></i>
             </button>
           </div>
         </section>

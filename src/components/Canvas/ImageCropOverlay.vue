@@ -13,7 +13,8 @@
           :class="{ 'image-crop-overlay__btn--active': showRatioMenu }"
           @click="showRatioMenu = !showRatioMenu"
         >
-          <span class="image-crop-overlay__icon image-crop-overlay__icon--crop" aria-hidden="true" />
+          <!-- <span class="image-crop-overlay__icon image-crop-overlay__icon--crop" aria-hidden="true" /> -->
+           <i class="iconfont icon-caijian" style="font-size: 18px;"></i>
           {{ currentRatioLabel }}
         </button>
         <div
@@ -38,26 +39,31 @@
 
       <div class="image-crop-overlay__tools">
         <button type="button" class="image-crop-overlay__icon-btn" title="逆时针旋转" @click="rotate(-90)">
-          <span class="image-crop-overlay__icon image-crop-overlay__icon--rotate-left" aria-hidden="true" />
+          <!-- <span class="image-crop-overlay__icon image-crop-overlay__icon--rotate-left" aria-hidden="true" /> -->
+          <i class="iconfont icon-shangyibu" style="font-size: 14px;"></i>
         </button>
         <button type="button" class="image-crop-overlay__icon-btn" title="顺时针旋转" @click="rotate(90)">
-          <span class="image-crop-overlay__icon image-crop-overlay__icon--rotate-right" aria-hidden="true" />
+          <!-- <span class="image-crop-overlay__icon image-crop-overlay__icon--rotate-right" aria-hidden="true" /> -->
+          <i class="iconfont icon-xiayibu1" style="font-size: 14px;"></i>
         </button>
         <button type="button" class="image-crop-overlay__icon-btn" title="水平翻转" @click="flipX = !flipX">
-          <img
+          <!-- <img
             src="@/assets/images/out.png"
             style="width: 12px; height: auto;"
-          />
+          /> -->
+          <i class="iconfont icon-dodo-v-flip-copy" style="font-size: 18px;"></i>
         </button>
         <button type="button" class="image-crop-overlay__icon-btn" title="垂直翻转" @click="flipY = !flipY">
           <!-- <span class="image-crop-overlay__icon image-crop-overlay__icon--flip-y" aria-hidden="true" /> -->
-          <img
+          <!-- <img
             src="@/assets/images/up.png"
             style="width: 12px; height: auto;"
-          />
+          /> -->
+          <i class="iconfont icon-dodo-v-flip1" style="font-size: 18px;"></i>
         </button>
         <button type="button" class="image-crop-overlay__icon-btn" title="重置" @click="resetTransform">
-          <span class="image-crop-overlay__icon image-crop-overlay__icon--reset" aria-hidden="true" />
+          <!-- <span class="image-crop-overlay__icon image-crop-overlay__icon--reset" aria-hidden="true" /> -->
+          <i class="iconfont icon-zhongzhi1" style="font-size: 18px;"></i>
         </button>
       </div>
 

@@ -41,7 +41,7 @@
               :title="showToolNames ? undefined : IMAGE_NODE_TOOLBAR.chat.label"
               @click="emitImageAction(IMAGE_NODE_TOOLBAR.chat.key)"
             >
-              <span class="canvas__node-toolbar-icon" data-icon="chat" aria-hidden="true" />
+              <i class="iconfont icon-duihuaqipao" style="font-size: 16px;"></i>
               <span v-if="showToolNames">{{ IMAGE_NODE_TOOLBAR.chat.label }}</span>
             </button>
           </div>
@@ -104,7 +104,8 @@
             title="下载"
             @click="emitImageAction('download')"
           >
-            <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" />
+            <!-- <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" /> -->
+            <i class="iconfont icon-xiazai" style="font-size: 14px;"></i>
           </button>
         </template>
       </template>
@@ -117,7 +118,8 @@
             :class="{ 'canvas__node-toolbar-btn--active': showVideoDialogue }"
             @click="emitVideoAction({ key: 'chat', label: VIDEO_NODE_TOOLBAR.chat.label })"
           >
-            <span class="canvas__node-toolbar-icon" data-icon="chat" aria-hidden="true" />
+            <!-- <span class="canvas__node-toolbar-icon" data-icon="chat" aria-hidden="true" /> -->
+             <i class="iconfont icon-duihuaqipao" style="font-size: 16px;"></i>
             {{ VIDEO_NODE_TOOLBAR.chat.label }}
           </button>
         </div>
@@ -158,7 +160,7 @@
           title="下载"
           @click="emitVideoAction({ key: 'download', label: '下载' })"
         >
-          <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" />
+        <i class="iconfont icon-xiazai" style="font-size: 14px;"></i>
         </button>
       </template>
     </template>

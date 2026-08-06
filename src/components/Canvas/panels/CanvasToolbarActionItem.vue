@@ -52,12 +52,7 @@
       @mousedown.stop
       @click.stop.prevent
     >
-      <span
-        v-if="item.icon"
-        class="canvas__node-toolbar-icon"
-        :data-icon="item.icon"
-        aria-hidden="true"
-      />
+      <i class="iconfont" :class="item.icon" v-if="item.icon" style="font-size: 16px;"></i>
       <span v-if="showToolNames">{{ item.label }}</span>
     </button>
     <div
@@ -88,12 +83,13 @@
     :title="showToolNames ? undefined : item.label"
     @click="emit('action', item.key, undefined, item.label)"
   >
-    <span
+    <!-- <span
       v-if="item.icon"
       class="canvas__node-toolbar-icon"
       :data-icon="item.icon"
       aria-hidden="true"
-    />
+    /> -->
+    <i class="iconfont" :class="item.icon" v-if="item.icon" style="font-size: 16px;"></i>
     <span v-if="showToolNames">{{ item.label }}</span>
   </button>
 </template>
@@ -108,7 +104,7 @@ const props = defineProps<{
   showImageCrop?: boolean
   showToolNames?: boolean
 }>()
-
+console.log('props.item', props.item);
 const showToolNames = computed(() => props.showToolNames !== false)
 
 const emit = defineEmits<{
