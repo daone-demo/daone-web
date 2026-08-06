@@ -692,7 +692,8 @@ export function buildGroupExecuteConfirmContent(taskCount: number, credits: numb
   }
 
   return {
-    main: `即将对组内 ${taskCount} 个生成节点分批执行，预计消耗 ${credits} 积分，是否继续？`,
+    // main: `即将对组内 ${taskCount} 个生成节点分批执行，预计消耗 ${credits} 积分，是否继续？`,
+    main: `即将对组内 ${taskCount} 个生成节点分批执行`,
     hint: '同一层级的节点将并行执行；有上下游依赖时，会等上游完成后再执行下游。均在组内已有 AI 节点上原地重新生成，不会新建节点。',
   }
 }

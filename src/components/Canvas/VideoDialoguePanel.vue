@@ -215,8 +215,8 @@
       </a-select>
 
       <span class="video-dialogue__credits">
-        <span class="video-dialogue__credits-icon" aria-hidden="true" />
-        {{ VIDEO_DIALOGUE_CREDITS }}
+        <!-- <span class="video-dialogue__credits-icon" aria-hidden="true" />
+        {{ VIDEO_DIALOGUE_CREDITS }} -->
       </span>
 
       <button type="button" class="video-dialogue__send" title="发送" @click="onSend">
