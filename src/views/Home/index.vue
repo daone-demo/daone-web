@@ -350,6 +350,8 @@ const openDeleteProject = (id: string) => {
     title: '确定要删除此项目吗？',
     icon: createVNode(ExclamationCircleFilled),
     content: '删除后将无法恢复，请谨慎操作。',
+    okText: '确定',
+    cancelText: '取消',
     onOk() {
       return api.deleteProject(id).then(() => {
         onRefreshProjects()
