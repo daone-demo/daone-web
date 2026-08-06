@@ -227,7 +227,7 @@
                 </button>
               </div>
             </div>
-            <button
+            <!-- <button
               v-if="item.role === 'user' && item.text"
               type="button"
               class="chat-panel__copy-btn"
@@ -236,7 +236,7 @@
               @click="copyMessage(item.text)"
             >
               <span class="chat-panel__copy-icon" aria-hidden="true" />
-            </button>
+            </button> -->
             <div
               v-if="item.tip"
               class="chat-panel__message-tip"
@@ -2017,26 +2017,8 @@ function startChatStream(
 
       const eventName = resolveStreamEventName(payload, sseEvent)
 
-      const assistant = resolveAssistant()
-      // task_created 需同步画布，即使助手消息已被替换也不应中断
-      if (!assistant && eventName !== 'task_created') return
-
-      if (eventName === 'user_message') {
-        return
-      }
-
-      if (eventName === 'agent_thinking') {
-        // 正文打字机进行中时不打断；已有正文时仍可更新思考态 tip（海浪动效）
-        if (streamingMessageIds.value.has(assistant.id)) {
-          return
-        }
-        const thinkingMessage = typeof payload.message === 'string' ? payload.message.trim() : ''
-        setMessageTip(assistant, thinkingMessage || '思考中...', true)
-        scrollMessagesToBottom()
-        return
-      }
-
       if (eventName === 'task_created') {
+        const assistant = resolveAssistant()
         if (assistant) {
           rememberTaskId(assistant, payload.taskId)
           awaitingRunningTask = true
@@ -2061,7 +2043,23 @@ function startChatStream(
         return
       }
 
+      const assistant = resolveAssistant()
       if (!assistant) return
+
+      if (eventName === 'user_message') {
+        return
+      }
+
+      if (eventName === 'agent_thinking') {
+        // 正文打字机进行中时不打断；已有正文时仍可更新思考态 tip（海浪动效）
+        if (streamingMessageIds.value.has(assistant.id)) {
+          return
+        }
+        const thinkingMessage = typeof payload.message === 'string' ? payload.message.trim() : ''
+        setMessageTip(assistant, thinkingMessage || '思考中...', true)
+        scrollMessagesToBottom()
+        return
+      }
 
       if (eventName === 'task_status' || eventName === 'task_progress') {
         rememberTaskId(assistant, payload.taskId)
@@ -2314,13 +2312,13 @@ async function onSendMessage(
   }
 }
 
-async function copyMessage(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    // ignore clipboard failures
-  }
-}
+// async function copyMessage(text: string) {
+//   try {
+//     await navigator.clipboard.writeText(text)
+//   } catch {
+//     // ignore clipboard failures
+//   }
+// }
 
 function onQuestionnaireOptionPick(message: ChatMessage, option: QuestionnaireOption) {
   if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
