@@ -645,7 +645,7 @@ const props = defineProps<{
   aiSkills?: any[]
 }>()
 
-const API_BASE = 'https://api.daoneai.com/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 const { loading, connected, connect, close } = useSSE()
 const isStreaming = computed(() => loading.value || connected.value)
