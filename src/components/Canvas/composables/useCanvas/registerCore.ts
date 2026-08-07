@@ -35,7 +35,7 @@ import {
   syncGroupBySelectionBox, ungroupSelection,
   type GroupResizeHandle,
   ensureImageTextEdge, syncTextNodeImageSource,
-  createMinimap, destroyMinimap, applyRemoteImageToNode, applyRemoteVideoToNode, runUploadSimulation, uploadAssetFile, previewUrlToUploadFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, setCanvasUploadCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage,
+  createMinimap, destroyMinimap, applyRemoteImageToNode, applyRemoteVideoToNode, runUploadSimulation, uploadAssetFile, previewUrlToUploadFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, setCanvasUploadCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage, cancelPendingCanvasSnapshotStorage,
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
@@ -91,6 +91,7 @@ import {
   pickImageGenerationResults,
   pollGenerationTask,
   applyGenerationResultToNode,
+  cancelAllGenerationTaskPolling,
   resetResumedGenerationTaskCache,
   recoverOrphanedGenerationTasks,
   resumePendingGenerationTasks,
@@ -6940,7 +6941,10 @@ export function registerCore(bind: CanvasBindings) {
     }
   }
 
-  async function flushRemoteCanvasSave(saveType: 'MANUAL' | 'AUTO') {
+  async function flushRemoteCanvasSave(
+    saveType: 'MANUAL' | 'AUTO',
+    reusedSnapshot?: CanvasSnapshot | null,
+  ) {
     if (!autoSaveEnabled) return
     if (saveType === 'AUTO' && !canvasContentReady) return
     if (saveInFlight) {
@@ -6951,7 +6955,7 @@ export function registerCore(bind: CanvasBindings) {
     const projectId = activeProjectId.value
     if (!projectId) return
 
-    const snapshot = buildCanvasSnapshot()
+    const snapshot = reusedSnapshot ?? buildCanvasSnapshot()
     if (!snapshot) return
 
     const project = canvasProjects.value.find((item) => item.id === projectId)
@@ -6995,7 +6999,7 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
-    void flushRemoteCanvasSave(saveType)
+    void flushRemoteCanvasSave(saveType, snapshot)
   }
 
   /** 当前项目是否有未落库的更改（含保存进行中） */
@@ -8339,6 +8343,29 @@ export function registerCore(bind: CanvasBindings) {
       updateImageResizeOverlay()
     }
     updateImageMarkHintPositions()
+  }
+
+  type ToolbarUpdateOptions = Parameters<typeof updateNodeToolbar>[0]
+  let toolbarUpdateRaf = 0
+  let pendingToolbarUpdateOptions: ToolbarUpdateOptions | undefined
+  function scheduleUpdateNodeToolbar(options?: ToolbarUpdateOptions) {
+    pendingToolbarUpdateOptions = options
+    if (toolbarUpdateRaf) return
+    toolbarUpdateRaf = window.requestAnimationFrame(() => {
+      toolbarUpdateRaf = 0
+      const nextOptions = pendingToolbarUpdateOptions
+      pendingToolbarUpdateOptions = undefined
+      updateNodeToolbar(nextOptions)
+    })
+  }
+
+  let viewportVisibilityRaf = 0
+  function scheduleViewportNodeVisibilitySync() {
+    if (viewportVisibilityRaf) return
+    viewportVisibilityRaf = window.requestAnimationFrame(() => {
+      viewportVisibilityRaf = 0
+      syncViewportNodeVisibility()
+    })
   }
 
   function paintImageResizeOverlay(
@@ -10659,10 +10686,10 @@ export function registerCore(bind: CanvasBindings) {
   })
 
   function onScrollerScroll() {
-    updateNodeToolbar({ skipImageResizeOverlay: true })
+    scheduleUpdateNodeToolbar({ skipImageResizeOverlay: true })
     updateImageResizeOverlay()
     updateEdgeDeleteButtonPosition()
-    syncViewportNodeVisibility()
+    scheduleViewportNodeVisibilitySync()
   }
 
   function bindScrollerScrollListener(g: Graph) {
@@ -10723,7 +10750,7 @@ export function registerCore(bind: CanvasBindings) {
       if (!cell?.isNode()) return
       startImageNodeCornerResize(g, cell as Node, event, corner, () => {
         bumpToolbarRevision()
-        updateNodeToolbar({ skipImageResizeOverlay: true })
+        scheduleUpdateNodeToolbar({ skipImageResizeOverlay: true })
       })
     }
     instance.__deleteCanvasNode = removeNodeById
@@ -10751,7 +10778,7 @@ export function registerCore(bind: CanvasBindings) {
     instance.__deactivateTextEditorToolbar = () => {
       setTextEditorToolbarActive(false)
     }
-    instance.__notifyNodeDragMove = updateNodeToolbar
+    instance.__notifyNodeDragMove = scheduleUpdateNodeToolbar
     instance.__notifyNodeDragEnd = () => {
       updateNodeToolbar()
       scheduleHistoryPush()
@@ -10784,14 +10811,14 @@ export function registerCore(bind: CanvasBindings) {
     instance.on('scale', ({ sx }) => {
       syncZoom(sx)
       updateEdgeDeleteButtonPosition()
-      syncViewportNodeVisibility()
-      updateNodeToolbar({ skipImageResizeOverlay: true })
+      scheduleViewportNodeVisibilitySync()
+      scheduleUpdateNodeToolbar({ skipImageResizeOverlay: true })
       updateImageResizeOverlay()
     })
     instance.on('translate', () => {
       updateEdgeDeleteButtonPosition()
-      syncViewportNodeVisibility()
-      updateNodeToolbar({ skipImageResizeOverlay: true })
+      scheduleViewportNodeVisibilitySync()
+      scheduleUpdateNodeToolbar({ skipImageResizeOverlay: true })
       updateImageResizeOverlay()
     })
     instance.on('node:moving', ({ node }) => {
@@ -10799,7 +10826,7 @@ export function registerCore(bind: CanvasBindings) {
       snapGridSplitNodePosition(instance, node)
       groupMoveState.draggingNodeId = node.id
       updateGroupToolbarPosition()
-      updateNodeToolbar()
+      scheduleUpdateNodeToolbar()
       updateEdgeDeleteButtonPosition()
     })
     instance.on('node:moved', ({ node }) => {
@@ -11254,6 +11281,16 @@ export function registerCore(bind: CanvasBindings) {
 
   onBeforeUnmount(() => {
     hideImageMarkHint()
+    cancelAllGenerationTaskPolling()
+    cancelPendingCanvasSnapshotStorage()
+    if (toolbarUpdateRaf) {
+      window.cancelAnimationFrame(toolbarUpdateRaf)
+      toolbarUpdateRaf = 0
+    }
+    if (viewportVisibilityRaf) {
+      window.cancelAnimationFrame(viewportVisibilityRaf)
+      viewportVisibilityRaf = 0
+    }
     window.removeEventListener('beforeunload', onPageUnload)
     window.removeEventListener('pagehide', onPageUnload)
     stopAutoSave()

@@ -138,7 +138,7 @@ export {
   setCanvasNodeMutationCompleteHandler,
   setCanvasUploadCompleteHandler,
 } from '../../upload'
-export { getCanvasSnapshot, saveCanvasSnapshotToStorage, normalizeCanvasSnapshot, type CanvasSnapshot } from '../../canvasSnapshot'
+export { getCanvasSnapshot, saveCanvasSnapshotToStorage, cancelPendingCanvasSnapshotStorage, normalizeCanvasSnapshot, type CanvasSnapshot } from '../../canvasSnapshot'
 export {
   buildGroupSkillMarkdown,
   createSkillFile,

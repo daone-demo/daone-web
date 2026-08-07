@@ -9,6 +9,10 @@ export interface GroupSkillNode {
   genPrompt?: string
   previewUrl?: string
   fileName?: string
+  /** 节点素材 ID，打组保存后拖回画布做标记/生成时必需 */
+  assetId?: string
+  /** 兼容旧字段：部分图片节点资产落在 sourceAssetId */
+  sourceAssetId?: string
   position: { x: number; y: number }
 }
 
@@ -37,6 +41,8 @@ export function extractGroupSubgraph(graph: Graph, nodeIds: string[]): GroupSkil
     .map((node) => {
       const data = node.getData() as CanvasNodeData
       const pos = node.getPosition()
+      const assetId = data.assetId?.trim() || undefined
+      const sourceAssetId = data.sourceAssetId?.trim() || undefined
       return {
         id: node.id,
         kind: data.kind,
@@ -45,6 +51,8 @@ export function extractGroupSubgraph(graph: Graph, nodeIds: string[]): GroupSkil
         genPrompt: data.genPrompt,
         previewUrl: data.previewUrl,
         fileName: data.fileName,
+        assetId,
+        sourceAssetId,
         position: { x: pos.x, y: pos.y },
       }
     })
@@ -90,6 +98,17 @@ function parseNodeKind(value: unknown): NodeKind {
   return 'text'
 }
 
+function readOptionalString(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed || undefined
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  return undefined
+}
+
 /** 从元素组 cells 解析为可落画布子图 */
 export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | null {
   if (!Array.isArray(cells) || !cells.length) return null
@@ -119,6 +138,8 @@ export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | n
         genPrompt: typeof item.genPrompt === 'string' ? item.genPrompt : undefined,
         previewUrl: typeof item.previewUrl === 'string' ? item.previewUrl : undefined,
         fileName: typeof item.fileName === 'string' ? item.fileName : undefined,
+        assetId: readOptionalString(item.assetId ?? item.asset_id),
+        sourceAssetId: readOptionalString(item.sourceAssetId ?? item.source_asset_id),
         position: {
           x: Number(position?.x ?? 0),
           y: Number(position?.y ?? 0),

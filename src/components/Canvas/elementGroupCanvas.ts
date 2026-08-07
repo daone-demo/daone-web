@@ -1,10 +1,14 @@
 import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData } from './constants'
-import { applyRemoteImageToNode } from './upload'
+import { applyRemoteImageToNode, applyRemoteVideoToNode } from './upload'
 import { connectGenEdge } from './imageGen'
 import { addCanvasNode } from './graph'
-import type { GroupSkillSubgraph } from './groupSkill'
+import type { GroupSkillNode, GroupSkillSubgraph } from './groupSkill'
 import { parseElementGroupRecord } from './groupSkill'
+
+function resolvePersistedAssetId(item: GroupSkillNode) {
+  return item.assetId?.trim() || item.sourceAssetId?.trim() || ''
+}
 
 function createNodeId() {
   return `node_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -29,6 +33,7 @@ export function spawnElementGroupOnCanvas(
     const newId = createNodeId()
     idMap.set(item.id, newId)
 
+    const persistedAssetId = resolvePersistedAssetId(item)
     const overrides: Partial<CanvasNodeData> = {
       mode: 'editor',
       title: item.title || item.fileName || '节点',
@@ -37,6 +42,12 @@ export function spawnElementGroupOnCanvas(
       genPrompt: item.genPrompt,
       uploadState: item.previewUrl ? 'done' : 'idle',
       uploadProgress: item.previewUrl ? 100 : 0,
+    }
+    if (persistedAssetId) {
+      overrides.assetId = persistedAssetId
+      if (item.sourceAssetId?.trim()) {
+        overrides.sourceAssetId = item.sourceAssetId.trim()
+      }
     }
 
     const point = {
@@ -47,15 +58,23 @@ export function spawnElementGroupOnCanvas(
     const node = addCanvasNode(graph, item.kind, point, overrides, { id: newId })
 
     if (item.previewUrl && item.kind === 'image') {
-      applyRemoteImageToNode(node, {
+      void applyRemoteImageToNode(node, {
+        assetId: persistedAssetId || undefined,
         previewUrl: item.previewUrl,
         fileName: item.fileName,
       })
     } else if (item.previewUrl && item.kind === 'video') {
+      void applyRemoteVideoToNode(node, {
+        assetId: persistedAssetId || undefined,
+        previewUrl: item.previewUrl,
+        fileName: item.fileName,
+      })
+    } else if (persistedAssetId) {
       const data = { ...(node.getData() as CanvasNodeData) }
-      data.previewUrl = item.previewUrl
-      data.uploadState = 'done'
-      data.uploadProgress = 100
+      data.assetId = persistedAssetId
+      if (item.sourceAssetId?.trim()) {
+        data.sourceAssetId = item.sourceAssetId.trim()
+      }
       node.setData(data)
     }
 

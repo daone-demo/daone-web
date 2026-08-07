@@ -25,11 +25,17 @@ export function createCanvasHistory(getMeta: () => CanvasSnapshotMeta) {
     return getCanvasSnapshot(graph, getMeta())
   }
 
+  function getGraphChangeKey(snapshot: CanvasSnapshot) {
+    const cells = snapshot.graph.cells ?? []
+    const cellIds = cells.map((cell) => String(cell.id ?? '')).join('\u0001')
+    return `${snapshot.summary.nodeCount}:${snapshot.summary.edgeCount}:${cells.length}:${cellIds}`
+  }
+
   function push(graph: Graph) {
     if (!recording) return
     const snap = capture(graph)
     const last = past[past.length - 1]
-    if (last && JSON.stringify(last.graph) === JSON.stringify(snap.graph)) return
+    if (last && getGraphChangeKey(last) === getGraphChangeKey(snap)) return
     past.push(snap)
     if (past.length > 40) past.shift()
     future.length = 0

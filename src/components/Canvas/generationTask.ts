@@ -35,12 +35,26 @@ export function isGenerationTaskTerminal(status: string) {
   return TERMINAL_STATUSES.has(status)
 }
 const userInfoStore = useUserInfo();
+let generationPollEpoch = 0
+let lastPointAccountQueryAt = 0
+const activePollingTaskIds = new Set<string>()
+const resumedTaskIds = new Set<string>()
+
+export function cancelAllGenerationTaskPolling() {
+  generationPollEpoch += 1
+  resumedTaskIds.clear()
+  activePollingTaskIds.clear()
+}
 
 async function getGenerationTaskDetail<T = GenerationTaskDetail>(taskId: string): Promise<T> {
   const result = await api.getGenerationTask<T>(taskId)
   const task = normalizeGenerationTaskDetail(result)
   if (isGenerationTaskTerminal(task.status)) {
-    void userInfoStore.queryPointAccount()
+    const now = Date.now()
+    if (now - lastPointAccountQueryAt > 2000) {
+      lastPointAccountQueryAt = now
+      void userInfoStore.queryPointAccount()
+    }
   }
   return result
 }
@@ -231,8 +245,6 @@ function isNodeOnGraph(node: Node) {
   return Boolean(node.model?.graph)
 }
 
-const activePollingTaskIds = new Set<string>()
-
 let onGenerationTaskSucceeded: ((task: GenerationTaskDetail) => void) | null = null
 let onGenerationTaskSettled: (() => void) | null = null
 
@@ -295,9 +307,13 @@ function scheduleGenerationTaskFollow(taskId: string, follow: () => Promise<unkn
   const key = taskId.trim()
   if (!key || activePollingTaskIds.has(key)) return false
 
+  const epoch = generationPollEpoch
   activePollingTaskIds.add(key)
   void Promise.resolve()
-    .then(follow)
+    .then(async () => {
+      if (epoch !== generationPollEpoch) return
+      await follow()
+    })
     .finally(() => {
       activePollingTaskIds.delete(key)
     })
@@ -549,10 +565,13 @@ export function updateGenerationNodeProgress(
   options: GenerationProgressSyncOptions = {},
 ) {
   if (!isNodeOnGraph(node)) return
-  const data = { ...(node.getData() as CanvasNodeData) }
+  const rounded = Math.max(0, Math.min(100, Math.round(progress)))
+  const data = node.getData() as CanvasNodeData
   if (data.imageGenState !== 'loading') return
-  data.imageGenProgress = Math.max(0, Math.min(100, Math.round(progress)))
-  setNodeData(node, data)
+  if (data.imageGenProgress === rounded) return
+
+  const next = { ...data, imageGenProgress: rounded }
+  setNodeData(node, next)
   refreshGenerationNodeView(node, options.forceRefreshView)
 }
 
@@ -620,18 +639,33 @@ export async function pollGenerationTask(
   options: {
     intervalMs?: number
     onProgress?: (task: GenerationTaskDetail) => void
+    shouldContinue?: () => boolean
   } = {},
 ): Promise<GenerationTaskDetail> {
   const intervalMs = options.intervalMs ?? 2000
   const maxAttempts = 180
+  const epoch = generationPollEpoch
+  let lastTask: GenerationTaskDetail | null = null
+
+  const canContinue = () =>
+    epoch === generationPollEpoch && (options.shouldContinue ? options.shouldContinue() : true)
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (!canContinue()) {
+      return lastTask ?? { id: taskId, status: 'CANCELED' }
+    }
+
     const raw = await getGenerationTaskDetail<GenerationTaskDetail>(taskId)
     const task = normalizeGenerationTaskDetail(raw)
+    lastTask = task
     options.onProgress?.(task)
 
     if (isGenerationTaskTerminal(task.status)) {
       return task
+    }
+
+    if (!canContinue()) {
+      return lastTask
     }
 
     await new Promise((resolve) => window.setTimeout(resolve, intervalMs))
@@ -780,6 +814,7 @@ async function pollAndApplyImageTaskOnNode(
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
+        shouldContinue: () => Boolean(resolveNode()),
         onProgress: (task) => {
           const target = resolveNode()
           if (!target) return
@@ -885,6 +920,7 @@ export async function followTextGenerationTaskOnNode(
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
+        shouldContinue: () => Boolean(resolveNode()),
         onProgress: (task) => {
           const target = resolveNode()
           if (target) updateTextGenerationNodeProgress(target, task.progress ?? 0)
@@ -957,6 +993,7 @@ export async function followModelGenerationTaskOnNode(
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
+        shouldContinue: () => Boolean(resolveNode()),
         onProgress: (task) => {
           const target = resolveNode()
           if (target) updateGenerationNodeProgress(target, task.progress ?? 0)
@@ -1031,6 +1068,7 @@ export async function followVideoGenerationTaskOnNode(
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
+        shouldContinue: () => Boolean(resolveNode()),
         onProgress: (task) => {
           const target = resolveNode()
           if (target) updateVideoGenerationNodeProgress(target, task.progress ?? 0)
@@ -1073,7 +1111,9 @@ export async function followVideoGenerationTaskOnNode(
   }
 }
 
-const resumedTaskIds = new Set<string>()
+export function resetResumedGenerationTaskCache() {
+  cancelAllGenerationTaskPolling()
+}
 
 function shouldResumeNode(data: CanvasNodeData) {
   const taskId = String(data.generationTaskId ?? '').trim()
@@ -1291,11 +1331,6 @@ export async function resumePendingGenerationTasks(
       resumeGenerationTaskFollow(node, data, taskId, options, initialTask)
     }),
   )
-}
-
-export function resetResumedGenerationTaskCache() {
-  resumedTaskIds.clear()
-  activePollingTaskIds.clear()
 }
 
 /** 创建图片任务后立即返回，后台按 taskId 回写对应节点 */

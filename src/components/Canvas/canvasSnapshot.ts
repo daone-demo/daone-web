@@ -106,8 +106,49 @@ export function getCanvasSnapshotStorageKey(projectId: string) {
   return `design-canvas:${projectId}`
 }
 
+let pendingStorageSnapshot: CanvasSnapshot | null = null
+let pendingStorageIdleId: number | null = null
+let pendingStorageTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushCanvasSnapshotStorage() {
+  pendingStorageIdleId = null
+  pendingStorageTimer = null
+  const snapshot = pendingStorageSnapshot
+  pendingStorageSnapshot = null
+  if (!snapshot) return
+
+  const key = getCanvasSnapshotStorageKey(snapshot.meta.projectId)
+  try {
+    localStorage.setItem(key, JSON.stringify(snapshot))
+  } catch (error) {
+    console.warn('[Canvas] local snapshot save failed', error)
+  }
+}
+
+export function cancelPendingCanvasSnapshotStorage() {
+  pendingStorageSnapshot = null
+  if (pendingStorageIdleId != null && typeof cancelIdleCallback !== 'undefined') {
+    cancelIdleCallback(pendingStorageIdleId)
+    pendingStorageIdleId = null
+  }
+  if (pendingStorageTimer) {
+    clearTimeout(pendingStorageTimer)
+    pendingStorageTimer = null
+  }
+}
+
 export function saveCanvasSnapshotToStorage(snapshot: CanvasSnapshot) {
   const key = getCanvasSnapshotStorageKey(snapshot.meta.projectId)
-  localStorage.setItem(key, JSON.stringify(snapshot))
+  pendingStorageSnapshot = snapshot
+  if (pendingStorageIdleId != null || pendingStorageTimer) return key
+
+  if (typeof requestIdleCallback !== 'undefined') {
+    pendingStorageIdleId = requestIdleCallback(() => flushCanvasSnapshotStorage(), {
+      timeout: 1500,
+    })
+    return key
+  }
+
+  pendingStorageTimer = setTimeout(flushCanvasSnapshotStorage, 0)
   return key
 }
