@@ -305,10 +305,12 @@ export interface UploadTicketRequest {
   fileName: string
   contentType: string
   fileSize: number
-  fileBase64: string
+  /** 直传模式下可不传，由前端 PUT 到返回的 previewUrl */
+  fileBase64?: string
+  type?: 'IMAGE' | 'VIDEO' | 'DOCUMENT' | string
 }
 
-/** `POST /assets/upload-tickets` 上传本地文件到 OSS 并返回访问地址。 */
+/** `POST /assets/upload-tickets` 上传并创建素材记录（或申请直传相关字段）。 */
 export interface AssetUploadResponse {
   id: Id
   type: 'IMAGE' | 'VIDEO' | string
@@ -317,6 +319,7 @@ export interface AssetUploadResponse {
   previewUrl: string
   url: string
   objectKey: string
+  authorization?: string
   fileSize: number
   width?: number | null
   height?: number | null
@@ -327,10 +330,33 @@ export interface AssetUploadResponse {
   createdAt: string
 }
 
+/** `POST /assets/upload-credentials` 申请前缀直传凭证。 */
+export interface AssetUploadCredentialsResponse {
+  uploadUrl?: string
+  previewUrl?: string
+  url?: string
+  objectKey: string
+  authorization?: string
+  Authorization?: string
+  headers?: Record<string, string>
+  prefix?: string
+}
+
+/** `POST /assets` 文件上传完成后确认上传并创建素材记录（旧流程）。 */
 export interface AssetCompleteUploadRequest {
   uploadTicket: string
   projectId?: Id
   fileSize: number
+}
+
+/** `POST /assets/upload-complete` 前端直传完成确认。 */
+export interface AssetDirectUploadCompleteRequest {
+  contentType: string
+  fileName: string
+  fileSize: number
+  objectKey: string
+  projectId?: Id
+  type?: 'IMAGE' | 'VIDEO' | 'DOCUMENT' | string
 }
 
 export interface AssetView {
@@ -657,9 +683,16 @@ const api = {
   completeAssetUpload<T = unknown>(data: AssetCompleteUploadRequest) {
     return http.post<T>('/assets', data)
   },
-  /** 上传本地文件到 OSS 并返回预览地址。 */
-  createAssetUploadTicket(data: any, config?: RequestConfig) {
+  /** 申请直传凭证，返回 previewUrl（PUT 目标）与 objectKey。 */
+  createAssetUploadTicket(data: UploadTicketRequest, config?: RequestConfig) {
     return http.post<AssetUploadResponse>('/assets/upload-tickets', data, config)
+  },
+  createAssetUploadCredentials(data: UploadTicketRequest, config?: RequestConfig) {
+    return http.post<AssetUploadCredentialsResponse>('/assets/upload-credentials', data, config)
+  },
+  /** 前端直传完成确认：核验对象 + 内容审核 + 创建素材记录。 */
+  completeAssetCompleteUpload(data: AssetDirectUploadCompleteRequest, config?: RequestConfig) {
+    return http.post<AssetUploadResponse>('/assets/upload-complete', data, config)
   },
   /** 获取指定素材的详情。 */
   getAsset<T = unknown>(assetId: Id) {
