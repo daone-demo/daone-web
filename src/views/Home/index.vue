@@ -19,7 +19,7 @@
         <div class="home__projects">
           <div class="home__project-card home__project-card--new" @click="openNewProject">
             <span class="home__project-new-icon" aria-hidden="true">
-              <i class="iconfont icon-icon-test"></i>
+              <i class="iconfont icon-tianjiajia"></i>
             </span>
             <span class="home__project-new-label">新建项目</span>
           </div>

@@ -3,7 +3,18 @@
     <div class="user-info__content">
       <section class="user-info__profile-card">
         <div class="user-info__profile-main">
-          <img class="user-info__avatar" :src="profileState.avatarUrl" :alt="profileState.nickname" />
+          <img 
+            v-if="profileState.avatarUrl"
+            class="user-info__avatar"
+            :src="profileState.avatarUrl"
+            :alt="profileState.nickname"
+          />
+          <img 
+            v-else
+            class="user-info__avatar"
+            :src="logoWhite"
+            :alt="profileState.nickname"
+          />
           <div class="user-info__profile-text">
             <div class="user-info__name-row">
               <h1 class="user-info__name">{{ profileState.nickname }}</h1>
@@ -537,6 +548,7 @@ import dayjs from 'dayjs';
 import { message, type SelectProps } from 'ant-design-vue';
 import { useNeedReloadPointsStore } from '@stores/useNeedReload';
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
+import logoWhite from '@assets/images/logo_white.png'
 const PAGINATION_LOCALE = zhCN.Pagination
 const needReloadPointsStore = useNeedReloadPointsStore();
 

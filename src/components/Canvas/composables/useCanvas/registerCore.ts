@@ -6585,8 +6585,7 @@ export function registerCore(bind: CanvasBindings) {
     closeAddMenu()
     closeConnectMenu()
     closeShortcutsPanel()
-    // 与侧栏「项目」一致：进入独立的我的项目页
-    void router.push({ name: 'project' })
+    showProjectBrowser.value = true
   }
 
   function closeProjectBrowser() {

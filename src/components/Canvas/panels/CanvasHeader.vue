@@ -144,10 +144,10 @@
             class="canvas__header-avatar"
             aria-hidden="true"
           />
-          <span
-            class="canvas__header-pill-icon canvas__header-pill-icon--star"
-            aria-hidden="true"
+          <img
             v-else
+            :src="canvasBgTheme === 'light' ? logoBlack : logoWhite"
+            class="canvas__header-pill-icon canvas__header-pill-icon--star"
           />
           <span class="canvas__header-credits-value">{{ userInfoStore?.pointAccount?.available || 0 }}</span>
           <!-- <span class="canvas__header-avatar" aria-hidden="true" /> -->
