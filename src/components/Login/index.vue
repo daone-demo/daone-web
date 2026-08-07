@@ -87,11 +87,11 @@
 
           <footer class="login-modal__footer">
             登录即代表同意
-            <button type="button" class="login-modal__link" @click="emit('user-agreement')">
+            <button type="button" class="login-modal__link" @click="onGoUrl('UserAgreement')">
               《用户协议》
             </button>
             和
-            <button type="button" class="login-modal__link" @click="emit('privacy-policy')">
+            <button type="button" class="login-modal__link" @click="onGoUrl('PrivacyPolicy')">
               《隐私政策》
             </button>
             未注册手机号将自动注册
@@ -113,6 +113,10 @@ import { useNeedReloadStore } from '@stores/useNeedReload';
 import api from '@/services/api'
 import { useUserInfo, type UserInfo } from '@/stores/useUserInfo'
 import SlideVerifyModal from '@/components/SlideVerifyModal/index.vue'
+import { useRoute, useRouter } from 'vue-router';
+
+const route = useRoute()
+const router = useRouter()
 
 interface SmsLoginResult {
   token: string
@@ -129,8 +133,6 @@ const emit = defineEmits<{
   submit: [payload: { phone: string; code: string }]
   'send-code': [phone: string]
   'qq-login': []
-  'user-agreement': []
-  'privacy-policy': []
 }>()
 
 const phone = ref('');
@@ -151,6 +153,11 @@ const codeBtnText = computed(() => {
   if (codeCountdown.value > 0) return `${codeCountdown.value}s`
   return '获取验证码'
 })
+
+const onGoUrl = (type: string) => {
+  const { href } = router.resolve({ name: 'pdf', query: { type } })
+  window.open(href, '_blank')
+}
 
 function close() {
   open.value = false
