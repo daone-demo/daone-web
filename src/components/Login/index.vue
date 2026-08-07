@@ -113,9 +113,8 @@ import { useNeedReloadStore } from '@stores/useNeedReload';
 import api from '@/services/api'
 import { useUserInfo, type UserInfo } from '@/stores/useUserInfo'
 import SlideVerifyModal from '@/components/SlideVerifyModal/index.vue'
-import { useRoute, useRouter } from 'vue-router';
+import { useRouter } from 'vue-router';
 
-const route = useRoute()
 const router = useRouter()
 
 interface SmsLoginResult {
