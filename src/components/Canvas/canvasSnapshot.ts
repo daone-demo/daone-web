@@ -1,7 +1,7 @@
 import type { Graph } from '@antv/x6'
 import type { CanvasBgTheme } from './canvasTheme'
 import type { CanvasNodeData } from './constants'
-import { getScroller } from './graph'
+import { getScroller, migrateGraphJsonForHtmlShape } from './graph'
 
 export interface CanvasSnapshotMeta {
   projectId: string
@@ -94,7 +94,7 @@ export function normalizeCanvasSnapshot(
       scrollLeft: data.viewport?.scrollLeft ?? 0,
       scrollTop: data.viewport?.scrollTop ?? 0,
     },
-    graph: data.graph ?? { cells: [] },
+    graph: migrateGraphJsonForHtmlShape(data.graph ?? { cells: [] }),
     summary: {
       nodeCount: data.summary?.nodeCount ?? 0,
       edgeCount: data.summary?.edgeCount ?? 0,

@@ -1,12 +1,25 @@
 <template>
-  <div v-if="item.key === 'addToDialog'" class="canvas__node-toolbar-hd">
+  <!-- <div v-if="item.key === 'addToDialog'" class="canvas__node-toolbar-hd">
     <img
       src="@assets/images/addToDialog.png"
       class="canvas__node-toolbar-addToDialog-img"
       @click="emit('action', item.key, undefined, item.label)"
     />
-    <!-- <i class="iconfont icon-contact-customer-service" @click="emit('action', item.key, undefined, item.label)" style="font-size: 18px;"></i> -->
-  </div>
+  </div> -->
+  <button
+    type="button"
+    class="canvas__node-toolbar-btn"
+    :title="showToolNames ? undefined : item.label"
+    @click="emit('action', item.key, undefined, item.label)"
+    v-if="item.key === 'addToDialog'"
+  >
+    <img
+      src="@assets/images/addToDialog.png"
+      class="canvas__node-toolbar-addToDialog-img"
+      style="width: 18px; height: auto; object-fit: cover;margin-right: 2px;"
+    />
+    <span>添加到智能体</span>
+  </button>
   <div v-else-if="item.key === 'hd'" class="canvas__node-toolbar-hd">
     <button
       type="button"

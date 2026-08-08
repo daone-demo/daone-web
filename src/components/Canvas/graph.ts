@@ -1,4 +1,4 @@
-import { Graph, Shape, type Edge, type Node, type TransformManager } from '@antv/x6'
+import { Graph, Shape, NodeView, type Edge, type Node, type TransformManager } from '@antv/x6'
 import { Scroller } from '@antv/x6-plugin-scroller'
 import '@antv/x6-plugin-scroller/es/index.css'
 import { Selection } from '@antv/x6-plugin-selection'
@@ -470,6 +470,37 @@ export type CanvasGraph = Graph & {
 let shapesRegistered = false
 let htmlShapeSyncPatched = false
 
+const LEGACY_VUE_SHAPE_VIEW = 'vue-shape-view'
+const HTML_SHAPE_VIEW = 'html-shape-view'
+
+/** 兼容历史画布：将 vue-shape-view 映射到 html-shape-view */
+function ensureHtmlShapeViewCompat() {
+  if (!NodeView.registry.exist(LEGACY_VUE_SHAPE_VIEW)) {
+    NodeView.registry.register(LEGACY_VUE_SHAPE_VIEW, HTMLShapeView, true)
+  }
+}
+
+/** 迁移持久化画布 JSON 中的旧 view 名称（localStorage / 接口快照） */
+export function migrateGraphJsonForHtmlShape(
+  graphJson: ReturnType<Graph['toJSON']>,
+): ReturnType<Graph['toJSON']> {
+  const cells = graphJson.cells
+  if (!cells?.length) return graphJson
+
+  let changed = false
+  const nextCells = cells.map((cell) => {
+    if (!cell || typeof cell !== 'object') return cell
+    const record = cell as Record<string, unknown>
+    if (record.view === LEGACY_VUE_SHAPE_VIEW) {
+      changed = true
+      return { ...cell, view: HTML_SHAPE_VIEW }
+    }
+    return cell
+  })
+
+  return changed ? { ...graphJson, cells: nextCells } : graphJson
+}
+
 const counters: Record<NodeKind, number> = {
   text: 0,
   image: 0,
@@ -542,6 +573,7 @@ function registerVueNode(
 }
 
 export function registerShapes() {
+  ensureHtmlShapeViewCompat()
   if (shapesRegistered) return
   shapesRegistered = true
 

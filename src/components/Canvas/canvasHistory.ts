@@ -1,9 +1,9 @@
 import type { Graph } from '@antv/x6'
 import { getCanvasSnapshot, type CanvasSnapshot, type CanvasSnapshotMeta } from './canvasSnapshot'
-import { ensureInfiniteCanvasArea, getScroller } from './graph'
+import { ensureInfiniteCanvasArea, getScroller, migrateGraphJsonForHtmlShape } from './graph'
 
 export function applyCanvasSnapshot(graph: Graph, snapshot: CanvasSnapshot) {
-  graph.fromJSON(snapshot.graph)
+  graph.fromJSON(migrateGraphJsonForHtmlShape(snapshot.graph))
   graph.zoomTo(snapshot.viewport.zoom)
   graph.translate(snapshot.viewport.translateX, snapshot.viewport.translateY)
 
