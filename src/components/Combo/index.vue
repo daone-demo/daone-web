@@ -390,6 +390,7 @@ import { useModalStore } from '@stores/useModal';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
 import SlideVerifyModal from '@/components/SlideVerifyModal/index.vue';
+import { preloadSlideVerifyImages } from '@/utils/slideVerifyImages';
 
 interface PlanItem {
   code: string
@@ -781,6 +782,7 @@ function lockBodyScroll(locked: boolean) {
 watch(open, (visible) => {
   lockBodyScroll(visible)
   if (visible) {
+    void preloadSlideVerifyImages()
     onloadPlans()
   } else {
     stopOrderPolling()

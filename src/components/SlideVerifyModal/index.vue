@@ -25,8 +25,14 @@
           </header>
 
           <div class="slide-verify-modal__body">
+            <div v-if="!ready" class="slide-verify-modal__loading" aria-live="polite">
+              <span class="slide-verify-modal__spinner" aria-hidden="true" />
+              <span>加载中...</span>
+            </div>
             <SlideVerify
+              v-else
               ref="blockRef"
+              :imgs="SLIDE_VERIFY_IMAGES"
               :l="42"
               :r="10"
               :w="310"
@@ -45,9 +51,10 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import SlideVerify, { type SlideVerifyInstance } from 'vue3-slide-verify'
 import 'vue3-slide-verify/dist/style.css'
+import { preloadSlideVerifyImages, SLIDE_VERIFY_IMAGES } from '@/utils/slideVerifyImages'
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -57,7 +64,9 @@ const emit = defineEmits<{
 }>()
 
 const blockRef = ref<SlideVerifyInstance>()
+const ready = ref(false)
 let successEmitted = false
+let imagesPreloaded = false
 
 function close() {
   open.value = false
@@ -87,12 +96,27 @@ function onAgain() {
   refreshBlock()
 }
 
-watch(open, async (visible) => {
-  if (visible) {
-    successEmitted = false
-    await nextTick()
-    refreshBlock()
+async function ensureReady() {
+  if (!imagesPreloaded) {
+    ready.value = false
+    await preloadSlideVerifyImages()
+    imagesPreloaded = true
   }
+  ready.value = true
+}
+
+watch(open, async (visible) => {
+  if (!visible) return
+  successEmitted = false
+  await ensureReady()
+  await nextTick()
+  refreshBlock()
+})
+
+onMounted(() => {
+  void preloadSlideVerifyImages().then(() => {
+    imagesPreloaded = true
+  })
 })
 </script>
 

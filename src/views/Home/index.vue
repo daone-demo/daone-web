@@ -309,7 +309,8 @@ function openNewProject() {
 }
 
 function onShowDemo() {
-  visable.value = true;
+  // visable.value = true;
+  message.info('相关内容制作中')
 }
 
 function openProject(id: string) {

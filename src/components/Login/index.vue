@@ -113,6 +113,7 @@ import { useNeedReloadStore } from '@stores/useNeedReload';
 import api from '@/services/api'
 import { useUserInfo, type UserInfo } from '@/stores/useUserInfo'
 import SlideVerifyModal from '@/components/SlideVerifyModal/index.vue'
+import { preloadSlideVerifyImages } from '@/utils/slideVerifyImages'
 import { useRouter } from 'vue-router';
 
 const router = useRouter()
@@ -234,6 +235,9 @@ const onLoadUserPoint = async () => {
 
 watch(open, (visible) => {
   lockBodyScroll(visible)
+  if (visible) {
+    void preloadSlideVerifyImages()
+  }
   if (!visible) {
     phone.value = ''
     smsCode.value = ''
