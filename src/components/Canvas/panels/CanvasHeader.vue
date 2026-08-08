@@ -53,12 +53,17 @@
                 aria-hidden="true"
               />
               <span class="canvas__project-name">{{ project.title }}</span>
-              <i
+              <!-- <i
                 class="iconfont icon-zhongmingming"
+                @click.stop="emit('rename-project', project.id, project.title)"
+              /> -->
+              <img
+                src="@assets/images/edit.png"
+                class="edit-icon"
                 @click.stop="emit('rename-project', project.id, project.title)"
               />
               <i
-                class="iconfont icon-shanchu1"
+                class="iconfont icon-shanchu"
                 v-if="project.id !== activeProjectId"
                 @click.stop="emit('delete-project', project.id)"
               />
@@ -308,3 +313,10 @@ function onProjectMenuScroll(event: Event) {
 }
 
 </script>
+<style lang="css" scoped>
+.edit-icon {
+  width: 16px;
+  height: 16px;
+  margin-left: 8px;
+}
+</style>
