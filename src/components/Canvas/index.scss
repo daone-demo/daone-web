@@ -3608,6 +3608,17 @@
     background: transparent;
   }
 
+  /* x6-html-shape：HTML 层节点容器（Safari 兼容，替代 foreignObject） */
+  .x6-html-shape-container {
+    z-index: 2;
+    overflow: visible;
+  }
+
+  .x6-html-shape-node {
+    overflow: visible;
+    box-sizing: border-box;
+  }
+
   .x6-node-selected rect[selector='body'] {
     stroke: transparent !important;
     stroke-width: 0 !important;

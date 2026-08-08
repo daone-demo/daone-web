@@ -84,14 +84,6 @@
       v-else-if="data.mode === 'picker'"
       class="text-node__body text-node__body--picker"
     >
-      <!-- <div class="text-node__hero-icon">
-        <span />
-        <span />
-        <span />
-        <span />
-      </div> -->
-
-      <!-- <p class="text-node__try">尝试：</p> -->
       <button
         type="button"
         class="text-node__action text-node__action--write"
@@ -202,39 +194,6 @@ import { useNodePortPlusStyle } from './useNodePortPlusStyle'
 import { useCanvasBgTheme } from '../useCanvasBgTheme'
 import type { TextEditorApi } from './useTextEditorRegistry'
 import { syncNodeViewData } from './syncNodeViewData'
-import { VueShapeView } from '@antv/x6-vue-shape'
-
-/**
- * 模块级一次性补丁：X6 的 vue-shape 默认会在 foreignObject 上按下时启动节点拖拽，
- * 从而把内部 <button> 的点击吞掉，导致删除/操作按钮“点了没反应”。
- * 这里让按钮、可编辑区上的按下不再触发 X6 拖拽。放在 TextNode 内，随该文件一起生效。
- */
-const vsvProto = VueShapeView.prototype as unknown as {
-  onMouseDown: (e: MouseEvent, x: number, y: number) => void
-  __btnPatched?: boolean
-}
-if (!vsvProto.__btnPatched) {
-  vsvProto.__btnPatched = true
-  const originalOnMouseDown = vsvProto.onMouseDown
-  vsvProto.onMouseDown = function patchedOnMouseDown(e: MouseEvent, x: number, y: number) {
-    const target = e?.target as Element | null
-    if (target) {
-      const tag = target.tagName?.toLowerCase()
-      if (
-        tag === 'button' ||
-        tag === 'input' ||
-        tag === 'textarea' ||
-        tag === 'select' ||
-        target.closest(
-          'button, [contenteditable="true"], .canvas-node__delete, .canvas-node__delete-float, .node-port-plus, .text-node__corner-tools',
-        )
-      ) {
-        return
-      }
-    }
-    return originalOnMouseDown.call(this, e, x, y)
-  }
-}
 
 const getNode = inject<() => Node>('getNode')!
 const { isLightTheme } = useCanvasBgTheme()
@@ -1074,15 +1033,6 @@ onBeforeUnmount(() => {
   overflow: visible;
 }
 
-.text-node--picker-card {
-  .text-node__body--picker {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-}
 
 .text-node--editor {
   .text-node__body--editor {
@@ -1177,7 +1127,8 @@ onBeforeUnmount(() => {
 }
 
 .text-node__body {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   border: 1px solid #4b4b55;
   border-radius: 14px;
   background: #1e1e22;
@@ -1186,6 +1137,9 @@ onBeforeUnmount(() => {
 }
 
 .text-node__body--picker {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding: 16px 12px 12px;
 }
 
@@ -1320,16 +1274,20 @@ onBeforeUnmount(() => {
 }
 
 .text-node__action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 18px;
   height: 18px;
   border-radius: 4px;
   background: #3d3d45;
   flex-shrink: 0;
+  line-height: 1;
 
-  &[data-icon='play']::after { content: '▶'; font-size: 10px; display: flex; justify-content: center; }
-  &[data-icon='image']::after { content: '▣'; font-size: 10px; display: flex; justify-content: center; }
-  &[data-icon='audio']::after { content: '♪'; font-size: 10px; display: flex; justify-content: center; }
-  &[data-icon='doc']::after { content: '≡'; font-size: 10px; display: flex; justify-content: center; }
+  &[data-icon='play']::after { content: '▶'; font-size: 10px; }
+  &[data-icon='image']::after { content: '▣'; font-size: 10px; }
+  &[data-icon='audio']::after { content: '♪'; font-size: 10px; }
+  &[data-icon='doc']::after { content: '≡'; font-size: 10px; }
 }
 
 .text-node__body--editor {

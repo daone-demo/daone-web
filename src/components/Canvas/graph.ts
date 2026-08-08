@@ -3,12 +3,13 @@ import { Scroller } from '@antv/x6-plugin-scroller'
 import '@antv/x6-plugin-scroller/es/index.css'
 import { Selection } from '@antv/x6-plugin-selection'
 import '@antv/x6-plugin-selection/es/index.css'
-import { register } from '@antv/x6-vue-shape'
+import { register as registerHtmlShape, HTMLShapeView } from 'x6-html-shape'
+import createVueRender from 'x6-html-shape/dist/vue'
+import type { Component } from 'vue'
 import { getDefaultEdgeStroke } from './canvasTheme'
 import { bindFlowEdgeInteraction, getFlowEdgeAttrs, getPreviewEdgeAttrs, registerCanvasEdgeDefaults } from './edgeStyle'
 import { canOpenConnectMenu } from './nodeConnect'
 import { resolveImageNaturalSize, resolveVideoNaturalSize } from './upload'
-import '@antv/x6-vue-shape'
 import TextNode from './nodes/TextNode.vue'
 import ImageNode from './nodes/ImageNode.vue'
 import ImageGenNode from './nodes/ImageGenNode.vue'
@@ -467,6 +468,7 @@ export type CanvasGraph = Graph & {
 }
 
 let shapesRegistered = false
+let htmlShapeSyncPatched = false
 
 const counters: Record<NodeKind, number> = {
   text: 0,
@@ -476,17 +478,81 @@ const counters: Record<NodeKind, number> = {
   model3d: 0,
 }
 
+/**
+ * x6-html-shape 首次挂载不会同步 HTML 层位置/矩阵，Safari 上节点需拖拽后才可见。
+ * 在 onMounted 中补一次 updateContainerStyle + updateHtmlContainerSize。
+ */
+function patchHtmlShapeViewSync() {
+  if (htmlShapeSyncPatched) return
+  htmlShapeSyncPatched = true
+
+  const proto = HTMLShapeView.prototype as HTMLShapeView & {
+    onMounted: () => void
+  }
+  const originalOnMounted = proto.onMounted
+  proto.onMounted = function patchedHtmlShapeOnMounted(this: HTMLShapeView) {
+    originalOnMounted.call(this)
+    this.updateContainerStyle()
+    this.updateHtmlContainerSize()
+  }
+}
+
+/** 同步 html-shape 节点 DOM 位置与画布 transform（新建节点 / 缩放 / 平移后调用） */
+export function syncHtmlShapeViews(graph: Graph, node?: Node) {
+  const cells = node ? [node] : graph.getNodes()
+  cells.forEach((cell) => {
+    const view = graph.findViewByCell(cell) as HTMLShapeView | null
+    if (!view?.updateContainerStyle) return
+    view.updateContainerStyle()
+    view.updateHtmlContainerSize()
+  })
+}
+
+function bindHtmlShapeSync(graph: Graph) {
+  patchHtmlShapeViewSync()
+
+  const scheduleSync = (target?: Node) => {
+    requestAnimationFrame(() => {
+      syncHtmlShapeViews(graph, target)
+      // Safari 首帧 layout 偶发未完成，再补一帧确保可见
+      requestAnimationFrame(() => syncHtmlShapeViews(graph, target))
+    })
+  }
+
+  graph.on('node:added', ({ node }) => scheduleSync(node))
+  graph.on('node:change:position', ({ node }) => syncHtmlShapeViews(graph, node))
+  graph.on('node:change:size', ({ node }) => syncHtmlShapeViews(graph, node))
+  graph.on('scale', () => syncHtmlShapeViews(graph))
+  graph.on('translate', () => syncHtmlShapeViews(graph))
+  graph.on('resize', () => scheduleSync())
+}
+
+function registerVueNode(
+  shape: string,
+  component: Component,
+  width: number,
+  height: number,
+) {
+  registerHtmlShape({
+    shape,
+    render: createVueRender(component),
+    width,
+    height,
+  })
+}
+
 export function registerShapes() {
   if (shapesRegistered) return
   shapesRegistered = true
 
   registerCanvasEdgeDefaults()
 
-  register({ shape: 'text-node', width: 180, height: 270, component: TextNode })
-  register({ shape: 'image-node', width: 180, height: 270, component: ImageNode })
-  register({ shape: 'image-gen-node', width: 180, height: 270, component: ImageGenNode })
-  register({ shape: 'video-node', width: 350, height: 200, component: VideoNode })
-  register({ shape: 'model3d-node', width: 320, height: 360, component: Model3DNode })
+  // x6-html-shape：用 HTML 层渲染节点，规避 Safari foreignObject + position 兼容问题
+  registerVueNode('text-node', TextNode, 180, 270)
+  registerVueNode('image-node', ImageNode, 180, 270)
+  registerVueNode('image-gen-node', ImageGenNode, 180, 270)
+  registerVueNode('video-node', VideoNode, 350, 200)
+  registerVueNode('model3d-node', Model3DNode, 320, 360)
 }
 
 export function createDefaultNodeData(kind: NodeKind): CanvasNodeData {
@@ -848,6 +914,8 @@ export function createGraph(container: HTMLElement): CanvasGraph {
     }),
   )
 
+  bindHtmlShapeSync(graph)
+
   return graph
 }
 
@@ -1207,10 +1275,6 @@ export function getNodeCropOverlayPosition(
   }
 }
 
-type VueShapeViewLike = {
-  renderVueComponent?: () => void
-}
-
 /** 按当前数据重新计算并应用节点尺寸（用于历史记录恢复后的尺寸校正） */
 export function syncAllNodeSizes(graph: Graph) {
   graph.getNodes().forEach((node) => {
@@ -1220,17 +1284,25 @@ export function syncAllNodeSizes(graph: Graph) {
   })
 }
 
-/** vue-shape 节点在独立 Vue 实例中，主题切换后强制重渲染 */
+/** html-shape 节点在独立 Vue 实例中，主题切换后强制重渲染 */
 export function refreshCanvasNodeViews(graph: Graph) {
   graph.getNodes().forEach((node) => {
     refreshCanvasNodeView(graph, node)
   })
+  syncHtmlShapeViews(graph)
 }
 
-/** 强制重渲染单个 vue-shape 节点视图 */
+/** 强制重渲染单个 html-shape 节点视图 */
 export function refreshCanvasNodeView(graph: Graph, node: Node) {
-  const view = graph.findViewByCell(node) as VueShapeViewLike | null
-  view?.renderVueComponent?.()
+  const view = graph.findViewByCell(node) as HTMLShapeView | null
+  if (!view) return
+
+  if (typeof view.mounted === 'function') {
+    view.mounted()
+    view.mounted = undefined
+    view.update()
+  }
+  syncHtmlShapeViews(graph, node)
 }
 
 function needsImageDimensionHydration(data: CanvasNodeData) {

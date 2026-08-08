@@ -19,7 +19,6 @@
     "@antv/x6-plugin-scroller": "^2.0.10",
     "@antv/x6-plugin-selection": "^2.2.2",
     "@antv/x6-plugin-transform": "^2.1.8",
-    "@antv/x6-vue-shape": "^2.1.2",
     "ant-design-vue": "4.x",
     "axios": "^1.18.0",
     "dayjs": "^1.11.21",
@@ -33,7 +32,8 @@
     "uuid": "^14.0.1",
     "vue": "^3.5.34",
     "vue-router": "^5.1.0",
-    "vue3-slide-verify": "^1.1.8"
+    "vue3-slide-verify": "^1.1.8",
+    "x6-html-shape": "^0.4.9"
   },
   "devDependencies": {
     "@types/node": "^24.12.3",
