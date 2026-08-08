@@ -110,17 +110,21 @@
         <span class="image-dialogue-footer__credits-icon" aria-hidden="true" />
         {{ IMAGE_DIALOGUE_CREDITS }}
       </span>
-      <button
-        type="button"
-        class="image-dialogue-footer__send"
-        :class="{ 'image-dialogue-footer__send--disabled': disabled }"
-        :disabled="disabled"
-        title="发送"
-        @mousedown.stop
-        @click.stop="onSend"
-      >
-        <span class="image-dialogue-footer__send-icon" aria-hidden="true" />
-      </button>
+      <a-popover placement="top">
+        <template #content>
+          <span>发送</span>
+        </template>
+        <button
+          type="button"
+          class="image-dialogue-footer__send"
+          :class="{ 'image-dialogue-footer__send--disabled': disabled }"
+          :disabled="disabled"
+          @mousedown.stop
+          @click.stop="onSend"
+        >
+          <span class="image-dialogue-footer__send-icon" aria-hidden="true" />
+        </button>
+      </a-popover>
     </div>
   </div>
 </template>

@@ -162,16 +162,20 @@
 
     <!-- 下载 / 剪贴板 / 删除 -->
     <button type="button" class="tft__btn" title="下载文本" @click="emitCmd('download')">
-      <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" />
+      <!-- <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" /> -->
+      <i class="iconfont icon-xiazai1" style="font-size: 16px;"></i>
     </button>
     <button type="button" class="tft__btn" title="复制" @click="emitCmd('copy')">
-      <span class="canvas__node-toolbar-icon" data-icon="copy" aria-hidden="true" />
+      <!-- <span class="canvas__node-toolbar-icon" data-icon="copy" aria-hidden="true" /> -->
+      <i class="iconfont icon-fuzhi2" style="font-size: 16px;"></i>
     </button>
     <button type="button" class="tft__btn" title="剪切" @click="emitCmd('cut')">
-      <span class="canvas__node-toolbar-icon" data-icon="cut" aria-hidden="true" />
+      <!-- <span class="canvas__node-toolbar-icon" data-icon="cut" aria-hidden="true" /> -->
+      <i class="iconfont icon-jianqie" style="font-size: 16px;"></i>
     </button>
     <button type="button" class="tft__btn" title="粘贴" @click="emitCmd('paste')">
-      <span class="canvas__node-toolbar-icon" data-icon="paste" aria-hidden="true" />
+      <!-- <span class="canvas__node-toolbar-icon" data-icon="paste" aria-hidden="true" /> -->
+      <i class="iconfont icon-niantie" style="font-size: 16px;"></i>
     </button>
     <button
       type="button"

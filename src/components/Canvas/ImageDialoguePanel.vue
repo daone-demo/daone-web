@@ -263,15 +263,19 @@
           <!-- <span class="image-dialogue__credits-icon" aria-hidden="true" />
           {{ IMAGE_DIALOGUE_CREDITS }} -->
         </span>
-        <button
-          type="button"
-          class="image-dialogue__send"
-          title="发送"
-          @mousedown.stop
-          @click.stop="onSend"
-        >
-          <span class="image-dialogue__send-icon" aria-hidden="true" />
-        </button>
+        <a-popover placement="top">
+          <template #content>
+            <span>发送</span>
+          </template>
+          <button
+            type="button"
+            class="image-dialogue__send"
+            @mousedown.stop
+            @click.stop="onSend"
+          >
+            <span class="image-dialogue__send-icon" aria-hidden="true" />
+          </button>
+        </a-popover>
       </div>
     </div>
     <Teleport to="body">

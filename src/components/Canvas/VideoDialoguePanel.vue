@@ -225,10 +225,14 @@
         <!-- <span class="video-dialogue__credits-icon" aria-hidden="true" />
         {{ VIDEO_DIALOGUE_CREDITS }} -->
       </span>
-
-      <button type="button" class="video-dialogue__send" title="发送" @click="onSend">
-        <span class="video-dialogue__send-icon" aria-hidden="true" />
-      </button>
+      <a-popover placement="top">
+        <template #content>
+          <span>发送</span>
+        </template>
+        <button type="button" class="video-dialogue__send" @click="onSend">
+          <span class="video-dialogue__send-icon" aria-hidden="true" />
+        </button>
+      </a-popover>
     </div>
   </div>
 </template>
