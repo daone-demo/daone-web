@@ -2081,6 +2081,13 @@ function startChatStream(
         return
       }
 
+      // 服务端显式结束流：立即隐藏 thinking / 处理中 tip
+      if (eventName === 'done') {
+        setMessageTip(assistant, undefined)
+        scrollMessagesToBottom()
+        return
+      }
+
       if (eventName === 'task_status' || eventName === 'task_progress') {
         rememberTaskId(assistant, payload.taskId)
 
@@ -2176,21 +2183,16 @@ function startChatStream(
     onDone() {
       cancelTypewriter(assistantId)
       const assistant = resolveAssistant()
-      const keepProcessingTip =
-        awaitingRunningTask
-        || (streamHasProgress && Boolean(assistant?.tip?.trim()) && !assistant?.text.trim())
-
-      if (keepProcessingTip) {
-        if (assistant && !assistant.tip) {
-          setMessageTip(assistant, '处理中...', true)
-        }
-        scrollMessagesToBottom()
-        return
-      }
+      // event=done / 流结束：隐藏 thinking 与处理中 tip（后台任务进度由任务事件单独驱动）
       if (assistant) {
         setMessageTip(assistant, undefined)
       }
-      if (assistant && !assistant.text.trim() && !assistant.questionnaire) {
+      if (
+        assistant
+        && !assistant.text.trim()
+        && !assistant.questionnaire
+        && !awaitingRunningTask
+      ) {
         assistant.text = '暂无回复，请稍后重试。'
       }
       scrollMessagesToBottom()

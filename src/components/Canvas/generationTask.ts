@@ -643,7 +643,7 @@ export async function pollGenerationTask(
   } = {},
 ): Promise<GenerationTaskDetail> {
   const intervalMs = options.intervalMs ?? 2000
-  const maxAttempts = 180
+  const maxAttempts = 450
   const epoch = generationPollEpoch
   let lastTask: GenerationTaskDetail | null = null
 

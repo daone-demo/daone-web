@@ -675,7 +675,7 @@ const api = {
   },
 
   // Assets
-  /** 分页查询素材，可按归属、项目、类型、来源和关键字筛选。 */
+  /** 分页查询素材，可按归属、项目、类型、来源和关键字筛选。 *task/
   getAssets<T = unknown>(params?: AssetListQuery) {
     return http.get<PageResult<T>>('/assets', { params })
   },
