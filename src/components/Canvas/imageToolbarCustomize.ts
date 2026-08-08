@@ -42,7 +42,8 @@ export function loadImageToolbarCustomizeSettings(): ImageToolbarCustomizeSettin
       orderedKeys: Array.isArray(parsed.orderedKeys)
         ? parsed.orderedKeys.filter((key): key is string => typeof key === 'string')
         : [],
-      showToolNames: parsed.showToolNames !== false,
+      // 始终展示工具名称，避免部分浏览器仅显示图标或出现转义文本
+      showToolNames: true,
     }
   } catch {
     return { ...DEFAULT_IMAGE_TOOLBAR_CUSTOMIZE_SETTINGS }
@@ -55,7 +56,7 @@ export function saveImageToolbarCustomizeSettings(settings: ImageToolbarCustomiz
     IMAGE_TOOLBAR_CUSTOMIZE_STORAGE_KEY,
     JSON.stringify({
       orderedKeys: settings.orderedKeys,
-      showToolNames: settings.showToolNames,
+      showToolNames: true,
     }),
   )
 }

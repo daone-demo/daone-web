@@ -9,7 +9,7 @@
   <button
     type="button"
     class="canvas__node-toolbar-btn"
-    :title="showToolNames ? undefined : item.label"
+    :title="item.label"
     @click="emit('action', item.key, undefined, item.label)"
     v-if="item.key === 'addToDialog'"
   >
@@ -18,23 +18,22 @@
       class="canvas__node-toolbar-addToDialog-img"
       style="width: 18px; height: auto; object-fit: cover;margin-right: 2px;"
     />
-    <span>添加到智能体</span>
+    <span class="canvas__node-toolbar-label">添加到智能体</span>
   </button>
   <div v-else-if="item.key === 'hd'" class="canvas__node-toolbar-hd">
     <button
       type="button"
       class="canvas__node-toolbar-btn"
       :class="{ 'canvas__node-toolbar-btn--active': showImageHdMenu }"
-      :title="showToolNames ? undefined : item.label"
+      :title="item.label"
       @click="emit('action', item.key, undefined, item.label)"
     >
-      <span v-if="showToolNames">{{ item.label }}</span>
       <span
-        v-else
         class="canvas__node-toolbar-icon"
         :data-icon="item.icon || 'hd'"
         aria-hidden="true"
       />
+      <span class="canvas__node-toolbar-label">{{ item.label }}</span>
     </button>
     <div
       v-if="showImageHdMenu"
@@ -66,7 +65,7 @@
       @click.stop.prevent
     >
       <i class="iconfont" :class="item.icon" v-if="item.icon" style="font-size: 16px;"></i>
-      <span v-if="showToolNames">{{ item.label }}</span>
+      <span class="canvas__node-toolbar-label">{{ item.label }}</span>
     </button>
     <div
       class="canvas__node-toolbar-dropdown-menu"
@@ -83,7 +82,7 @@
           @mousedown.stop
           @click.stop="emit('action', item.key, mode.value, item.label)"
         >
-          {{ mode.label }}
+          {{ decodeDisplayText(mode.label) }}
         </button>
       </div>
     </div>
@@ -93,7 +92,7 @@
     type="button"
     class="canvas__node-toolbar-btn"
     :class="{ 'canvas__node-toolbar-btn--active': item.key === 'crop' && showImageCrop }"
-    :title="showToolNames ? undefined : item.label"
+    :title="item.label"
     @click="emit('action', item.key, undefined, item.label)"
   >
     <!-- <span
@@ -103,22 +102,20 @@
       aria-hidden="true"
     /> -->
     <i class="iconfont" :class="item.icon" v-if="item.icon" style="font-size: 16px;"></i>
-    <span v-if="showToolNames">{{ item.label }}</span>
+    <span class="canvas__node-toolbar-label">{{ item.label }}</span>
   </button>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import { IMAGE_HD_RESOLUTIONS, type ImageCapabilityToolbarAction } from '../constants'
+import { decodeDisplayText } from '@/utils/decodeDisplayText'
 
-const props = defineProps<{
+defineProps<{
   item: ImageCapabilityToolbarAction
   showImageHdMenu?: boolean
   showImageCrop?: boolean
   showToolNames?: boolean
 }>()
-console.log('props.item', props.item);
-const showToolNames = computed(() => props.showToolNames !== false)
 
 const emit = defineEmits<{
   action: [key: string, option?: string, label?: string]

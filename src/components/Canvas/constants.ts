@@ -1,3 +1,5 @@
+import { decodeDisplayText } from '@/utils/decodeDisplayText'
+
 export type NodeKind = 'text' | 'image' | 'video' | 'audio' | 'model3d'
 
 export type NodeMode = 'picker' | 'editor'
@@ -670,6 +672,16 @@ const IMAGE_TOOLBAR_EXCLUDED_CODES = new Set(['IMAGE_GENERAL_V1', 'Custom_tool']
 
 /** 不进视频节点工具栏的能力（通用视频生成入口） */
 const VIDEO_TOOLBAR_EXCLUDED_CODES = new Set(['VIDEO_GENERAL_V1'])
+
+function normalizeCapabilityToolbarModes(
+  modes: ImageCapabilityToolbarMode[] | undefined,
+): ImageCapabilityToolbarMode[] {
+  if (!Array.isArray(modes)) return []
+  return modes.map((mode) => ({
+    ...mode,
+    label: decodeDisplayText(mode.label),
+  }))
+}
 
 /** 兼容接口直接返回数组，或包在 records/list/data 里 */
 export function normalizeImageCapabilities(
@@ -1465,10 +1477,10 @@ export function buildImageToolbarActionsFromCapabilities(
       const type = toolbar?.type === 'dropdown' ? 'dropdown' : 'button'
       return {
         key: item.code,
-        label: item.name,
+        label: decodeDisplayText(item.name),
         icon: resolveCapabilityToolbarIcon(item.icon),
         type,
-        modes: Array.isArray(toolbar?.modes) ? toolbar!.modes! : [],
+        modes: normalizeCapabilityToolbarModes(toolbar?.modes),
         order: typeof toolbar?.order === 'number' ? toolbar.order : index,
         capability: item,
         _index: index,
@@ -1511,10 +1523,10 @@ export function buildVideoToolbarActionsFromCapabilities(
       const type = toolbar?.type === 'dropdown' ? 'dropdown' : 'button'
       return {
         key: item.code,
-        label: item.name,
+        label: decodeDisplayText(item.name),
         icon: resolveVideoToolbarIcon(item.code, item.icon),
         type,
-        modes: Array.isArray(toolbar?.modes) ? toolbar!.modes! : [],
+        modes: normalizeCapabilityToolbarModes(toolbar?.modes),
         order: typeof toolbar?.order === 'number' ? toolbar.order : index,
         capability: item,
         _index: index,

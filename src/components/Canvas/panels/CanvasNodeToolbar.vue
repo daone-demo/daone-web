@@ -38,11 +38,11 @@
               type="button"
               class="canvas__node-toolbar-btn"
               :class="{ 'canvas__node-toolbar-btn--active': showImageDialogue }"
-              :title="showToolNames ? undefined : IMAGE_NODE_TOOLBAR.chat.label"
+              :title="IMAGE_NODE_TOOLBAR.chat.label"
               @click="emitImageAction(IMAGE_NODE_TOOLBAR.chat.key)"
             >
               <i class="iconfont icon-duihuaqipao" style="font-size: 16px;"></i>
-              <span v-if="showToolNames">{{ IMAGE_NODE_TOOLBAR.chat.label }}</span>
+              <span class="canvas__node-toolbar-label">{{ IMAGE_NODE_TOOLBAR.chat.label }}</span>
             </button>
           </div>
           <span class="canvas__node-toolbar-divider" aria-hidden="true" />
@@ -66,7 +66,7 @@
                 type="button"
                 class="canvas__node-toolbar-btn"
                 :class="{ 'canvas__node-toolbar-btn--active': showImageToolbarMore }"
-                :title="showToolNames ? undefined : IMAGE_NODE_TOOLBAR.more.label"
+                :title="IMAGE_NODE_TOOLBAR.more.label"
                 @mousedown.stop
                 @click.stop="emitImageAction(IMAGE_NODE_TOOLBAR.more.key)"
               >
@@ -75,7 +75,7 @@
                   :data-icon="IMAGE_NODE_TOOLBAR.more.icon"
                   aria-hidden="true"
                 />
-                <span v-if="showToolNames">{{ IMAGE_NODE_TOOLBAR.more.label }}</span>
+                <span class="canvas__node-toolbar-label">{{ IMAGE_NODE_TOOLBAR.more.label }}</span>
                 <span class="canvas__node-toolbar-more-count">{{ overflowActions.length }}</span>
               </button>
               <div
@@ -120,7 +120,7 @@
           >
             <!-- <span class="canvas__node-toolbar-icon" data-icon="chat" aria-hidden="true" /> -->
              <i class="iconfont icon-duihuaqipao" style="font-size: 16px;"></i>
-            {{ VIDEO_NODE_TOOLBAR.chat.label }}
+            <span class="canvas__node-toolbar-label">{{ VIDEO_NODE_TOOLBAR.chat.label }}</span>
           </button>
         </div>
         <span class="canvas__node-toolbar-divider" aria-hidden="true" />
@@ -144,13 +144,8 @@
             }"
             @click="emitVideoAction(item)"
           >
-            <span
-              v-if="item.icon"
-              class="canvas__node-toolbar-icon"
-              :data-icon="item.icon"
-              aria-hidden="true"
-            />
-            {{ item.label }}
+            <i class="iconfont" :class="item.icon" v-if="item.icon" style="font-size: 16px;"></i>
+            <span class="canvas__node-toolbar-label">{{ item.label }}</span>
           </button>
         </div>
         <span class="canvas__node-toolbar-divider" aria-hidden="true" />
