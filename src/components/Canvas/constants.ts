@@ -2781,7 +2781,7 @@ export function getImageToolbarMoreHover(key: string) {
 }
 
 export const PROMPT_PLACEHOLDER =
-  '写下你想讲的故事、场景或角色设定，例如：一个来自未来的机器人，在城市屋顶看星星。'
+  '请输入你想制作的内容，细节描述越多，效果会更符合你的期待哦。'
 
 const NODE_CARD = nodeCardSize2x3()
 

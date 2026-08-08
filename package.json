@@ -31,6 +31,7 @@
     "three": "^0.185.1",
     "uuid": "^14.0.1",
     "vue": "^3.5.34",
+    "vue-next-slider-vertify": "^1.0.5",
     "vue-router": "^5.1.0",
     "vue3-slide-verify": "^1.1.8",
     "x6-html-shape": "^0.4.9"

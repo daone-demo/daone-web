@@ -76,12 +76,9 @@ function uniqueDownloadFileName(name: string, used: Set<string>): string {
   return next
 }
 
-function isSameOriginUrl(url: string): boolean {
-  try {
-    return new URL(url, window.location.href).origin === window.location.origin
-  } catch {
-    return false
-  }
+function buildDownloadFetchCandidates(sourceUrl: string): string[] {
+  const downloadUrl = resolveOriginalMediaDownloadUrl(sourceUrl)
+  return [...new Set([downloadUrl, ...buildMediaProxyCandidates(downloadUrl)].filter(Boolean))]
 }
 
 function formatBatchZipName() {
@@ -125,9 +122,48 @@ function triggerLinkDownload(url: string, fileName: string) {
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = fileName
+  anchor.rel = 'noopener'
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
+}
+
+const INVALID_DOWNLOAD_CONTENT_TYPE_RE = /text\/html|application\/json|text\/plain/i
+
+function isValidMediaDownloadContentType(contentType: string, blob: Blob): boolean {
+  const type = (contentType || blob.type || '').toLowerCase()
+  if (!type) return blob.size > 0
+  if (INVALID_DOWNLOAD_CONTENT_TYPE_RE.test(type)) return false
+  if (type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/')) return true
+  if (type.includes('octet-stream') || type.includes('gltf') || type.includes('model')) return true
+  return false
+}
+
+async function assertValidMediaBlob(blob: Blob, contentType: string) {
+  if (!blob.size) {
+    throw new Error('empty media response')
+  }
+  if (!isValidMediaDownloadContentType(contentType, blob)) {
+    throw new Error(`invalid media content-type: ${contentType || blob.type || 'unknown'}`)
+  }
+
+  const header = new Uint8Array(await blob.slice(0, 64).arrayBuffer())
+  const prefix = String.fromCharCode(...header).trimStart().toLowerCase()
+  if (prefix.startsWith('<!doctype') || prefix.startsWith('<html') || prefix.startsWith('{')) {
+    throw new Error('invalid media response: html/json payload')
+  }
+}
+
+async function readResponseBlob(response: Response): Promise<Blob> {
+  const contentType = response.headers.get('content-type') || ''
+  const blob = await response.blob()
+  await assertValidMediaBlob(blob, contentType)
+  return blob
+}
+
+/** 浏览器直连资源地址下载，不依赖 fetch/CORS，用于 media-proxy 未配置的生产环境 */
+function triggerDirectResourceDownload(url: string, fileName: string) {
+  triggerLinkDownload(url, fileName)
 }
 
 async function fetchMediaBlob(sourceUrl: string): Promise<Blob> {
@@ -141,24 +177,19 @@ async function fetchMediaBlob(sourceUrl: string): Promise<Blob> {
     if (!response.ok) {
       throw new Error(`download failed: ${response.status}`)
     }
-    return response.blob()
+    return readResponseBlob(response)
   }
 
-  const downloadUrl = resolveOriginalMediaDownloadUrl(trimmed)
-  const candidates = [
-    ...buildMediaProxyCandidates(downloadUrl),
-    ...(isSameOriginUrl(downloadUrl) ? [downloadUrl] : []),
-    downloadUrl,
-  ]
+  const candidates = buildDownloadFetchCandidates(trimmed)
 
   let lastError: unknown
-  for (const candidate of [...new Set(candidates)]) {
+  for (const candidate of candidates) {
     try {
       const response = await fetch(candidate)
       if (!response.ok) {
         throw new Error(`download failed: ${response.status}`)
       }
-      return await response.blob()
+      return await readResponseBlob(response)
     } catch (error) {
       lastError = error
     }
@@ -190,8 +221,14 @@ export async function downloadCanvasMedia(options: {
 
     const downloadUrl = resolveOriginalMediaDownloadUrl(sourceUrl)
     const fileName = resolveDownloadFileName(downloadUrl, options.fileName, options.fallbackName)
-    const blob = await fetchMediaBlob(sourceUrl)
-    triggerBlobDownload(blob, fileName)
+
+    try {
+      const blob = await fetchMediaBlob(sourceUrl)
+      triggerBlobDownload(blob, fileName)
+    } catch {
+      // 生产 nginx 未配置 /media-proxy 时会返回 index.html；直连 OSS 不经过 fetch，可正常下载
+      triggerDirectResourceDownload(downloadUrl, fileName)
+    }
   })
 }
 
