@@ -342,6 +342,8 @@ export function registerCore(bind: CanvasBindings) {
   let activeVideoDialogueNodeId = ''
   let autoSaveDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let autoSaveEnabled = true
+  let lastCanvasFileInputClickAt = 0
+  const CANVAS_FILE_INPUT_CLICK_DEBOUNCE_MS = 400
   let canvasContentReady = false
   let saveInFlight = false
   let pendingRemoteSaveType: 'MANUAL' | 'AUTO' | null = null
@@ -4370,6 +4372,10 @@ export function registerCore(bind: CanvasBindings) {
     multiple: boolean,
     nodeId = '',
   ) {
+    const now = Date.now()
+    if (now - lastCanvasFileInputClickAt < CANVAS_FILE_INPUT_CLICK_DEBOUNCE_MS) return
+    lastCanvasFileInputClickAt = now
+
     pendingUploadNodeId.value = nodeId
     fileInputAccept.value = accept
     fileInputMultiple.value = multiple

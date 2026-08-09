@@ -225,7 +225,7 @@
         title="重新上传图片"
         :disabled="data.uploadState === 'uploading'"
         @mousedown.stop
-        @pointerdown.stop="onUploadPointerDown"
+        @pointerdown.stop
         @click.stop="onUploadClick"
       >
         <svg
@@ -481,11 +481,6 @@ function onMarkRemoveClick(mark: ImageMarkItem, event: MouseEvent) {
   event.stopPropagation()
   const g = getGraph() as CanvasGraph
   g.__removeImageElementMark?.(mark.id)
-}
-
-function onUploadPointerDown(event: PointerEvent) {
-  if (event.button !== 0) return
-  onUploadClick()
 }
 
 function onUploadClick() {
