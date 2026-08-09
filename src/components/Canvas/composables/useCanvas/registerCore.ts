@@ -10467,7 +10467,7 @@ export function registerCore(bind: CanvasBindings) {
 
   function syncGroupBlankHoverCursor(event: MouseEvent) {
     const root = graphRef.value
-    if (!root || groupOverlayDrag.active || panMode.value) {
+    if (!root || groupOverlayDrag.active) {
       root?.classList.remove('canvas__graph--group-blank-hover')
       return
     }
@@ -10501,7 +10501,12 @@ export function registerCore(bind: CanvasBindings) {
     if (!g || !root || !group) return
 
     stopGroupOverlayDrag()
+    cancelBlankPanGesture()
     cancelActiveRubberband(g)
+
+    const scroller = getScroller(g)
+    const suspendCanvasPan = panMode.value
+    if (suspendCanvasPan) scroller?.togglePanning(false)
 
     groupOverlayDrag.active = true
     groupOverlayDrag.nodeIds = [...group.nodeIds]
@@ -10547,6 +10552,7 @@ export function registerCore(bind: CanvasBindings) {
       ended = true
       stopGroupOverlayDrag()
       cancelActiveRubberband(g)
+      if (suspendCanvasPan && panMode.value) scroller?.togglePanning(true)
       updateGroupToolbarPosition()
       scheduleHistoryPush()
     }
@@ -10774,7 +10780,32 @@ export function registerCore(bind: CanvasBindings) {
     openFileUploadPicker('image/*,video/*', 'any', true)
   }
 
-  const { altVoiceTimer, bindKeyboard, unbindKeyboard, bindLongPressPan, unbindLongPressPan, endSpacePan } =
+  function handleGroupBlankMouseDown({ e }: { e: MouseEvent }) {
+    if (e.button !== 0) return
+    if (e.detail >= 2) {
+      resetCanvasPanCursorState()
+      return
+    }
+
+    if (showVideoGenCanvasPickMode.value || showImageDialogueCanvasPickMode.value) {
+      return
+    }
+
+    const groupId = findGroupBlankAreaAtClientPoint(e.clientX, e.clientY)
+    if (!groupId) return
+
+    const g = graph.value
+    if (!g) return
+
+    cancelBlankPanGesture()
+    cancelActiveRubberband(g)
+    e.preventDefault()
+    e.stopPropagation()
+    onGroupOverlaySelectGroup(groupId)
+    onGroupOverlayDragStart({ event: e, groupId })
+  }
+
+  const { altVoiceTimer, bindKeyboard, unbindKeyboard, bindLongPressPan, unbindLongPressPan, endSpacePan, cancelBlankPanGesture } =
     useCanvasKeyboard({
     graph,
     panMode,
@@ -10801,6 +10832,8 @@ export function registerCore(bind: CanvasBindings) {
     triggerCanvasUploadShortcut,
     getScroller,
     setRubberbandEnabled,
+    isGroupBlankDragTarget: (clientX, clientY) =>
+      Boolean(findGroupBlankAreaAtClientPoint(clientX, clientY)),
   })
 
   function onScrollerScroll() {
@@ -10916,37 +10949,14 @@ export function registerCore(bind: CanvasBindings) {
     bindGraphInteraction(instance)
     bindScrollerScrollListener(instance)
     bindKeyboard()
+    instance.on('blank:dblclick', handleBlankDblClick)
+    instance.on('blank:mousedown', handleGroupBlankMouseDown)
     bindLongPressPan(instance)
 
     // 挂载即把全画布各层背景刷成当前主题色，避免拖拽到内容区外露出建图时的深色底（视图分层感）
     applyCanvasBgTheme(instance, canvasBgTheme.value, gridVisible.value)
 
-    instance.on('blank:dblclick', handleBlankDblClick)
-    instance.on('blank:mousedown', ({ e }: { e: MouseEvent }) => {
-      if (e.button !== 0) return
-      if (e.detail >= 2) {
-        resetCanvasPanCursorState()
-        return
-      }
-
-      if (
-        panMode.value ||
-        showVideoGenCanvasPickMode.value ||
-        showImageDialogueCanvasPickMode.value
-      ) {
-        return
-      }
-
-      const groupId = findGroupBlankAreaAtClientPoint(e.clientX, e.clientY)
-      if (!groupId) return
-
-      cancelActiveRubberband(instance)
-      e.preventDefault()
-      e.stopPropagation()
-      onGroupOverlaySelectGroup(groupId)
-      onGroupOverlayDragStart({ event: e, groupId })
-    })
-    instance.on('scale', ({ sx }) => {
+    instance.on('scale', ({ sx }: { sx: number }) => {
       syncZoom(sx)
       updateEdgeDeleteButtonPosition()
       scheduleViewportNodeVisibilitySync()
