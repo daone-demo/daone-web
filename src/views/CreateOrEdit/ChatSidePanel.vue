@@ -308,7 +308,7 @@
                 @mousedown.prevent
                 @click="selectChatSkill(skill)"
               >
-                <span class="chat-panel__skill-picker-name">{{ skill.name }}</span>
+                <span class="chat-panel__skill-picker-name">{{ skill.displayName }}</span>
                 <span class="chat-panel__skill-picker-cmd">/{{ skill.command }}</span>
                 <span
                   v-if="skill.description"
@@ -930,6 +930,7 @@ function resolveEnabledSkill(skill: any) {
 }
 
 function selectChatSkill(skill: ChatSkillItem | Record<string, any>) {
+  console.log('skill123123', skill);
   selectedSkill.value = skill
   skillChipSelected.value = false
   message.value = message.value.replace(/(^|\s)\/[a-zA-Z0-9-]*$/, '').trimStart()
@@ -1317,7 +1318,7 @@ function buildMessageText() {
     .map((item) => `@${item.role} ${item.name}`)
     .join(' ')
   const skillPrefix = selectedSkill.value
-    ? `/${selectedSkill.value.command || selectedSkill.value.name || selectedSkill.value.displayName}`
+    ? `${selectedSkill.value.command || selectedSkill.value.displayName || selectedSkill.value.name}`
     : ''
   const body = message.value.trim()
   return [mentionText, skillPrefix, body].filter(Boolean).join(' ')
@@ -2284,6 +2285,8 @@ function sendMessage() {
   const skillName = String(
     selectedSkill.value?.name ?? selectedSkill.value?.skillName ?? '',
   ).trim() || undefined
+
+  console.log('skillName', skillName)
 
   void onSendMessage(session, payloadAttachments, text, assetIds, { nodeId, skillName })
 }
