@@ -9,7 +9,7 @@ import { registerCore } from './registerCore'
 
 export type { CanvasEmit, CanvasDomRefs } from './types'
 
-import type { ChatTaskCreatedPayload } from '../../chatGenerationTask'
+import type { ChatTaskCreatedPayload, ChatTaskUpdatedPayload } from '../../chatGenerationTask'
 
 type GridSplitCanvasApi = Pick<
   CanvasState,
@@ -101,6 +101,7 @@ type GridSplitCanvasApi = Pick<
     | 'closeProjectBrowser'
   > & {
     createNodeFromChatTask: (payload: ChatTaskCreatedPayload) => Node | null
+    updateChatTaskNodeTitleFromPayload: (payload: ChatTaskUpdatedPayload) => void
     overlayGroupSelection: import('vue').ComputedRef<
       ReturnType<typeof import('../../nodeGroup').getGroupSelectionForNodeIds> | null
     >

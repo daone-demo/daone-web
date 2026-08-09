@@ -10,7 +10,7 @@
     "build": "vue-tsc -b && vite build",
     "build:dev": "vue-tsc -b && vite build --mode development",
     "build:test": "vue-tsc -b && vite build --mode test",
-    "build:prod": "vue-tsc -b && vite build --mode production && cp deploy/nginx-media-proxy.conf dist/nginx-media-proxy.conf",
+    "build:prod": "vue-tsc -b && vite build --mode production && cp deploy/nginx-media-proxy.conf deploy/nginx-daone-web.conf deploy/nginx-site.conf dist/",
     "preview": "vite preview",
     "start": "node server.mjs"
   },
