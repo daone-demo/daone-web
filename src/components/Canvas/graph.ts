@@ -1357,24 +1357,13 @@ export function syncAllNodeSizes(graph: Graph) {
   })
 }
 
-/** html-shape 节点在独立 Vue 实例中，主题切换后强制重渲染 */
+/** html-shape 节点同步 DOM 位置/矩阵（Safari 首帧、缩放平移、加载后校正） */
 export function refreshCanvasNodeViews(graph: Graph) {
-  graph.getNodes().forEach((node) => {
-    refreshCanvasNodeView(graph, node)
-  })
   syncHtmlShapeViews(graph)
 }
 
 /** 强制重渲染单个 html-shape 节点视图 */
 export function refreshCanvasNodeView(graph: Graph, node: Node) {
-  const view = graph.findViewByCell(node) as HTMLShapeView | null
-  if (!view) return
-
-  if (typeof view.mounted === 'function') {
-    view.mounted()
-    view.mounted = undefined
-    view.update()
-  }
   syncHtmlShapeViews(graph, node)
 }
 

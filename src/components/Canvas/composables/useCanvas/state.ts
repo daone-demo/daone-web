@@ -9,7 +9,6 @@ import {
   type VideoHdMagnification,
   createDefaultVideoDialogueSettings,
 } from '../../constants'
-import { refreshCanvasNodeViews } from '../../graph'
 import type { ImageExpandOverlayLayout } from '../../graph'
 import type { ImageEditTextEntry } from '../../editTextUtils'
 import { setSharedCanvasBgTheme } from '../../useCanvasBgTheme'
@@ -58,8 +57,6 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
 
   watch(canvasBgTheme, (theme) => {
     setSharedCanvasBgTheme(theme)
-    const g = graph.value
-    if (g) refreshCanvasNodeViews(g)
   }, { immediate: true })
 
   const panMode = ref(false)

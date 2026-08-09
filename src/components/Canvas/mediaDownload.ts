@@ -24,6 +24,7 @@ export interface CanvasMediaBatchDownloadResult {
   success: number
   failed: number
   packagedAsZip: boolean
+  proxyUnavailable?: boolean
 }
 
 function fileNameFromUrl(url: string): string {
@@ -163,7 +164,7 @@ async function readResponseBlob(response: Response): Promise<Blob> {
   return blob
 }
 
-/** 浏览器直连资源地址下载，不依赖 fetch/CORS，用于 media-proxy 未配置的生产环境 */
+/** 浏览器直连资源地址下载，不依赖 fetch/CORS（仅单文件下载兜底） */
 function triggerDirectResourceDownload(url: string, fileName: string) {
   triggerLinkDownload(url, fileName)
 }
@@ -207,30 +208,6 @@ function triggerBlobDownload(blob: Blob, fileName: string) {
   } finally {
     window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000)
   }
-}
-
-/** fetch 失败时逐个触发浏览器直连下载（不依赖 CORS，但无法打包 zip） */
-async function downloadBatchViaDirectLinks(items: CanvasMediaDownloadItem[]): Promise<number> {
-  let success = 0
-  await runWithoutLeaveConfirm(async () => {
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index]
-      const sourceUrl = item.url.trim()
-      if (!sourceUrl) continue
-      const downloadUrl = resolveOriginalMediaDownloadUrl(sourceUrl)
-      const fileName = resolveDownloadFileName(downloadUrl, item.fileName, item.fileName)
-      try {
-        triggerDirectResourceDownload(downloadUrl, fileName)
-        success += 1
-      } catch {
-        // ignore
-      }
-      if (index < items.length - 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 350))
-      }
-    }
-  })
-  return success
 }
 
 /** 通过资源链接触发浏览器下载，避免当前页跳转触发离开确认 */
@@ -285,7 +262,6 @@ export async function downloadCanvasMediaBatch(
 
   const zip = new JSZip()
   let success = 0
-  const failedItems: CanvasMediaDownloadItem[] = []
 
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index]
@@ -295,7 +271,7 @@ export async function downloadCanvasMediaBatch(
       zip.file(item.fileName, blob)
       success += 1
     } catch {
-      failedItems.push(item)
+      // ignore
     }
   }
 
@@ -307,24 +283,19 @@ export async function downloadCanvasMediaBatch(
       triggerBlobDownload(zipBlob, formatBatchZipName())
     })
 
-    if (failedItems.length) {
-      const directSuccess = await downloadBatchViaDirectLinks(failedItems)
-      return {
-        total,
-        success: success + directSuccess,
-        failed: total - success - directSuccess,
-        packagedAsZip: true,
-      }
+    return {
+      total,
+      success,
+      failed: total - success,
+      packagedAsZip: true,
     }
-
-    return { total, success, failed: 0, packagedAsZip: true }
   }
 
-  const directSuccess = await downloadBatchViaDirectLinks(items)
   return {
     total,
-    success: directSuccess,
-    failed: total - directSuccess,
+    success: 0,
+    failed: total,
     packagedAsZip: false,
+    proxyUnavailable: true,
   }
 }

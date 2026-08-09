@@ -193,8 +193,6 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
 
   watch(canvasBgTheme, (theme) => {
     setSharedCanvasBgTheme(theme)
-    const g = graph.value
-    if (g) refreshCanvasNodeViews(g)
   }, { immediate: true })
 
   const panMode = ref(false)

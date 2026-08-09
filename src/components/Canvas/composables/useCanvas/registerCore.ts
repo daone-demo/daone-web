@@ -9680,7 +9680,11 @@ export function registerCore(bind: CanvasBindings) {
       hideLoading()
 
       if (!result.success) {
-        message.error('批量下载失败，请稍后重试')
+        message.error(
+          result.proxyUnavailable
+            ? '批量打包下载失败：服务器未配置媒体代理，请联系运维部署 deploy/nginx-media-proxy.conf'
+            : '批量下载失败，请稍后重试',
+        )
         return
       }
       if (result.failed > 0) {

@@ -10,8 +10,9 @@
     "build": "vue-tsc -b && vite build",
     "build:dev": "vue-tsc -b && vite build --mode development",
     "build:test": "vue-tsc -b && vite build --mode test",
-    "build:prod": "vue-tsc -b && vite build --mode production",
-    "preview": "vite preview"
+    "build:prod": "vue-tsc -b && vite build --mode production && cp deploy/nginx-media-proxy.conf dist/nginx-media-proxy.conf",
+    "preview": "vite preview",
+    "start": "node server.mjs"
   },
   "dependencies": {
     "@antv/x6": "^2.19.2",

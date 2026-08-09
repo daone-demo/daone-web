@@ -26,9 +26,10 @@ export function buildMediaProxyCandidates(url: string): string[] {
 
   const pathname = parsed.pathname.replace(/^\//, '')
   const search = parsed.search || ''
+  const encoded = encodeURIComponent(parsed.toString())
   const candidates = [
+    `/media-proxy?url=${encoded}`,
     `/media-proxy/${parsed.hostname}/${pathname}${search}`,
-    `/media-proxy?url=${encodeURIComponent(parsed.toString())}`,
   ]
   return [...new Set(candidates)]
 }
