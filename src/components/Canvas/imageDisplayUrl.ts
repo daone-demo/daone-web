@@ -1,4 +1,4 @@
-import { buildMediaProxyCandidates } from './mediaProxy'
+import { buildMediaProxyCandidates, buildMediaProxyPathUrl } from './mediaProxy'
 
 const OSS_HOST_RE = /\.aliyuncs\.com$/i
 const DEFAULT_CANVAS_IMAGE_MAX_EDGE = 960
@@ -93,7 +93,7 @@ export function getCanvasImageDisplayUrl(
       if (!inner) return source
       const processed = appendOssResizeProcess(inner, maxEdge)
       if (processed === inner) return source
-      return `/media-proxy?url=${encodeURIComponent(processed)}`
+      return buildMediaProxyPathUrl(processed) ?? source
     } catch {
       return source
     }

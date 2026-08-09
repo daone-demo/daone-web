@@ -171,15 +171,28 @@ function triggerDirectResourceDownload(url: string, fileName: string) {
   triggerLinkDownload(url, fileName)
 }
 
+function isMediaProxyEndpointResponse(response: Response): boolean {
+  if (response.status === 400 || response.status === 403 || response.status === 502) return true
+  const contentType = (response.headers.get('content-type') || '').toLowerCase()
+  return response.ok && !contentType.includes('text/html')
+}
+
 async function probeMediaProxyAvailable(): Promise<boolean> {
-  try {
-    const response = await fetch('/media-proxy?url=', { method: 'GET', cache: 'no-store' })
-    if (response.status === 400 || response.status === 403) return true
-    const contentType = (response.headers.get('content-type') || '').toLowerCase()
-    return response.ok && !contentType.includes('text/html')
-  } catch {
-    return false
+  const probes = [
+    '/media-proxy/probe.invalid.aliyuncs.com/probe',
+    '/media-proxy?url=',
+  ]
+
+  for (const probeUrl of probes) {
+    try {
+      const response = await fetch(probeUrl, { method: 'GET', cache: 'no-store' })
+      if (isMediaProxyEndpointResponse(response)) return true
+    } catch {
+      // try next probe
+    }
   }
+
+  return false
 }
 
 async function fetchMediaBlob(sourceUrl: string, options: { proxyOnly?: boolean } = {}): Promise<Blob> {

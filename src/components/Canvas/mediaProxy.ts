@@ -16,29 +16,36 @@ function parseRemoteMediaUrl(url: string): URL | null {
 }
 
 /**
- * 将跨域对象存储地址转为同源代理地址，便于 canvas 读取像素。
- * - path 风格 `/media-proxy/<host>/<path>`：适配 nginx 反代（dev 静态部署）
- * - query 风格 `/media-proxy?url=...`：适配 Vercel Serverless
+ * Path 风格同源代理：`/media-proxy/<host>/<path>`（nginx / Vercel path rewrite）
  */
-export function buildMediaProxyCandidates(url: string): string[] {
+export function buildMediaProxyPathUrl(url: string): string | null {
   const parsed = parseRemoteMediaUrl(url)
-  if (!parsed) return []
+  if (!parsed) return null
 
   const pathname = parsed.pathname.replace(/^\//, '')
   const search = parsed.search || ''
-  const encoded = encodeURIComponent(parsed.toString())
-  const candidates = [
-    `/media-proxy?url=${encoded}`,
-    `/media-proxy/${parsed.hostname}/${pathname}${search}`,
-  ]
-  return [...new Set(candidates)]
+  return `/media-proxy/${parsed.hostname}/${pathname}${search}`
 }
 
 /**
- * 将跨域对象存储地址转为同源 `/media-proxy?url=...`（兼容旧调用）。
+ * 将跨域对象存储地址转为同源代理地址，便于 canvas 读取像素。
+ * - path 风格 `/media-proxy/<host>/<path>`：生产 nginx 与 Vercel path rewrite
+ * - query 风格 `/media-proxy?url=...`：仅作兜底（部分环境 query location 未生效）
  */
+export function buildMediaProxyCandidates(url: string): string[] {
+  const pathStyle = buildMediaProxyPathUrl(url)
+  if (!pathStyle) return []
+
+  const parsed = parseRemoteMediaUrl(url)
+  if (!parsed) return [pathStyle]
+
+  const encoded = encodeURIComponent(parsed.toString())
+  return [...new Set([pathStyle, `/media-proxy?url=${encoded}`])]
+}
+
+/** 将跨域对象存储地址转为同源 `/media-proxy/<host>/<path>` */
 export function toMediaProxyUrl(url: string): string | null {
-  return buildMediaProxyCandidates(url)[0] ?? null
+  return buildMediaProxyPathUrl(url)
 }
 
 export function isAllowedMediaProxyHost(hostname: string) {
