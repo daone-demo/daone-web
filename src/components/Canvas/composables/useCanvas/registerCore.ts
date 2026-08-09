@@ -10379,7 +10379,7 @@ export function registerCore(bind: CanvasBindings) {
   }
 
   function syncGroupedNodeMove(_node: Node) {
-    // 组内节点允许单独拖拽；整组平移仅通过组标签拖拽（onGroupOverlayDragStart）
+    // 组内节点允许单独拖拽；整组平移可通过组标题或组空白区域拖拽
   }
 
   function handleGroupedNodeMoved(node: Node) {
@@ -10431,9 +10431,63 @@ export function registerCore(bind: CanvasBindings) {
     return (activeHit ?? hits[hits.length - 1]).groupId
   }
 
+  function findNodeAtGraphLocalPoint(
+    g: Graph,
+    local: { x: number; y: number },
+  ): Node | null {
+    const candidates = g
+      .getNodes()
+      .sort((a, b) => (b.getZIndex() ?? 0) - (a.getZIndex() ?? 0))
+
+    return (
+      candidates.find((node) => {
+        const bbox = node.getBBox()
+        return (
+          local.x >= bbox.x &&
+          local.x <= bbox.x + bbox.width &&
+          local.y >= bbox.y &&
+          local.y <= bbox.y + bbox.height
+        )
+      }) ?? null
+    )
+  }
+
+  /** 指针落在组框内且未命中任何节点时，视为组空白区域 */
+  function findGroupBlankAreaAtClientPoint(clientX: number, clientY: number): string | null {
+    const groupId = findGroupIdAtContainerPoint(clientX, clientY)
+    if (!groupId) return null
+
+    const g = graph.value
+    if (!g) return null
+
+    const local = clientPointToGraphLocal(g, clientX, clientY)
+    if (findNodeAtGraphLocalPoint(g, local)) return null
+    return groupId
+  }
+
+  function syncGroupBlankHoverCursor(event: MouseEvent) {
+    const root = graphRef.value
+    if (!root || groupOverlayDrag.active || panMode.value) {
+      root?.classList.remove('canvas__graph--group-blank-hover')
+      return
+    }
+
+    const groupId = findGroupBlankAreaAtClientPoint(event.clientX, event.clientY)
+    root.classList.toggle('canvas__graph--group-blank-hover', Boolean(groupId))
+  }
+
+  function onCanvasGroupBlankPointerMove(event: MouseEvent) {
+    syncGroupBlankHoverCursor(event)
+  }
+
+  function resetGroupBlankHoverCursor() {
+    graphRef.value?.classList.remove('canvas__graph--group-blank-hover')
+    graphRef.value?.classList.remove('canvas__graph--group-blank-grabbing')
+  }
+
   function onGroupOverlayDragStart(payload: { event: MouseEvent; groupId: string }) {
     const g = graph.value
-    const root = canvasRef.value
+    const root = graphRef.value
     const group = resolveOverlayGroup(payload.groupId)
     if (!g || !root || !group) return
 
@@ -10443,6 +10497,8 @@ export function registerCore(bind: CanvasBindings) {
     const local = clientPointToGraphLocal(g, payload.event.clientX, payload.event.clientY)
     groupOverlayDrag.lastGraphX = local.x
     groupOverlayDrag.lastGraphY = local.y
+    resetGroupBlankHoverCursor()
+    graphRef.value?.classList.add('canvas__graph--group-blank-grabbing')
 
     const onMove = (moveEvent: MouseEvent) => {
       if (!groupOverlayDrag.active) return
@@ -10474,6 +10530,7 @@ export function registerCore(bind: CanvasBindings) {
 
     const onUp = () => {
       groupOverlayDrag.active = false
+      resetGroupBlankHoverCursor()
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
       scheduleHistoryPush()
@@ -10842,8 +10899,27 @@ export function registerCore(bind: CanvasBindings) {
 
     instance.on('blank:dblclick', handleBlankDblClick)
     instance.on('blank:mousedown', ({ e }: { e: MouseEvent }) => {
-      if (e.detail < 2) return
-      resetCanvasPanCursorState()
+      if (e.button !== 0) return
+      if (e.detail >= 2) {
+        resetCanvasPanCursorState()
+        return
+      }
+
+      if (
+        panMode.value ||
+        showVideoGenCanvasPickMode.value ||
+        showImageDialogueCanvasPickMode.value
+      ) {
+        return
+      }
+
+      const groupId = findGroupBlankAreaAtClientPoint(e.clientX, e.clientY)
+      if (!groupId) return
+
+      e.preventDefault()
+      e.stopPropagation()
+      onGroupOverlaySelectGroup(groupId)
+      onGroupOverlayDragStart({ event: e, groupId })
     })
     instance.on('scale', ({ sx }) => {
       syncZoom(sx)
@@ -10944,6 +11020,8 @@ export function registerCore(bind: CanvasBindings) {
       handleMediaNodeContextMenu(node.id, e.clientX, e.clientY, e)
     })
     canvasRef.value?.addEventListener('contextmenu', onCanvasImageContextMenuCapture, true)
+    canvasRef.value?.addEventListener('mousemove', onCanvasGroupBlankPointerMove)
+    canvasRef.value?.addEventListener('mouseleave', resetGroupBlankHoverCursor)
     instance.on('blank:click', ({ e }: { e: MouseEvent }) => {
       clearImageElementMarkSelection()
       const groupId = findGroupIdAtContainerPoint(e.clientX, e.clientY)
@@ -11339,6 +11417,9 @@ export function registerCore(bind: CanvasBindings) {
     unbindLongPressPan()
     unbindGraphDropListeners()
     canvasRef.value?.removeEventListener('contextmenu', onCanvasImageContextMenuCapture, true)
+    canvasRef.value?.removeEventListener('mousemove', onCanvasGroupBlankPointerMove)
+    canvasRef.value?.removeEventListener('mouseleave', resetGroupBlankHoverCursor)
+    resetGroupBlankHoverCursor()
     setCanvasAssetDropHandler(null)
     clearCanvasAssetDrag()
     if (historyPushTimer) clearTimeout(historyPushTimer)

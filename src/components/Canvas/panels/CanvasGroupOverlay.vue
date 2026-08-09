@@ -20,7 +20,7 @@
     <div
       v-else
       class="canvas__group-label"
-      title="双击修改标题，拖动可移动整组"
+      title="双击修改标题；拖动标题或组内空白区域可移动整组"
       @mousedown.stop="onLabelMouseDown"
       @dblclick.stop="startEditing"
     >

@@ -3942,6 +3942,23 @@
   }
 }
 
+.canvas__graph {
+  &--group-blank-hover,
+  &--group-blank-grabbing {
+    .x6-graph-scroller,
+    .x6-graph-scroller-paper {
+      cursor: grab;
+    }
+  }
+
+  &--group-blank-grabbing {
+    .x6-graph-scroller,
+    .x6-graph-scroller-paper {
+      cursor: grabbing;
+    }
+  }
+}
+
 .canvas__group-bg {
   position: absolute;
   z-index: 1;
