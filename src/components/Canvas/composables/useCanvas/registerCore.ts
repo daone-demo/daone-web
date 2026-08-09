@@ -11365,7 +11365,21 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
-    selectGraphNodes(nodes.map((node) => node.id))
+    const ids = nodes.map((node) => node.id)
+    if (ids.length >= 2) {
+      ungroupSelection(g, ids)
+      const groupId = assignGroupId(g, ids)
+      if (groupId) {
+        const title = String(record.name ?? record.projectName ?? '').trim()
+        if (title) {
+          setGroupTitle(g, groupId, title)
+        }
+      }
+    }
+
+    selectGraphNodes(ids)
+    bumpToolbarRevision()
+    updateNodeToolbar()
     syncNodeCount()
     scheduleHistoryPush()
     ensureInfiniteCanvasArea(g)

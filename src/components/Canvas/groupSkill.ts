@@ -1,5 +1,6 @@
 import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData, NodeKind } from './constants'
+import { isAiGeneratedCanvasNode } from './constants'
 
 export interface GroupSkillNode {
   id: string
@@ -13,6 +14,8 @@ export interface GroupSkillNode {
   assetId?: string
   /** 兼容旧字段：部分图片节点资产落在 sourceAssetId */
   sourceAssetId?: string
+  /** 是否为 AI 生成结果，落画布后不可重新上传原图 */
+  aiGenerated?: boolean
   position: { x: number; y: number }
 }
 
@@ -53,6 +56,7 @@ export function extractGroupSubgraph(graph: Graph, nodeIds: string[]): GroupSkil
         fileName: data.fileName,
         assetId,
         sourceAssetId,
+        aiGenerated: isAiGeneratedCanvasNode(data) || undefined,
         position: { x: pos.x, y: pos.y },
       }
     })
@@ -140,6 +144,7 @@ export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | n
         fileName: typeof item.fileName === 'string' ? item.fileName : undefined,
         assetId: readOptionalString(item.assetId ?? item.asset_id),
         sourceAssetId: readOptionalString(item.sourceAssetId ?? item.source_asset_id),
+        aiGenerated: item.aiGenerated === true ? true : undefined,
         position: {
           x: Number(position?.x ?? 0),
           y: Number(position?.y ?? 0),
@@ -149,6 +154,24 @@ export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | n
   }
 
   return nodes.length ? { nodes, edges } : null
+}
+
+/** 推断工作流中 AI 生成节点（显式标记或组内有上游连线的图/视频节点） */
+export function inferWorkflowAiGeneratedNodeIds(workflow: GroupSkillSubgraph): Set<string> {
+  const internalTargets = new Set(workflow.edges.map((edge) => edge.target))
+  const result = new Set<string>()
+
+  for (const node of workflow.nodes) {
+    if (node.aiGenerated) {
+      result.add(node.id)
+      continue
+    }
+    if (internalTargets.has(node.id) && (node.kind === 'image' || node.kind === 'video')) {
+      result.add(node.id)
+    }
+  }
+
+  return result
 }
 
 /** 从接口记录或本地技能解析元素组结构 */

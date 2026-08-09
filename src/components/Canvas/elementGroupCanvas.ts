@@ -4,7 +4,7 @@ import { applyRemoteImageToNode, applyRemoteVideoToNode } from './upload'
 import { connectGenEdge } from './imageGen'
 import { addCanvasNode } from './graph'
 import type { GroupSkillNode, GroupSkillSubgraph } from './groupSkill'
-import { parseElementGroupRecord } from './groupSkill'
+import { inferWorkflowAiGeneratedNodeIds, parseElementGroupRecord } from './groupSkill'
 
 function resolvePersistedAssetId(item: GroupSkillNode) {
   return item.assetId?.trim() || item.sourceAssetId?.trim() || ''
@@ -12,6 +12,16 @@ function resolvePersistedAssetId(item: GroupSkillNode) {
 
 function createNodeId() {
   return `node_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function applyAiGeneratedNodeOverrides(item: GroupSkillNode, overrides: Partial<CanvasNodeData>) {
+  if (item.kind === 'image') {
+    overrides.imageGenState = 'done'
+    return
+  }
+  if (item.kind === 'video') {
+    overrides.generationTaskType = 'VIDEO'
+  }
 }
 
 export function spawnElementGroupOnCanvas(
@@ -28,6 +38,7 @@ export function spawnElementGroupOnCanvas(
   const offsetY = anchor.y - centerY
 
   const createdNodes: Node[] = []
+  const aiGeneratedIds = inferWorkflowAiGeneratedNodeIds(workflow)
 
   for (const item of workflow.nodes) {
     const newId = createNodeId()
@@ -48,6 +59,9 @@ export function spawnElementGroupOnCanvas(
       if (item.sourceAssetId?.trim()) {
         overrides.sourceAssetId = item.sourceAssetId.trim()
       }
+    }
+    if (aiGeneratedIds.has(item.id)) {
+      applyAiGeneratedNodeOverrides(item, overrides)
     }
 
     const point = {
