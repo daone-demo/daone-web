@@ -447,10 +447,10 @@ export function resolveGroupMemberIdsForDragPreview(graph: Graph, draggingNode: 
   const groupFrame = resolveGroupGraphBBox(
     graph,
     groupId,
-    members.map((item) => item.id),
+    others.map((item) => item.id),
   )
   const stillCovered = boxesIntersect(draggingNode.getBBox(), groupFrame)
-  if (stillCovered || shouldRetainGroupMembershipOnLeave(graph, draggingNode)) {
+  if (stillCovered) {
     return members.map((item) => item.id)
   }
 
@@ -459,9 +459,8 @@ export function resolveGroupMemberIdsForDragPreview(graph: Graph, draggingNode: 
 
 /**
  * 组内节点单独拖拽结束后的成员同步：
- * - 仍与其余成员选区相交 → 留在组内
- * - 拖出选区且为 AI / 有 AI 衍生 → 留在组内
- * - 拖出选区且为无衍生的非 AI 节点 → 移出打组；剩余 ≤1 则解散
+ * - 仍在组选区（其余成员占位 + 已保存选区）内 → 留在组内
+ * - 拖出选区 → 移出打组；剩余 ≤1 则解散
  */
 
 /** 组框应包围的节点：仅包含实际打组成员 */
@@ -543,18 +542,10 @@ export function reconcileGroupMembershipAfterNodeMove(graph: Graph, node: Node):
   const groupFrame = resolveGroupGraphBBox(
     graph,
     groupId,
-    members.map((item) => item.id),
+    others.map((item) => item.id),
   )
   const stillCovered = boxesIntersect(node.getBBox(), groupFrame)
   if (stillCovered) {
-    return {
-      removed: false,
-      groupId,
-      remainingIds: members.map((item) => item.id),
-    }
-  }
-
-  if (shouldRetainGroupMembershipOnLeave(graph, node)) {
     return {
       removed: false,
       groupId,
