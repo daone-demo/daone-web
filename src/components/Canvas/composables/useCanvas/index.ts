@@ -109,6 +109,7 @@ type GridSplitCanvasApi = Pick<
         groupId: string
         nodeIds: string[]
         nodeCount: number
+        title: string
         left: number
         top: number
         width: number
@@ -122,6 +123,7 @@ type GridSplitCanvasApi = Pick<
       groupId: string
     }) => void
     onGroupOverlaySelectGroup: (groupId: string) => void
+    onGroupOverlayTitleChange: (payload: { groupId: string; title: string }) => void
   }
 
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {

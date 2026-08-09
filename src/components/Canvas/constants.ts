@@ -91,6 +91,15 @@ export interface CanvasNodeData {
   hideNodeMeta?: boolean
   /** 节点所属分组 ID，同组节点可整组移动与解组 */
   groupId?: string
+  /** 打组后用户自定义的选区范围（可大于节点占位，随画布持久化） */
+  groupSelectionBox?: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
+  /** 打组后用户自定义的组标题 */
+  groupTitle?: string
   imageGenTask?: ImageGenTask
   sourceNodeId?: string
   sourcePreviewUrl?: string

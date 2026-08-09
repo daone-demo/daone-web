@@ -93,11 +93,12 @@
       :key="item.groupId"
       :group-id="item.groupId"
       :box="item"
-      :node-count="item.nodeCount"
+      :title="item.title"
       :active="overlayGroupSelection?.groupId === item.groupId"
       @drag-start="onGroupOverlayDragStart"
       @resize-start="onGroupOverlayResizeStart"
       @select-group="onGroupOverlaySelectGroup"
+      @title-change="onGroupOverlayTitleChange"
     />
 
     <CanvasGroupToolbar
@@ -654,6 +655,7 @@ const {
   onGroupOverlayDragStart,
   onGroupOverlayResizeStart,
   onGroupOverlaySelectGroup,
+  onGroupOverlayTitleChange,
   onImageCropComplete,
   onImageResizePointerDown,
   onImageGridSplitComplete,

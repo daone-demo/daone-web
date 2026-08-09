@@ -23,11 +23,11 @@ const CANVAS_BG_THEMES: Record<CanvasBgTheme, CanvasBgThemeMeta> = {
   },
   light: {
     label: '灰色',
-    pageBg: '#e8eaed',
-    graphBg: '#e8eaed',
+    pageBg: '#FAFAFA',
+    graphBg: '#FAFAFA',
     gridColor: '#b8bcc4',
     edgeStroke: '#c8ccd2',
-    minimapBg: '#e8eaed',
+    minimapBg: '#FAFAFA',
   },
 }
 

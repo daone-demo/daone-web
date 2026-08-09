@@ -19,11 +19,11 @@
   color: #f3f4f6;
 
   &--bg-light {
-    --canvas-page-bg: #0000000d;
-    --canvas-graph-bg: #0000000d;
-    --canvas-group-bg: transparent;
+    --canvas-page-bg: #FAFAFA;
+    --canvas-graph-bg: #FAFAFA;
+    --canvas-group-bg: #EDEDED;
     --canvas-group-border: rgba(100, 116, 139, 0.42);
-    --canvas-group-bg-active: transparent;
+    --canvas-group-bg-active: #EDEDED;
     --canvas-group-border-active: rgba(71, 85, 105, 0.55);
     --canvas-group-handle-bg: #fff;
     --canvas-group-handle-border: rgba(71, 85, 105, 0.28);
@@ -63,11 +63,11 @@
 
     .canvas__minimap-host {
       border-color: #d1d5db;
-      background: #e8eaed;
+      background: #FAFAFA;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 
       .x6-widget-minimap {
-        background-color: #e8eaed;
+        background-color: #FAFAFA;
       }
     }
 
@@ -3995,6 +3995,26 @@
   &:active {
     cursor: grabbing;
   }
+}
+
+.canvas__group-label-input {
+  position: absolute;
+  top: -24px;
+  left: 0;
+  z-index: 5;
+  min-width: 120px;
+  max-width: 240px;
+  padding: 2px 6px;
+  border: 1px solid rgba(71, 85, 105, 0.35);
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #374151;
+  outline: none;
+  pointer-events: auto;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
 }
 
 .canvas__group-handle {

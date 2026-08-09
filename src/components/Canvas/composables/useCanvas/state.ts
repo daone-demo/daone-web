@@ -144,6 +144,7 @@ export function createCanvasState(emit: CanvasEmit, domRefs: CanvasDomRefs) {
       groupId: string
       nodeIds: string[]
       nodeCount: number
+      title: string
       left: number
       top: number
       width: number

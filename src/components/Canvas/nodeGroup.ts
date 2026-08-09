@@ -33,8 +33,8 @@ function createGroupId() {
 
 function clearNodeGroupId(node: Node) {
   const data = node.getData() as CanvasNodeData
-  if (!data.groupId) return
-  const { groupId: _removed, ...rest } = data
+  if (!data.groupId && !data.groupSelectionBox && !data.groupTitle) return
+  const { groupId: _removed, groupSelectionBox: _box, groupTitle: _title, ...rest } = data
   node.setData(rest as CanvasNodeData, { overwrite: true })
 }
 
@@ -284,6 +284,91 @@ export function getGroupGraphBBox(graph: Graph, nodeIds: string[]) {
   }
 }
 
+function unionGroupBoxes(a: GroupGraphBox, b: GroupGraphBox): GroupGraphBox {
+  const minX = Math.min(a.x, b.x)
+  const minY = Math.min(a.y, b.y)
+  const maxX = Math.max(a.x + a.width, b.x + b.width)
+  const maxY = Math.max(a.y + a.height, b.y + b.height)
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  }
+}
+
+export function getStoredGroupSelectionBox(graph: Graph, groupId: string): GroupGraphBox | null {
+  for (const member of getNodesInGroup(graph, groupId)) {
+    const box = (member.getData() as CanvasNodeData).groupSelectionBox
+    if (box && box.width > 0 && box.height > 0) return { ...box }
+  }
+  return null
+}
+
+export function setStoredGroupSelectionBox(graph: Graph, groupId: string, box: GroupGraphBox) {
+  const snapshot = { ...box }
+  getNodesInGroup(graph, groupId).forEach((node) => {
+    const data = node.getData() as CanvasNodeData
+    node.setData({ ...data, groupSelectionBox: snapshot })
+  })
+}
+
+/** 组框：节点占位与已保存选区的并集（支持大于内容的自定义范围） */
+export function resolveGroupGraphBBox(graph: Graph, groupId: string, nodeIds: string[]): GroupGraphBox {
+  const contentBox = getGroupGraphBBox(graph, nodeIds)
+  const stored = getStoredGroupSelectionBox(graph, groupId)
+  if (!stored) return contentBox
+  return unionGroupBoxes(contentBox, stored)
+}
+
+/** 调整组框后保存范围；缩小时移出框外的成员会被移出组 */
+export function applyGroupSelectionBoxResize(
+  graph: Graph,
+  groupId: string,
+  box: GroupGraphBox,
+): string[] {
+  setStoredGroupSelectionBox(graph, groupId, box)
+
+  getNodesInGroup(graph, groupId).forEach((node) => {
+    if (!boxesIntersect(node.getBBox(), box)) clearNodeGroupId(node)
+  })
+
+  const nextMembers = getNodesInGroup(graph, groupId)
+  if (nextMembers.length <= 1) {
+    clearGroupId(graph, groupId)
+    return nextMembers.map((node) => node.id)
+  }
+
+  return nextMembers.map((node) => node.id)
+}
+
+export function getGroupTitle(graph: Graph, groupId: string): string {
+  for (const member of getNodesInGroup(graph, groupId)) {
+    const title = (member.getData() as CanvasNodeData).groupTitle?.trim()
+    if (title) return title
+  }
+  return ''
+}
+
+export function setGroupTitle(graph: Graph, groupId: string, title: string) {
+  const trimmed = title.trim()
+  getNodesInGroup(graph, groupId).forEach((node) => {
+    const data = node.getData() as CanvasNodeData
+    if (!trimmed) {
+      const { groupTitle: _removed, ...rest } = data
+      node.setData(rest as CanvasNodeData, { overwrite: true })
+      return
+    }
+    node.setData({ ...data, groupTitle: trimmed })
+  })
+}
+
+export function resolveGroupDisplayTitle(graph: Graph, groupId: string, nodeCount: number): string {
+  const custom = getGroupTitle(graph, groupId)
+  if (custom) return custom
+  return `分组 ${nodeCount} 个节点`
+}
+
 export function normalizeGroupMembership(graph: Graph, removedNodeId: string) {
   const node = graph.getCellById(removedNodeId)
   if (!node?.isNode()) return
@@ -335,11 +420,12 @@ export function resolveGroupMemberIdsForDragPreview(graph: Graph, draggingNode: 
   const others = members.filter((item) => item.id !== draggingNode.id)
   if (!others.length) return members.map((item) => item.id)
 
-  const othersBox = getGroupGraphBBox(
+  const groupFrame = resolveGroupGraphBBox(
     graph,
-    others.map((item) => item.id),
+    groupId,
+    members.map((item) => item.id),
   )
-  const stillCovered = boxesIntersect(draggingNode.getBBox(), othersBox)
+  const stillCovered = boxesIntersect(draggingNode.getBBox(), groupFrame)
   if (stillCovered || shouldRetainGroupMembershipOnLeave(graph, draggingNode)) {
     return members.map((item) => item.id)
   }
@@ -393,11 +479,12 @@ export function reconcileGroupMembershipAfterNodeMove(graph: Graph, node: Node):
   const others = members.filter((item) => item.id !== node.id)
   if (!others.length) return null
 
-  const othersBox = getGroupGraphBBox(
+  const groupFrame = resolveGroupGraphBBox(
     graph,
-    others.map((item) => item.id),
+    groupId,
+    members.map((item) => item.id),
   )
-  const stillCovered = boxesIntersect(node.getBBox(), othersBox)
+  const stillCovered = boxesIntersect(node.getBBox(), groupFrame)
   if (stillCovered) {
     return {
       removed: false,

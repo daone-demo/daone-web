@@ -24,15 +24,17 @@ import {
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
   getNodeVideoGenPromptPosition, getNodePromptPosition, getNodeSidePanelPosition, getNodeTextDownloadPosition,
-  getNodeTextFormatToolbarPosition, getGroupScreenBox, getMultiSelectionToolbarPosition,   getNodeToolbarPosition,
+  getNodeTextFormatToolbarPosition, getGroupScreenBox, getGroupScreenBoxFromGraphBox, getMultiSelectionToolbarPosition,   getNodeToolbarPosition,
   getImageMarkHintPosition,
   getNodeSize, getScroller, getEdgeDeleteButtonPosition, graphLocalToContainerOffset, refreshCanvasNodeViews, syncAllNodeSizes, syncNodeShapeFromData, getImageNodeMediaScreenBox, getImageExpandOverlayLayout, syncImageNodeSizeToMediaAspect, startImageNodeCornerResize,
   hydrateImageNodeDimensions, hydrateMissingImageNodeDimensions, formatDimensions,
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, assignGroupId,
   getCompleteGroupSelection, getGroupBoxNodeIds, getGroupDisplayMemberCount, getGroupGraphBBox,
   getGroupSelectionForNodeIds, getNodesInGroup, listCanvasGroups, mergeStoryboardGroup,
-  normalizeGroupMembership, reconcileGroupMembershipAfterNodeMove, resizeGroupGraphBox,
-  syncGroupBySelectionBox, ungroupSelection,
+  applyGroupSelectionBoxResize, normalizeGroupMembership, reconcileGroupMembershipAfterNodeMove,
+  resizeGroupGraphBox, resolveGroupGraphBBox, getStoredGroupSelectionBox, setStoredGroupSelectionBox,
+  resolveGroupDisplayTitle, setGroupTitle,
+  ungroupSelection,
   type GroupResizeHandle,
   ensureImageTextEdge, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, applyRemoteVideoToNode, runUploadSimulation, uploadAssetFile, previewUrlToUploadFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, setCanvasUploadCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage, cancelPendingCanvasSnapshotStorage,
@@ -8226,10 +8228,12 @@ export function registerCore(bind: CanvasBindings) {
           box.y + box.height,
           overlayRoot,
         )
+        const nodeCount = group.nodeIds.length
         return {
           groupId: group.groupId,
           nodeIds: group.nodeIds,
-          nodeCount: group.nodeIds.length,
+          nodeCount,
+          title: resolveGroupDisplayTitle(g, group.groupId, nodeCount),
           left: topLeft.left,
           top: topLeft.top,
           width: Math.max(0, bottomRight.left - topLeft.left),
@@ -8244,11 +8248,13 @@ export function registerCore(bind: CanvasBindings) {
           : null
       const boxNodeIds = getGroupBoxNodeIds(g, group.groupId, draggingMember)
       const nodeCount = getGroupDisplayMemberCount(g, group.groupId, draggingMember)
-      const box = getGroupScreenBox(g, boxNodeIds, overlayRoot)
+      const graphBox = resolveGroupGraphBBox(g, group.groupId, boxNodeIds)
+      const box = getGroupScreenBoxFromGraphBox(g, graphBox, overlayRoot)
       return {
         groupId: group.groupId,
         nodeIds: group.nodeIds,
         nodeCount,
+        title: resolveGroupDisplayTitle(g, group.groupId, nodeCount),
         left: box.left,
         top: box.top,
         width: box.width,
@@ -9592,7 +9598,7 @@ export function registerCore(bind: CanvasBindings) {
       if (!cell?.isNode()) return
       const clone = (cell as Node).clone() as Node
       const cloneData = clone.getData() as CanvasNodeData
-      const { groupId: _groupId, ...cloneRest } = cloneData
+      const { groupId: _groupId, groupSelectionBox: _box, groupTitle: _title, ...cloneRest } = cloneData
       clone.setData(cloneRest as CanvasNodeData)
       const pos = clone.getPosition()
       clone.position(pos.x + 32, pos.y + 32)
@@ -10433,6 +10439,7 @@ export function registerCore(bind: CanvasBindings) {
 
     groupOverlayDrag.active = true
     groupOverlayDrag.nodeIds = [...group.nodeIds]
+    const groupId = group.groupId
     const local = clientPointToGraphLocal(g, payload.event.clientX, payload.event.clientY)
     groupOverlayDrag.lastGraphX = local.x
     groupOverlayDrag.lastGraphY = local.y
@@ -10450,6 +10457,16 @@ export function registerCore(bind: CanvasBindings) {
         const pos = node.getPosition()
         node.position(pos.x + dx, pos.y + dy)
       })
+
+      const storedBox = getStoredGroupSelectionBox(g, groupId)
+      if (storedBox) {
+        setStoredGroupSelectionBox(g, groupId, {
+          ...storedBox,
+          x: storedBox.x + dx,
+          y: storedBox.y + dy,
+        })
+      }
+
       groupOverlayDrag.lastGraphX = current.x
       groupOverlayDrag.lastGraphY = current.y
       updateNodeToolbar()
@@ -10474,6 +10491,26 @@ export function registerCore(bind: CanvasBindings) {
     nextTick(() => updateGroupToolbarPosition())
   }
 
+  function onGroupOverlayTitleChange(payload: { groupId: string; title: string }) {
+    const g = graph.value
+    if (!g) return
+
+    const members = getNodesInGroup(g, payload.groupId)
+    if (members.length < 2) return
+
+    const defaultTitle = `分组 ${members.length} 个节点`
+    const next = payload.title.trim()
+    if (!next || next === defaultTitle) {
+      setGroupTitle(g, payload.groupId, '')
+    } else {
+      setGroupTitle(g, payload.groupId, next)
+    }
+
+    bumpToolbarRevision()
+    updateGroupToolbarPosition()
+    scheduleHistoryPush()
+  }
+
   function onGroupOverlayResizeStart(payload: {
     event: MouseEvent
     handle: GroupResizeHandle
@@ -10483,7 +10520,7 @@ export function registerCore(bind: CanvasBindings) {
     const group = resolveOverlayGroup(payload.groupId)
     if (!g || !group) return
 
-    const startBox = getGroupGraphBBox(g, getGroupBoxNodeIds(g, group.groupId))
+    const startBox = resolveGroupGraphBBox(g, group.groupId, getGroupBoxNodeIds(g, group.groupId))
     const startPointer = clientPointToGraphLocal(g, payload.event.clientX, payload.event.clientY)
 
     groupOverlayResize.active = true
@@ -10519,7 +10556,7 @@ export function registerCore(bind: CanvasBindings) {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
 
-      const memberIds = syncGroupBySelectionBox(g, groupId, box)
+      const memberIds = applyGroupSelectionBoxResize(g, groupId, box)
       if (memberIds.length >= 2) {
         selectGraphNodes(memberIds)
       } else if (memberIds.length === 1) {
@@ -10548,7 +10585,7 @@ export function registerCore(bind: CanvasBindings) {
     if (source?.isNode()) {
       node = (source as Node).clone() as Node
       const clonedData = node.getData() as CanvasNodeData
-      const { groupId: _groupId, ...clonedRest } = clonedData
+      const { groupId: _groupId, groupSelectionBox: _box, groupTitle: _title, ...clonedRest } = clonedData
       node.setData(clonedRest as CanvasNodeData)
       const pos = node.getPosition()
       node.position(pos.x + 32 + offsetIndex * 16, pos.y + 32 + offsetIndex * 16)
@@ -11493,6 +11530,7 @@ export function registerCore(bind: CanvasBindings) {
     onGroupOverlayDragStart,
     onGroupOverlayResizeStart,
     onGroupOverlaySelectGroup,
+    onGroupOverlayTitleChange,
     onImageCropComplete,
     onImageResizePointerDown,
     onImageDialogueAddCanvasNode,

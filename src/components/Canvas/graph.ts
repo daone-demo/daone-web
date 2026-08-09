@@ -1070,8 +1070,30 @@ export function getGroupScreenBox(
     maxY = Math.max(maxY, bbox.y + bbox.height)
   })
 
-  const topLeft = graphLocalToContainerOffset(graph, minX - padding, minY - padding, container)
-  const bottomRight = graphLocalToContainerOffset(graph, maxX + padding, maxY + padding, container)
+  return getGroupScreenBoxFromGraphBox(
+    graph,
+    {
+      x: minX - padding,
+      y: minY - padding,
+      width: maxX - minX + padding * 2,
+      height: maxY - minY + padding * 2,
+    },
+    container,
+  )
+}
+
+export function getGroupScreenBoxFromGraphBox(
+  graph: Graph,
+  box: { x: number; y: number; width: number; height: number },
+  container: HTMLElement,
+) {
+  const topLeft = graphLocalToContainerOffset(graph, box.x, box.y, container)
+  const bottomRight = graphLocalToContainerOffset(
+    graph,
+    box.x + box.width,
+    box.y + box.height,
+    container,
+  )
 
   return {
     left: topLeft.left,
