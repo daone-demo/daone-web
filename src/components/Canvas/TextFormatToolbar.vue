@@ -2,19 +2,27 @@
   <div class="tft" :class="{ 'tft--light': isLightTheme }" @mousedown.stop.prevent>
     <!-- 颜色 -->
     <div class="tft__group tft__color">
-      <button
-        type="button"
-        class="tft__swatch"
-        title="文字颜色"
-        :style="{ background: color }"
-        @click="toggle('color')"
-      />
-      <button
-        type="button"
-        class="tft__swatch tft__swatch--none"
-        title="清除颜色"
-        @click="emitCmd('clear-color')"
-      />
+      <a-popover placement="top">
+        <template #content>
+          <span>文字颜色</span>
+        </template>
+        <button
+          type="button"
+          class="tft__swatch"
+          :style="{ background: color }"
+          @click="toggle('color')"
+        />
+      </a-popover>
+      <a-popover placement="top">
+        <template #content>
+          <span>清除颜色</span>
+        </template>
+        <button
+          type="button"
+          class="tft__swatch tft__swatch--none"
+          @click="emitCmd('clear-color')"
+        />
+      </a-popover>
       <div v-if="open === 'color'" class="tft__pop tft__pop--color">
         <button
           v-for="c in TEXT_COLOR_SWATCHES"
@@ -32,10 +40,15 @@
 
     <!-- 字体 -->
     <div class="tft__group">
-      <button type="button" class="tft__select" @click="toggle('family')">
-        <span class="tft__select-text">{{ familyLabel }}</span>
-        <span class="tft__chev" v-html="chevSvg" />
-      </button>
+      <a-popover placement="top">
+        <template #content>
+          <span>字体</span>
+        </template>
+        <button type="button" class="tft__select" @click="toggle('family')">
+          <span class="tft__select-text">{{ familyLabel }}</span>
+          <span class="tft__chev" v-html="chevSvg" />
+        </button>
+      </a-popover>
       <div v-if="open === 'family'" class="tft__pop">
         <button
           v-for="f in TEXT_FONT_FAMILIES"
@@ -53,10 +66,15 @@
 
     <!-- 字重 -->
     <div class="tft__group">
-      <button type="button" class="tft__select" @click="toggle('weight')">
-        <span class="tft__select-text">{{ weightLabel }}</span>
-        <span class="tft__chev" v-html="chevSvg" />
-      </button>
+      <a-popover placement="top">
+        <template #content>
+          <span>字重</span>
+        </template>
+        <button type="button" class="tft__select" @click="toggle('weight')">
+          <span class="tft__select-text">{{ weightLabel }}</span>
+          <span class="tft__chev" v-html="chevSvg" />
+        </button>
+      </a-popover>
       <div v-if="open === 'weight'" class="tft__pop">
         <button
           v-for="w in TEXT_FONT_WEIGHTS"
@@ -76,34 +94,47 @@
 
     <!-- 加粗 / 斜体 -->
     <div class="tft__bi">
-      <button
-        type="button"
-        class="tft__btn"
-        :class="{ 'tft__btn--on': boldActive }"
-        title="加粗"
-        @click="toggleMark('bold')"
-      >
-        <b>B</b>
-      </button>
-      <button
-        type="button"
-        class="tft__btn"
-        :class="{ 'tft__btn--on': italicActive }"
-        title="斜体"
-        @click="toggleMark('italic')"
-      >
-        <em>I</em>
-      </button>
+      <a-popover placement="top">
+        <template #content>
+          <span>加粗</span>
+        </template>
+        <button
+          type="button"
+          class="tft__btn"
+          :class="{ 'tft__btn--on': boldActive }"
+          @click="toggleMark('bold')"
+        >
+          <b>B</b>
+        </button>
+      </a-popover>
+      <a-popover placement="top">
+        <template #content>
+          <span>斜体</span>
+        </template>
+        <button
+          type="button"
+          class="tft__btn"
+          :class="{ 'tft__btn--on': italicActive }"
+          @click="toggleMark('italic')"
+        >
+          <em>I</em>
+        </button>
+      </a-popover>
     </div>
 
     <span class="tft__divider" />
 
     <!-- 字号 -->
     <div class="tft__group">
-      <button type="button" class="tft__select tft__select--sm" @click="toggle('size')">
-        <span class="tft__select-text">{{ size }}</span>
-        <span class="tft__chev" v-html="chevSvg" />
-      </button>
+      <a-popover placement="top">
+        <template #content>
+          <span>字号</span>
+        </template>
+        <button type="button" class="tft__select tft__select--sm" @click="toggle('size')">
+          <span class="tft__select-text">{{ size }}</span>
+          <span class="tft__chev" v-html="chevSvg" />
+        </button>
+      </a-popover>
       <div v-if="open === 'size'" class="tft__pop tft__pop--scroll">
         <button
           v-for="s in TEXT_FONT_SIZES"
@@ -120,10 +151,15 @@
 
     <!-- 对齐 -->
     <div class="tft__group">
-      <button type="button" class="tft__btn" title="对齐" @click="toggle('align')">
-        <span class="tft__ico" v-html="alignSvg(align)" />
-        <span class="tft__chev" v-html="chevSvg" />
-      </button>
+      <a-popover placement="top">
+        <template #content>
+          <span>对齐</span>
+        </template>
+        <button type="button" class="tft__btn" @click="toggle('align')">
+          <span class="tft__ico" v-html="alignSvg(align)" />
+          <span class="tft__chev" v-html="chevSvg" />
+        </button>
+      </a-popover>
       <div v-if="open === 'align'" class="tft__pop tft__pop--row">
         <button
           v-for="a in TEXT_ALIGN_OPTIONS"
@@ -141,9 +177,14 @@
 
     <!-- 行距 / 调节 -->
     <div class="tft__group">
-      <button type="button" class="tft__btn" title="行距" @click="toggle('lh')">
-        <span class="tft__ico" v-html="slidersSvg" />
-      </button>
+      <a-popover placement="top">
+        <template #content>
+          <span>行距</span>
+        </template>
+        <button type="button" class="tft__btn" @click="toggle('lh')">
+          <span class="tft__ico" v-html="slidersSvg" />
+        </button>
+      </a-popover>
       <div v-if="open === 'lh'" class="tft__pop">
         <button
           v-for="lh in TEXT_LINE_HEIGHTS"
@@ -161,22 +202,38 @@
     <span class="tft__divider" />
 
     <!-- 下载 / 剪贴板 / 删除 -->
-    <button type="button" class="tft__btn" title="下载文本" @click="emitCmd('download')">
-      <!-- <span class="canvas__node-toolbar-icon" data-icon="download" aria-hidden="true" /> -->
-      <i class="iconfont icon-xiazai1" style="font-size: 16px;"></i>
-    </button>
-    <button type="button" class="tft__btn" title="复制" @click="emitCmd('copy')">
-      <!-- <span class="canvas__node-toolbar-icon" data-icon="copy" aria-hidden="true" /> -->
-      <i class="iconfont icon-fuzhi2" style="font-size: 16px;"></i>
-    </button>
-    <button type="button" class="tft__btn" title="剪切" @click="emitCmd('cut')">
-      <!-- <span class="canvas__node-toolbar-icon" data-icon="cut" aria-hidden="true" /> -->
-      <i class="iconfont icon-jianqie" style="font-size: 16px;"></i>
-    </button>
-    <button type="button" class="tft__btn" title="粘贴" @click="emitCmd('paste')">
-      <!-- <span class="canvas__node-toolbar-icon" data-icon="paste" aria-hidden="true" /> -->
-      <i class="iconfont icon-niantie" style="font-size: 16px;"></i>
-    </button>
+    <a-popover placement="top">
+      <template #content>
+        <span>下载文本</span>
+      </template>
+      <button type="button" class="tft__btn" @click="emitCmd('download')">
+        <i class="iconfont icon-xiazai1" style="font-size: 16px;"></i>
+      </button>
+    </a-popover>
+    <a-popover placement="top">
+      <template #content>
+        <span>复制</span>
+      </template>
+      <button type="button" class="tft__btn" @click="emitCmd('copy')">
+        <i class="iconfont icon-fuzhi2" style="font-size: 16px;"></i>
+      </button>
+    </a-popover>
+    <a-popover placement="top">
+      <template #content>
+        <span>剪切</span>
+      </template>
+      <button type="button" class="tft__btn" @click="emitCmd('cut')">
+        <i class="iconfont icon-jianqie" style="font-size: 16px;"></i>
+      </button>
+    </a-popover>
+    <a-popover placement="top">
+      <template #content>
+        <span>粘贴</span>
+      </template>
+      <button type="button" class="tft__btn" @click="emitCmd('paste')">
+        <i class="iconfont icon-niantie" style="font-size: 16px;"></i>
+      </button>
+    </a-popover>
     <button
       type="button"
       class="tft__btn tft__btn--danger"

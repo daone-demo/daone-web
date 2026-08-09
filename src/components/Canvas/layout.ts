@@ -1,10 +1,100 @@
 import type { Graph, Node } from '@antv/x6'
+import type { CanvasNodeData } from './constants'
 import { getScroller } from './graph'
 
 const START_X = 120
 const START_Y = 120
 const GAP_X = 100
 const GAP_Y = 80
+const TASK_BLOCK_GAP_Y = 140
+const UNGROUPED_TASK_KEY = '__ungrouped__'
+
+type NodeBBox = { x: number; y: number; width: number; height: number }
+
+/** 从节点标题提取任务分块键（与组执行逻辑一致：取「-」前前缀） */
+function resolveNodeTaskKey(node: Node): string {
+  const data = node.getData() as CanvasNodeData
+  if (data.groupId) return `__group__:${data.groupId}`
+
+  const title = (data.title || data.fileName || '').trim()
+  if (!title) return UNGROUPED_TASK_KEY
+
+  const dash = title.indexOf('-')
+  if (dash > 0) return title.slice(0, dash).trim()
+  return title
+}
+
+function getNodesBBox(nodes: Node[]): NodeBBox {
+  if (nodes.length === 0) return { x: 0, y: 0, width: 0, height: 0 }
+
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+
+  nodes.forEach((node) => {
+    const { x, y } = node.getPosition()
+    const { width, height } = node.getSize()
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x + width)
+    maxY = Math.max(maxY, y + height)
+  })
+
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+}
+
+function translateNodes(nodes: Node[], dx: number, dy: number) {
+  if (dx === 0 && dy === 0) return
+  nodes.forEach((node) => {
+    const pos = node.getPosition()
+    node.position(pos.x + dx, pos.y + dy)
+  })
+}
+
+function getClusterAnchor(nodes: Node[]) {
+  const bbox = getNodesBBox(nodes)
+  return { x: bbox.x, y: bbox.y }
+}
+
+function clusterNodesByTask(nodes: Node[]): Node[][] {
+  const clusters = new Map<string, Node[]>()
+  nodes.forEach((node) => {
+    const key = resolveNodeTaskKey(node)
+    const bucket = clusters.get(key)
+    if (bucket) bucket.push(node)
+    else clusters.set(key, [node])
+  })
+
+  return [...clusters.values()].sort((a, b) => {
+    const anchorA = getClusterAnchor(a)
+    const anchorB = getClusterAnchor(b)
+    if (Math.abs(anchorA.y - anchorB.y) < 80) return anchorA.x - anchorB.x
+    return anchorA.y - anchorB.y
+  })
+}
+
+function layoutClusterAt(graph: Graph, nodes: Node[], anchorX: number, anchorY: number): NodeBBox {
+  tidyNodes(graph, nodes)
+  const bbox = getNodesBBox(nodes)
+  translateNodes(nodes, anchorX - bbox.x, anchorY - bbox.y)
+  return getNodesBBox(nodes)
+}
+
+/** 按任务分块整理画布：同任务节点聚为一组，组间留足间距 */
+function layoutByTaskBlocks(graph: Graph, nodes: Node[]) {
+  const clusters = clusterNodesByTask(nodes)
+  if (clusters.length <= 1) {
+    tidyNodes(graph, nodes)
+    return
+  }
+
+  let blockY = START_Y
+  clusters.forEach((clusterNodes) => {
+    const bbox = layoutClusterAt(graph, clusterNodes, START_X, blockY)
+    blockY += bbox.height + TASK_BLOCK_GAP_Y
+  })
+}
 
 function layoutGrid(nodes: Node[]) {
   const sorted = [...nodes].sort((a, b) => {
@@ -184,12 +274,12 @@ export function layoutNodesInGroup(
   })
 }
 
-/** 整理画布：按连线关系分层排列，无连线时网格排列 */
+/** 整理画布：按任务分块排列，块内按连线关系或网格整理 */
 export function tidyCanvas(graph: Graph) {
   const nodes = graph.getNodes()
   if (nodes.length === 0) return
 
-  tidyNodes(graph, nodes)
+  layoutByTaskBlocks(graph, nodes)
 
   const scroller = getScroller(graph)
   scroller?.resize()

@@ -77,34 +77,46 @@
           </div>
         </div>
       </div>
-      <button
-        type="button"
-        class="canvas__brand-add"
-        title="新建"
-        @click="emit('new-project')"
-      >
-        <i class="iconfont icon-black" style="font-size: 18px;"></i>
-      </button>
+      <a-popover placement="bottom">
+        <template #content>
+          <span>新建</span>
+        </template>
+        <button
+          type="button"
+          class="canvas__brand-add"
+          @click="emit('new-project')"
+        >
+          <i class="iconfont icon-black" style="font-size: 18px;"></i>
+        </button>
+      </a-popover>
       <span class="canvas__brand-divider" aria-hidden="true" />
       <div class="canvas__brand-group">
-        <button
-          type="button"
-          class="canvas__brand-icon-btn"
-          title="撤销"
-          :disabled="!canUndo"
-          @click="emit('undo')"
-        >
-          <i class="iconfont icon-shangyibu"></i>
-        </button>
-        <button
-          type="button"
-          class="canvas__brand-icon-btn"
-          title="重做"
-          :disabled="!canRedo"
-          @click="emit('redo')"
-        >
-          <i class="iconfont icon-xiayibu1"></i>
-        </button>
+        <a-popover placement="bottom">
+          <template #content>
+            <span>上一步</span>
+          </template>
+          <button
+            type="button"
+            class="canvas__brand-icon-btn"
+            :disabled="!canUndo"
+            @click="emit('undo')"
+          >
+            <i class="iconfont icon-shangyibu"></i>
+          </button>
+        </a-popover>
+        <a-popover placement="bottom">
+          <template #content>
+            <span>下一步</span>
+          </template>
+          <button
+            type="button"
+            class="canvas__brand-icon-btn"
+            :disabled="!canRedo"
+            @click="emit('redo')"
+          >
+            <i class="iconfont icon-xiayibu1"></i>
+          </button>
+        </a-popover>
       </div>
       <span class="canvas__brand-divider" aria-hidden="true" />
       <div class="canvas__brand-group">
