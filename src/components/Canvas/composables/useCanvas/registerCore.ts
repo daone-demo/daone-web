@@ -10613,7 +10613,9 @@ export function registerCore(bind: CanvasBindings) {
     const group = resolveOverlayGroup(payload.groupId)
     if (!g || !group) return
 
-    const startBox = resolveGroupGraphBBox(g, group.groupId, getGroupBoxNodeIds(g, group.groupId))
+    const memberIds = getNodesInGroup(g, group.groupId).map((node) => node.id)
+    const memberContentBox = getGroupGraphBBox(g, memberIds)
+    const startBox = resolveGroupGraphBBox(g, group.groupId, memberIds)
     const startPointer = clientPointToGraphLocal(g, payload.event.clientX, payload.event.clientY)
 
     groupOverlayResize.active = true
@@ -10635,6 +10637,7 @@ export function registerCore(bind: CanvasBindings) {
         groupOverlayResize.handle as GroupResizeHandle,
         dx,
         dy,
+        memberContentBox,
       )
       updateGroupToolbarPosition()
     }

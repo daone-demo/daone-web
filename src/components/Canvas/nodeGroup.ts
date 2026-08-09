@@ -155,6 +155,7 @@ export function resizeGroupGraphBox(
   handle: GroupResizeHandle,
   dx: number,
   dy: number,
+  minBox?: GroupGraphBox,
 ): GroupGraphBox {
   let { x, y, width, height } = start
   const min = GROUP_BOX_MIN_SIZE
@@ -175,6 +176,35 @@ export function resizeGroupGraphBox(
   if (handle.includes('s')) {
     height = Math.max(min, height + dy)
   }
+
+  const resized = { x, y, width, height }
+  if (!minBox) return resized
+  return clampGroupGraphBoxToContain(resized, minBox)
+}
+
+/** 组框至少需完整包含成员占位（含 padding） */
+export function clampGroupGraphBoxToContain(box: GroupGraphBox, minBox: GroupGraphBox): GroupGraphBox {
+  let { x, y, width, height } = box
+  const minRight = minBox.x + minBox.width
+  const minBottom = minBox.y + minBox.height
+
+  if (x > minBox.x) {
+    width += x - minBox.x
+    x = minBox.x
+  }
+  if (y > minBox.y) {
+    height += y - minBox.y
+    y = minBox.y
+  }
+  if (x + width < minRight) {
+    width = minRight - x
+  }
+  if (y + height < minBottom) {
+    height = minBottom - y
+  }
+
+  width = Math.max(width, GROUP_BOX_MIN_SIZE, minBox.width)
+  height = Math.max(height, GROUP_BOX_MIN_SIZE, minBox.height)
 
   return { x, y, width, height }
 }
@@ -308,19 +338,6 @@ export function getGroupGraphBBox(graph: Graph, nodeIds: string[]) {
   }
 }
 
-function unionGroupBoxes(a: GroupGraphBox, b: GroupGraphBox): GroupGraphBox {
-  const minX = Math.min(a.x, b.x)
-  const minY = Math.min(a.y, b.y)
-  const maxX = Math.max(a.x + a.width, b.x + b.width)
-  const maxY = Math.max(a.y + a.height, b.y + b.height)
-  return {
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY,
-  }
-}
-
 export function getStoredGroupSelectionBox(graph: Graph, groupId: string): GroupGraphBox | null {
   for (const member of getNodesInGroup(graph, groupId)) {
     const box = (member.getData() as CanvasNodeData).groupSelectionBox
@@ -337,33 +354,23 @@ export function setStoredGroupSelectionBox(graph: Graph, groupId: string, box: G
   })
 }
 
-/** 组框：节点占位与已保存选区的并集（支持大于内容的自定义范围） */
+/** 组框：有手动保存的选区时以选区为准，否则按成员占位自适应 */
 export function resolveGroupGraphBBox(graph: Graph, groupId: string, nodeIds: string[]): GroupGraphBox {
-  const contentBox = getGroupGraphBBox(graph, nodeIds)
   const stored = getStoredGroupSelectionBox(graph, groupId)
-  if (!stored) return contentBox
-  return unionGroupBoxes(contentBox, stored)
+  if (stored) return stored
+  return getGroupGraphBBox(graph, nodeIds)
 }
 
-/** 调整组框后保存范围；缩小时移出框外的成员会被移出组 */
+/** 调整组框后仅保存范围，不改变组成员；最小范围需包含全部成员 */
 export function applyGroupSelectionBoxResize(
   graph: Graph,
   groupId: string,
   box: GroupGraphBox,
 ): string[] {
-  setStoredGroupSelectionBox(graph, groupId, box)
-
-  getNodesInGroup(graph, groupId).forEach((node) => {
-    if (!boxesIntersect(node.getBBox(), box)) clearNodeGroupId(node)
-  })
-
-  const nextMembers = getNodesInGroup(graph, groupId)
-  if (nextMembers.length <= 1) {
-    clearGroupId(graph, groupId)
-    return nextMembers.map((node) => node.id)
-  }
-
-  return nextMembers.map((node) => node.id)
+  const memberIds = getNodesInGroup(graph, groupId).map((node) => node.id)
+  const minBox = getGroupGraphBBox(graph, memberIds)
+  setStoredGroupSelectionBox(graph, groupId, clampGroupGraphBoxToContain(box, minBox))
+  return memberIds
 }
 
 export function getGroupTitle(graph: Graph, groupId: string): string {

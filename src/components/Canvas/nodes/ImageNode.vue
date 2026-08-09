@@ -563,7 +563,7 @@ onMounted(() => {
   bottom: 100%;
   left: 0;
   right: 0;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
   font-size: 12px;
 }
 
@@ -613,8 +613,8 @@ onMounted(() => {
 }
 
 .image-node__preview-delete {
-  top: -30px;
-  right: -30px;
+  top: -26px;
+  right: -20px;
   z-index: 4;
   border-radius: 50%;
   background: rgba(125, 125, 125, 0.72);
