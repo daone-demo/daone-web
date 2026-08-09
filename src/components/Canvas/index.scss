@@ -2777,6 +2777,7 @@
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
   transform: translateY(-50%);
   pointer-events: auto;
+  user-select: none;
 
   &--floating {
     top: auto;

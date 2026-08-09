@@ -46,6 +46,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
+  user-select: none;
 }
 
 /* 浮动删除按钮：用于没有标题栏的节点状态（选择器/未上传/视频），保证所有节点均可删除 */

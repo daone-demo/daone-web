@@ -7115,11 +7115,16 @@ export function registerCore(bind: CanvasBindings) {
     URL.revokeObjectURL(url)
   }
 
+  function clearCanvasTextSelection() {
+    window.getSelection()?.removeAllRanges()
+  }
+
   function openAddMenuAtGraphPoint(graphPoint: { x: number; y: number }) {
     const g = graph.value
     const overlayRoot = canvasRef.value
     if (!g || !overlayRoot) return
 
+    clearCanvasTextSelection()
     closeConnectMenu()
     addMenuDropPoint.value = graphPoint
 
@@ -8817,6 +8822,7 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
+    clearCanvasTextSelection()
     addMenuDropPoint.value = null
     const overlayRoot = canvasRef.value
     if (overlayRoot) {

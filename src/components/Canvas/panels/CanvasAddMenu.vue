@@ -7,6 +7,7 @@
     }"
     :style="dropPoint ? { left: `${position.left}px`, top: `${position.top}px` } : undefined"
     @mousedown.stop
+    @selectstart.prevent
   >
     <section v-for="group in ADD_NODE_GROUPS" :key="group.title" class="canvas__add-group">
       <h4 class="canvas__add-title">{{ group.title }}</h4>
