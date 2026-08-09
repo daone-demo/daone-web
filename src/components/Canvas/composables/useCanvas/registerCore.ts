@@ -31,7 +31,7 @@ import {
   applyCanvasBgTheme, getCanvasBgThemeMeta, layoutNodesInGroup, tidyCanvas, assignGroupId,
   getCompleteGroupSelection, getGroupBoxNodeIds, getGroupDisplayMemberCount, getGroupGraphBBox,
   getGroupSelectionForNodeIds, getNodesInGroup, listCanvasGroups, mergeStoryboardGroup,
-  applyGroupSelectionBoxResize, normalizeGroupMembership, reconcileGroupMembershipAfterNodeMove,
+  applyGroupSelectionBoxResize, normalizeGroupMembership, reconcileGroupMembershipAfterNodeMove, tryAdoptNodeIntoIntersectingGroup,
   resizeGroupGraphBox, resolveGroupGraphBBox, getStoredGroupSelectionBox, setStoredGroupSelectionBox,
   resolveGroupDisplayTitle, setGroupTitle,
   ungroupSelection,
@@ -10386,14 +10386,14 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     if (!g) return
 
-    const result = reconcileGroupMembershipAfterNodeMove(g, node)
-    if (!result) {
-      const data = node.getData() as CanvasNodeData
-      if (data.groupId) updateGroupToolbarPosition()
+    const leaveResult = reconcileGroupMembershipAfterNodeMove(g, node)
+    if (leaveResult && !leaveResult.removed) {
+      updateGroupToolbarPosition()
       return
     }
 
-    if (result.removed) {
+    const joinResult = tryAdoptNodeIntoIntersectingGroup(g, node)
+    if (leaveResult?.removed || joinResult) {
       bumpToolbarRevision()
     }
     updateGroupToolbarPosition()

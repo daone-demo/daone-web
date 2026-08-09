@@ -56,6 +56,30 @@ function boxesIntersect(
   )
 }
 
+function boxIntersectionArea(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+) {
+  const x = Math.max(a.x, b.x)
+  const y = Math.max(a.y, b.y)
+  const width = Math.min(a.x + a.width, b.x + b.width) - x
+  const height = Math.min(a.y + a.height, b.y + b.height) - y
+  if (width <= 0 || height <= 0) return 0
+  return width * height
+}
+
+function detachNodeFromGroup(graph: Graph, node: Node) {
+  const data = node.getData() as CanvasNodeData
+  const groupId = data.groupId
+  if (!groupId) return
+
+  clearNodeGroupId(node)
+  const remaining = getNodesInGroup(graph, groupId)
+  if (remaining.length <= 1) {
+    clearGroupId(graph, groupId)
+  }
+}
+
 export function getNodesInGroup(graph: Graph, groupId: string): Node[] {
   return graph
     .getNodes()
@@ -462,6 +486,43 @@ export function getGroupDisplayMemberCount(
     return resolveGroupMemberIdsForDragPreview(graph, draggingMember).length
   }
   return getNodesInGroup(graph, groupId).length
+}
+
+/**
+ * 节点拖拽结束后，若落入某个打组选区则编入该组。
+ * 已在目标组内、或未与任何组框相交时不做变更。
+ */
+export function tryAdoptNodeIntoIntersectingGroup(graph: Graph, node: Node): {
+  added: boolean
+  groupId: string
+  memberIds: string[]
+} | null {
+  const nodeBox = node.getBBox()
+  const data = node.getData() as CanvasNodeData
+
+  const candidates = listCanvasGroups(graph)
+    .map(({ groupId, nodeIds }) => ({
+      groupId,
+      box: resolveGroupGraphBBox(graph, groupId, nodeIds),
+    }))
+    .filter(({ box }) => boxesIntersect(nodeBox, box))
+
+  if (!candidates.length) return null
+  if (data.groupId && candidates.some((item) => item.groupId === data.groupId)) return null
+
+  const target = candidates
+    .slice()
+    .sort((a, b) => boxIntersectionArea(nodeBox, b.box) - boxIntersectionArea(nodeBox, a.box))[0]
+
+  detachNodeFromGroup(graph, node)
+  setNodeGroupId(node, target.groupId)
+
+  const memberIds = getNodesInGroup(graph, target.groupId).map((item) => item.id)
+  return {
+    added: true,
+    groupId: target.groupId,
+    memberIds,
+  }
 }
 
 export function reconcileGroupMembershipAfterNodeMove(graph: Graph, node: Node): {

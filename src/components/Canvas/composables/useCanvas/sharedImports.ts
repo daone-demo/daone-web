@@ -119,6 +119,7 @@ export {
   mergeStoryboardGroup,
   normalizeGroupMembership,
   reconcileGroupMembershipAfterNodeMove,
+  tryAdoptNodeIntoIntersectingGroup,
   resizeGroupGraphBox,
   resolveGroupDisplayTitle,
   resolveGroupGraphBBox,
