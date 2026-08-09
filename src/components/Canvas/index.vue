@@ -187,6 +187,7 @@
       @close="closeAssetCenterPanel"
       @select="onSelectAssetCenterItem"
       @add-to-chat="onAddAssetCenterToChat"
+      @delete="onDeleteAssetCenterItem"
     />
 
     <CanvasNodeOverlays
@@ -906,9 +907,29 @@ const onAddAssetCenterToChat = (payload: { id: string; role: string; name: strin
 }
 
 const onLoadSkill = () => {
-  api.queryElementGroups(activeProjectId.value, { pageSize: 50, page: 1 }).then((res: any) => {
-    skillList.value = res.records ?? [];
-  })
+  if (!activeProjectId.value) return
+  assetCenterLoading.value = true
+  api.queryElementGroups(activeProjectId.value, { pageSize: 50, page: 1 })
+    .then((res: any) => {
+      skillList.value = res.records ?? []
+    })
+    .finally(() => {
+      assetCenterLoading.value = false
+    })
+}
+
+const onDeleteAssetCenterItem = async (item: ElementGroupRecord) => {
+  const groupId = item.id
+  if (!activeProjectId.value || !groupId) return
+
+  try {
+    await api.deleteProjectElementGroup(activeProjectId.value, groupId)
+    message.success('删除成功')
+    onLoadSkill()
+  } catch (error) {
+    console.error('[Canvas] delete element group failed', error)
+    message.error('删除失败，请稍后重试')
+  }
 }
 
 const onLoadHistory = async (reset = false) => {

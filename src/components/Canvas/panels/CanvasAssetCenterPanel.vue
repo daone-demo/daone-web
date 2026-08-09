@@ -63,24 +63,43 @@
             </span>
             <span class="canvas__asset-center-item-name">{{ displayName(item) }}</span>
             <div class="canvas__asset-center-item-actions">
-              <button
-                type="button"
-                class="canvas__asset-center-item-action"
-                aria-label="添加到画布"
-                @click.stop="onAddToCanvas(item)"
-              >
-                <span class="canvas__asset-center-item-action-icon canvas__asset-center-item-action-icon--add" aria-hidden="true" />
-                <span class="canvas__asset-center-item-action-tip">添加到画布</span>
-              </button>
-              <button
-                type="button"
-                class="canvas__asset-center-item-action"
-                aria-label="添加到对话"
-                @click.stop="onAddToDialog(item)"
-              >
-                <span class="canvas__asset-center-item-action-icon canvas__asset-center-item-action-icon--mention" aria-hidden="true" />
-                <span class="canvas__asset-center-item-action-tip">添加到对话</span>
-              </button>
+              <a-popover placement="top">
+                <template #content>
+                  <span>删除</span>
+                </template>
+                <button
+                  type="button"
+                  class="canvas__asset-center-item-action"
+                  @click.stop="onDelete(item)"
+                >
+                  <i class="iconfont icon-shanchu" style="font-size: 18px;" />
+                </button>
+              </a-popover>
+              <a-popover placement="top">
+                <template #content>
+                  <span>添加到画布</span>
+                </template>
+                <button
+                  type="button"
+                  class="canvas__asset-center-item-action"
+                  @click.stop="onAddToCanvas(item)"
+                >
+                  <span class="canvas__asset-center-item-action-icon canvas__asset-center-item-action-icon--add" aria-hidden="true" />
+                </button>
+              </a-popover>
+              <a-popover placement="top">
+                <template #content>
+                  <span>添加到对话</span>
+                </template>
+                <button
+                  type="button"
+                  class="canvas__asset-center-item-action"
+                  aria-label="添加到对话"
+                  @click.stop="onAddToDialog(item)"
+                >
+                  <span class="canvas__asset-center-item-action-icon canvas__asset-center-item-action-icon--mention" aria-hidden="true" />
+                </button>
+              </a-popover>
             </div>
           </div>
 
@@ -156,6 +175,7 @@ const emit = defineEmits<{
   close: []
   select: [item: ElementGroupRecord]
   'add-to-chat': [payload: { id: string; role: string; name: string }]
+  delete: [item: ElementGroupRecord]
 }>()
 
 const sectionOpen = ref(true)
@@ -237,6 +257,10 @@ function onAddToDialog(item: ElementGroupRecord) {
     role: getRole(item),
     name: displayName(item),
   })
+}
+
+function onDelete(item: ElementGroupRecord) {
+  emit('delete', item)
 }
 
 function toDragPayload(item: ElementGroupRecord) {

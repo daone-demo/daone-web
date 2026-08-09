@@ -906,9 +906,9 @@ const api = {
   }) {
     return http.put<T>('/canvas/toolbar-preferences', data)
   },
-  /** 删除指定项目。 */
-  deleteProjectElementGroup(groupId: Id) {
-    return http.delete(`/projects/{projectId}/element-groups/${groupId}`)
+  /** 删除画布元素组。 */
+  deleteProjectElementGroup(projectId: Id, groupId: Id) {
+    return http.delete(`/projects/${pathId(projectId)}/element-groups/${pathId(groupId)}`)
   },
   queryMaterialCategories<T = unknown>() {
     return http.get<T>('/materials/categories', {  })
