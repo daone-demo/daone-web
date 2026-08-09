@@ -28,8 +28,9 @@ export function useNodeConnect() {
     event.stopPropagation()
 
     const node = getNode()
-    const g = resolveNodeGraph(node)
-    if (!g || !canOpenConnectMenu(node)) return
+    const resolvedGraph = resolveNodeGraph(node)
+    if (!resolvedGraph || !canOpenConnectMenu(node)) return
+    const g = resolvedGraph
     ;(g as CanvasGraph).__deactivateTextEditorToolbar?.()
 
     if (activeEdgeId) {

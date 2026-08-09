@@ -923,7 +923,7 @@ const onDeleteAssetCenterItem = async (item: ElementGroupRecord) => {
   if (!activeProjectId.value || !groupId) return
 
   try {
-    await api.deleteProjectElementGroup(activeProjectId.value, groupId)
+    await api.deleteProjectElementGroup(activeProjectId.value, String(groupId))
     message.success('删除成功')
     onLoadSkill()
   } catch (error) {
