@@ -2958,6 +2958,7 @@ export function canReplaceImageNodePreview(data?: Partial<CanvasNodeData> | null
   if (!data.previewUrl?.trim()) return false
   if (data.compactPreview) return false
   if (data.gridSplitTile) return false
+  if (data.uploadState === 'uploading') return false
   if (isAiGeneratedImageNode(data)) return false
   return true
 }

@@ -382,7 +382,7 @@ function hasDraggedFiles(event: DragEvent) {
 }
 
 function onDragOver(event: DragEvent) {
-  if (isGridSplitNode.value || isAiGenerated.value) return
+  if (isGridSplitNode.value || isAiGenerated.value || isFileUploading.value) return
   if (!hasDraggedFiles(event)) return
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   isDragOver.value = true
@@ -399,6 +399,7 @@ function onPreviewDragStart(event: DragEvent) {
 }
 
 function uploadImageFile(file: File) {
+  if (isFileUploading.value) return
   const node = getNode()
   const g = node.model?.graph as CanvasGraph | undefined
   if (typeof g?.__uploadFileToCanvasNode === 'function') {
@@ -409,7 +410,7 @@ function uploadImageFile(file: File) {
 }
 
 function onDrop(event: DragEvent) {
-  if (isGridSplitNode.value || isAiGenerated.value) return
+  if (isGridSplitNode.value || isAiGenerated.value || isFileUploading.value) return
   isDragOver.value = false
   const file = event.dataTransfer?.files?.[0]
   if (!file || !file.type.startsWith('image/')) return
@@ -439,6 +440,7 @@ function cancelPendingUpload() {
 
 function onPreviewClick() {
   if (isGridSplitNode.value) return
+  if (isFileUploading.value) return
   // 有预览时单击仅选中节点（由 graph node:click 处理，显示上方操作栏），双击再打开下方对话框
   if (data.previewUrl?.trim() && data.uploadState !== 'uploading') {
     cancelPendingUpload()
@@ -490,6 +492,7 @@ function onUploadClick() {
 }
 
 function onUploadInputChange(event: Event) {
+  if (isFileUploading.value) return
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''

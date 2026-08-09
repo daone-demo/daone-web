@@ -41,6 +41,7 @@ import {
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
+import { isNodeFileUploading } from '../../constants'
 import {
   normalizeOcrRecognizeResult,
   type ImageEditTextChange,
@@ -4398,6 +4399,7 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     const cell = g?.getCellById(nodeId)
     const data = cell?.getData() as CanvasNodeData | undefined
+    if (isNodeFileUploading(data)) return
     const isVideo = data?.kind === 'video'
     triggerFileInputClick(
       isVideo ? 'video/*' : 'image/*',
@@ -4417,6 +4419,7 @@ export function registerCore(bind: CanvasBindings) {
 
     const node = cell as Node
     const data = { ...(node.getData() as CanvasNodeData) }
+    if (isNodeFileUploading(data)) return
     data.mode = 'editor'
     node.setData(data)
 

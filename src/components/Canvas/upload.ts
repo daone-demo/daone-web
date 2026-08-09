@@ -2,6 +2,7 @@ import { message } from 'ant-design-vue'
 import type { Graph, Node } from '@antv/x6'
 import api from '@/services/api'
 import type { CanvasNodeData } from './constants'
+import { isNodeFileUploading } from './constants'
 import { syncGenNodesFromSource } from './imageGen'
 import { syncTextNodesFromImageSource } from './textPrompt'
 import { getNodeSize, syncNodeShapeFromData } from './graph'
@@ -351,7 +352,10 @@ async function uploadCanvasFile(
 }
 
 export async function runUploadSimulation(graphNode: Node, file: File) {
-  const data = { ...(graphNode.getData() as CanvasNodeData) }
+  const existing = graphNode.getData() as CanvasNodeData
+  if (isNodeFileUploading(existing)) return
+
+  const data = { ...existing }
   data.uploadState = 'uploading'
   data.uploadProgress = 0
   data.fileName = file.name

@@ -352,6 +352,7 @@ function canvasGraph() {
 }
 
 function triggerUpload() {
+  if (isFileUploading.value) return
   requestCanvasUpload?.(getNode().id)
 }
 
