@@ -331,9 +331,23 @@ export function shouldRetainGroupMembershipOnLeave(graph: Graph, node: Node): bo
  * - 拖出选区且为 AI / 有 AI 衍生 → 留在组内（组框自动扩大覆盖）
  * - 拖出选区且为无衍生的非 AI 节点 → 移出打组；剩余 ≤1 则解散
  */
-function isGroupDerivedNode(data: CanvasNodeData, memberIdSet: Set<string>): boolean {
+/** 组成员直接衍生的 AI 结果节点（出边直连或 sourceNodeId 指向组成员） */
+function isDirectAiDerivedFromMember(
+  graph: Graph,
+  node: Node,
+  memberIdSet: Set<string>,
+): boolean {
+  const data = node.getData() as CanvasNodeData
+  if (!isAiGeneratedCanvasNode(data)) return false
   if (data.sourceNodeId && memberIdSet.has(data.sourceNodeId)) return true
-  return isAiGeneratedCanvasNode(data)
+
+  for (const edge of graph.getEdges()) {
+    const sourceId = edge.getSourceCellId()
+    if (!sourceId || !memberIdSet.has(sourceId)) continue
+    if (edge.getTargetCellId() === node.id) return true
+  }
+
+  return false
 }
 
 /** 组成员衍生的 AI 结果节点（连线或 sourceNodeId，不计入组成员数但参与组框包围） */
@@ -341,27 +355,10 @@ export function getDerivedAiNodesForGroup(graph: Graph, groupId: string): Node[]
   const members = getNodesInGroup(graph, groupId)
   const memberIdSet = new Set(members.map((item) => item.id))
   const derived: Node[] = []
-  const seen = new Set<string>()
-
-  members.forEach((member) => {
-    graph.getEdges().forEach((edge) => {
-      if (edge.getSourceCellId() !== member.id) return
-      const targetId = edge.getTargetCellId()
-      if (!targetId || seen.has(targetId)) return
-      const target = graph.getCellById(targetId)
-      if (!target?.isNode()) return
-      const data = target.getData() as CanvasNodeData
-      if (!isGroupDerivedNode(data, memberIdSet)) return
-      seen.add(targetId)
-      derived.push(target as Node)
-    })
-  })
 
   graph.getNodes().forEach((node) => {
-    if (seen.has(node.id) || memberIdSet.has(node.id)) return
-    const data = node.getData() as CanvasNodeData
-    if (!isGroupDerivedNode(data, memberIdSet)) return
-    seen.add(node.id)
+    if (memberIdSet.has(node.id)) return
+    if (!isDirectAiDerivedFromMember(graph, node, memberIdSet)) return
     derived.push(node)
   })
 

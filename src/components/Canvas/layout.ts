@@ -7,21 +7,79 @@ const START_Y = 120
 const GAP_X = 100
 const GAP_Y = 80
 const TASK_BLOCK_GAP_Y = 140
-const UNGROUPED_TASK_KEY = '__ungrouped__'
 
 type NodeBBox = { x: number; y: number; width: number; height: number }
 
-/** 从节点标题提取任务分块键（与组执行逻辑一致：取「-」前前缀） */
-function resolveNodeTaskKey(node: Node): string {
+function collectParentNodeIds(
+  graph: Graph,
+  node: Node,
+  nodeMap: Map<string, Node>,
+): string[] {
+  const data = node.getData() as CanvasNodeData
+  const parents = new Set<string>()
+
+  const sourceId = data.sourceNodeId?.trim()
+  if (sourceId && sourceId !== node.id && nodeMap.has(sourceId)) {
+    parents.add(sourceId)
+  }
+
+  graph.getEdges().forEach((edge) => {
+    if (edge.getTargetCellId() !== node.id) return
+    const src = edge.getSourceCellId()
+    if (src && src !== node.id && nodeMap.has(src)) parents.add(src)
+  })
+
+  return [...parents]
+}
+
+function pickLeftmostRootId(rootIds: string[], nodeMap: Map<string, Node>): string {
+  return rootIds.reduce((best, rootId) => {
+    const bestNode = nodeMap.get(best)
+    const rootNode = nodeMap.get(rootId)
+    if (!bestNode) return rootId
+    if (!rootNode) return best
+
+    const bestPos = bestNode.getPosition()
+    const rootPos = rootNode.getPosition()
+    if (rootPos.x < bestPos.x - 1) return rootId
+    if (rootPos.x > bestPos.x + 1) return best
+    return rootPos.y < bestPos.y ? rootId : best
+  })
+}
+
+/** 追溯任务原节点：沿 sourceNodeId 与入边向上，直到无上游 */
+function resolveTaskRootId(
+  graph: Graph,
+  node: Node,
+  nodeMap: Map<string, Node>,
+): string {
+  function walk(current: Node, pathVisited: Set<string>): string {
+    if (pathVisited.has(current.id)) return current.id
+    pathVisited.add(current.id)
+
+    const parents = collectParentNodeIds(graph, current, nodeMap)
+    if (!parents.length) return current.id
+
+    const rootIds = parents.map((parentId) => {
+      const parent = nodeMap.get(parentId)
+      if (!parent) return current.id
+      return walk(parent, new Set(pathVisited))
+    })
+
+    return pickLeftmostRootId(rootIds, nodeMap)
+  }
+
+  return walk(node, new Set())
+}
+
+function resolveNodeClusterKey(
+  graph: Graph,
+  node: Node,
+  nodeMap: Map<string, Node>,
+): string {
   const data = node.getData() as CanvasNodeData
   if (data.groupId) return `__group__:${data.groupId}`
-
-  const title = (data.title || data.fileName || '').trim()
-  if (!title) return UNGROUPED_TASK_KEY
-
-  const dash = title.indexOf('-')
-  if (dash > 0) return title.slice(0, dash).trim()
-  return title
+  return `__root__:${resolveTaskRootId(graph, node, nodeMap)}`
 }
 
 function getNodesBBox(nodes: Node[]): NodeBBox {
@@ -57,10 +115,12 @@ function getClusterAnchor(nodes: Node[]) {
   return { x: bbox.x, y: bbox.y }
 }
 
-function clusterNodesByTask(nodes: Node[]): Node[][] {
+function clusterNodesByTaskRoot(graph: Graph, nodes: Node[]): Node[][] {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]))
   const clusters = new Map<string, Node[]>()
+
   nodes.forEach((node) => {
-    const key = resolveNodeTaskKey(node)
+    const key = resolveNodeClusterKey(graph, node, nodeMap)
     const bucket = clusters.get(key)
     if (bucket) bucket.push(node)
     else clusters.set(key, [node])
@@ -81,9 +141,9 @@ function layoutClusterAt(graph: Graph, nodes: Node[], anchorX: number, anchorY: 
   return getNodesBBox(nodes)
 }
 
-/** 按任务分块整理画布：同任务节点聚为一组，组间留足间距 */
+/** 按任务原节点分块整理画布：同一原节点衍生的节点聚为一组，组间留足间距 */
 function layoutByTaskBlocks(graph: Graph, nodes: Node[]) {
-  const clusters = clusterNodesByTask(nodes)
+  const clusters = clusterNodesByTaskRoot(graph, nodes)
   if (clusters.length <= 1) {
     tidyNodes(graph, nodes)
     return
@@ -274,7 +334,7 @@ export function layoutNodesInGroup(
   })
 }
 
-/** 整理画布：按任务分块排列，块内按连线关系或网格整理 */
+/** 整理画布：按任务原节点分块排列，块内按连线关系或网格整理 */
 export function tidyCanvas(graph: Graph) {
   const nodes = graph.getNodes()
   if (nodes.length === 0) return
