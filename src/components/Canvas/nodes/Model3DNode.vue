@@ -12,7 +12,7 @@
       class="node-port-plus"
       :style="portPlusStyle"
       title="添加连线节点"
-      @mousedown.stop="onPlusPointerDown"
+      @pointerdown.stop="onPlusPointerDown"
     >
       +
     </button>

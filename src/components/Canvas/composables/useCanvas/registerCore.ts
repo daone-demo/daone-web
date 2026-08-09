@@ -10871,6 +10871,7 @@ export function registerCore(bind: CanvasBindings) {
     setRubberbandEnabled,
     isGroupBlankDragTarget: (clientX, clientY) =>
       Boolean(findGroupBlankAreaAtClientPoint(clientX, clientY)),
+    isNodeInteractionPointerTarget: isGraphNodePointerTarget,
   })
 
   function onScrollerScroll() {

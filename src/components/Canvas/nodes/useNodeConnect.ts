@@ -1,5 +1,5 @@
 import { inject, ref } from 'vue'
-import type { Node } from '@antv/x6'
+import type { Graph, Node } from '@antv/x6'
 import type { CanvasGraph } from '../graph'
 import { getFlowEdgeAttrs, getPreviewEdgeAttrs } from '../edgeStyle'
 import type { CanvasNodeData } from '../constants'
@@ -14,16 +14,22 @@ let activeEdgeId: string | null = null
 
 export function useNodeConnect() {
   const getNode = inject<() => Node>('getNode')!
+  const getGraph = inject<(() => Graph | undefined) | undefined>('getGraph', undefined)
   const dragging = ref(false)
 
-  function onPlusPointerDown(event: MouseEvent) {
+  function resolveNodeGraph(node: Node): Graph | null {
+    return getGraph?.() ?? node.model?.graph ?? null
+  }
+
+  /** x6-html-shape 会在 capture 阶段吞掉 button 的 mousedown，需用 pointerdown */
+  function onPlusPointerDown(event: PointerEvent) {
+    if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
 
     const node = getNode()
-    const graph = node.model?.graph
-    if (!graph || !canOpenConnectMenu(node)) return
-    const g = graph
+    const g = resolveNodeGraph(node)
+    if (!g || !canOpenConnectMenu(node)) return
     ;(g as CanvasGraph).__deactivateTextEditorToolbar?.()
 
     if (activeEdgeId) {
@@ -52,14 +58,22 @@ export function useNodeConnect() {
     })
     activeEdgeId = edge.id
 
-    function onMove(e: MouseEvent) {
+    const captureTarget = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+
+    function onMove(e: PointerEvent) {
+      if (e.pointerId !== event.pointerId) return
       const point = g.clientToLocal(e.clientX, e.clientY)
       edge.setTarget(point)
     }
 
-    function onUp(e: MouseEvent) {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
+    function onUp(e: PointerEvent) {
+      if (e.pointerId !== event.pointerId) return
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      if (captureTarget?.hasPointerCapture?.(event.pointerId)) {
+        captureTarget.releasePointerCapture(event.pointerId)
+      }
       dragging.value = false
       activeEdgeId = null
 
@@ -96,8 +110,10 @@ export function useNodeConnect() {
       openMenu?.(sourceId, point)
     }
 
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    captureTarget?.setPointerCapture?.(event.pointerId)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
   }
 
   return { onPlusPointerDown, dragging }

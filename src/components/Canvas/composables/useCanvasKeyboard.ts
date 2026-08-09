@@ -42,6 +42,8 @@ type CanvasKeyboardDeps = {
   setRubberbandEnabled: (enabled: boolean) => void
   /** 指针落在打组空白区域时，不启动空白长按/空格拖拽画布 */
   isGroupBlankDragTarget?: (clientX: number, clientY: number) => boolean
+  /** 指针落在节点交互控件（连线加号等）时，不启动空白长按 */
+  isNodeInteractionPointerTarget?: (clientX: number, clientY: number) => boolean
 }
 
 /** 长按空白处进入拖拽画布的阈值（毫秒） */
@@ -227,6 +229,7 @@ export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {
     if (e.detail >= 2) return
     if (deps.panMode.value || tempPanActive.value || longPressPanActive) return
     if (deps.isGroupBlankDragTarget?.(e.clientX, e.clientY)) return
+    if (deps.isNodeInteractionPointerTarget?.(e.clientX, e.clientY)) return
 
     pressButtonDown = true
     pressStart = { x: e.clientX, y: e.clientY, event: e }
