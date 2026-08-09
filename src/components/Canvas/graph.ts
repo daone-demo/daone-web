@@ -467,6 +467,7 @@ export type CanvasGraph = Graph & {
   __openVideoDialogue?: (nodeId: string) => void
   __deleteCanvasNode?: (nodeId: string) => void
   __uploadFileToCanvasNode?: (nodeId: string, file: File) => void
+  __requestCanvasUpload?: (nodeId: string) => void
   __textEditorRegistry?: TextEditorRegistry
   __requestTextExpand?: (nodeId: string) => void
   __onTextPickerAction?: (key: string, nodeId: string) => void

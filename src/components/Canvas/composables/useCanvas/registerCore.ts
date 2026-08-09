@@ -10458,8 +10458,21 @@ export function registerCore(bind: CanvasBindings) {
     )
   }
 
+  function isGraphNodePointerTarget(clientX: number, clientY: number): boolean {
+    const el = document.elementFromPoint(clientX, clientY)
+    if (!el) return false
+    return Boolean(
+      el.closest('.x6-node') ||
+        el.closest('.image-node__upload-btn') ||
+        el.closest('.canvas-node__delete-float') ||
+        el.closest('.node-port-plus'),
+    )
+  }
+
   /** 指针落在组框内且未命中任何节点时，视为组空白区域 */
   function findGroupBlankAreaAtClientPoint(clientX: number, clientY: number): string | null {
+    if (isGraphNodePointerTarget(clientX, clientY)) return null
+
     const groupId = findGroupIdAtContainerPoint(clientX, clientY)
     if (!groupId) return null
 
@@ -10791,6 +10804,7 @@ export function registerCore(bind: CanvasBindings) {
 
   function handleGroupBlankMouseDown({ e }: { e: MouseEvent }) {
     if (e.button !== 0) return
+    if (isGraphNodePointerTarget(e.clientX, e.clientY)) return
     if (e.detail >= 2) {
       resetCanvasPanCursorState()
       return
@@ -10915,6 +10929,7 @@ export function registerCore(bind: CanvasBindings) {
     }
     instance.__deleteCanvasNode = removeNodeById
     instance.__uploadFileToCanvasNode = uploadFileToCanvasNode
+    instance.__requestCanvasUpload = requestCanvasUpload
     instance.__requestTextExpand = openTextExpand
     instance.__onTextPickerAction = handleTextPickerAction
     instance.__onVideoPickerAction = handleVideoPickerAction
