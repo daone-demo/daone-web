@@ -805,6 +805,7 @@ const {
   addImageFromFile,
   addImagesFromFiles,
   createNodeFromChatTask,
+  updateChatTaskNodeTitleFromPayload,
   getNodeCount,
 } = canvasRuntime
 
@@ -822,6 +823,7 @@ defineExpose({
   addImageFromFile,
   addImagesFromFiles,
   createNodeFromChatTask,
+  updateChatTaskNodeTitleFromPayload,
   getNodeCount,
   hasUnsavedChanges(): boolean {
     const fn = (canvasRuntime as { hasUnsavedChanges?: () => boolean }).hasUnsavedChanges

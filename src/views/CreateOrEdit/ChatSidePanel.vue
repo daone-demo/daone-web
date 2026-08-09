@@ -693,6 +693,7 @@ const emit = defineEmits<{
   'set-session-name': [name: string],
   'close-chat': [],
   'task-created': [payload: ChatTaskCreatedPayload],
+  'task-updated': [payload: { taskId: string | number; taskName: string }],
 }>()
 
 const onTargetCollapse = () => {
@@ -1700,6 +1701,39 @@ function extractGenerateImageTip(payload: StreamEvent): string | undefined {
   return taskName || summary || '图片生成任务处理中...'
 }
 
+function resolveStreamTaskName(payload: StreamEvent, taskId?: string | number): string {
+  const direct = String(payload.taskName ?? '').trim()
+  if (direct) return direct
+
+  const current = String(payload.currentTaskName ?? '').trim()
+  if (current) return current
+
+  const normalizedTaskId = String(taskId ?? payload.taskId ?? '').trim()
+  for (const action of payload.agentActions ?? []) {
+    if (action.type !== 'GENERATE_IMAGE' && action.tool !== 'generate_image') continue
+    const actionTaskId = String(action.data?.taskId ?? '').trim()
+    if (normalizedTaskId && actionTaskId && actionTaskId !== normalizedTaskId) continue
+    const actionTaskName = String(action.data?.taskName ?? '').trim()
+    if (actionTaskName) return actionTaskName
+  }
+
+  return ''
+}
+
+function emitTaskUpdatesFromPayload(payload: StreamEvent) {
+  const taskName = resolveStreamTaskName(payload)
+  if (!taskName) return
+
+  const taskIds = new Set<string>()
+  const directTaskId = String(payload.taskId ?? '').trim()
+  if (directTaskId) taskIds.add(directTaskId)
+  collectGenerationTaskIds(payload).forEach((id) => taskIds.add(id))
+
+  taskIds.forEach((taskId) => {
+    emit('task-updated', { taskId, taskName })
+  })
+}
+
 function applyStreamAgentPayload(
   assistant: ChatMessage,
   payload: StreamEvent,
@@ -2040,10 +2074,10 @@ function startChatStream(
 
       if (eventName === 'task_created') {
         const assistant = resolveAssistant()
+        const taskName = resolveStreamTaskName(payload)
         if (assistant) {
           rememberTaskId(assistant, payload.taskId)
           awaitingRunningTask = true
-          const taskName = typeof payload.taskName === 'string' ? payload.taskName.trim() : ''
           setMessageTip(
             assistant,
             taskName ? `已创建任务「${taskName}」，处理中...` : '已创建生成任务，处理中...',
@@ -2054,7 +2088,7 @@ function startChatStream(
         emit('task-created', {
           taskId: payload.taskId as string | number,
           taskType: payload.taskType,
-          taskName: payload.taskName,
+          taskName: taskName || payload.taskName,
           prompt: payload.prompt,
           capabilityCode: payload.capabilityCode,
           nodeId: payload.nodeId,
@@ -2091,6 +2125,13 @@ function startChatStream(
 
       if (eventName === 'task_status' || eventName === 'task_progress') {
         rememberTaskId(assistant, payload.taskId)
+        const taskName = resolveStreamTaskName(payload)
+        if (taskName && payload.taskId != null) {
+          emit('task-updated', {
+            taskId: payload.taskId as string | number,
+            taskName,
+          })
+        }
 
         if (eventName === 'task_status') {
           if (isRunningTaskStatus(payload.status)) {
@@ -2153,6 +2194,7 @@ function startChatStream(
         }
 
         applyStreamAgentPayload(assistant, payload)
+        emitTaskUpdatesFromPayload(payload)
         if (assistant.generationTaskIds?.length) {
           awaitingRunningTask = true
         }

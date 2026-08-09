@@ -38,6 +38,7 @@
         @set-current-session-id="onSetCurrentSessionId"
         @send="onChatSend"
         @task-created="onChatTaskCreated"
+        @task-updated="onChatTaskUpdated"
         @new-chat="onNewChat"
         @set-session-name="onSetSessionName"
         @close-chat="onCloseChat"
@@ -61,6 +62,7 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vu
 import Canvas from '@/components/Canvas/index.vue'
 import ChatSidePanel from './ChatSidePanel.vue'
 import type { ChatSendPayload, ChatTaskCreatedPayload } from './chatTypes'
+import type { ChatTaskUpdatedPayload } from '@/components/Canvas/chatGenerationTask'
 import api, { type ProjectCanvasResponse } from '@/services/api'
 import { isLeaveConfirmSuppressed } from '@/utils/leaveGuard'
 import { useModalStore } from '@stores/useModal'
@@ -97,6 +99,7 @@ type CanvasExpose = {
   setCanvasDescription: (description: string, taskType?: string) => void
   loadProjectCanvas: (payload: ProjectCanvasResponse) => boolean
   createNodeFromChatTask: (payload: ChatTaskCreatedPayload) => Node | null
+  updateChatTaskNodeTitleFromPayload?: (payload: ChatTaskUpdatedPayload) => void
 }
 
 type CanvasProjectItem = {
@@ -193,6 +196,10 @@ async function onChatSend(payload: ChatSendPayload) {
 
 function onChatTaskCreated(payload: ChatTaskCreatedPayload) {
   canvasRef.value?.createNodeFromChatTask?.(payload)
+}
+
+function onChatTaskUpdated(payload: ChatTaskUpdatedPayload) {
+  canvasRef.value?.updateChatTaskNodeTitleFromPayload?.(payload)
 }
 
 function onNewChat() {

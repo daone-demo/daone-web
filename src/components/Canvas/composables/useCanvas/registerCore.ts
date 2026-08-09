@@ -78,13 +78,17 @@ import {
   linkChatTaskNodeToParent,
   normalizeChatTaskType,
   resolveChatTaskTargetNode,
+  resolveChatTaskTitle,
+  updateChatTaskNodeTitle,
   type ChatTaskCreatedPayload,
+  type ChatTaskUpdatedPayload,
 } from '../../chatGenerationTask'
 import {
   bindGenerationTaskId,
   followModelGenerationTaskOnNode,
   followTextGenerationTaskOnNode,
   followVideoGenerationTaskOnNode,
+  isGenerationProgressTitle,
   isGenerationTaskTerminal,
   markGenerationNodeFailed,
   markTextGenerationNodeFailed,
@@ -11180,7 +11184,10 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     const taskType = normalizeChatTaskType(payload.taskType)
-    const title = String(payload.taskName || '').trim() || '生成中'
+    const title = resolveChatTaskTitle(payload)
+    const taskTitleFields = isGenerationProgressTitle(title)
+      ? { title }
+      : { title, generationTaskName: title }
     const prompt = String(payload.prompt || '').trim()
     const parentNodeId = String(payload.parentNodeId ?? '').trim()
     const parentCell = parentNodeId ? g.getCellById(parentNodeId) : null
@@ -11223,7 +11230,7 @@ export function registerCore(bind: CanvasBindings) {
         uploadState: 'uploading',
         uploadProgress: 0,
         generationTaskType: 'VIDEO',
-        title,
+        ...taskTitleFields,
         fileName: `${title}.mp4`,
         previewUrl: '',
         genPrompt: prompt,
@@ -11241,7 +11248,7 @@ export function registerCore(bind: CanvasBindings) {
         textGenState: 'loading',
         textGenProgress: 0,
         generationTaskType: 'TEXT',
-        title,
+        ...taskTitleFields,
         content: '',
         genPrompt: prompt,
         ...sourceOverrides,
@@ -11257,7 +11264,7 @@ export function registerCore(bind: CanvasBindings) {
         imageGenState: 'loading',
         imageGenProgress: 0,
         generationTaskType: 'MODEL',
-        title,
+        ...taskTitleFields,
         fileName: `${title}.glb`,
         previewUrl: '',
         mediaWidth: 320,
@@ -11277,7 +11284,7 @@ export function registerCore(bind: CanvasBindings) {
         imageGenState: 'loading',
         imageGenProgress: 0,
         generationTaskType: 'IMAGE',
-        title,
+        ...taskTitleFields,
         fileName: `${title}.png`,
         previewUrl: '',
         genPrompt: prompt,
@@ -11304,6 +11311,13 @@ export function registerCore(bind: CanvasBindings) {
     scheduleHistoryPush()
     ensureInfiniteCanvasArea(g)
     return node
+  }
+
+  function updateChatTaskNodeTitleFromPayload(payload: ChatTaskUpdatedPayload) {
+    const g = graph.value
+    if (!g) return
+    updateChatTaskNodeTitle(g, payload)
+    scheduleHistoryPush()
   }
 
   function addImageFromFile(
@@ -11523,6 +11537,7 @@ export function registerCore(bind: CanvasBindings) {
     addImageFromFile,
     addImagesFromFiles,
     createNodeFromChatTask,
+    updateChatTaskNodeTitleFromPayload,
     addNode,
     addPromptImageSourceRef,
     altVoiceTimer,

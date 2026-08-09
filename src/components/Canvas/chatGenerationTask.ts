@@ -5,9 +5,11 @@ import {
   bindGenerationTaskId,
   findNodeByGenerationTaskId,
   followModelGenerationTaskOnNode,
+  isGenerationProgressTitle,
   startImageGenerationTaskFollow,
   startTextGenerationTaskFollow,
   startVideoGenerationTaskFollow,
+  updateGenerationTaskNodeTitleByTaskId,
   type GenerationTaskType,
 } from './generationTask'
 
@@ -22,6 +24,48 @@ export type ChatTaskCreatedPayload = {
   nodeId?: string
   /** 画布上游节点 ID，用于自动连线 */
   parentNodeId?: string
+}
+
+/** 对话 SSE task_status / task_progress 携带的任务名更新 */
+export type ChatTaskUpdatedPayload = {
+  taskId: string | number
+  taskName: string
+}
+
+const CHAT_TASK_CAPABILITY_TITLES: Record<string, string> = {
+  IMAGE_REMOVE_BG: '抠图',
+  IMAGE_PROMPT_REVERSE: '提示词反推',
+  IMAGE_TO_3D: '图生3D',
+  IMAGE_INPAINT: '局部修改',
+  IMAGE_EDIT_TEXT: '编辑文字',
+  IMAGE_EXPAND: '扩图',
+  IMAGE_CROP: '裁剪',
+  IMAGE_GENERAL_V1: '文生图',
+  TEXT_COPY_V1: '文案生成',
+  VIDEO_GENERAL_V1: '文生视频',
+}
+
+/** 对话任务节点标题：优先 taskName，其次 capabilityCode 映射，最后才是进行中占位 */
+export function resolveChatTaskTitle(
+  payload: Pick<ChatTaskCreatedPayload, 'taskName' | 'capabilityCode'>,
+) {
+  const taskName = String(payload.taskName ?? '').trim()
+  if (taskName && !isGenerationProgressTitle(taskName)) return taskName
+
+  const capabilityCode = String(payload.capabilityCode ?? '').trim()
+  if (capabilityCode && CHAT_TASK_CAPABILITY_TITLES[capabilityCode]) {
+    return CHAT_TASK_CAPABILITY_TITLES[capabilityCode]
+  }
+
+  return '生成中'
+}
+
+/** 根据 taskId 回写节点任务名（来自 SSE task_status / task_progress） */
+export function updateChatTaskNodeTitle(graph: Graph, payload: ChatTaskUpdatedPayload) {
+  const taskId = String(payload.taskId ?? '').trim()
+  const taskName = String(payload.taskName ?? '').trim()
+  if (!taskId || !taskName) return
+  updateGenerationTaskNodeTitleByTaskId(graph, taskId, taskName)
 }
 
 export function normalizeChatTaskType(raw?: string): GenerationTaskType {
@@ -72,10 +116,14 @@ export function followChatGenerationTaskOnNode(
   if (!taskId) return
 
   const taskType = normalizeChatTaskType(payload.taskType)
-  const title = String(payload.taskName || '').trim() || '生成中'
+  const title = resolveChatTaskTitle(payload)
   const { onError, onComplete, toHtml } = options
 
   bindGenerationTaskId(node, taskId, taskType)
+  if (!isGenerationProgressTitle(title)) {
+    const data = { ...(node.getData() as CanvasNodeData), title, generationTaskName: title }
+    node.setData(data)
+  }
 
   if (taskType === 'VIDEO') {
     startVideoGenerationTaskFollow(node, taskId, {

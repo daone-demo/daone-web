@@ -87,7 +87,7 @@ export interface ChatSendPayload {
 }
 
 /** 对话 SSE task_created 事件，用于在画布创建生成节点 */
-export type { ChatTaskCreatedPayload } from '@/components/Canvas/chatGenerationTask'
+export type { ChatTaskCreatedPayload, ChatTaskUpdatedPayload } from '@/components/Canvas/chatGenerationTask'
 
 export const CHAT_TIPS = [
   // '提示：将文件拖入工作区即可作为素材使用。',

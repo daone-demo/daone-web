@@ -23,11 +23,46 @@ export type GenerationTaskDetail = {
   id: string
   status: string
   progress?: number
+  taskName?: string
+  capabilityName?: string
   results?: GenerationTaskResult[]
   error?: { code?: string; message?: string } | null
 }
 
 export type GenerationTaskType = 'IMAGE' | 'TEXT' | 'MODEL' | 'VIDEO'
+
+const GENERATION_PLACEHOLDER_TITLES = new Set(['生成中', '生成结果'])
+
+/** Agent / 画布生成任务占位标题，不应作为完成态节点标题 */
+export function isGenerationProgressTitle(title?: string) {
+  const normalized = String(title ?? '').trim()
+  return !normalized || GENERATION_PLACEHOLDER_TITLES.has(normalized)
+}
+
+/** 完成态标题：跳过占位文案，优先使用真实任务名 */
+export function resolveGenerationResultTitle(
+  ...candidates: Array<string | undefined>
+) {
+  return resolveGenerationResultTitleWithFallback('生成结果', ...candidates)
+}
+
+export function resolveGenerationResultTitleWithFallback(
+  fallback: string,
+  ...candidates: Array<string | undefined>
+) {
+  for (const candidate of candidates) {
+    const normalized = String(candidate ?? '').trim()
+    if (normalized && !isGenerationProgressTitle(normalized)) {
+      return normalized
+    }
+  }
+  return fallback
+}
+
+export function pickGenerationTaskName(task: GenerationTaskDetail | null | undefined) {
+  if (!task) return ''
+  return String(task.taskName ?? task.capabilityName ?? '').trim()
+}
 
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELED'])
 
@@ -163,10 +198,26 @@ export function normalizeGenerationTaskDetail(raw: unknown): GenerationTaskDetai
     .map((item) => normalizeGenerationTaskResult(item))
     .filter((item): item is GenerationTaskResult => Boolean(item))
 
+  const taskName = String(
+    readResultField<unknown>(
+      task,
+      'taskName',
+      'task_name',
+      'currentTaskName',
+      'current_task_name',
+      'name',
+    ) ?? '',
+  ).trim()
+  const capabilityName = String(
+    readResultField<unknown>(task, 'capabilityName', 'capability_name') ?? '',
+  ).trim()
+
   return {
     id: String(readResultField<unknown>(task, 'id') ?? ''),
     status: String(readResultField<unknown>(task, 'status', 'taskStatus') ?? '').toUpperCase(),
     progress: parseGenerationTaskProgress(readResultField<unknown>(task, 'progress', 'taskProgress')),
+    taskName: taskName || undefined,
+    capabilityName: capabilityName || undefined,
     results,
     error: (task.error as GenerationTaskDetail['error']) ?? null,
   }
@@ -288,6 +339,34 @@ export function findNodeByGenerationTaskId(graph: Graph, taskId: string): Node |
   }
 
   return null
+}
+
+/** 根据 taskId 回写节点任务名（SSE task_status / 轮询中间态） */
+export function updateGenerationTaskNodeTitleByTaskId(
+  graph: Graph,
+  taskId: string,
+  taskName: string,
+) {
+  const node = findNodeByGenerationTaskId(graph, taskId.trim())
+  if (!node) return
+
+  const normalized = String(taskName ?? '').trim()
+  if (!normalized || isGenerationProgressTitle(normalized)) return
+
+  const data = { ...(node.getData() as CanvasNodeData) }
+  data.generationTaskName = normalized
+
+  const shouldUpdateTitle =
+    data.imageGenState === 'loading'
+    || data.textGenState === 'loading'
+    || data.uploadState === 'uploading'
+    || isGenerationProgressTitle(data.title)
+
+  if (shouldUpdateTitle) {
+    data.title = normalized
+  }
+
+  setNodeData(node, data)
 }
 
 function getNodeGraph(node: Node): Graph | null {
@@ -422,7 +501,12 @@ export function applyTextGenerationResultToNode(
   data.textGenState = 'done'
   data.textGenProgress = 100
   data.textPickerTask = ''
-  data.title = options.title || data.title || '反推提示词'
+  data.title = resolveGenerationResultTitleWithFallback(
+    '反推提示词',
+    options.title,
+    data.generationTaskName,
+    data.title,
+  )
   data.content = options.toHtml ? options.toHtml(text) : text
   setNodeData(node, data)
   syncNodeShapeFromData(node)
@@ -466,7 +550,12 @@ export async function applyVideoGenerationResultToNode(
   data.uploadState = 'done'
   data.uploadProgress = 100
   data.previewUrl = previewUrl
-  data.title = options.title || data.title || '文生视频'
+  data.title = resolveGenerationResultTitleWithFallback(
+    '文生视频',
+    options.title,
+    data.generationTaskName,
+    data.title,
+  )
   data.fileName = options.fileName || result.fileName || data.fileName || '文生视频.mp4'
   delete data.generationTaskType
   delete data.generationTaskId
@@ -533,7 +622,12 @@ export function applyModelGenerationResultToNode(
   data.uploadProgress = 100
   data.previewUrl = previewUrl
   data.assetId = result.assetId
-  data.title = options.title || data.title || '3D 模型'
+  data.title = resolveGenerationResultTitleWithFallback(
+    '3D 模型',
+    options.title,
+    data.generationTaskName,
+    data.title,
+  )
   data.fileName =
     options.fileName ||
     result.fileName ||
@@ -592,7 +686,14 @@ export async function applyGenerationResultToNode(
   data.uploadProgress = 100
   data.previewUrl = previewUrl
   data.assetId = result.assetId
-  data.title = options.title || data.title || '生成结果'
+  data.title = resolveGenerationResultTitle(
+    options.title,
+    data.generationTaskName,
+    data.title,
+  )
+  if (!isGenerationProgressTitle(data.title)) {
+    data.generationTaskName = data.title
+  }
   data.fileName = options.fileName || result.fileName || data.fileName || '生成结果.png'
 
   if (result.width && result.height) {
@@ -773,7 +874,24 @@ async function pollAndApplyImageTaskOnNode(
 
   let appliedDuringPoll = false
   let resolvingResult = false
-  const applyOptions = { title: options.title, fileName: options.fileName }
+
+  const buildApplyOptions = (task: GenerationTaskDetail | undefined, target: Node) => {
+    const nodeData = target.getData() as CanvasNodeData
+    const taskName = pickGenerationTaskName(task)
+    if (taskName && graph) {
+      updateGenerationTaskNodeTitleByTaskId(graph, taskId, taskName)
+    }
+    const title = resolveGenerationResultTitle(
+      taskName,
+      options.title,
+      nodeData.generationTaskName,
+      nodeData.title,
+    )
+    return {
+      title,
+      fileName: options.fileName || `${title}.png`,
+    }
+  }
 
   const tryApplyDuringPoll = (task: GenerationTaskDetail) => {
     const target = resolveNode()
@@ -782,6 +900,7 @@ async function pollAndApplyImageTaskOnNode(
     if (!raw) return
 
     resolvingResult = true
+    const applyOptions = buildApplyOptions(task, target)
     void applyResolvedImageResultToNode(target, raw, applyOptions)
       .then((applied) => {
         if (applied) appliedDuringPoll = true
@@ -809,6 +928,10 @@ async function pollAndApplyImageTaskOnNode(
     }
 
     updateGenerationNodeProgress(initialTarget, first.progress ?? 5)
+    if (graph) {
+      const taskName = pickGenerationTaskName(first)
+      if (taskName) updateGenerationTaskNodeTitleByTaskId(graph, taskId, taskName)
+    }
     tryApplyDuringPoll(first)
 
     const finalTask = isGenerationTaskTerminal(first.status)
@@ -819,6 +942,10 @@ async function pollAndApplyImageTaskOnNode(
           const target = resolveNode()
           if (!target) return
           if (isImageResultApplied(target)) return
+          if (graph) {
+            const taskName = pickGenerationTaskName(task)
+            if (taskName) updateGenerationTaskNodeTitleByTaskId(graph, taskId, taskName)
+          }
           if (isGenerationTaskTerminal(task.status)) {
             tryApplyDuringPoll(task)
             return
@@ -859,6 +986,7 @@ async function pollAndApplyImageTaskOnNode(
     }
 
     if (!isImageResultApplied(finalTarget)) {
+      const applyOptions = buildApplyOptions(finalTask, finalTarget)
       const applied = await applyResolvedImageResultToNode(finalTarget, primaryResult, applyOptions)
       if (!applied) {
         markGenerationNodeFailed(finalTarget, '未返回结果图片')
