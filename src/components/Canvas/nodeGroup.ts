@@ -325,46 +325,6 @@ export function shouldRetainGroupMembershipOnLeave(graph: Graph, node: Node): bo
   return hasDerivedAiTaskNodes(graph, node.id)
 }
 
-/**
- * 组内节点单独拖拽结束后的成员同步：
- * - 仍与其余成员选区相交 → 留在组内
- * - 拖出选区且为 AI / 有 AI 衍生 → 留在组内（组框自动扩大覆盖）
- * - 拖出选区且为无衍生的非 AI 节点 → 移出打组；剩余 ≤1 则解散
- */
-/** 组成员直接衍生的 AI 结果节点（出边直连或 sourceNodeId 指向组成员） */
-function isDirectAiDerivedFromMember(
-  graph: Graph,
-  node: Node,
-  memberIdSet: Set<string>,
-): boolean {
-  const data = node.getData() as CanvasNodeData
-  if (!isAiGeneratedCanvasNode(data)) return false
-  if (data.sourceNodeId && memberIdSet.has(data.sourceNodeId)) return true
-
-  for (const edge of graph.getEdges()) {
-    const sourceId = edge.getSourceCellId()
-    if (!sourceId || !memberIdSet.has(sourceId)) continue
-    if (edge.getTargetCellId() === node.id) return true
-  }
-
-  return false
-}
-
-/** 组成员衍生的 AI 结果节点（连线或 sourceNodeId，不计入组成员数但参与组框包围） */
-export function getDerivedAiNodesForGroup(graph: Graph, groupId: string): Node[] {
-  const members = getNodesInGroup(graph, groupId)
-  const memberIdSet = new Set(members.map((item) => item.id))
-  const derived: Node[] = []
-
-  graph.getNodes().forEach((node) => {
-    if (memberIdSet.has(node.id)) return
-    if (!isDirectAiDerivedFromMember(graph, node, memberIdSet)) return
-    derived.push(node)
-  })
-
-  return derived
-}
-
 /** 拖拽过程中预览组成员（非 AI 拖出时实时缩小计数与包围盒） */
 export function resolveGroupMemberIdsForDragPreview(graph: Graph, draggingNode: Node): string[] {
   const data = draggingNode.getData() as CanvasNodeData
@@ -387,19 +347,23 @@ export function resolveGroupMemberIdsForDragPreview(graph: Graph, draggingNode: 
   return others.map((item) => item.id)
 }
 
-/** 组框应包围的节点：组成员 + 衍生 AI 节点 */
+/**
+ * 组内节点单独拖拽结束后的成员同步：
+ * - 仍与其余成员选区相交 → 留在组内
+ * - 拖出选区且为 AI / 有 AI 衍生 → 留在组内
+ * - 拖出选区且为无衍生的非 AI 节点 → 移出打组；剩余 ≤1 则解散
+ */
+
+/** 组框应包围的节点：仅包含实际打组成员 */
 export function getGroupBoxNodeIds(
   graph: Graph,
   groupId: string,
   draggingMember?: Node | null,
 ): string[] {
-  const memberIds =
-    draggingMember && (draggingMember.getData() as CanvasNodeData).groupId === groupId
-      ? resolveGroupMemberIdsForDragPreview(graph, draggingMember)
-      : getNodesInGroup(graph, groupId).map((item) => item.id)
-
-  const derivedIds = getDerivedAiNodesForGroup(graph, groupId).map((item) => item.id)
-  return [...new Set([...memberIds, ...derivedIds])]
+  if (draggingMember && (draggingMember.getData() as CanvasNodeData).groupId === groupId) {
+    return resolveGroupMemberIdsForDragPreview(graph, draggingMember)
+  }
+  return getNodesInGroup(graph, groupId).map((item) => item.id)
 }
 
 /** 组标签显示的节点数（仅统计组成员，不含衍生 AI） */
