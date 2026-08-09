@@ -249,6 +249,24 @@ type ScrollerImplLike = {
   container: HTMLDivElement
 }
 
+type SelectionCancelApi = {
+  selectionImpl?: {
+    undelegateDocumentEvents: () => void
+    hideRubberband: () => void
+    container: HTMLElement
+  }
+}
+
+/** 取消 X6 框选残留的 document 监听，避免自定义拖拽后画布无法交互 */
+export function cancelActiveRubberband(graph: Graph) {
+  const selection = graph.getPlugin('selection') as SelectionCancelApi | null
+  const impl = selection?.selectionImpl
+  if (!impl) return
+  impl.undelegateDocumentEvents()
+  impl.hideRubberband()
+  impl.container.removeAttribute('style')
+}
+
 /**
  * 当前可视视口中心对应的图坐标。
  * scroller 模式下必须用 scrollerImpl.clientToLocalPoint（已计入 scrollLeft/padding/缩放），

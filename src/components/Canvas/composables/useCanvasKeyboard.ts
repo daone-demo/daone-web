@@ -1,5 +1,6 @@
 import { ref, type Ref, type ShallowRef } from 'vue'
 import type { Graph, Node } from '@antv/x6'
+import { cancelActiveRubberband } from '../graph'
 import type { CanvasNodeData } from '../constants'
 
 type ScrollerPanApi = {
@@ -11,14 +12,6 @@ type ScrollerImplPan = {
   startPanning: (e: MouseEvent) => void
   stopPanning: (e?: Event) => void
   once: (name: string, handler: (...args: unknown[]) => void) => void
-}
-
-type SelectionCancelApi = {
-  selectionImpl?: {
-    undelegateDocumentEvents: () => void
-    hideRubberband: () => void
-    container: HTMLElement
-  }
 }
 
 type CanvasKeyboardDeps = {
@@ -58,15 +51,6 @@ function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName
   return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable
-}
-
-function cancelActiveRubberband(graph: Graph) {
-  const selection = graph.getPlugin('selection') as SelectionCancelApi | null
-  const impl = selection?.selectionImpl
-  if (!impl) return
-  impl.undelegateDocumentEvents()
-  impl.hideRubberband()
-  impl.container.removeAttribute('style')
 }
 
 export function useCanvasKeyboard(deps: CanvasKeyboardDeps) {

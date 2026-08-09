@@ -59,6 +59,7 @@ export { syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPr
 export {
   addCanvasNode,
   bindGraphInteraction,
+  cancelActiveRubberband,
   createGraph,
   ensureInfiniteCanvasArea,
   clientPointToGraphLocal,

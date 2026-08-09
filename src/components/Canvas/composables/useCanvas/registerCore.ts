@@ -20,7 +20,7 @@ import {
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
   spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, getImageGenerationPlaceholderSize, findReusableImageGenerationNode, resetImageGenerationNodeForRetry, isImageGenerationFailedNode, shouldGenerateImageInPlaceOnNode, prepareImageNodeForInPlaceGeneration, resolveText2ImageGenerationTargetNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
   getConnectMenuPosition, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
-  syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, createGraph,
+  syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, cancelActiveRubberband, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
   centerGraphContent, getNodeCropOverlayPosition, getNodeDialoguePosition, getNodeImageGenPromptPosition,
   getNodeVideoGenPromptPosition, getNodePromptPosition, getNodeSidePanelPosition, getNodeTextDownloadPosition,
@@ -10485,11 +10485,23 @@ export function registerCore(bind: CanvasBindings) {
     graphRef.value?.classList.remove('canvas__graph--group-blank-grabbing')
   }
 
+  let groupOverlayDragCleanup: (() => void) | null = null
+
+  function stopGroupOverlayDrag() {
+    groupOverlayDragCleanup?.()
+    groupOverlayDragCleanup = null
+    groupOverlayDrag.active = false
+    resetGroupBlankHoverCursor()
+  }
+
   function onGroupOverlayDragStart(payload: { event: MouseEvent; groupId: string }) {
     const g = graph.value
     const root = graphRef.value
     const group = resolveOverlayGroup(payload.groupId)
     if (!g || !root || !group) return
+
+    stopGroupOverlayDrag()
+    cancelActiveRubberband(g)
 
     groupOverlayDrag.active = true
     groupOverlayDrag.nodeIds = [...group.nodeIds]
@@ -10497,8 +10509,9 @@ export function registerCore(bind: CanvasBindings) {
     const local = clientPointToGraphLocal(g, payload.event.clientX, payload.event.clientY)
     groupOverlayDrag.lastGraphX = local.x
     groupOverlayDrag.lastGraphY = local.y
-    resetGroupBlankHoverCursor()
     graphRef.value?.classList.add('canvas__graph--group-blank-grabbing')
+
+    let ended = false
 
     const onMove = (moveEvent: MouseEvent) => {
       if (!groupOverlayDrag.active) return
@@ -10526,18 +10539,29 @@ export function registerCore(bind: CanvasBindings) {
       groupOverlayDrag.lastGraphX = current.x
       groupOverlayDrag.lastGraphY = current.y
       updateNodeToolbar()
+      updateGroupToolbarPosition()
     }
 
-    const onUp = () => {
-      groupOverlayDrag.active = false
-      resetGroupBlankHoverCursor()
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
+    const onEnd = () => {
+      if (ended) return
+      ended = true
+      stopGroupOverlayDrag()
+      cancelActiveRubberband(g)
+      updateGroupToolbarPosition()
       scheduleHistoryPush()
     }
 
     window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    window.addEventListener('mouseup', onEnd, true)
+    window.addEventListener('pointerup', onEnd, true)
+    window.addEventListener('pointercancel', onEnd, true)
+
+    groupOverlayDragCleanup = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onEnd, true)
+      window.removeEventListener('pointerup', onEnd, true)
+      window.removeEventListener('pointercancel', onEnd, true)
+    }
   }
 
   function onGroupOverlaySelectGroup(groupId: string) {
@@ -10916,6 +10940,7 @@ export function registerCore(bind: CanvasBindings) {
       const groupId = findGroupBlankAreaAtClientPoint(e.clientX, e.clientY)
       if (!groupId) return
 
+      cancelActiveRubberband(instance)
       e.preventDefault()
       e.stopPropagation()
       onGroupOverlaySelectGroup(groupId)
@@ -11420,6 +11445,7 @@ export function registerCore(bind: CanvasBindings) {
     canvasRef.value?.removeEventListener('mousemove', onCanvasGroupBlankPointerMove)
     canvasRef.value?.removeEventListener('mouseleave', resetGroupBlankHoverCursor)
     resetGroupBlankHoverCursor()
+    stopGroupOverlayDrag()
     setCanvasAssetDropHandler(null)
     clearCanvasAssetDrag()
     if (historyPushTimer) clearTimeout(historyPushTimer)
