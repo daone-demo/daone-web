@@ -2515,7 +2515,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     }
     groupToolbarPos.value = {
       left: box.centerX,
-      top: box.anchorTop - 10,
+      top: box.anchorTop - 30,
     }
   }
 

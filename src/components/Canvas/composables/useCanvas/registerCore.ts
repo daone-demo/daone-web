@@ -8268,7 +8268,7 @@ export function registerCore(bind: CanvasBindings) {
       if (item) {
         groupToolbarPos.value = {
           left: item.left + item.width / 2,
-          top: item.top - 10,
+          top: item.top - 30,
         }
       }
     }
