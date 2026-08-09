@@ -9688,7 +9688,7 @@ export function registerCore(bind: CanvasBindings) {
       if (!result.success) {
         message.error(
           result.proxyUnavailable
-            ? '批量打包下载失败：服务器未配置媒体代理，请联系运维部署 deploy/nginx-media-proxy.conf'
+            ? '批量打包下载失败：当前环境未启用媒体代理，无法打包 zip，请联系运维配置 nginx media-proxy'
             : '批量下载失败，请稍后重试',
         )
         return

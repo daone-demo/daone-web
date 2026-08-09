@@ -77,11 +77,13 @@ function uniqueDownloadFileName(name: string, used: Set<string>): string {
   return next
 }
 
-function buildDownloadFetchCandidates(sourceUrl: string): string[] {
+function buildDownloadFetchCandidates(sourceUrl: string, options: { proxyOnly?: boolean } = {}): string[] {
   const downloadUrl = resolveOriginalMediaDownloadUrl(sourceUrl)
   const proxies = buildMediaProxyCandidates(downloadUrl)
-  // 优先同源代理，避免生产环境直连对象存储触发 CORS
-  return [...new Set([...proxies, downloadUrl].filter(Boolean))]
+  const candidates = options.proxyOnly
+    ? proxies
+    : [...new Set([...proxies, downloadUrl].filter(Boolean))]
+  return [...new Set(candidates.filter(Boolean))]
 }
 
 function formatBatchZipName() {
@@ -169,7 +171,18 @@ function triggerDirectResourceDownload(url: string, fileName: string) {
   triggerLinkDownload(url, fileName)
 }
 
-async function fetchMediaBlob(sourceUrl: string): Promise<Blob> {
+async function probeMediaProxyAvailable(): Promise<boolean> {
+  try {
+    const response = await fetch('/media-proxy?url=', { method: 'GET', cache: 'no-store' })
+    if (response.status === 400 || response.status === 403) return true
+    const contentType = (response.headers.get('content-type') || '').toLowerCase()
+    return response.ok && !contentType.includes('text/html')
+  } catch {
+    return false
+  }
+}
+
+async function fetchMediaBlob(sourceUrl: string, options: { proxyOnly?: boolean } = {}): Promise<Blob> {
   const trimmed = sourceUrl.trim()
   if (!trimmed) {
     throw new Error('无可下载资源')
@@ -183,7 +196,7 @@ async function fetchMediaBlob(sourceUrl: string): Promise<Blob> {
     return readResponseBlob(response)
   }
 
-  const candidates = buildDownloadFetchCandidates(trimmed)
+  const candidates = buildDownloadFetchCandidates(trimmed, options)
 
   let lastError: unknown
   for (const candidate of candidates) {
@@ -246,17 +259,20 @@ export async function downloadCanvasMediaBatch(
     return { total: 0, success: 0, failed: 0, packagedAsZip: false }
   }
 
-  if (total === 1) {
-    try {
-      await downloadCanvasMedia({
-        url: items[0].url,
-        fileName: items[0].fileName,
-        fallbackName: items[0].fileName,
-      })
-      options.onProgress?.(1, 1)
-      return { total: 1, success: 1, failed: 0, packagedAsZip: false }
-    } catch {
-      return { total: 1, success: 0, failed: 1, packagedAsZip: false }
+  const hasRemoteAssets = items.some((item) => {
+    const url = item.url.trim()
+    return url && !url.startsWith('blob:') && !url.startsWith('data:')
+  })
+  if (hasRemoteAssets) {
+    const proxyReady = await probeMediaProxyAvailable()
+    if (!proxyReady) {
+      return {
+        total,
+        success: 0,
+        failed: total,
+        packagedAsZip: false,
+        proxyUnavailable: true,
+      }
     }
   }
 
@@ -267,7 +283,7 @@ export async function downloadCanvasMediaBatch(
     const item = items[index]
     options.onProgress?.(index, total)
     try {
-      const blob = await fetchMediaBlob(item.url)
+      const blob = await fetchMediaBlob(item.url, { proxyOnly: hasRemoteAssets })
       zip.file(item.fileName, blob)
       success += 1
     } catch {
@@ -296,6 +312,6 @@ export async function downloadCanvasMediaBatch(
     success: 0,
     failed: total,
     packagedAsZip: false,
-    proxyUnavailable: true,
+    proxyUnavailable: hasRemoteAssets,
   }
 }
