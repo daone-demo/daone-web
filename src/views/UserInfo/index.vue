@@ -663,6 +663,10 @@ function openComboModal() {
 }
 
 function openPointsModal() {
+  if (!profileState.value.vipName) {
+    message.warning('请先开通会员')
+    return
+  }
   modalStore.openModal('points')
 }
 
