@@ -3722,6 +3722,14 @@ export function registerCore(bind: CanvasBindings) {
       const sourceCell = g.getCellById(ref.nodeId)
       if (sourceCell?.isNode()) syncNodeImageMarkLists(sourceCell as Node)
     }
+    // 从其他节点的标记模式切过来时，退出标记选点，避免「识别中」带到新对话框
+    if (
+      showElementSelectMode.value &&
+      elementSelectReturnNodeId.value &&
+      elementSelectReturnNodeId.value !== id
+    ) {
+      exitElementSelectMode()
+    }
     // 待生成节点不提供标记能力：打开时退出标记模式
     if (isPendingImageGenDialogueTarget(data) && showElementSelectMode.value) {
       exitElementSelectMode({ force: true })
@@ -3892,7 +3900,7 @@ export function registerCore(bind: CanvasBindings) {
     exitImageDialogueCanvasPickMode()
   }
 
-  /** 生成成功后清空源节点对话框输入（文案/模型/参数/标记/额外参考图），保留节点自身图片 */
+  /** 生成成功后清空源节点对话框输入（文案/模型/参数/额外参考图），保留节点自身图片与标记点 */
   function resetImageDialogueInputOnSourceNode(sourceNodeId: string) {
     const g = graph.value
     if (!g || !sourceNodeId) return
@@ -3902,14 +3910,7 @@ export function registerCore(bind: CanvasBindings) {
 
     const node = cell as Node
     const data = { ...(node.getData() as CanvasNodeData) }
-    const marks = [
-      ...(data.elementMarks ?? []),
-      ...(data.imageElementMarks ?? []),
-    ]
-    marks.forEach((mark) => removeImageMarkFromGraph(g, mark.id))
 
-    data.elementMarks = []
-    data.imageElementMarks = []
     data.imageDialogueText = ''
     data.genPrompt = ''
     data.imageDialogueSettings = createDefaultImageDialogueSettings()
@@ -8021,7 +8022,13 @@ export function registerCore(bind: CanvasBindings) {
     if (prevVideoDialogueNodeId && prevVideoDialogueNodeId !== selectedNodeId.value) {
       persistVideoDialogueFields(prevVideoDialogueNodeId)
     }
-    if (showImageDialogue.value && selectedNodeId.value && selectedKind.value === 'image') {
+    // 标记选点进行中：不切换对话框归属，避免标记中状态带到其他节点对话框
+    if (
+      showImageDialogue.value &&
+      selectedNodeId.value &&
+      selectedKind.value === 'image' &&
+      !showElementSelectMode.value
+    ) {
       loadImageDialogueFields(selectedNodeId.value)
     } else if (!selectedNodeId.value) {
       activeImageDialogueNodeId = ''
@@ -9235,9 +9242,25 @@ export function registerCore(bind: CanvasBindings) {
       }
       clearImageElementMarkSelection()
       clearEdgeSelection()
-      selectedNodeId.value = node.id
-      selectedKind.value = 'image'
-      syncSelectionFromGraph()
+
+      // 标记模式下点击其他图片只用于加点；对话框与选中态保持在发起标记的节点，
+      // 避免「识别中」等标记状态被带到另一张图的对话框。
+      const returnId = elementSelectReturnNodeId.value
+      const g = graph.value
+      if (returnId && g) {
+        const returnCell = g.getCellById(returnId)
+        if (returnCell?.isNode()) {
+          selectedNodeId.value = returnId
+          selectedKind.value = 'image'
+          selectedNodeIds.value = [returnId]
+          g.cleanSelection()
+          g.select(returnCell)
+          syncNodeSelectionHighlight([returnId])
+          bumpToolbarRevision()
+          updateNodeToolbar()
+        }
+      }
+
       void handleImageMarkRecognize(node, e)
       return
     }

@@ -169,6 +169,17 @@
   }
 }
 
+.image-node--ai-generated.image-node--light {
+  .image-node__body {
+    border: none;
+    background: transparent;
+  }
+
+  .image-node__preview {
+    background: transparent;
+  }
+}
+
 .video-node--light {
   color: #111827;
 
@@ -300,6 +311,10 @@
 
   .image-gen-node__preview {
     background: #f3f4f6;
+
+    &--output {
+      background: transparent;
+    }
   }
 
   .image-gen-node__placeholder-icon {

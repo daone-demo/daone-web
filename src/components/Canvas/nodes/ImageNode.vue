@@ -12,6 +12,7 @@
       'image-node--uploading': data.uploadState === 'uploading',
       'image-node--generating': data.imageGenState === 'loading',
       'image-node--adaptive': hasAdaptivePreview,
+      'image-node--ai-generated': isAiGenerated && Boolean(data.previewUrl),
       'image-node--mark-target': data.imageMarkTarget,
     }"
   >
@@ -562,6 +563,40 @@ onMounted(() => {
       object-fit: cover;
       display: block;
     }
+  }
+}
+
+/** AI 结果图：贴边铺满，去掉外框/内圆角错位造成的白边 */
+.image-node--ai-generated {
+  .image-node__body {
+    border: none;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  .image-node__preview {
+    border-radius: 14px;
+    background: transparent;
+    overflow: hidden;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 14px;
+    }
+  }
+}
+
+.image-node--ai-generated.image-node--light {
+  .image-node__body {
+    border: none;
+    background: transparent;
+  }
+
+  .image-node__preview {
+    background: transparent;
   }
 }
 

@@ -315,18 +315,18 @@
           </section>
           <section v-else>
             <section class="combo-confirm__card">
-              <div class="combo-confirm__row">
+              <!-- <div class="combo-confirm__row">
                 <span>原会员实付</span>
                 <span>¥{{ confirmPreview.originalPaidYuan }}</span>
-              </div>
+              </div> -->
               <div class="combo-confirm__row">
-                <span>目标会员标价</span>
+                <span>会员标价</span>
                 <span>¥{{ confirmPreview.targetPriceYuan }}</span>
               </div>
-              <div class="combo-confirm__row combo-confirm__row--highlight">
+              <!-- <div class="combo-confirm__row combo-confirm__row--highlight">
                 <span>应付差价</span>
                 <strong>¥{{ confirmPreview.payDiffYuan }}</strong>
-              </div>
+              </div> -->
             </section>
             <section class="combo-confirm__card">
               <div class="combo-confirm__row">
@@ -341,21 +341,21 @@
                 <span>目标会员月度积分</span>
                 <span>{{ confirmPreview.targetGrantPoints }}</span>
               </div>
-              <div class="combo-confirm__row">
+              <!-- <div class="combo-confirm__row">
                 <span>原会员已消耗积分</span>
                 <span>{{ confirmPreview.consumedPoints }}</span>
-              </div>
+              </div> -->
               <div class="combo-confirm__row">
                 <span>实际到账积分</span>
                 <span>{{ confirmPreview.actualGrantPoints }}</span>
               </div>
             </section>
-            <ul class="combo-confirm__notes">
+            <!-- <ul class="combo-confirm__notes">
               <li>应付差价按目标会员标价与原会员实付金额计算</li>
               <li>实际到账积分按目标会员月度积分与原会员已消耗积分计算</li>
               <li>升级后立即生效，有效期按新会员周期重新计算</li>
               <li>升级后原会员模型折扣与赠送权益将终止，新会员权益即时生效</li>
-            </ul>
+            </ul> -->
           </section>
           <button
             type="button"

@@ -271,6 +271,8 @@ export function tidyNodes(graph: Graph, nodes: Node[]) {
 export type GroupLayoutDirection = 'grid' | 'horizontal' | 'vertical'
 
 const GROUP_GAP = 24
+/** 多个源图上下排列时的最小间距（底边到顶边） */
+const SOURCE_MIN_GAP_Y = 100
 
 function sortNodesForLayout(nodes: Node[], direction: GroupLayoutDirection): Node[] {
   return [...nodes].sort((a, b) => {
@@ -429,8 +431,45 @@ function alignClusterToSourceCenter(cluster: Node[], source: Node) {
 }
 
 /**
+ * 排序时：相邻源图上下间距（上源底边 → 下源顶边）不足 100px 则拉开。
+ * 下移下方源图及其整簇下游节点，保持相对位置。
+ */
+function ensureSourceImagesMinVerticalGap(
+  sources: Node[],
+  clusters: Map<string, Node[]>,
+  orphans: Node[],
+  orphanAnchorSourceId: string | null,
+) {
+  if (sources.length < 2) return
+
+  const ordered = [...sources].sort((a, b) => {
+    const ay = a.getPosition().y
+    const by = b.getPosition().y
+    if (Math.abs(ay - by) < 1) return a.getPosition().x - b.getPosition().x
+    return ay - by
+  })
+
+  for (let i = 1; i < ordered.length; i += 1) {
+    const upper = ordered[i - 1]
+    const lower = ordered[i]
+    const upperBottom = upper.getPosition().y + upper.getSize().height
+    const lowerTop = lower.getPosition().y
+    const gap = lowerTop - upperBottom
+    if (gap >= SOURCE_MIN_GAP_Y) continue
+
+    const dy = SOURCE_MIN_GAP_Y - gap
+    const moving = [lower, ...(clusters.get(lower.id) ?? [])]
+    if (orphanAnchorSourceId === lower.id && orphans.length) {
+      moving.push(...orphans)
+    }
+    translateNodes(moving, 0, dy)
+  }
+}
+
+/**
  * 有源图时：源图固定；下游节点按源图分簇，排到各自源图右侧并垂直居中
  * （垂直=右侧纵列，水平=右侧横排，宫格=右侧宫格）
+ * 多个源图时保证上下间距至少 100px
  */
 function layoutNodesBesideSourceImages(
   nodes: Node[],
@@ -440,8 +479,6 @@ function layoutNodesBesideSourceImages(
 ) {
   const sourceIds = new Set(sources.map((node) => node.id))
   const others = nodes.filter((node) => !sourceIds.has(node.id))
-  if (others.length === 0) return
-
   const nodeMap = new Map(nodes.map((node) => [node.id, node]))
   const clusters = new Map<string, Node[]>()
   const orphans: Node[] = []
@@ -457,6 +494,11 @@ function layoutNodesBesideSourceImages(
     else clusters.set(sourceId, [node])
   })
 
+  const leftmost = sources.reduce((best, node) =>
+    node.getPosition().x < best.getPosition().x ? node : best,
+  )
+  const orphanAnchorSourceId = orphans.length ? leftmost.id : null
+
   sources.forEach((source) => {
     const cluster = clusters.get(source.id)
     if (!cluster?.length) return
@@ -465,18 +507,19 @@ function layoutNodesBesideSourceImages(
     const { width } = source.getSize()
     placeNodesAtAnchor(sorted, direction, x + width + GROUP_GAP, y)
     alignClusterToSourceCenter(sorted, source)
+    clusters.set(source.id, sorted)
   })
 
-  if (!orphans.length) return
+  if (orphans.length) {
+    const sorted = sortNodesForLayout(orphans, direction)
+    const { x, y } = leftmost.getPosition()
+    const { width } = leftmost.getSize()
+    placeNodesAtAnchor(sorted, direction, x + width + GROUP_GAP, y)
+    alignClusterToSourceCenter(sorted, leftmost)
+    orphans.splice(0, orphans.length, ...sorted)
+  }
 
-  const leftmost = sources.reduce((best, node) =>
-    node.getPosition().x < best.getPosition().x ? node : best,
-  )
-  const sorted = sortNodesForLayout(orphans, direction)
-  const { x, y } = leftmost.getPosition()
-  const { width } = leftmost.getSize()
-  placeNodesAtAnchor(sorted, direction, x + width + GROUP_GAP, y)
-  alignClusterToSourceCenter(sorted, leftmost)
+  ensureSourceImagesMinVerticalGap(sources, clusters, orphans, orphanAnchorSourceId)
 }
 
 /**

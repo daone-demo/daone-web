@@ -8,6 +8,7 @@
       'image-gen-node--light': isLightTheme,
       'image-gen-node--card-only': isEmptyUpload,
       'image-gen-node--generating': data.imageGenState === 'loading',
+      'image-gen-node--output': Boolean(data.previewUrl) && data.imageGenState !== 'loading',
     }"
   >
     <button
@@ -381,12 +382,14 @@ onMounted(() => {
     flex: 1;
     min-height: 140px;
     position: relative;
+    background: transparent;
 
     img {
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: cover;
       object-position: center;
+      display: block;
     }
   }
 
@@ -396,6 +399,31 @@ onMounted(() => {
     background: rgba(107, 124, 255, 0.08);
     color: #6b7cff;
     cursor: pointer;
+  }
+}
+
+/** 已生成结果图：去掉卡片底色与描边，生成中样式不受影响 */
+.image-gen-node--output {
+  .image-gen-node__body {
+    border: none;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  .image-gen-node__preview--output {
+    border-radius: 14px;
+    background: transparent;
+  }
+}
+
+.image-gen-node--output.image-gen-node--light {
+  .image-gen-node__body {
+    border: none;
+    background: transparent;
+  }
+
+  .image-gen-node__preview--output {
+    background: transparent;
   }
 }
 
