@@ -549,6 +549,8 @@ import { message, type SelectProps } from 'ant-design-vue';
 import { useNeedReloadPointsStore } from '@stores/useNeedReload';
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import logoWhite from '@assets/images/logo_white.png'
+import { useProject } from '@stores/useProject';
+const projectStore = useProject();
 const PAGINATION_LOCALE = zhCN.Pagination
 const needReloadPointsStore = useNeedReloadPointsStore();
 
@@ -934,6 +936,7 @@ const onLoadPoints = async () => {
 const onLogout = async () => {
   await api.logout();
   userInfoStore.logout();
+  projectStore.clearProjects();
   router.replace('/');
 }
 

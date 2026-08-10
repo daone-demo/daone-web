@@ -237,11 +237,14 @@ import type { CanvasBgTheme } from '../canvasTheme';
 import { useUserInfo } from '@/stores/useUserInfo';
 import { useRouter } from 'vue-router';
 import api from '@/services/api';
+import { useProject } from '@stores/useProject';
 const router = useRouter();
 // import { useRouter } from 'vue-router';
 
 // const router = useRouter();
 const userInfoStore = useUserInfo();
+
+const projectStore = useProject();
 console.log('userInfoStore123', userInfoStore.userInfo);
 
 export type CanvasProjectItem = {
@@ -287,8 +290,9 @@ const displayProjectName = computed(
 
 const onLogout = async () => {
   await api.logout();
-  userInfoStore.logout();
   router.replace('/');
+  userInfoStore.logout();
+  projectStore.clearProjects();
 }
 
 const emit = defineEmits<{

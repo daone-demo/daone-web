@@ -72,6 +72,13 @@ export const useProject = defineStore('project', () => {
     }
   }
 
+  function clearProjects() {
+    projects.value = []
+    page.value = 1
+    pageSize.value = 10
+    total.value = 0
+  }
+
   return {
     projects,
     page,
@@ -83,5 +90,6 @@ export const useProject = defineStore('project', () => {
     refreshProjects,
     removeProject,
     updateProjectTitle,
+    clearProjects
   }
 })
