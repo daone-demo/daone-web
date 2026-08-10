@@ -125,6 +125,7 @@ export {
   resolveGroupGraphBBox,
   setGroupTitle,
   setStoredGroupSelectionBox,
+  fitStoredGroupSelectionBoxToMembers,
   syncGroupBySelectionBox,
   ungroupSelection,
   type GroupResizeHandle,

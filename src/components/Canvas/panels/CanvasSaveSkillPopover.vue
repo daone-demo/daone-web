@@ -13,7 +13,7 @@
           :class="{ 'canvas__save-skill-tab--active': activeTab === 'new' }"
           @click="activeTab = 'new'"
         >
-          新建技能
+          新建工作流
         </button>
       </div>
 
@@ -43,7 +43,7 @@
           placeholder="输入清晰的描述，帮助 agent 更好地搜索和复用..."
         />
 
-        <div class="canvas__save-skill-files">
+        <!-- <div class="canvas__save-skill-files">
           <div
             v-for="item in items"
             :key="item.nodeId"
@@ -53,7 +53,7 @@
             <span class="canvas__save-skill-file-name">{{ item.label }}</span>
             <span class="canvas__save-skill-file-arrow" aria-hidden="true">›</span>
           </div>
-        </div>
+        </div> -->
 
         <!-- <button
           type="button"

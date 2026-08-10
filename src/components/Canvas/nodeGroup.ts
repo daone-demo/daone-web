@@ -354,6 +354,13 @@ export function setStoredGroupSelectionBox(graph: Graph, groupId: string, box: G
   })
 }
 
+/** 组内排列后：将组框收紧为刚好包含全部成员（含 padding） */
+export function fitStoredGroupSelectionBoxToMembers(graph: Graph, groupId: string) {
+  const memberIds = getNodesInGroup(graph, groupId).map((node) => node.id)
+  if (memberIds.length < 2) return
+  setStoredGroupSelectionBox(graph, groupId, getGroupGraphBBox(graph, memberIds))
+}
+
 /** 组框：有手动保存的选区时以选区为准，否则按成员占位自适应 */
 export function resolveGroupGraphBBox(graph: Graph, groupId: string, nodeIds: string[]): GroupGraphBox {
   const stored = getStoredGroupSelectionBox(graph, groupId)

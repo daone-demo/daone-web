@@ -87,7 +87,7 @@
                   <span class="canvas__asset-center-item-action-icon canvas__asset-center-item-action-icon--add" aria-hidden="true" />
                 </button>
               </a-popover>
-              <a-popover placement="top">
+              <!-- <a-popover placement="top">
                 <template #content>
                   <span>添加到对话</span>
                 </template>
@@ -99,11 +99,11 @@
                 >
                   <span class="canvas__asset-center-item-action-icon canvas__asset-center-item-action-icon--mention" aria-hidden="true" />
                 </button>
-              </a-popover>
+              </a-popover> -->
             </div>
           </div>
 
-          <div
+          <!-- <div
             v-if="hoveredId === String(item.id)"
             class="canvas__asset-center-preview"
             :style="previewStyle"
@@ -112,7 +112,6 @@
           >
             <div class="canvas__asset-center-preview-head">
               <span class="canvas__asset-center-preview-name">{{ displayName(item) }}</span>
-              <!-- <span class="canvas__asset-center-preview-role">{{ getRole(item) }}</span> -->
             </div>
             <p class="canvas__asset-center-preview-summary">
               包含 {{ getFiles(item).length }} 个文件
@@ -136,7 +135,7 @@
                 <span class="canvas__asset-center-preview-file-name">{{ file.fileName }}</span>
               </li>
             </ul>
-          </div>
+          </div> -->
         </div>
       </div>
     </div>

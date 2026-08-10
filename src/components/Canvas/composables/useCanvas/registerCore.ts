@@ -33,6 +33,7 @@ import {
   getGroupSelectionForNodeIds, getNodesInGroup, listCanvasGroups, mergeStoryboardGroup,
   applyGroupSelectionBoxResize, normalizeGroupMembership, reconcileGroupMembershipAfterNodeMove, tryAdoptNodeIntoIntersectingGroup,
   resizeGroupGraphBox, resolveGroupGraphBBox, getStoredGroupSelectionBox, setStoredGroupSelectionBox,
+  fitStoredGroupSelectionBoxToMembers,
   resolveGroupDisplayTitle, setGroupTitle,
   ungroupSelection,
   type GroupResizeHandle,
@@ -64,12 +65,14 @@ import {
   canSubmitImageDialogueTask,
   clearElementMarksOnNode,
   clientPointToImageNaturalCoords,
+  collectDialogueElementMarks,
   parseImageMarkRecognizeResult,
   removeImageMarkFromGraph,
   replaceImageMarkOnGraph,
   setImageMarkAnalyzing,
   isImageMarkAnalyzing,
   stripMarkMentionFromPrompt,
+  syncNodeImageMarkLists,
   updateImageMarkLabelOnNode,
 } from '../../imageMarkUtils'
 import { toVideoApiPrompt } from '../../promptMention'
@@ -1011,7 +1014,7 @@ export function registerCore(bind: CanvasBindings) {
       || (showVideoGenPromptBar.value ? activeVideoGenPromptNodeId.value : '')
     if (!returnId) return []
     const data = graph.value?.getCellById(returnId)?.getData() as CanvasNodeData | undefined
-    return Array.isArray(data?.elementMarks) ? data!.elementMarks! : []
+    return collectDialogueElementMarks(data)
   })
 
   const imageMarkAnalyzingActive = computed(() => {
@@ -3712,6 +3715,13 @@ export function registerCore(bind: CanvasBindings) {
     showImageDialogue.value = true
     showImageHdMenu.value = false
     closeImageGenPromptBar()
+    // 对齐图上钉点与对话框标记列表，避免只存在一侧
+    syncNodeImageMarkLists(cell as Node)
+    for (const ref of getImageDialoguePreviewsForNode(id)) {
+      if (!ref.nodeId || ref.nodeId === id) continue
+      const sourceCell = g.getCellById(ref.nodeId)
+      if (sourceCell?.isNode()) syncNodeImageMarkLists(sourceCell as Node)
+    }
     // 待生成节点不提供标记能力：打开时退出标记模式
     if (isPendingImageGenDialogueTarget(data) && showElementSelectMode.value) {
       exitElementSelectMode({ force: true })
@@ -5906,6 +5916,10 @@ export function registerCore(bind: CanvasBindings) {
       }
 
       replaceImageMarkOnGraph(g, pendingMark.id, completedMark)
+      syncNodeImageMarkLists(sourceNode)
+      if (returnCell?.isNode() && returnCell.id !== sourceNode.id) {
+        syncNodeImageMarkLists(returnCell as Node)
+      }
 
       recordCanvasDescription(completedMark.label, '标记识别')
       message.success(`已识别：${completedMark.label}`)
@@ -6020,22 +6034,30 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     if (!g || !markId) return
     const mark = findElementMarkById(markId)
-    if (!mark) return
 
-    removeImageMarkFromGraph(g, markId)
+    // 无论标记挂在 elementMarks 还是 imageElementMarks，都按 id 全图移除，保证图上钉点与对话框同步
+    const removed = removeImageMarkFromGraph(g, markId)
+    if (!removed && !mark) return
 
     const ownerId = getElementMarkOwnerNodeId()
-    if (showImageDialogue.value || activeImageGenPromptNodeId.value) {
+    if (mark && (showImageDialogue.value || activeImageGenPromptNodeId.value)) {
       imageDialogueText.value = stripMarkMentionFromPrompt(imageDialogueText.value, mark)
       if (ownerId) persistImageDialogueFields(ownerId)
     }
-    if (showVideoGenPromptBar.value) {
+    if (mark && showVideoGenPromptBar.value) {
       videoGenPromptText.value = stripMarkMentionFromPrompt(videoGenPromptText.value, mark)
       persistVideoGenPrompt()
     }
 
     if (selectedElementMarkId.value === markId) {
       clearImageElementMarkSelection()
+    } else {
+      // 即便未走选中态，也清掉节点上残留的选中 id（removeImageMarkFromNode 已处理，这里兜底全局）
+      const stillSelected = g.getNodes().some((cell) => {
+        const data = cell.getData() as CanvasNodeData
+        return data.selectedImageElementMarkId === markId
+      })
+      if (stillSelected) clearImageElementMarkSelection()
     }
 
     bumpToolbarRevision()
@@ -6050,11 +6072,22 @@ export function registerCore(bind: CanvasBindings) {
     const cell = g.getCellById(ownerId)
     if (!cell?.isNode()) return
     const data = cell.getData() as CanvasNodeData
-    const marks = [...(data.elementMarks ?? [])]
+    const markMap = new Map<string, ImageMarkItem>()
+    for (const mark of collectDialogueElementMarks(data)) {
+      markMap.set(mark.id, mark)
+    }
+    const marks = [...markMap.values()]
     if (!marks.length) return
 
     marks.forEach((mark) => removeImageMarkFromGraph(g, mark.id))
     clearElementMarksOnNode(cell as Node)
+    // 同步清空本节点图片钉（clearElementMarksOnNode 只清 elementMarks）
+    const latest = { ...(cell.getData() as CanvasNodeData) }
+    if (latest.imageElementMarks?.length) {
+      latest.imageElementMarks = []
+      delete latest.selectedImageElementMarkId
+      cell.setData(latest, { overwrite: true })
+    }
     clearImageElementMarkSelection()
 
     if (showImageDialogue.value) {
@@ -9674,6 +9707,12 @@ export function registerCore(bind: CanvasBindings) {
       .map((id) => g.getCellById(id))
       .filter((cell): cell is Node => cell != null && cell.isNode())
     layoutNodesInGroup(nodes, direction)
+    const touchedGroupIds = new Set<string>()
+    nodes.forEach((node) => {
+      const groupId = (node.getData() as CanvasNodeData).groupId
+      if (groupId) touchedGroupIds.add(groupId)
+    })
+    touchedGroupIds.forEach((groupId) => fitStoredGroupSelectionBoxToMembers(g, groupId))
     updateNodeToolbar()
     scheduleHistoryPush()
   }
@@ -9697,18 +9736,9 @@ export function registerCore(bind: CanvasBindings) {
       return
     }
 
-    const closeLoading = message.loading(`正在准备下载 0/${items.length}...`, 0)
-    let hideLoading = closeLoading
+    const hideLoading = message.loading('正在下载', 0)
     try {
-      const result = await downloadCanvasMediaBatch(items, {
-        onProgress: (current, total) => {
-          hideLoading()
-          hideLoading = message.loading(
-            current >= total ? '正在打包下载...' : `正在准备下载 ${current}/${total}...`,
-            0,
-          )
-        },
-      })
+      const result = await downloadCanvasMediaBatch(items)
       hideLoading()
 
       if (!result.success) {
@@ -9796,6 +9826,7 @@ export function registerCore(bind: CanvasBindings) {
       .map((id) => g.getCellById(id))
       .filter((cell): cell is Node => cell != null && cell.isNode())
     layoutNodesInGroup(nodes, direction)
+    fitStoredGroupSelectionBoxToMembers(g, group.groupId)
     updateNodeToolbar()
     scheduleHistoryPush()
   }

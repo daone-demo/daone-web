@@ -477,7 +477,6 @@ function onMarkPinClick(mark: ImageMarkItem, event: MouseEvent) {
 }
 
 function onMarkRemoveClick(mark: ImageMarkItem, event: MouseEvent) {
-  if (mark.pending) return
   event.preventDefault()
   event.stopPropagation()
   const g = getGraph() as CanvasGraph

@@ -210,6 +210,62 @@ export function appendElementMarkToNode(node: Node, mark: ImageMarkItem) {
   node.setData(data, { overwrite: true })
 }
 
+/**
+ * 将节点上 imageElementMarks 与 elementMarks 按 id 对齐，避免「图上有钉、对话框无标记」或反向不同步。
+ * 仅合并自身相关标记：image 钉全部并入 elementMarks；elementMarks 中 source 指向本节点的并入 image 钉。
+ */
+export function syncNodeImageMarkLists(node: Node) {
+  const data = { ...(node.getData() as CanvasNodeData) }
+  if (data.kind !== 'image') return false
+
+  const pins = Array.isArray(data.imageElementMarks) ? [...data.imageElementMarks] : []
+  const elements = Array.isArray(data.elementMarks) ? [...data.elementMarks] : []
+  const pinIds = new Set(pins.map((mark) => mark.id))
+  const elementIds = new Set(elements.map((mark) => mark.id))
+
+  let changed = false
+
+  for (const mark of pins) {
+    if (elementIds.has(mark.id)) continue
+    elements.push({ ...mark })
+    elementIds.add(mark.id)
+    changed = true
+  }
+
+  for (const mark of elements) {
+    if (mark.sourceNodeId && mark.sourceNodeId !== node.id) continue
+    if (pinIds.has(mark.id)) continue
+    pins.push({ ...mark })
+    pinIds.add(mark.id)
+    changed = true
+  }
+
+  if (!changed) return false
+  data.imageElementMarks = pins
+  data.elementMarks = elements
+  node.setData(data, { overwrite: true })
+  return true
+}
+
+/** 收集节点上用于对话框展示的标记（elementMarks 优先，并补齐同节点 image 钉） */
+export function collectDialogueElementMarks(data?: CanvasNodeData | null): ImageMarkItem[] {
+  if (!data) return []
+  const elements = Array.isArray(data.elementMarks) ? data.elementMarks : []
+  if (data.kind !== 'image') return [...elements]
+
+  const pins = Array.isArray(data.imageElementMarks) ? data.imageElementMarks : []
+  if (!pins.length) return [...elements]
+
+  const merged = [...elements]
+  const ids = new Set(elements.map((mark) => mark.id))
+  for (const mark of pins) {
+    if (ids.has(mark.id)) continue
+    merged.push(mark)
+    ids.add(mark.id)
+  }
+  return merged
+}
+
 export function setImageMarkAnalyzing(node: Node, point: { x: number; y: number } | null) {
   const data = { ...(node.getData() as CanvasNodeData) }
   data.imageMarkAnalyzing = point
@@ -268,7 +324,7 @@ function filterMarkList(list: ImageMarkItem[] | undefined, markId: string) {
   return next.length === list.length ? list : next
 }
 
-/** 从节点数据中移除指定标记 */
+/** 从节点数据中移除指定标记（imageElementMarks / elementMarks 同步清理） */
 export function removeImageMarkFromNode(node: Node, markId: string) {
   const data = { ...(node.getData() as CanvasNodeData) }
   let changed = false
@@ -286,6 +342,10 @@ export function removeImageMarkFromNode(node: Node, markId: string) {
       data.elementMarks = next
       changed = true
     }
+  }
+  if (data.selectedImageElementMarkId === markId) {
+    data.selectedImageElementMarkId = undefined
+    changed = true
   }
 
   if (changed) {
