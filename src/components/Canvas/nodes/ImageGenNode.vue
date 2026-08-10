@@ -112,7 +112,7 @@
       </div>
 
       <div
-        v-else-if="data.imageGenTask === 'img2img'"
+        v-else-if="data.imageGenTask === 'img2img' || (data.imageGenTask === 'picker' && data.previewUrl)"
         class="image-gen-node__picker"
       >
         <div
@@ -139,15 +139,15 @@
               @error="onImageError"
             />
           </template>
-          <span v-else class="image-gen-node__placeholder-icon" aria-hidden="true" />
+          <i v-else class="iconfont icon-icon-" style="font-size: 48px; color: #000000;"></i>
         </div>
       </div>
 
       <div v-else class="image-gen-node__picker">
         <div class="image-gen-node__preview image-gen-node__preview--empty">
-          <span class="image-gen-node__placeholder-icon" aria-hidden="true" />
+          <i class="iconfont icon-icon-" style="font-size: 48px; color: #000000;"></i>
         </div>
-        <p class="image-gen-node__hd-hint">图片高清处理中…</p>
+        <!-- <p class="image-gen-node__hd-hint">图片高清处理中…</p> -->
       </div>
     </div>
   </div>

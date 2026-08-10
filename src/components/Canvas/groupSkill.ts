@@ -1,6 +1,6 @@
 import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData, NodeKind } from './constants'
-import { isAiGeneratedCanvasNode } from './constants'
+import { isAiGeneratedCanvasNode, normalizeAssetId } from './constants'
 
 export interface GroupSkillNode {
   id: string
@@ -44,8 +44,8 @@ export function extractGroupSubgraph(graph: Graph, nodeIds: string[]): GroupSkil
     .map((node) => {
       const data = node.getData() as CanvasNodeData
       const pos = node.getPosition()
-      const assetId = data.assetId?.trim() || undefined
-      const sourceAssetId = data.sourceAssetId?.trim() || undefined
+      const assetId = normalizeAssetId(data.assetId)
+      const sourceAssetId = normalizeAssetId(data.sourceAssetId)
       return {
         id: node.id,
         kind: data.kind,
@@ -102,17 +102,6 @@ function parseNodeKind(value: unknown): NodeKind {
   return 'text'
 }
 
-function readOptionalString(value: unknown): string | undefined {
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    return trimmed || undefined
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return String(value)
-  }
-  return undefined
-}
-
 /** 从元素组 cells 解析为可落画布子图 */
 export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | null {
   if (!Array.isArray(cells) || !cells.length) return null
@@ -142,8 +131,8 @@ export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | n
         genPrompt: typeof item.genPrompt === 'string' ? item.genPrompt : undefined,
         previewUrl: typeof item.previewUrl === 'string' ? item.previewUrl : undefined,
         fileName: typeof item.fileName === 'string' ? item.fileName : undefined,
-        assetId: readOptionalString(item.assetId ?? item.asset_id),
-        sourceAssetId: readOptionalString(item.sourceAssetId ?? item.source_asset_id),
+        assetId: normalizeAssetId(item.assetId ?? item.asset_id),
+        sourceAssetId: normalizeAssetId(item.sourceAssetId ?? item.source_asset_id),
         aiGenerated: item.aiGenerated === true ? true : undefined,
         position: {
           x: Number(position?.x ?? 0),

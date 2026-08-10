@@ -8,6 +8,7 @@
       type="button"
       class="dialogue-workflow-select__trigger"
       :class="{ 'dialogue-workflow-select__trigger--active': open }"
+      :disabled="disabled"
       @click="toggle"
     >
       <span class="dialogue-workflow-select__label">{{ displayLabel }}</span>
@@ -105,6 +106,7 @@ const props = withDefaults(
     groups?: ImageWorkflowOptionGroup[]
     placeholder?: string
     light?: boolean
+    disabled?: boolean
   }>(),
   {
     modelValue: undefined,
@@ -112,6 +114,7 @@ const props = withDefaults(
     groups: () => [],
     placeholder: '选择工作流',
     light: true,
+    disabled: false,
   },
 )
 
@@ -165,6 +168,7 @@ function onCategoryHover(categoryId: string) {
 }
 
 function toggle() {
+  if (props.disabled) return
   open.value = !open.value
   if (open.value) {
     syncActiveCategory()
@@ -254,6 +258,11 @@ onBeforeUnmount(() => {
   &--active {
     background: #f3f4f6;
     border-color: #d1d5db;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
   }
 }
 

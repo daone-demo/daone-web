@@ -101,6 +101,7 @@ export type CanvasBindings = CanvasState & {
     mediaHeight: number
   } | null>
   imageDialoguePreviews: ComputedRef<import('../../constants').ImageSourceRef[]>
+  imageDialogueWorkflowDisabled: ComputedRef<boolean>
   imageDialoguePreviewUrl: ComputedRef<string>
   elementMarks: ComputedRef<import('../../constants').ImageMarkItem[]>
   imageMarkAnalyzingActive: ComputedRef<boolean>

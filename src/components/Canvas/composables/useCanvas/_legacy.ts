@@ -492,6 +492,8 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     return data?.sourcePreviewUrl || data?.previewUrl || ''
   })
 
+  const imageDialogueWorkflowDisabled = computed(() => false)
+
   const showNodeToolbar = computed(
     () => Boolean(selectedNodeId.value) && !showGroupToolbar.value,
   )
@@ -4222,6 +4224,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     imageCropSource,
     imageDialoguePreviewUrl,
     imageDialoguePreviews,
+    imageDialogueWorkflowDisabled,
     imageDialogueText,
     imageGenPromptPos,
     imageGenPromptText,

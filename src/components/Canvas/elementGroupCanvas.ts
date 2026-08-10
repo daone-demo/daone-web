@@ -1,5 +1,6 @@
 import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData } from './constants'
+import { normalizeAssetId } from './constants'
 import { applyRemoteImageToNode, applyRemoteVideoToNode } from './upload'
 import { connectGenEdge } from './imageGen'
 import { addCanvasNode } from './graph'
@@ -7,7 +8,7 @@ import type { GroupSkillNode, GroupSkillSubgraph } from './groupSkill'
 import { inferWorkflowAiGeneratedNodeIds, parseElementGroupRecord } from './groupSkill'
 
 function resolvePersistedAssetId(item: GroupSkillNode) {
-  return item.assetId?.trim() || item.sourceAssetId?.trim() || ''
+  return normalizeAssetId(item.assetId) || normalizeAssetId(item.sourceAssetId) || ''
 }
 
 function createNodeId() {
@@ -56,8 +57,9 @@ export function spawnElementGroupOnCanvas(
     }
     if (persistedAssetId) {
       overrides.assetId = persistedAssetId
-      if (item.sourceAssetId?.trim()) {
-        overrides.sourceAssetId = item.sourceAssetId.trim()
+      const sourceAssetId = normalizeAssetId(item.sourceAssetId)
+      if (sourceAssetId) {
+        overrides.sourceAssetId = sourceAssetId
       }
     }
     if (aiGeneratedIds.has(item.id)) {
@@ -86,8 +88,9 @@ export function spawnElementGroupOnCanvas(
     } else if (persistedAssetId) {
       const data = { ...(node.getData() as CanvasNodeData) }
       data.assetId = persistedAssetId
-      if (item.sourceAssetId?.trim()) {
-        data.sourceAssetId = item.sourceAssetId.trim()
+      const sourceAssetId = normalizeAssetId(item.sourceAssetId)
+      if (sourceAssetId) {
+        data.sourceAssetId = sourceAssetId
       }
       node.setData(data)
     }
