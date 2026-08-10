@@ -272,14 +272,8 @@ export type GroupLayoutDirection = 'grid' | 'horizontal' | 'vertical'
 
 const GROUP_GAP = 24
 
-/** 组内整理：在组锚点处按宫格、水平或垂直方向排列节点 */
-export function layoutNodesInGroup(
-  nodes: Node[],
-  direction: GroupLayoutDirection = 'horizontal',
-) {
-  if (nodes.length === 0) return
-
-  const sorted = [...nodes].sort((a, b) => {
+function sortNodesForLayout(nodes: Node[], direction: GroupLayoutDirection): Node[] {
+  return [...nodes].sort((a, b) => {
     const pa = a.getPosition()
     const pb = b.getPosition()
     if (direction === 'horizontal') {
@@ -293,10 +287,14 @@ export function layoutNodesInGroup(
     if (Math.abs(pa.y - pb.y) < 48) return pa.x - pb.x
     return pa.y - pb.y
   })
+}
 
-  const anchorX = Math.min(...nodes.map((node) => node.getPosition().x))
-  const anchorY = Math.min(...nodes.map((node) => node.getPosition().y))
-
+function placeNodesAtAnchor(
+  sorted: Node[],
+  direction: GroupLayoutDirection,
+  anchorX: number,
+  anchorY: number,
+) {
   if (direction === 'grid') {
     const cols = Math.max(1, Math.ceil(Math.sqrt(sorted.length)))
     let x = anchorX
@@ -322,7 +320,6 @@ export function layoutNodesInGroup(
 
   let x = anchorX
   let y = anchorY
-
   sorted.forEach((node) => {
     const { width, height } = node.getSize()
     node.position(x, y)
@@ -332,6 +329,175 @@ export function layoutNodesInGroup(
       y += height + GROUP_GAP
     }
   })
+}
+
+/** 沿 sourceNodeId / 入边向上，找到选中集合中的源图根节点 */
+function resolveSourceImageId(
+  nodeId: string,
+  sourceIds: Set<string>,
+  nodeMap: Map<string, Node>,
+  graph: Graph | undefined,
+): string | null {
+  const visited = new Set<string>()
+
+  function walk(currentId: string): string | null {
+    if (visited.has(currentId)) return null
+    visited.add(currentId)
+    if (sourceIds.has(currentId)) return currentId
+
+    const current = nodeMap.get(currentId)
+    if (current) {
+      const sid = String((current.getData() as CanvasNodeData).sourceNodeId ?? '').trim()
+      if (sid) {
+        const hit = walk(sid)
+        if (hit) return hit
+      }
+    }
+
+    if (!graph) return null
+    for (const edge of graph.getEdges()) {
+      if (edge.getTargetCellId() !== currentId) continue
+      const src = edge.getSourceCellId()
+      if (!src) continue
+      const hit = walk(src)
+      if (hit) return hit
+    }
+    return null
+  }
+
+  return walk(nodeId)
+}
+
+/**
+ * 选中集合内的源图：图片根节点（选中范围内无入边 / sourceNodeId），
+ * 且至少带有一个选中的下游节点。不依赖是否 AI 生成。
+ */
+function findSourceImageRoots(nodes: Node[], graph: Graph | undefined): Node[] {
+  if (nodes.length < 2) return []
+
+  const idSet = new Set(nodes.map((node) => node.id))
+  const hasIncoming = new Set<string>()
+
+  nodes.forEach((node) => {
+    const sid = String((node.getData() as CanvasNodeData).sourceNodeId ?? '').trim()
+    if (sid && idSet.has(sid)) hasIncoming.add(node.id)
+  })
+
+  if (graph) {
+    graph.getEdges().forEach((edge) => {
+      const src = edge.getSourceCellId()
+      const tgt = edge.getTargetCellId()
+      if (!src || !tgt || !idSet.has(src) || !idSet.has(tgt)) return
+      hasIncoming.add(tgt)
+    })
+  }
+
+  const roots = nodes.filter((node) => {
+    if (hasIncoming.has(node.id)) return false
+    return (node.getData() as CanvasNodeData).kind === 'image'
+  })
+  if (!roots.length) return []
+
+  const rootIds = new Set(roots.map((node) => node.id))
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]))
+  const rootsWithChildren = roots.filter((root) =>
+    nodes.some((node) => {
+      if (rootIds.has(node.id)) return false
+      return resolveSourceImageId(node.id, new Set([root.id]), nodeMap, graph) === root.id
+    }),
+  )
+
+  return rootsWithChildren
+}
+
+/** 无源图时：全部节点参与排列（原逻辑） */
+function layoutAllNodesInGroup(nodes: Node[], direction: GroupLayoutDirection) {
+  const sorted = sortNodesForLayout(nodes, direction)
+  const anchorX = Math.min(...nodes.map((node) => node.getPosition().x))
+  const anchorY = Math.min(...nodes.map((node) => node.getPosition().y))
+  placeNodesAtAnchor(sorted, direction, anchorX, anchorY)
+}
+
+/** 将子节点块垂直居中对齐到源图 */
+function alignClusterToSourceCenter(cluster: Node[], source: Node) {
+  if (cluster.length === 0) return
+  const sourceBox = source.getBBox()
+  const clusterBox = getNodesBBox(cluster)
+  const dy = sourceBox.y + sourceBox.height / 2 - (clusterBox.y + clusterBox.height / 2)
+  if (Math.abs(dy) < 1) return
+  translateNodes(cluster, 0, dy)
+}
+
+/**
+ * 有源图时：源图固定；下游节点按源图分簇，排到各自源图右侧并垂直居中
+ * （垂直=右侧纵列，水平=右侧横排，宫格=右侧宫格）
+ */
+function layoutNodesBesideSourceImages(
+  nodes: Node[],
+  sources: Node[],
+  direction: GroupLayoutDirection,
+  graph: Graph | undefined,
+) {
+  const sourceIds = new Set(sources.map((node) => node.id))
+  const others = nodes.filter((node) => !sourceIds.has(node.id))
+  if (others.length === 0) return
+
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]))
+  const clusters = new Map<string, Node[]>()
+  const orphans: Node[] = []
+
+  others.forEach((node) => {
+    const sourceId = resolveSourceImageId(node.id, sourceIds, nodeMap, graph)
+    if (!sourceId) {
+      orphans.push(node)
+      return
+    }
+    const bucket = clusters.get(sourceId)
+    if (bucket) bucket.push(node)
+    else clusters.set(sourceId, [node])
+  })
+
+  sources.forEach((source) => {
+    const cluster = clusters.get(source.id)
+    if (!cluster?.length) return
+    const sorted = sortNodesForLayout(cluster, direction)
+    const { x, y } = source.getPosition()
+    const { width } = source.getSize()
+    placeNodesAtAnchor(sorted, direction, x + width + GROUP_GAP, y)
+    alignClusterToSourceCenter(sorted, source)
+  })
+
+  if (!orphans.length) return
+
+  const leftmost = sources.reduce((best, node) =>
+    node.getPosition().x < best.getPosition().x ? node : best,
+  )
+  const sorted = sortNodesForLayout(orphans, direction)
+  const { x, y } = leftmost.getPosition()
+  const { width } = leftmost.getSize()
+  placeNodesAtAnchor(sorted, direction, x + width + GROUP_GAP, y)
+  alignClusterToSourceCenter(sorted, leftmost)
+}
+
+/**
+ * 组内 / 多选整理：按宫格、水平或垂直排列。
+ * - 选中含源图根节点时：源图不参与，其余排到源图右侧（见图示）
+ * - 无源图时：全部节点参与，保持原行为
+ */
+export function layoutNodesInGroup(
+  nodes: Node[],
+  direction: GroupLayoutDirection = 'horizontal',
+) {
+  if (nodes.length === 0) return
+
+  const graph = (nodes[0]?.model?.graph ?? undefined) as Graph | undefined
+  const sources = findSourceImageRoots(nodes, graph)
+  if (sources.length > 0) {
+    layoutNodesBesideSourceImages(nodes, sources, direction, graph)
+    return
+  }
+
+  layoutAllNodesInGroup(nodes, direction)
 }
 
 /** 整理画布：按任务原节点分块排列，块内按连线关系或网格整理 */
