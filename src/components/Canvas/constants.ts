@@ -325,6 +325,18 @@ export function createEmptyNodeData(): CanvasNodeData {
   }
 }
 
+/** 将接口/持久化数据中可能出现的素材 ID 规范为字符串（兼容 number 类型） */
+export function normalizeAssetId(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed || undefined
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  return undefined
+}
+
 /** 从节点数据或图片来源引用中解析素材库资源 ID */
 export function resolveImageAssetId(
   source?:
@@ -333,8 +345,14 @@ export function resolveImageAssetId(
     | null,
 ): string {
   if (!source) return ''
-  if ('assetId' in source && source.assetId) return source.assetId
-  if ('sourceAssetId' in source && source.sourceAssetId) return source.sourceAssetId
+  if ('assetId' in source) {
+    const assetId = normalizeAssetId(source.assetId)
+    if (assetId) return assetId
+  }
+  if ('sourceAssetId' in source) {
+    const sourceAssetId = normalizeAssetId(source.sourceAssetId)
+    if (sourceAssetId) return sourceAssetId
+  }
   return ''
 }
 
@@ -343,8 +361,10 @@ export function resolveVideoAssetId(
   source?: Pick<CanvasNodeData, 'assetId' | 'sourceAssetId'> | null,
 ): string {
   if (!source) return ''
-  if (source.assetId) return source.assetId
-  if (source.sourceAssetId) return source.sourceAssetId
+  const assetId = normalizeAssetId(source.assetId)
+  if (assetId) return assetId
+  const sourceAssetId = normalizeAssetId(source.sourceAssetId)
+  if (sourceAssetId) return sourceAssetId
   return ''
 }
 

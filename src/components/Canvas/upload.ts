@@ -2,7 +2,7 @@ import { message } from 'ant-design-vue'
 import type { Graph, Node } from '@antv/x6'
 import api from '@/services/api'
 import type { CanvasNodeData } from './constants'
-import { isNodeFileUploading } from './constants'
+import { isNodeFileUploading, normalizeAssetId } from './constants'
 import { syncGenNodesFromSource } from './imageGen'
 import { syncTextNodesFromImageSource } from './textPrompt'
 import { getNodeSize, syncNodeShapeFromData } from './graph'
@@ -326,7 +326,7 @@ export async function uploadAssetFile(
 
   return {
     url: asset.previewUrl || asset.url || '',
-    assetId: asset.id,
+    assetId: normalizeAssetId(asset.id) ?? '',
     width: asset.width,
     height: asset.height,
     durationSeconds: asset.durationSeconds,
@@ -443,7 +443,8 @@ async function finishUpload(
     kind: data.kind,
   })
   if (result.assetId) {
-    data.assetId = result.assetId
+    const assetId = normalizeAssetId(result.assetId)
+    if (assetId) data.assetId = assetId
   }
 
   if (result.width && result.height) {
@@ -519,8 +520,9 @@ export async function applyRemoteImageToNode(
   data.mode = 'editor'
   data.fileName = payload.fileName || '图片'
   data.title = data.fileName
-  if (payload.assetId) {
-    data.assetId = payload.assetId
+  const assetId = normalizeAssetId(payload.assetId)
+  if (assetId) {
+    data.assetId = assetId
   }
 
   if (payload.width && payload.height) {
@@ -565,8 +567,9 @@ export async function applyRemoteVideoToNode(
   data.mode = 'editor'
   data.fileName = payload.fileName || '视频'
   data.title = data.fileName
-  if (payload.assetId) {
-    data.assetId = payload.assetId
+  const assetId = normalizeAssetId(payload.assetId)
+  if (assetId) {
+    data.assetId = assetId
   }
   delete data.generationTaskType
   delete data.generationTaskId
