@@ -148,7 +148,6 @@ import type { AssetCenterTabKey } from '../assetCenterData'
 import type { ElementGroupRecord } from '../assetCenterData'
 import {
   getAssetCenterDisplayName,
-  getAssetCenterFiles,
   getAssetCenterPreviewUrl,
   getAssetCenterRole,
 } from '../assetCenterData'
@@ -205,10 +204,6 @@ function getPreviewUrl(item: ElementGroupRecord) {
   return getAssetCenterPreviewUrl(item)
 }
 
-function getFiles(item: ElementGroupRecord) {
-  return getAssetCenterFiles(item)
-}
-
 function canDrag(item: ElementGroupRecord) {
   return Boolean(parseElementGroupRecord(item))
 }
@@ -229,14 +224,6 @@ function setHovered(event: MouseEvent, item: ElementGroupRecord) {
   }
 }
 
-function keepPreview(item: ElementGroupRecord) {
-  if (hoverTimer) {
-    clearTimeout(hoverTimer)
-    hoverTimer = null
-  }
-  hoveredId.value = String(item.id)
-}
-
 function clearHovered() {
   hoverTimer = setTimeout(() => {
     hoveredId.value = ''
@@ -248,14 +235,6 @@ function clearHovered() {
 function onAddToCanvas(item: ElementGroupRecord) {
   if (!canDrag(item)) return
   emit('select', item)
-}
-
-function onAddToDialog(item: ElementGroupRecord) {
-  emit('add-to-chat', {
-    id: String(item.id),
-    role: getRole(item),
-    name: displayName(item),
-  })
 }
 
 function onDelete(item: ElementGroupRecord) {
