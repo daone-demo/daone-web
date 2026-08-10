@@ -62,7 +62,7 @@
       v-if="data.mode === 'picker'"
       class="video-node__body video-node__body--picker"
     >
-      <i class="iconfont icon-shipin" style="font-size: 36px; color: black;" />
+    <i class="iconfont icon-chakantiezishipin" style="font-size: 48px; color: #000000;"></i>
     </div>
 
     <div

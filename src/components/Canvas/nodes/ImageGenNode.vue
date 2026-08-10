@@ -94,7 +94,7 @@
               @error="onImageError"
             />
           </template>
-          <span v-else class="image-gen-node__placeholder-icon" aria-hidden="true" />
+          <i class="iconfont icon-icon-" v-else style="font-size: 48px; color: #000000;"></i>
         </div>
       </div>
 
@@ -108,8 +108,7 @@
         @dragleave="onDragLeave"
         @drop.prevent.stop="onDrop"
       >
-        <i class="iconfont icon-shangchuantupian1" style="font-size: 36px;"></i>
-        <span>{{ isDragOver ? '松开以上传图片' : '点击或拖拽图片到此处上传' }}</span>
+        <i class="iconfont icon-icon-" style="font-size: 48px; color: #000000;"></i>
       </div>
 
       <div
@@ -477,5 +476,10 @@ onMounted(() => {
 
 @keyframes image-gen-spin {
   to { transform: rotate(360deg); }
+}
+.img_tip_icon {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
 }
 </style>

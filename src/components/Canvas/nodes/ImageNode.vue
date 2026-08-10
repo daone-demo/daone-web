@@ -212,8 +212,7 @@
           />
         </template>
         <template v-else>
-          <i class="iconfont icon-shangchuantupian1" style="font-size: 36px;"></i>
-          <span>{{ isDragOver ? '松开以上传图片' : '点击或拖拽图片到此处上传' }}</span>
+          <img src="@assets/images/img.png" alt="" class="video-dialogue__drop-icon" />
         </template>
       </div>
 
