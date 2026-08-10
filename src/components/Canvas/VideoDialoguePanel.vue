@@ -15,7 +15,7 @@
     </div>
 
     <div class="video-dialogue__head">
-      <div class="video-dialogue__advisor-wrap">
+      <!-- <div class="video-dialogue__advisor-wrap">
         <button
           type="button"
           class="video-dialogue__select"
@@ -59,7 +59,7 @@
           </template>
           <p v-else class="video-dialogue__advisor-empty">暂无工作流</p>
         </div>
-      </div>
+      </div> -->
     </div>
 
     <div class="video-dialogue__refs">
@@ -306,7 +306,8 @@ const advisorButtonLabel = computed(() => {
     const found = group.children.find((item) => item.id === selectedWorkflowId.value)
     if (found) return found.name
   }
-  return '视频参谋'
+  // return '视频参谋'
+  return '请选择工作流'
 })
 const videoDuration = ref<VideoGenDuration>(VIDEO_GEN_DURATIONS[0])
 const videoAspectRatio = ref<VideoGenAspectRatio>('16:9')

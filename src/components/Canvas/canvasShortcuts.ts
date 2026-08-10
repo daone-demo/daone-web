@@ -44,13 +44,13 @@ export const CANVAS_SHORTCUT_GROUPS: CanvasShortcutGroup[] = [
       { label: '上传图片/视频', keys: ['Shift', 'A'] },
     ],
   },
-  {
-    title: '图层',
-    items: [
-      { label: '置于顶层', keys: [']'] },
-      { label: '上移一层', keys: [SHORTCUT_MOD_KEY, ']'] },
-      { label: '置于底层', keys: ['['] },
-      { label: '下移一层', keys: [SHORTCUT_MOD_KEY, '['] },
-    ],
-  },
+  // {
+  //   title: '图层',
+  //   items: [
+  //     { label: '置于顶层', keys: [']'] },
+  //     { label: '上移一层', keys: [SHORTCUT_MOD_KEY, ']'] },
+  //     { label: '置于底层', keys: ['['] },
+  //     { label: '下移一层', keys: [SHORTCUT_MOD_KEY, '['] },
+  //   ],
+  // },
 ]
