@@ -215,10 +215,13 @@ import dayjs from 'dayjs';
 import UpdateProjectName from '@components/UpdateProjectName/index.vue';
 import EmbeddedVideoPlayer from '@components/EmbeddedVideoPlayer/index.vue';
 import { Modal, message } from 'ant-design-vue';
-
 import { useModalStore } from '@stores/useModal';
 import { useProject } from '@stores/useProject';
 import { useNeedReloadStore } from '@stores/useNeedReload';
+import { useUserInfo } from '@/stores/useUserInfo';
+
+const userInfoStore = useUserInfo();
+
 const needReloadStore = useNeedReloadStore();
 const modalStore = useModalStore();
 const projectStore = useProject();
@@ -303,6 +306,8 @@ function getNextUntitledProjectTitle() {
 }
 
 function openNewProject() {
+  console.log('userInfoStore', userInfoStore.userInfo);
+  return;
   api.createProject({ title: getNextUntitledProjectTitle() }).then((res: any) => {
     router.push({ name: 'createProject', params: { id: res.id } })
   })
