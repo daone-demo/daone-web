@@ -45,6 +45,8 @@ export {
   reserveOutgoingBatchColumnOffset,
   resolveOutgoingResultNodePoint,
   planOutgoingResultPoints,
+  syncPendingImageTargetFromSources,
+  collectUpstreamImageSourceRefs,
 } from '../../imageGen'
 export {
   canImageNodeAcceptIncoming,

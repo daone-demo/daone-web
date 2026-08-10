@@ -18,7 +18,7 @@ import {
   ADD_NODE_GROUPS, CANVAS_ASSET_DRAG_TYPE, CANVAS_ELEMENT_GROUP_DRAG_TYPE, CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM, CONNECT_GENERATE_MENU,
   NODE_SPAWN_GAP_X, NODE_SPAWN_GAP_Y,
   ZOOM_MENU_PRESETS, IMG2PROMPT_DEFAULT_INSTRUCTION, applyImageGenTaskToNode, connectGenEdge,
-  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, getImageGenerationPlaceholderSize, findReusableImageGenerationNode, resetImageGenerationNodeForRetry, isImageGenerationFailedNode, shouldGenerateImageInPlaceOnNode, prepareImageNodeForInPlaceGeneration, resolveText2ImageGenerationTargetNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
+  spawnCroppedImageNode, spawnErasedImageNode, spawnGenerationResultNode, getImageGenerationPlaceholderSize, findReusableImageGenerationNode, resetImageGenerationNodeForRetry, isImageGenerationFailedNode, shouldGenerateImageInPlaceOnNode, prepareImageNodeForInPlaceGeneration, resolveText2ImageGenerationTargetNode, spawnCompletedImageResultNode, spawnGridSplitResultNodes, spawnModel3DResultNode, spawnVideoGenerationResultNode, spawnTextPromptResultNode, syncPendingImageTargetFromSources, collectUpstreamImageSourceRefs, canImageNodeAcceptIncoming, canOpenConnectMenu, createNodeFromConnectMenu, planOutgoingResultPoints,
   getConnectMenuPosition, resolveConnectSpawnPoint, detachEdgeRelation, isPersistedEdge,
   syncEdgeSelectionHighlight, applyFlowEdgeStyle, getFlowEdgeAttrs, getPreviewEdgeAttrs, addCanvasNode, bindGraphInteraction, cancelActiveRubberband, createGraph,
   ensureInfiniteCanvasArea, clientPointToGraphLocal, getViewportCenterLocal, getRandomViewportLocalPoint, hasVisibleNodesInViewport,
@@ -978,6 +978,25 @@ export function registerCore(bind: CanvasBindings) {
     }
     if (!id) return []
     return getImageDialoguePreviewsForNode(id)
+  })
+
+  const imageDialogueWorkflowDisabled = computed(() => {
+    void toolbarRevision.value
+    const g = graph.value
+    let id = ''
+    if (showImageDialogue.value) {
+      id = activeImageDialogueNodeId
+        || (selectedKind.value === 'image' ? selectedNodeId.value : '')
+    } else if (activeImageGenPromptNodeId.value) {
+      id = activeImageGenPromptNodeId.value
+    } else {
+      id = selectedNodeId.value
+    }
+    if (!g || !id) return false
+    const cell = g.getCellById(id)
+    if (!cell?.isNode()) return false
+    const data = cell.getData() as CanvasNodeData
+    return collectUpstreamImageSourceRefs(g, id, data).length > 1
   })
 
   const imageDialoguePreviewUrl = computed(() => {
@@ -3695,6 +3714,7 @@ export function registerCore(bind: CanvasBindings) {
       if (!currentRefs.length || refsChanged) {
         syncImageDialogueSourceRefs(cell as Node, refs)
       }
+      syncPendingImageTargetFromSources(g, cell as Node)
     }
     loadImageDialogueFields(id)
     showImageDialogue.value = true
@@ -4141,6 +4161,7 @@ export function registerCore(bind: CanvasBindings) {
     data.sourceAssetId = latest?.assetId ?? ''
     data.inputUpdated = refs.some((item) => Boolean(item.previewUrl))
     cell.setData(data, { overwrite: true })
+    syncPendingImageTargetFromSources(g, cell as Node)
     bumpToolbarRevision()
     scheduleHistoryPush()
   }
@@ -7250,6 +7271,8 @@ export function registerCore(bind: CanvasBindings) {
     )
     if (!spawned) return
 
+    syncPendingImageTargetFromSources(g, spawned)
+
     const data = spawned.getData() as CanvasNodeData
     if (data.mode === 'picker' && (data.kind === 'text' || data.kind === 'audio')) {
       activePickerNodeId.value = spawned.id
@@ -7386,6 +7409,13 @@ export function registerCore(bind: CanvasBindings) {
     data.inputUpdated = refs.some((item) => Boolean(item.previewUrl))
     // overwrite: true —— 避免 X6 默认深合并对 imageSourceRefs 数组按索引合并导致脏数据
     target.setData(data, { overwrite: true })
+    const g = graph.value
+    if (g) {
+      syncPendingImageTargetFromSources(g, target)
+      if (showImageDialogue.value && getActiveImageDialogueTargetNodeId() === target.id) {
+        loadImageDialogueFields(target.id)
+      }
+    }
     return true
   }
 
@@ -11688,6 +11718,7 @@ export function registerCore(bind: CanvasBindings) {
     imageGridSplitSource,
     imageDialoguePreviewUrl,
     imageDialoguePreviews,
+    imageDialogueWorkflowDisabled,
     isImageUploadFile,
     isImg2PromptTask,
     isText2VideoTask,

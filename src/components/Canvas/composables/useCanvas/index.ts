@@ -99,6 +99,7 @@ type GridSplitCanvasApi = Pick<
     | 'imageMarkHints'
     | 'openProjectBrowser'
     | 'closeProjectBrowser'
+    | 'imageDialogueWorkflowDisabled'
   > & {
     createNodeFromChatTask: (payload: ChatTaskCreatedPayload) => Node | null
     updateChatTaskNodeTitleFromPayload: (payload: ChatTaskUpdatedPayload) => void

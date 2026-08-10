@@ -1,6 +1,10 @@
 import type { Graph, Node } from '@antv/x6'
-import type { CanvasNodeData, ImageGenTask } from './constants'
-import { addCanvasNode, getNodeSize } from './graph'
+import type { CanvasNodeData, ImageGenTask, ImageSourceRef } from './constants'
+import {
+  createDefaultImageDialogueSettings,
+  normalizeAssetId,
+} from './constants'
+import { addCanvasNode, getNodeSize, syncNodeShapeFromData } from './graph'
 import { GRID_SPLIT_GAP, computeGridSplitContentOrigin } from './gridSplitUtils'
 
 import { getFlowEdgeAttrs } from './edgeStyle'
@@ -298,6 +302,208 @@ export function connectGenEdge(graph: Graph, sourceId: string, targetId: string)
   })
 }
 
+function isUpstreamDialogueSourceRef(item: ImageSourceRef, targetId: string) {
+  if (!item.previewUrl?.trim() || !item.nodeId || item.nodeId === targetId) return false
+  const nodeId = String(item.nodeId)
+  return !nodeId.startsWith('digital-human-') && !nodeId.startsWith('upload-')
+}
+
+/** 待生成图片节点：尚无生成结果、可接收上游图源 */
+export function isPendingImageGenerationTarget(data: CanvasNodeData): boolean {
+  if (data.kind !== 'image') return false
+  if (data.imageGenState === 'loading') return false
+  if (data.imageGenState === 'done') return false
+  if (data.generationTaskId) return false
+  return (
+    data.imageGenTask === 'picker' ||
+    data.imageGenTask === 'img2img' ||
+    data.mode === 'picker'
+  )
+}
+
+/** 统计目标节点上游图片源数量（优先以入边为准） */
+export function collectUpstreamImageSourceRefs(
+  graph: Graph,
+  targetId: string,
+  data: CanvasNodeData,
+): ImageSourceRef[] {
+  const fromEdges: ImageSourceRef[] = []
+  const seen = new Set<string>()
+  for (const edge of graph.getEdges()) {
+    if (edge.getTargetCellId() !== targetId) continue
+    const sourceId = edge.getSourceCellId()
+    if (!sourceId || seen.has(sourceId) || sourceId === targetId) continue
+    const source = graph.getCellById(sourceId)
+    if (!source?.isNode()) continue
+    const sourceData = source.getData() as CanvasNodeData
+    if (
+      sourceData.kind !== 'image' ||
+      !sourceData.previewUrl?.trim() ||
+      sourceData.uploadState === 'uploading'
+    ) {
+      continue
+    }
+    seen.add(sourceId)
+    fromEdges.push({
+      nodeId: sourceId,
+      assetId: normalizeAssetId(sourceData.assetId),
+      previewUrl: sourceData.previewUrl,
+      fileName: sourceData.fileName || sourceData.title || '',
+    })
+  }
+  if (fromEdges.length) return fromEdges
+
+  const fromRefs = (Array.isArray(data.imageSourceRefs) ? data.imageSourceRefs : []).filter((item) =>
+    isUpstreamDialogueSourceRef(item, targetId),
+  )
+  return fromRefs.map((item) => ({
+    nodeId: item.nodeId,
+    assetId: normalizeAssetId(item.assetId),
+    previewUrl: item.previewUrl,
+    fileName: item.fileName ?? '',
+  }))
+}
+
+/** 单图源待生成节点：继承源节点画布尺寸与媒体比例 */
+function resolvePendingImageTargetLayoutFromSource(
+  sourceNode: Node,
+  targetData: CanvasNodeData,
+): { layout: Partial<CanvasNodeData>; size: { width: number; height: number } } {
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  const sourceSize = sourceNode.getSize()
+  const layout: Partial<CanvasNodeData> = {}
+
+  if (sourceData.mediaWidth > 0 && sourceData.mediaHeight > 0) {
+    layout.mediaWidth = sourceData.mediaWidth
+    layout.mediaHeight = sourceData.mediaHeight
+  }
+
+  if (sourceData.editorWidth && sourceData.editorHeight) {
+    layout.editorWidth = sourceData.editorWidth
+    layout.editorHeight = sourceData.editorHeight
+  } else if (sourceSize.width > 0 && sourceSize.height > 0) {
+    layout.editorWidth = Math.round(sourceSize.width)
+    layout.editorHeight = Math.round(sourceSize.height)
+  }
+
+  if (typeof sourceData.viewScale === 'number' && sourceData.viewScale > 0) {
+    layout.viewScale = sourceData.viewScale
+  }
+
+  const merged = { ...targetData, ...layout }
+  const size = getNodeSize('image', merged.mode ?? 'picker', merged)
+  return { layout, size }
+}
+
+function resolveDefaultPendingImageTargetLayout(
+  targetData: CanvasNodeData,
+): { layout: Partial<CanvasNodeData>; size: { width: number; height: number } } {
+  const layout: Partial<CanvasNodeData> = {
+    mediaWidth: 0,
+    mediaHeight: 0,
+  }
+  const merged = { ...targetData, ...layout }
+  delete merged.editorWidth
+  delete merged.editorHeight
+  delete merged.viewScale
+  const size = getNodeSize('image', merged.mode ?? 'picker', merged)
+  return { layout, size }
+}
+
+function applyPendingImageTargetLayout(
+  targetNode: Node,
+  data: CanvasNodeData,
+  layout: Partial<CanvasNodeData>,
+  size: { width: number; height: number },
+) {
+  const next = { ...data, ...layout }
+  if (!layout.editorWidth) delete next.editorWidth
+  if (!layout.editorHeight) delete next.editorHeight
+  if (!layout.viewScale) delete next.viewScale
+  targetNode.setData(next, { overwrite: true })
+  targetNode.resize(size.width, size.height)
+  syncNodeShapeFromData(targetNode)
+}
+
+/**
+ * 待生成节点按上游图源数量同步展示图与 assetId：
+ * - 单图源：继承来源预览与 assetId
+ * - 多图源：清空节点预览与 assetId，并重置工作流
+ */
+export function syncPendingImageTargetFromSources(graph: Graph, targetNode: Node): boolean {
+  const data = { ...(targetNode.getData() as CanvasNodeData) }
+  if (!isPendingImageGenerationTarget(data)) return false
+
+  const refs = collectUpstreamImageSourceRefs(graph, targetNode.id, data)
+
+  if (refs.length) {
+    data.imageSourceRefs = refs.map((item) => ({
+      nodeId: item.nodeId,
+      assetId: item.assetId,
+      previewUrl: item.previewUrl,
+      fileName: item.fileName ?? '',
+    }))
+  } else {
+    data.imageSourceRefs = []
+  }
+
+  if (refs.length === 1) {
+    const ref = refs[0]
+    const sourceCell = graph.getCellById(ref.nodeId)
+    const sourceData = sourceCell?.isNode() ? (sourceCell.getData() as CanvasNodeData) : null
+    data.previewUrl = ref.previewUrl
+    data.assetId = normalizeAssetId(ref.assetId)
+    data.sourceNodeId = ref.nodeId
+    data.sourcePreviewUrl = ref.previewUrl
+    data.sourceFileName = ref.fileName || sourceData?.fileName || sourceData?.title || ''
+    data.sourceAssetId = normalizeAssetId(ref.assetId)
+    data.fileName = ref.fileName || sourceData?.fileName || sourceData?.title || ''
+    data.uploadState = 'done'
+    data.uploadProgress = 100
+    data.imageGenState = 'idle'
+    data.inputUpdated = true
+    const layoutResult = sourceCell?.isNode()
+      ? resolvePendingImageTargetLayoutFromSource(sourceCell as Node, data)
+      : resolveDefaultPendingImageTargetLayout(data)
+    applyPendingImageTargetLayout(targetNode, data, layoutResult.layout, layoutResult.size)
+    return true
+  }
+
+  if (refs.length > 1) {
+    data.previewUrl = ''
+    delete data.assetId
+    data.uploadState = 'idle'
+    data.uploadProgress = 0
+    delete data.imageGenState
+    data.inputUpdated = true
+    const settings = data.imageDialogueSettings ?? createDefaultImageDialogueSettings()
+    if (settings.workflowId) {
+      data.imageDialogueSettings = { ...settings, workflowId: '' }
+    }
+    const layoutResult = resolveDefaultPendingImageTargetLayout(data)
+    applyPendingImageTargetLayout(targetNode, data, layoutResult.layout, layoutResult.size)
+    return true
+  }
+
+  if (refs.length === 0) {
+    data.previewUrl = ''
+    delete data.assetId
+    data.uploadState = 'idle'
+    data.uploadProgress = 0
+    delete data.imageGenState
+    data.inputUpdated = false
+    delete data.sourceNodeId
+    delete data.sourcePreviewUrl
+    delete data.sourceFileName
+    delete data.sourceAssetId
+    const layoutResult = resolveDefaultPendingImageTargetLayout(data)
+    applyPendingImageTargetLayout(targetNode, data, layoutResult.layout, layoutResult.size)
+    return true
+  }
+
+  return false
+}
+
 export function findOutgoingGenNode(graph: Graph, sourceId: string) {
   const edge = graph.getEdges().find((item) => {
     const source = item.getSourceCellId()
@@ -357,6 +563,7 @@ export function spawnImageGenNode(
     sourceNodeId: sourceNode.id,
     sourcePreviewUrl: sourceData.previewUrl ?? '',
     sourceFileName: sourceData.fileName ?? '',
+    sourceAssetId: normalizeAssetId(sourceData.assetId),
     inputUpdated: Boolean(sourceData.previewUrl),
     genSeed: 58,
   }
@@ -370,6 +577,7 @@ export function spawnImageGenNode(
 
   const node = addCanvasNode(graph, 'image', point, overrides)
   connectGenEdge(graph, sourceNode.id, node.id)
+  syncPendingImageTargetFromSources(graph, node)
   return node
 }
 
@@ -390,12 +598,14 @@ export function spawnImageGenNodeAtPoint(
     sourceNodeId: sourceNode.id,
     sourcePreviewUrl: sourceData.previewUrl ?? '',
     sourceFileName: sourceData.fileName ?? '',
+    sourceAssetId: normalizeAssetId(sourceData.assetId),
     inputUpdated: Boolean(sourceData.previewUrl),
     genSeed: 58,
   }
 
   const node = addCanvasNode(graph, 'image', point, overrides)
   connectGenEdge(graph, sourceNode.id, node.id)
+  syncPendingImageTargetFromSources(graph, node)
   return node
 }
 

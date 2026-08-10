@@ -22,6 +22,7 @@
         :groups="workflowOptionGroups"
         placeholder="选择工作流"
         :light="isLightTheme"
+        :disabled="workflowDisabled"
         @update:model-value="onWorkflowChange"
         @select-digital-human="onDigitalHumanSelect"
       />
@@ -339,6 +340,7 @@ const props = defineProps<{
   settings: ImageDialogueSettings
   previewUrl?: string
   previews?: ImageSourceRef[]
+  workflowDisabled?: boolean
   canvasPickMode?: boolean
   elementSelectMode?: boolean
   elementMarks?: ImageMarkItem[]
@@ -385,6 +387,14 @@ const previewList = computed(() => {
     return [{ key: 'src-0', nodeId: '', previewUrl: props.previewUrl }]
   }
   return []
+})
+
+const workflowDisabled = computed(() => props.workflowDisabled ?? previewList.value.length > 1)
+
+watch(workflowDisabled, (disabled) => {
+  if (!disabled || !selectedWorkFlow.value) return
+  selectedWorkFlow.value = ''
+  emitSettings()
 })
 
 function resolveMarkPreviewUrl(mark: ImageMarkItem) {
