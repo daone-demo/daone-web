@@ -255,6 +255,7 @@
       :image-dialogue-settings="imageDialogueSettings"
       :image-dialogue-preview-url="imageDialoguePreviewUrl"
       :image-dialogue-previews="imageDialoguePreviews"
+      :image-dialogue-hide-workflow-and-mark="imageDialogueHideWorkflowAndMark"
       :element-marks="elementMarks"
       :mention-insert-serial="mentionInsertSerial"
       :mention-insert-token="mentionInsertToken"
@@ -629,6 +630,7 @@ const {
   gridSplitCols,
   imageDialoguePreviewUrl,
   imageDialoguePreviews,
+  imageDialogueHideWorkflowAndMark,
   imageDialogueText,
   imageDialogueSettings,
   imageGenPromptPos,

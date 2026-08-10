@@ -102,6 +102,7 @@ export type CanvasBindings = CanvasState & {
   } | null>
   imageDialoguePreviews: ComputedRef<import('../../constants').ImageSourceRef[]>
   imageDialoguePreviewUrl: ComputedRef<string>
+  imageDialogueHideWorkflowAndMark: ComputedRef<boolean>
   elementMarks: ComputedRef<import('../../constants').ImageMarkItem[]>
   imageMarkAnalyzingActive: ComputedRef<boolean>
   showNodeToolbar: ComputedRef<boolean>

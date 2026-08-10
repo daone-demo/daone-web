@@ -352,6 +352,7 @@
       :resolve-mark-preview-url="resolveMarkPreviewUrl"
       :chat-tools="chatTools"
       :workflows="workflows"
+      :hide-workflow-and-mark="imageDialogueHideWorkflowAndMark"
       @update:model-value="emit('update:imageDialogueText', $event)"
       @update:settings="emit('update:imageDialogueSettings', $event)"
       @remove="emit('remove-image-dialogue-preview', $event)"
@@ -576,6 +577,7 @@ const props = defineProps<{
   imageDialogueSettings: ImageDialogueSettings
   imageDialoguePreviewUrl: string
   imageDialoguePreviews: ImageSourceRef[]
+  imageDialogueHideWorkflowAndMark?: boolean
   elementMarks: ImageMarkItem[]
   mentionInsertSerial: number
   mentionInsertToken: string

@@ -16,7 +16,7 @@
         <p class="image-dialogue__drop-text">点击或拖拽图片到此处上传</p>
       </div>
     </div>
-    <div class="image-dialogue__workflow-row">
+    <div v-if="!hideWorkflowAndMark" class="image-dialogue__workflow-row">
       <DialogueWorkflowSelect
         :model-value="selectedWorkFlow || undefined"
         :groups="workflowOptionGroups"
@@ -81,6 +81,7 @@
 
     <div class="image-dialogue__input-wrap">
       <MarkTagsEcho
+        v-if="!hideWorkflowAndMark"
         :marks="elementMarks ?? []"
         @remove="emit('remove-mark', $event)"
         @clear="emit('clear-marks')"
@@ -210,7 +211,7 @@
           <span class="image-dialogue__tool-icon" data-icon="panorama" aria-hidden="true" />
           全景
         </button> -->
-        <a-tooltip>
+        <a-tooltip v-if="!hideWorkflowAndMark">
           <template #title>标记</template>
           <button
             type="button"
@@ -347,6 +348,8 @@ const props = defineProps<{
   resolveMarkPreviewUrl?: (mark: ImageMarkItem) => string
   chatTools?: ChatTools | null
   workflows: WorkflowCategoryGroup[]
+  /** 待生成占位节点：隐藏工作流选择与标记入口 */
+  hideWorkflowAndMark?: boolean
 }>();
 
 const emit = defineEmits<{
@@ -572,6 +575,7 @@ function hasCompletedElementMarks() {
 
 function onWorkflowChange(workflowId: string | undefined) {
   selectedWorkFlow.value = workflowId ?? ''
+  if (props.hideWorkflowAndMark) return
   const workflow = workflowOptions.value.find((item) => item.id === workflowId)
   if (isMyModelWorkflow(workflow)) return
   if (!workflowId || hasCompletedElementMarks() || props.elementSelectMode) return

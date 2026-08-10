@@ -2923,6 +2923,13 @@ export function canOpenImageDialogueOnNode(data: CanvasNodeData): boolean {
     data.imageSourceRefs.some((item) => item.previewUrl?.trim())
 }
 
+/** 图生图拉出的待生成占位节点：下方对话框隐藏工作流与标记；已有媒体资源节点不受影响 */
+export function isPendingImageGenDialogueTarget(data?: CanvasNodeData | null): boolean {
+  if (!data || data.kind !== 'image') return false
+  if (!data.imageGenTask) return false
+  return !data.previewUrl?.trim()
+}
+
 /** 节点是否已持久化图片对话溯源（生成结果节点打开对话框时应回填参考图与参数） */
 export function hasPersistedImageDialogueProvenance(data: CanvasNodeData): boolean {
   if (data.imageDialogueText?.trim()) return true

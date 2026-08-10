@@ -145,6 +145,7 @@ import {
   type ImageMarkItem,
   type CanvasGenerationParams,
   canOpenImageDialogueOnNode,
+  isPendingImageGenDialogueTarget,
   hasPersistedImageDialogueProvenance,
   normalizeImageDialogueSettingsForModel,
   pickImageDialogueSettingsInput,
@@ -978,6 +979,17 @@ export function registerCore(bind: CanvasBindings) {
     }
     if (!id) return []
     return getImageDialoguePreviewsForNode(id)
+  })
+
+  /** 待生成占位节点下方对话框隐藏工作流/标记；已有媒体资源节点对话框保持完整 */
+  const imageDialogueHideWorkflowAndMark = computed(() => {
+    void toolbarRevision.value
+    if (!showImageDialogue.value) return false
+    const id = getActiveImageDialogueTargetNodeId()
+    if (!id) return false
+    const g = graph.value
+    const data = g?.getCellById(id)?.getData() as CanvasNodeData | undefined
+    return isPendingImageGenDialogueTarget(data)
   })
 
   const imageDialoguePreviewUrl = computed(() => {
@@ -3700,6 +3712,10 @@ export function registerCore(bind: CanvasBindings) {
     showImageDialogue.value = true
     showImageHdMenu.value = false
     closeImageGenPromptBar()
+    // 待生成节点不提供标记能力：打开时退出标记模式
+    if (isPendingImageGenDialogueTarget(data) && showElementSelectMode.value) {
+      exitElementSelectMode({ force: true })
+    }
     syncNodeSelectionHighlight(id)
     updateNodeToolbar()
   }
@@ -6096,7 +6112,10 @@ export function registerCore(bind: CanvasBindings) {
       exitElementSelectMode({ force: true })
       return
     }
-    if (!getActiveImageDialogueTargetNodeId()) return
+    const targetId = getActiveImageDialogueTargetNodeId()
+    if (!targetId) return
+    const data = graph.value?.getCellById(targetId)?.getData() as CanvasNodeData | undefined
+    if (isPendingImageGenDialogueTarget(data)) return
     enterElementSelectMode('image-dialogue')
   }
 
@@ -11688,6 +11707,7 @@ export function registerCore(bind: CanvasBindings) {
     imageGridSplitSource,
     imageDialoguePreviewUrl,
     imageDialoguePreviews,
+    imageDialogueHideWorkflowAndMark,
     isImageUploadFile,
     isImg2PromptTask,
     isText2VideoTask,

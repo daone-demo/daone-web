@@ -87,6 +87,7 @@ type GridSplitCanvasApi = Pick<
     | 'toggleImageDialogueCanvasPickMode'
     | 'elementMarks'
     | 'imageMarkAnalyzingActive'
+    | 'imageDialogueHideWorkflowAndMark'
     | 'toggleImageDialogueMarkMode'
     | 'updateImageMarkLabel'
     | 'removeElementMark'
