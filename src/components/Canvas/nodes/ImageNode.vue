@@ -212,7 +212,7 @@
           />
         </template>
         <template v-else>
-          <img src="@assets/images/img.png" alt="" class="video-dialogue__drop-icon" />
+          <i class="iconfont icon-icon-" style="font-size: 48px; color: #000000;"></i>
         </template>
       </div>
 
