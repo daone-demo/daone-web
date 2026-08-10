@@ -14,8 +14,8 @@
       </div>
     </div>
 
-    <div class="video-dialogue__head">
-      <!-- <div class="video-dialogue__advisor-wrap">
+    <!-- <div class="video-dialogue__head">
+      <div class="video-dialogue__advisor-wrap">
         <button
           type="button"
           class="video-dialogue__select"
@@ -59,8 +59,8 @@
           </template>
           <p v-else class="video-dialogue__advisor-empty">暂无工作流</p>
         </div>
-      </div> -->
-    </div>
+      </div>
+    </div> -->
 
     <div class="video-dialogue__refs">
       <div
@@ -261,7 +261,6 @@ import {
   VIDEO_GEN_DURATIONS,
   buildVideoDialogueCountOptionsFromCapabilities,
   buildVideoDialogueModelsFromCapabilities,
-  buildVideoWorkflowOptionGroups,
   formatVideoGenSettings,
   isDialogueModelIconfont,
   normalizeDialogueModelIcon,
@@ -298,17 +297,17 @@ const emit = defineEmits<{
 const showAdvisorMenu = ref(false)
 const showVideoSettings = ref(false)
 const showModelMenu = ref(false)
-const activeAdvisorKey = ref('')
-const selectedWorkflowId = ref('')
-const workflowOptionGroups = computed(() => buildVideoWorkflowOptionGroups(props.workflows))
-const advisorButtonLabel = computed(() => {
-  for (const group of workflowOptionGroups.value) {
-    const found = group.children.find((item) => item.id === selectedWorkflowId.value)
-    if (found) return found.name
-  }
-  // return '视频参谋'
-  return '请选择工作流'
-})
+// const activeAdvisorKey = ref('')
+// const selectedWorkflowId = ref('')
+// Advisor menu UI is commented out in template; keep refs for re-enable.
+// const workflowOptionGroups = computed(() => buildVideoWorkflowOptionGroups(props.workflows))
+// const advisorButtonLabel = computed(() => {
+//   for (const group of workflowOptionGroups.value) {
+//     const found = group.children.find((item) => item.id === selectedWorkflowId.value)
+//     if (found) return found.name
+//   }
+//   return '视频参谋'
+// })
 const videoDuration = ref<VideoGenDuration>(VIDEO_GEN_DURATIONS[0])
 const videoAspectRatio = ref<VideoGenAspectRatio>('16:9')
 const videoResolution = ref<VideoGenResolution>('480P')
@@ -629,19 +628,19 @@ function selectModel(model: VideoDialogueModelItem) {
   showModelMenu.value = false
 }
 
-function toggleAdvisorMenu() {
-  showAdvisorMenu.value = !showAdvisorMenu.value
-  if (showAdvisorMenu.value) {
-    activeAdvisorKey.value = workflowOptionGroups.value[0]?.categoryId ?? ''
-    showVideoSettings.value = false
-    showModelMenu.value = false
-  }
-}
+// function toggleAdvisorMenu() {
+//   showAdvisorMenu.value = !showAdvisorMenu.value
+//   if (showAdvisorMenu.value) {
+//     activeAdvisorKey.value = workflowOptionGroups.value[0]?.categoryId ?? ''
+//     showVideoSettings.value = false
+//     showModelMenu.value = false
+//   }
+// }
 
-function selectAdvisorItem(workflowId: string) {
-  selectedWorkflowId.value = workflowId
-  showAdvisorMenu.value = false
-}
+// function selectAdvisorItem(workflowId: string) {
+//   selectedWorkflowId.value = workflowId
+//   showAdvisorMenu.value = false
+// }
 
 function onVideoCountChange(value: unknown) {
   if (value === undefined || value === null) return
