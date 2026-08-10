@@ -306,10 +306,12 @@ function getNextUntitledProjectTitle() {
 }
 
 function openNewProject() {
-  console.log('userInfoStore', userInfoStore.userInfo);
-  return;
+  if (!userInfoStore.userInfo?.vipName) {
+    message.warning('请先开通会员');
+    return;
+  }
   api.createProject({ title: getNextUntitledProjectTitle() }).then((res: any) => {
-    router.push({ name: 'createProject', params: { id: res.id } })
+    router.push({ name: 'createProject', params: { id: res.id } });
   })
 }
 
@@ -323,7 +325,6 @@ function openProject(id: string) {
 }
 
 const openInspiration = (item: any) => {
-  console.log(item)
   inspirationsInfo.value = item;
   open.value = true;
   // router.push({ name: 'projectDetail', params: { id } })
@@ -337,7 +338,7 @@ const onLoadProjects = () => {
 const openUpdateProjectName = (id: string, name: string) => {
   projectId.value = id;
   projectName.value = name;
-  modalStore.openModal('updateProjectName')
+  modalStore.openModal('updateProjectName');
 }
 
 /**

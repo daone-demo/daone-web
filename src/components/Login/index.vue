@@ -208,22 +208,27 @@ async function onSlideVerifySuccess() {
 
 async function submitLogin() {
   if (!canSubmit.value) return
-
   const loginData = {
     phone: phone.value.trim(),
     code: smsCode.value.trim(),
   }
   const result = await api.postSmsLogin<SmsLoginResult>(loginData)
-
   userInfoStore.setSession(result.token, result.user);
   needReloadStore.setNeedReload(true);
   onLoadUserPoint();
+  onLoadUserInfo();
   emit('submit', loginData)
   close()
 }
 
 function lockBodyScroll(locked: boolean) {
   document.body.style.overflow = locked ? 'hidden' : ''
+}
+
+/** 加载用户资料 */
+const onLoadUserInfo = async () => {
+  const res = await api.getCurrentUser();
+  userInfoStore.setUserInfo(res as any);
 }
 
 const onLoadUserPoint = async () => {

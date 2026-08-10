@@ -875,7 +875,7 @@ const api = {
   },
   /** 画布元素组列表 */
   queryElementGroups<T = unknown>(projectId: Id, params?: PageQuery) {
-    return http.get<T>(`/projects/${pathId(projectId)}/element-groups`, { params })
+    return http.get<T>(`/projects/element-groups`, { params })
   },
   queryAiCapabilities<T = unknown>(params:any) {
     return http.get<T>('/canvas/capabilities', { params })
@@ -908,7 +908,7 @@ const api = {
   },
   /** 删除画布元素组。 */
   deleteProjectElementGroup(projectId: Id, groupId: Id) {
-    return http.delete(`/projects/${pathId(projectId)}/element-groups/${pathId(groupId)}`)
+    return http.delete(`/projects/element-groups/${pathId(groupId)}`)
   },
   queryMaterialCategories<T = unknown>() {
     return http.get<T>('/materials/categories', {  })
