@@ -419,11 +419,11 @@
               ref="fileInputRef"
               type="file"
               class="chat-panel__file-input"
-              accept="image/*,.md"
+              accept="image/*"
               multiple
               @change="onFileInputChange"
             />
-            <button type="button" class="chat-panel__icon-btn chat-panel__icon-btn--sm" title="添加附件" @click="openFilePicker">
+            <button type="button" class="chat-panel__icon-btn chat-panel__icon-btn--sm" title="上传图片" @click="openFilePicker">
               <span class="chat-panel__icon chat-panel__icon--plus" aria-hidden="true" />
             </button>
             <span class="chat-panel__composer-divider" aria-hidden="true" />
@@ -1328,10 +1328,10 @@ function buildMessageText() {
 function addAttachments(files: File[], assetId?: string, nodeId?: string) {
   ensureActiveSession()
   files.forEach((file) => {
-    if (!file.type.startsWith('image/') && !file.name.endsWith('.md')) return
+    if (!file.type.startsWith('image/')) return
     const attachment = createAttachment(file, assetId, nodeId)
     attachments.value.push(attachment)
-    if (file.type.startsWith('image/') && !assetId) {
+    if (!assetId) {
       void uploadAttachmentToOss(attachment.id)
     }
   })
@@ -1393,7 +1393,7 @@ async function addAttachmentFromCanvas(payload: {
 function addSkillFile(file: File, skillName?: string) {
   ensureActiveSession()
   if (!file.name.endsWith('.md')) return
-  addAttachments([file])
+  attachments.value.push(createAttachment(file))
   if (skillName) {
     message.value = `请使用技能「${skillName}」处理以下工作流`
   }
