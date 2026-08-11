@@ -34,6 +34,16 @@ export function isGridSplitResultNodeData(data: CanvasNodeData | undefined) {
   return Boolean(data?.gridSplitTile)
 }
 
+/** 宫格拆分产物（含工作流恢复后可能丢失 gridSplitTile 的碎片） */
+export function isGridSplitDerivedImageData(data: CanvasNodeData | undefined) {
+  if (isGridSplitResultNodeData(data)) return true
+  if (!data || data.kind !== 'image') return false
+  const title = String(data.title ?? '').trim()
+  if (/^宫格-\d+-\d+/.test(title)) return true
+  const fileName = String(data.fileName ?? '').trim()
+  return /^宫格-\d+-\d+/.test(fileName)
+}
+
 export function areAllGridSplitResultNodes(graph: Graph, nodeIds: string[]) {
   if (!nodeIds.length) return false
   return nodeIds.every((id) => {

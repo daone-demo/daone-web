@@ -247,9 +247,22 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, reactive, ref, toRef } from 'vue'
 import type { Graph, Node } from '@antv/x6'
-import { CANVAS_IMAGE_NODE_DRAG_TYPE, canOpenImageDialogueOnNode, canReplaceImageNodePreview, isAiGeneratedImageNode, isNodeFileUploading, isPortrait, resolveGenerationFailMessage, shouldAdaptImageNodeHeight } from '../constants'
-import type { CanvasNodeData, ImageMarkItem } from '../constants'
-import { createEmptyNodeData } from '../constants'
+import { isGroupSourceImageNode } from '../nodeGroup'
+import { isCropDerivedImageData } from '../imageGen'
+import { isGridSplitDerivedImageData } from '../gridSplitUtils'
+import {
+  CANVAS_IMAGE_NODE_DRAG_TYPE,
+  canOpenImageDialogueOnNode,
+  canReplaceImageNodePreview,
+  createEmptyNodeData,
+  isAiGeneratedImageNode,
+  isNodeFileUploading,
+  isPortrait,
+  resolveGenerationFailMessage,
+  shouldAdaptImageNodeHeight,
+  type CanvasNodeData,
+  type ImageMarkItem,
+} from '../constants'
 import { isImageGenerationFailedNode, resolveImageGenerationProgressLabel } from '../imageGen'
 import CanvasGenerationFailPanel from './CanvasGenerationFailPanel.vue'
 import { useNodeDelete } from './useNodeDelete'
@@ -286,7 +299,12 @@ const isGenerationFailed = computed(
   () => isImageGenerationFailedNode(data) && !data.previewUrl?.trim(),
 )
 const failMessage = computed(() => resolveGenerationFailMessage(data))
-const showReplaceUploadBtn = computed(() => canReplaceImageNodePreview(data))
+const showReplaceUploadBtn = computed(() => {
+  if (isGridSplitDerivedImageData(data)) return false
+  if (isCropDerivedImageData(data)) return false
+  if (!canReplaceImageNodePreview(data)) return false
+  return isGroupSourceImageNode(getGraph(), getNode())
+})
 const hasAdaptivePreview = computed(() => shouldAdaptImageNodeHeight(data))
 const isFileUploading = computed(() => isNodeFileUploading(data))
 

@@ -139,6 +139,8 @@ export interface CanvasNodeData {
     rows: number
     cols: number
   }
+  /** 裁剪产物（非源图，不可重新上传替换） */
+  cropResult?: boolean
   textPickerTask?: 'img2prompt' | 'text2video' | 'text2image' | 'write' | ''
   /** 自由输入提示词生成后，底部输入框保持显示 */
   promptBarPinned?: boolean
@@ -2978,13 +2980,19 @@ export function isAiGeneratedCanvasNode(data?: Partial<CanvasNodeData> | null): 
   return false
 }
 
-/** 组内非 AI 生成且已有预览图的图片节点，可重新上传替换 */
+/** 组内源图且非 AI 生成、已有预览图的图片节点，可重新上传替换 */
 export function canReplaceImageNodePreview(data?: Partial<CanvasNodeData> | null): boolean {
   if (!data || data.kind !== 'image') return false
   if (!String(data.groupId ?? '').trim()) return false
   if (!data.previewUrl?.trim()) return false
   if (data.compactPreview) return false
   if (data.gridSplitTile) return false
+  const title = String(data.title ?? '').trim()
+  if (/^宫格-\d+-\d+/.test(title)) return false
+  if (/^宫格-\d+-\d+/.test(String(data.fileName ?? '').trim())) return false
+  if (data.cropResult) return false
+  if (title === '裁剪结果' || title.startsWith('裁剪-')) return false
+  if (String(data.fileName ?? '').trim().startsWith('裁剪-')) return false
   if (data.uploadState === 'uploading') return false
   if (isAiGeneratedImageNode(data)) return false
   return true

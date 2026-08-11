@@ -459,6 +459,7 @@ export function spawnCroppedImageNode(
     uploadState: 'done',
     uploadProgress: 100,
     fileName: sourceData.fileName ? `裁剪-${sourceData.fileName}` : '裁剪结果.png',
+    cropResult: true,
     sourceNodeId: sourceNode.id,
     sourcePreviewUrl: sourceData.previewUrl ?? '',
     sourceFileName: sourceData.fileName ?? '',
@@ -475,6 +476,16 @@ export function spawnCroppedImageNode(
   const node = addCanvasNode(graph, 'image', point, overrides)
   connectGenEdge(graph, sourceNode.id, node.id)
   return node
+}
+
+/** 裁剪产物（含工作流恢复后可能丢失 cropResult 的节点） */
+export function isCropDerivedImageData(data: CanvasNodeData | undefined) {
+  if (!data || data.kind !== 'image') return false
+  if (data.cropResult) return true
+  const title = String(data.title ?? '').trim()
+  if (title === '裁剪结果' || title.startsWith('裁剪-')) return true
+  const fileName = String(data.fileName ?? '').trim()
+  return fileName.startsWith('裁剪-') || fileName === '裁剪结果.png'
 }
 
 export function spawnErasedImageNode(

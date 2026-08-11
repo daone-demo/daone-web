@@ -1,5 +1,7 @@
 import type { Graph, Node } from '@antv/x6'
 import { isAiGeneratedCanvasNode, type CanvasNodeData } from './constants'
+import { isGridSplitDerivedImageData } from './gridSplitUtils'
+import { isCropDerivedImageData } from './imageGen'
 
 export const GROUP_BOX_PADDING = 20
 export const GROUP_BOX_MIN_SIZE = 48
@@ -84,6 +86,33 @@ export function getNodesInGroup(graph: Graph, groupId: string): Node[] {
   return graph
     .getNodes()
     .filter((node) => (node.getData() as CanvasNodeData).groupId === groupId)
+}
+
+/**
+ * 组内源图：图片节点且在组内无来自同组成员的入边 / sourceNodeId。
+ * 用于控制打组后仅源图可重新上传。
+ */
+export function isGroupSourceImageNode(graph: Graph, node: Node): boolean {
+  const data = node.getData() as CanvasNodeData
+  const groupId = String(data.groupId ?? '').trim()
+  if (!groupId || data.kind !== 'image') return false
+  if (isGridSplitDerivedImageData(data)) return false
+  if (isCropDerivedImageData(data)) return false
+  if (isAiGeneratedCanvasNode(data)) return false
+
+  const memberIds = new Set(getNodesInGroup(graph, groupId).map((member) => member.id))
+  if (!memberIds.has(node.id)) return false
+
+  const sourceNodeId = String(data.sourceNodeId ?? '').trim()
+  if (sourceNodeId) return false
+
+  for (const edge of graph.getEdges()) {
+    if (edge.getTargetCellId() !== node.id) continue
+    const src = edge.getSourceCellId()
+    if (src && memberIds.has(src)) return false
+  }
+
+  return true
 }
 
 export function assignGroupId(graph: Graph, nodeIds: string[]): string | null {
