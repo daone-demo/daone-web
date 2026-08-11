@@ -91,12 +91,11 @@ function getNodesBBox(nodes: Node[]): NodeBBox {
   let maxY = -Infinity
 
   nodes.forEach((node) => {
-    const { x, y } = node.getPosition()
-    const { width, height } = node.getSize()
-    minX = Math.min(minX, x)
-    minY = Math.min(minY, y)
-    maxX = Math.max(maxX, x + width)
-    maxY = Math.max(maxY, y + height)
+    const box = node.getBBox()
+    minX = Math.min(minX, box.x)
+    minY = Math.min(minY, box.y)
+    maxX = Math.max(maxX, box.x + box.width)
+    maxY = Math.max(maxY, box.y + box.height)
   })
 
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
@@ -276,8 +275,8 @@ const SOURCE_MIN_GAP_Y = 100
 
 function sortNodesForLayout(nodes: Node[], direction: GroupLayoutDirection): Node[] {
   return [...nodes].sort((a, b) => {
-    const pa = a.getPosition()
-    const pb = b.getPosition()
+    const pa = a.getBBox()
+    const pb = b.getBBox()
     if (direction === 'horizontal') {
       if (Math.abs(pa.y - pb.y) < 48) return pa.x - pb.x
       return pa.y - pb.y
@@ -289,6 +288,13 @@ function sortNodesForLayout(nodes: Node[], direction: GroupLayoutDirection): Nod
     if (Math.abs(pa.y - pb.y) < 48) return pa.x - pb.x
     return pa.y - pb.y
   })
+}
+
+/** 将节点外框左上角对齐到锚点（兼容端口导致的 position/bbox 偏移） */
+function placeNodeLayoutBoxAt(node: Node, boxX: number, boxY: number) {
+  const box = node.getBBox()
+  const pos = node.getPosition()
+  node.position(boxX - (box.x - pos.x), boxY - (box.y - pos.y))
 }
 
 function placeNodesAtAnchor(
@@ -305,16 +311,16 @@ function placeNodesAtAnchor(
     let col = 0
 
     sorted.forEach((node) => {
-      const { width, height } = node.getSize()
+      const box = node.getBBox()
       if (col >= cols) {
         col = 0
         x = anchorX
         y += rowMaxH + GROUP_GAP
         rowMaxH = 0
       }
-      node.position(x, y)
-      x += width + GROUP_GAP
-      rowMaxH = Math.max(rowMaxH, height)
+      placeNodeLayoutBoxAt(node, x, y)
+      x += box.width + GROUP_GAP
+      rowMaxH = Math.max(rowMaxH, box.height)
       col += 1
     })
     return
@@ -323,14 +329,95 @@ function placeNodesAtAnchor(
   let x = anchorX
   let y = anchorY
   sorted.forEach((node) => {
-    const { width, height } = node.getSize()
-    node.position(x, y)
+    const box = node.getBBox()
+    placeNodeLayoutBoxAt(node, x, y)
     if (direction === 'horizontal') {
-      x += width + GROUP_GAP
+      x += box.width + GROUP_GAP
     } else {
-      y += height + GROUP_GAP
+      y += box.height + GROUP_GAP
     }
   })
+}
+
+function boxesOverlap(a: NodeBBox, b: NodeBBox, gap = 0): boolean {
+  return (
+    a.x < b.x + b.width + gap &&
+    a.x + a.width + gap > b.x &&
+    a.y < b.y + b.height + gap &&
+    a.y + a.height + gap > b.y
+  )
+}
+
+/** 布局后消除节点重叠；pinnedIds 中的节点保持不动 */
+function resolveOverlapsAmongNodes(
+  nodes: Node[],
+  options?: { minGap?: number; pinnedIds?: Set<string> },
+) {
+  if (nodes.length < 2) return
+
+  const minGap = options?.minGap ?? GROUP_GAP
+  const pinnedIds = options?.pinnedIds ?? new Set<string>()
+  const maxPasses = nodes.length * nodes.length
+
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    let moved = false
+
+    for (let i = 0; i < nodes.length; i += 1) {
+      const nodeA = nodes[i]
+      const boxA = getNodesBBox([nodeA])
+
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const nodeB = nodes[j]
+        const boxB = getNodesBBox([nodeB])
+        if (!boxesOverlap(boxA, boxB, minGap)) continue
+
+        const pushDown = boxA.y + boxA.height + minGap - boxB.y
+        const pushRight = boxA.x + boxA.width + minGap - boxB.x
+        const pushUp = boxB.y + boxB.height + minGap - boxA.y
+        const pushLeft = boxB.x + boxB.width + minGap - boxA.x
+
+        const candidates: { node: Node; dx: number; dy: number; cost: number }[] = []
+
+        const addCandidate = (node: Node, dx: number, dy: number) => {
+          if (dx === 0 && dy === 0) return
+          candidates.push({ node, dx, dy, cost: Math.abs(dx) + Math.abs(dy) })
+        }
+
+        if (!pinnedIds.has(nodeB.id)) {
+          if (pushDown > 0) addCandidate(nodeB, 0, pushDown)
+          if (pushRight > 0) addCandidate(nodeB, pushRight, 0)
+          if (pushUp > 0) addCandidate(nodeB, 0, -pushUp)
+          if (pushLeft > 0) addCandidate(nodeB, -pushLeft, 0)
+        }
+        if (!pinnedIds.has(nodeA.id)) {
+          if (pushDown > 0) addCandidate(nodeA, 0, -pushDown)
+          if (pushRight > 0) addCandidate(nodeA, -pushRight, 0)
+          if (pushUp > 0) addCandidate(nodeA, 0, pushUp)
+          if (pushLeft > 0) addCandidate(nodeA, pushLeft, 0)
+        }
+
+        if (!candidates.length) continue
+
+        const best = candidates.reduce((pick, item) => (item.cost < pick.cost ? item : pick))
+        translateNodes([best.node], best.dx, best.dy)
+        moved = true
+        break
+      }
+      if (moved) break
+    }
+
+    if (!moved) break
+  }
+}
+
+function measureBlocksRightEdge(sources: Node[], clusters: Map<string, Node[]>): number {
+  let maxRight = 0
+  sources.forEach((source) => {
+    const block = [source, ...(clusters.get(source.id) ?? [])]
+    const bbox = getNodesBBox(block)
+    maxRight = Math.max(maxRight, bbox.x + bbox.width)
+  })
+  return maxRight
 }
 
 /** 沿 sourceNodeId / 入边向上，找到选中集合中的源图根节点 */
@@ -415,9 +502,9 @@ function findSourceImageRoots(nodes: Node[], graph: Graph | undefined): Node[] {
 /** 无源图时：全部节点参与排列（原逻辑） */
 function layoutAllNodesInGroup(nodes: Node[], direction: GroupLayoutDirection) {
   const sorted = sortNodesForLayout(nodes, direction)
-  const anchorX = Math.min(...nodes.map((node) => node.getPosition().x))
-  const anchorY = Math.min(...nodes.map((node) => node.getPosition().y))
-  placeNodesAtAnchor(sorted, direction, anchorX, anchorY)
+  const bbox = getNodesBBox(nodes)
+  placeNodesAtAnchor(sorted, direction, bbox.x, bbox.y)
+  resolveOverlapsAmongNodes(nodes, { minGap: GROUP_GAP })
 }
 
 /** 将子节点块垂直居中对齐到源图 */
@@ -431,38 +518,32 @@ function alignClusterToSourceCenter(cluster: Node[], source: Node) {
 }
 
 /**
- * 排序时：相邻源图上下间距（上源底边 → 下源顶边）不足 100px 则拉开。
- * 下移下方源图及其整簇下游节点，保持相对位置。
+ * 排序时：相邻源图块（源图 + 其下游簇）上下间距不足 100px 则拉开。
+ * 下移下方整块，避免仅按源图高度计算导致子节点簇重叠。
  */
-function ensureSourceImagesMinVerticalGap(
+function ensureSourceBlocksMinVerticalGap(
   sources: Node[],
   clusters: Map<string, Node[]>,
-  orphans: Node[],
-  orphanAnchorSourceId: string | null,
 ) {
   if (sources.length < 2) return
 
   const ordered = [...sources].sort((a, b) => {
-    const ay = a.getPosition().y
-    const by = b.getPosition().y
-    if (Math.abs(ay - by) < 1) return a.getPosition().x - b.getPosition().x
+    const ay = a.getBBox().y
+    const by = b.getBBox().y
+    if (Math.abs(ay - by) < 1) return a.getBBox().x - b.getBBox().x
     return ay - by
   })
 
   for (let i = 1; i < ordered.length; i += 1) {
-    const upper = ordered[i - 1]
-    const lower = ordered[i]
-    const upperBottom = upper.getPosition().y + upper.getSize().height
-    const lowerTop = lower.getPosition().y
-    const gap = lowerTop - upperBottom
+    const upperBlock = [ordered[i - 1], ...(clusters.get(ordered[i - 1].id) ?? [])]
+    const lowerBlock = [ordered[i], ...(clusters.get(ordered[i].id) ?? [])]
+    const upperBBox = getNodesBBox(upperBlock)
+    const lowerBBox = getNodesBBox(lowerBlock)
+    const gap = lowerBBox.y - upperBBox.y - upperBBox.height
     if (gap >= SOURCE_MIN_GAP_Y) continue
 
     const dy = SOURCE_MIN_GAP_Y - gap
-    const moving = [lower, ...(clusters.get(lower.id) ?? [])]
-    if (orphanAnchorSourceId === lower.id && orphans.length) {
-      moving.push(...orphans)
-    }
-    translateNodes(moving, 0, dy)
+    translateNodes(lowerBlock, 0, dy)
   }
 }
 
@@ -494,32 +575,29 @@ function layoutNodesBesideSourceImages(
     else clusters.set(sourceId, [node])
   })
 
-  const leftmost = sources.reduce((best, node) =>
-    node.getPosition().x < best.getPosition().x ? node : best,
-  )
-  const orphanAnchorSourceId = orphans.length ? leftmost.id : null
-
   sources.forEach((source) => {
     const cluster = clusters.get(source.id)
     if (!cluster?.length) return
     const sorted = sortNodesForLayout(cluster, direction)
-    const { x, y } = source.getPosition()
-    const { width } = source.getSize()
-    placeNodesAtAnchor(sorted, direction, x + width + GROUP_GAP, y)
+    const box = source.getBBox()
+    placeNodesAtAnchor(sorted, direction, box.x + box.width + GROUP_GAP, box.y)
     alignClusterToSourceCenter(sorted, source)
     clusters.set(source.id, sorted)
   })
 
   if (orphans.length) {
     const sorted = sortNodesForLayout(orphans, direction)
-    const { x, y } = leftmost.getPosition()
-    const { width } = leftmost.getSize()
-    placeNodesAtAnchor(sorted, direction, x + width + GROUP_GAP, y)
-    alignClusterToSourceCenter(sorted, leftmost)
+    const rightEdge = measureBlocksRightEdge(sources, clusters)
+    const anchorY = Math.min(...sources.map((source) => source.getBBox().y))
+    placeNodesAtAnchor(sorted, direction, rightEdge + GROUP_GAP, anchorY)
     orphans.splice(0, orphans.length, ...sorted)
   }
 
-  ensureSourceImagesMinVerticalGap(sources, clusters, orphans, orphanAnchorSourceId)
+  ensureSourceBlocksMinVerticalGap(sources, clusters)
+  resolveOverlapsAmongNodes(nodes, {
+    minGap: GROUP_GAP,
+    pinnedIds: new Set(sources.map((source) => source.id)),
+  })
 }
 
 /**
