@@ -2961,6 +2961,8 @@ export function isAiGeneratedImageNode(data?: Partial<CanvasNodeData> | null): b
   if (!data || data.kind !== 'image') return false
   if (data.imageGenState === 'loading' || data.imageGenState === 'done') return true
   if (data.generationTaskType === 'IMAGE') return true
+  if (data.generationParams?.taskType === 'IMAGE') return true
+  if (String(data.generationParams?.capabilityCode ?? '').trim()) return true
   if (String(data.generationTaskId ?? '').trim()) return true
   return false
 }

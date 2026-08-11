@@ -397,9 +397,9 @@ const { isLightTheme } = useCanvasBgTheme()
 const videoGenTabs = ref<Array<{ key: string; label: string; disabled?: boolean; disabledHint?: string }>>([
   { key: 'text2video', label: '文生视频', disabled: true, disabledHint: '已接入媒体输入,无法使用纯文生视频' },
   { key: 'reference', label: '全能参考', disabled: false, disabledHint: '' },
-  { key: 'img2video', label: '图生视频', disabled: false, disabledHint: '' },
+  // { key: 'img2video', label: '图生视频', disabled: false, disabledHint: '' },
   { key: 'frames', label: '首尾帧', disabled: false, disabledHint: '' },
-  { key: 'imageRef', label: '图片参考', disabled: false, disabledHint: '' },
+  // { key: 'imageRef', label: '图片参考', disabled: false, disabledHint: '' },
 ])
 
 const props = defineProps<{

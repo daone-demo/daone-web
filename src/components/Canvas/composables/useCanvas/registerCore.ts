@@ -3339,6 +3339,10 @@ export function registerCore(bind: CanvasBindings) {
       if (config.snapshotSourceNode) {
         cloneNodeGenerationSnapshot(config.snapshotSourceNode, node)
       }
+      const extraData = { ...(node.getData() as CanvasNodeData) }
+      extraData.imageGenState = 'done'
+      extraData.imageGenProgress = 100
+      node.setData(extraData, { overwrite: true })
       pointIndex += 1
       nodes.push(node)
     }

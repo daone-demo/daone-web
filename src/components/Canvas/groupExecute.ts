@@ -3,10 +3,13 @@ import {
   GROUP_EXECUTE_IMG2PROMPT_CREDITS,
   GROUP_EXECUTE_TEXT_COPY_CREDITS,
   IMAGE_DIALOGUE_CREDITS,
+  IMAGE_DESIGN_ADVISOR_MENU,
+  IMAGE_DESIGN_WORKFLOW_MENU,
   IMAGE_GENERAL_CAPABILITY_CODE,
   IMAGE_NODE_TOOLBAR,
   VIDEO_DIALOGUE_CREDITS,
   VIDEO_GENERAL_CAPABILITY_CODE,
+  hasPersistedImageDialogueProvenance,
   isAiGeneratedCanvasNode,
   isVideoNodeGenerating,
   resolveImageAssetId,
@@ -14,7 +17,9 @@ import {
   type ImageDialogueSettings,
   type ImageSourceRef,
 } from './constants'
-import { getGroupBoxNodeIds } from './nodeGroup'
+import { isCropDerivedImageData } from './imageGen'
+import { isGridSplitDerivedImageData } from './gridSplitUtils'
+import { getGroupBoxNodeIds, isGroupSourceImageNode } from './nodeGroup'
 import { syncTextNodeImageSource } from './textPrompt'
 import { findIncomingTextNodes, plainTextFromNodeContent } from './videoGen'
 
@@ -49,14 +54,93 @@ export interface GroupAiReferenceContext {
 const IMAGE_DIALOGUE_CREDIT = Number.parseInt(IMAGE_DIALOGUE_CREDITS, 10) || 22
 const VIDEO_DIALOGUE_CREDIT = Number.parseInt(VIDEO_DIALOGUE_CREDITS, 10) || 135
 
-const CAPABILITY_LABEL_ENTRIES: Array<{ label: string; code: string }> = [
+type CapabilityLabelEntry = { label: string; code: string; prompt?: string }
+
+function flattenImageDialogueMenuLabels(
+  menus: ReadonlyArray<{
+    children?: ReadonlyArray<{ label: string; prompt?: string; key?: string }>
+  }>,
+): CapabilityLabelEntry[] {
+  const entries: CapabilityLabelEntry[] = []
+  for (const group of menus) {
+    for (const child of group.children ?? []) {
+      const label = child.label?.trim()
+      if (!label) continue
+      entries.push({
+        label,
+        code: IMAGE_GENERAL_CAPABILITY_CODE,
+        prompt: child.prompt,
+      })
+    }
+  }
+  return entries
+}
+
+const CAPABILITY_LABEL_ENTRIES: CapabilityLabelEntry[] = [
   ...IMAGE_NODE_TOOLBAR.actions.map((item) => ({ label: item.label, code: item.key })),
+  ...flattenImageDialogueMenuLabels(IMAGE_DESIGN_ADVISOR_MENU),
+  ...flattenImageDialogueMenuLabels(IMAGE_DESIGN_WORKFLOW_MENU),
   { label: '去水印', code: 'watermark' },
   { label: 'HD 高清', code: 'hd' },
   { label: '局部修改', code: 'IMAGE_INPAINT' },
   { label: '反推提示词', code: 'IMAGE_PROMPT_REVERSE' },
   { label: '图生3D', code: 'IMAGE_TO_3D' },
 ]
+
+function findCapabilityLabelEntry(titlePrefix: string): CapabilityLabelEntry | null {
+  const trimmed = titlePrefix.trim()
+  if (!trimmed) return null
+  return (
+    CAPABILITY_LABEL_ENTRIES.find(
+      (item) => item.label === trimmed || trimmed.includes(item.label),
+    ) ?? null
+  )
+}
+
+function resolveAdvisorPromptFromTitle(title: string): string {
+  const prefix = resolveTitlePrefix(title)
+  const matched = findCapabilityLabelEntry(prefix)
+  return matched?.prompt?.trim() || ''
+}
+
+function hasGroupInternalIncomingEdge(graph: Graph, nodeId: string, scopeIds: Set<string>): boolean {
+  for (const edge of graph.getEdges()) {
+    if (edge.getTargetCellId() !== nodeId) continue
+    const sourceId = edge.getSourceCellId()
+    if (sourceId && scopeIds.has(sourceId) && sourceId !== nodeId) return true
+  }
+  return false
+}
+
+function hasImageGenerationProvenance(data: CanvasNodeData): boolean {
+  if (data.generationParams?.taskType === 'IMAGE') return true
+  if (String(data.generationParams?.capabilityCode ?? '').trim()) return true
+  if (hasPersistedImageDialogueProvenance(data)) return true
+  if (data.imageSourceRefs?.length) return true
+  if (data.elementMarks?.length) return true
+  if (data.genPrompt?.trim() || data.imageDialogueText?.trim()) return true
+  if (resolveImageCapabilityFromNode(data)) return true
+  if (resolveAdvisorPromptFromTitle(data.title || data.fileName || '')) return true
+  return false
+}
+
+/** 整组执行可识别的 AI 生成节点（含工作流多结果等未写入 imageGenState 的对话框产物） */
+function isGroupAiGenerationTarget(
+  graph: Graph,
+  node: Node,
+  scopeIds: Set<string>,
+  data: CanvasNodeData,
+): boolean {
+  if (isAiGeneratedCanvasNode(data)) return true
+  if (data.kind !== 'image') return false
+  if (isExcludedFromGroupExecute(data)) return false
+  if (isGridSplitDerivedImageData(data)) return false
+  if (isCropDerivedImageData(data)) return false
+  if (isGroupSourceImageNode(graph, node)) return false
+  if (!data.previewUrl?.trim() && data.imageGenState !== 'loading') return false
+  if (!hasGroupInternalIncomingEdge(graph, node.id, scopeIds)) return false
+  return hasImageGenerationProvenance(data)
+}
 
 function isNodeGenerationBusy(data: CanvasNodeData): boolean {
   if (data.imageGenState === 'loading') return true
@@ -99,9 +183,7 @@ function resolveTitlePrefix(title: string): string {
 export function resolveImageCapabilityFromNode(data: CanvasNodeData): { code: string; label: string } | null {
   const titlePrefix = resolveTitlePrefix(data.title || data.fileName || '')
   if (titlePrefix) {
-    const matched = CAPABILITY_LABEL_ENTRIES.find(
-      (item) => item.label === titlePrefix || titlePrefix.includes(item.label),
-    )
+    const matched = findCapabilityLabelEntry(titlePrefix)
     if (matched) return { code: matched.code, label: matched.label }
   }
 
@@ -160,7 +242,7 @@ function resolveIncomingAiTextPrompt(graph: Graph, nodeId: string): string {
 
 function resolveGroupAiTask(graph: Graph, node: Node, scopeIds: Set<string>): GroupAiTask | null {
   const data = node.getData() as CanvasNodeData
-  if (!isAiGeneratedCanvasNode(data)) return null
+  if (!isGroupAiGenerationTarget(graph, node, scopeIds, data)) return null
   if (isExcludedFromGroupExecute(data)) return null
   if (isNodeGenerationBusy(data)) return null
 
@@ -537,6 +619,7 @@ export function resolveGroupAiReferenceContext(
       ? resolveIncomingAiTextPrompt(graph, node.id)
       : ''
 
+  const advisorPrompt = resolveAdvisorPromptFromTitle(data.title || data.fileName || '')
   const prompt =
     incomingAiTextPrompt ||
     savedParams?.prompt?.trim() ||
@@ -544,6 +627,7 @@ export function resolveGroupAiReferenceContext(
     data.genPrompt?.trim() ||
     data.videoDialogueText?.trim() ||
     incomingTextPrompt ||
+    advisorPrompt ||
     ''
 
   if (task.kind === 'imageCapability' || task.kind === 'imageDialogue') {
