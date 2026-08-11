@@ -579,20 +579,22 @@ export function reconcileGroupMembershipAfterNodeMove(graph: Graph, node: Node):
   const members = getNodesInGroup(graph, groupId)
   if (members.length < 2) return null
 
-  const others = members.filter((item) => item.id !== node.id)
-  if (!others.length) return null
+  const memberIds = members.map((item) => item.id)
+  const stored = getStoredGroupSelectionBox(graph, groupId)
+  const stillCovered = stored
+    ? boxesIntersect(node.getBBox(), stored)
+    : (() => {
+        const others = members.filter((item) => item.id !== node.id)
+        if (!others.length) return true
+        const groupFrame = getGroupGraphBBox(graph, others.map((item) => item.id))
+        return boxesIntersect(node.getBBox(), groupFrame)
+      })()
 
-  const groupFrame = resolveGroupGraphBBox(
-    graph,
-    groupId,
-    others.map((item) => item.id),
-  )
-  const stillCovered = boxesIntersect(node.getBBox(), groupFrame)
   if (stillCovered) {
     return {
       removed: false,
       groupId,
-      remainingIds: members.map((item) => item.id),
+      remainingIds: memberIds,
     }
   }
 

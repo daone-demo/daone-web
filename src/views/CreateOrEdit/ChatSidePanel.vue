@@ -309,7 +309,7 @@
                 @click="selectChatSkill(skill)"
               >
                 <span class="chat-panel__skill-picker-name">{{ skill.displayName }}</span>
-                <span class="chat-panel__skill-picker-cmd">/{{ skill.command }}</span>
+                <span class="chat-panel__skill-picker-cmd" v-if="skill.description">/{{ skill.command }}</span>
                 <span
                   v-if="skill.description"
                   class="chat-panel__skill-picker-desc"

@@ -8058,6 +8058,14 @@ export function registerCore(bind: CanvasBindings) {
     syncSelectionFromGraph()
   }
 
+  function selectSingleGraphNode(node: Node) {
+    const g = graph.value
+    if (!g) return
+    clearEdgeSelection()
+    g.cleanSelection()
+    g.select(node)
+  }
+
   function syncEdgeHighlight() {
     const g = graph.value
     if (!g) return
@@ -9266,6 +9274,11 @@ export function registerCore(bind: CanvasBindings) {
     }
 
     clearEdgeSelection()
+
+    if (!multiSelect) {
+      selectSingleGraphNode(node)
+    }
+
     selectedNodeId.value = node.id
     selectedKind.value = data.kind
 
@@ -11094,9 +11107,12 @@ export function registerCore(bind: CanvasBindings) {
     })
     instance.on('node:moved', ({ node }) => {
       snapGridSplitNodePosition(instance, node)
+      const draggedByUser = groupMoveState.draggingNodeId === node.id
       groupMoveState.anchorId = ''
       groupMoveState.draggingNodeId = ''
-      handleGroupedNodeMoved(node)
+      if (draggedByUser) {
+        handleGroupedNodeMoved(node)
+      }
       updateNodeToolbar()
       syncViewportNodeVisibility()
       scheduleHistoryPush()
@@ -11104,6 +11120,23 @@ export function registerCore(bind: CanvasBindings) {
     instance.on('node:added', syncNodeCount)
     instance.on('node:removed', syncNodeCount)
     instance.on('node:click', handleNodeClick)
+    instance.on('node:mousedown', ({ node, e }: { node: Node; e: MouseEvent }) => {
+      if (e.button !== 0) return
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return
+      if (
+        showVideoGenCanvasPickMode.value ||
+        showImageDialogueCanvasPickMode.value ||
+        showElementSelectMode.value
+      ) {
+        return
+      }
+
+      const g = graph.value
+      if (!g) return
+      const ids = getGraphSelectedNodeIds()
+      if (ids.length === 1 && ids[0] === node.id) return
+      selectSingleGraphNode(node)
+    })
     instance.on('edge:click', handleEdgeClick)
     instance.on('edge:mouseenter', handleEdgeMouseEnter)
     instance.on('edge:mouseleave', handleEdgeMouseLeave)
@@ -11137,7 +11170,14 @@ export function registerCore(bind: CanvasBindings) {
         updateImageResizeOverlay()
       })
     })
-    instance.on('node:resized', () => {
+    instance.on('node:resized', ({ node }: { node: Node }) => {
+      const g = graph.value
+      if (g) {
+        const groupId = (node.getData() as CanvasNodeData).groupId
+        if (groupId) {
+          fitStoredGroupSelectionBoxToMembers(g, groupId)
+        }
+      }
       scheduleHistoryPush()
       bumpToolbarRevision()
       updateImageResizeOverlay()
@@ -11443,9 +11483,9 @@ export function registerCore(bind: CanvasBindings) {
 
     const ids = nodes.map((node) => node.id)
     if (ids.length >= 2) {
-      ungroupSelection(g, ids)
       const groupId = assignGroupId(g, ids)
       if (groupId) {
+        fitStoredGroupSelectionBoxToMembers(g, groupId)
         const title = String(record.name ?? record.projectName ?? '').trim()
         if (title) {
           setGroupTitle(g, groupId, title)
