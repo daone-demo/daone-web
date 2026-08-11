@@ -328,3 +328,24 @@ export function resetVideoGenerationNodeForRetry(
   }
   node.setData(data, { overwrite: true })
 }
+
+/** 首尾帧模式：将首帧/尾帧 assetId 写入 parameters（尾帧不能只传尾帧） */
+export function applyVideoFirstLastFrameParameters(
+  parameters: Record<string, unknown>,
+  mode: string | undefined,
+  referenceAssetIds?: string[],
+): Record<string, unknown> {
+  if (mode !== 'first-last-frame') return parameters
+  const ids = (referenceAssetIds ?? [])
+    .map((id) => String(id ?? '').trim())
+    .filter(Boolean)
+  if (!ids.length) return parameters
+  const next: Record<string, unknown> = {
+    ...parameters,
+    firstFrameAssetId: ids[0],
+  }
+  if (ids.length >= 2) {
+    next.lastFrameAssetId = ids[1]
+  }
+  return next
+}

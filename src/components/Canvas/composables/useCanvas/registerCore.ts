@@ -39,7 +39,7 @@ import {
   type GroupResizeHandle,
   ensureImageTextEdge, syncTextNodeImageSource,
   createMinimap, destroyMinimap, applyRemoteImageToNode, applyRemoteVideoToNode, runUploadSimulation, uploadAssetFile, previewUrlToUploadFile, setCanvasUploadProjectId, setCanvasNodeMutationCompleteHandler, setCanvasUploadCompleteHandler, getCanvasSnapshot, saveCanvasSnapshotToStorage, cancelPendingCanvasSnapshotStorage,
-  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry,
+  normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry, applyVideoFirstLastFrameParameters,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
 import { isNodeFileUploading } from '../../constants'
@@ -1674,7 +1674,11 @@ export function registerCore(bind: CanvasBindings) {
 
     const refreshedSource = sourceNode.getData() as CanvasNodeData
     const requestedCount = Math.max(1, Math.floor(Number(taskParameters.videoCount)) || 1)
-    const singleTaskParameters = { ...taskParameters, videoCount: 1 }
+    const singleTaskParameters = applyVideoFirstLastFrameParameters(
+      { ...taskParameters, videoCount: 1 },
+      String(taskParameters.mode ?? ''),
+      referenceAssetIds,
+    )
     const buildIndexedFileName = (index: number) =>
       resolveGenerationResultFileName(
         config.buildFileName,
@@ -2918,6 +2922,11 @@ export function registerCore(bind: CanvasBindings) {
     if (assetId) {
       parameters.assetId = assetId
     }
+    const apiParameters = applyVideoFirstLastFrameParameters(
+      parameters,
+      resolvedMode,
+      imageAssetIds,
+    )
 
     const connectRefsToVideoNode = (node: Node) => {
       for (const ref of submitCtx.refs) {
@@ -2978,7 +2987,7 @@ export function registerCore(bind: CanvasBindings) {
           submitCtx.refs,
           {
             capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
-            parameters,
+            parameters: apiParameters,
             referenceAssetIds: imageAssetIds.length ? imageAssetIds : undefined,
           },
         )
@@ -3004,7 +3013,7 @@ export function registerCore(bind: CanvasBindings) {
                   taskType: 'VIDEO',
                   capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
                   prompt: toVideoApiPrompt(prompt),
-                  parameters,
+                  parameters: apiParameters,
                   projectId: activeProjectId.value,
                   nodeId: resultNode.id,
                   referenceAssetIds: imageAssetIds.length ? imageAssetIds : undefined,
@@ -3081,7 +3090,7 @@ export function registerCore(bind: CanvasBindings) {
       submitCtx.refs,
       {
         capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
-        parameters,
+        parameters: apiParameters,
         referenceAssetIds: imageAssetIds.length ? imageAssetIds : undefined,
       },
     )
@@ -3107,7 +3116,7 @@ export function registerCore(bind: CanvasBindings) {
               taskType: 'VIDEO',
               capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
               prompt: toVideoApiPrompt(prompt),
-              parameters,
+              parameters: apiParameters,
               projectId: activeProjectId.value,
               nodeId: targetNode.id,
               referenceAssetIds: imageAssetIds.length ? imageAssetIds : undefined,
@@ -10148,16 +10157,21 @@ export function registerCore(bind: CanvasBindings) {
         : `group-video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     try {
+      const videoParameters = applyVideoFirstLastFrameParameters(
+        {
+          ...refCtx.parameters,
+          clarity: toVideoApiClarity(String(refCtx.parameters.clarity ?? '720P')),
+        },
+        String(refCtx.parameters.mode ?? ''),
+        refCtx.referenceAssetIds,
+      )
       const created = normalizeGenerationTaskDetail(
         await api.createGenerationTask<GenerationTaskDetail>(
           {
             taskType: 'VIDEO',
             capabilityCode: refCtx.capabilityCode,
             prompt: toVideoApiPrompt(prompt),
-            parameters: {
-              ...refCtx.parameters,
-              clarity: toVideoApiClarity(String(refCtx.parameters.clarity ?? '720P')),
-            },
+            parameters: videoParameters,
             projectId: activeProjectId.value,
             nodeId: node.id,
             referenceAssetIds: refCtx.referenceAssetIds.length ? refCtx.referenceAssetIds : undefined,

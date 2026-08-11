@@ -175,6 +175,7 @@ export {
   findReusableVideoGenerationNode,
   resolveVideoGenerationSubmitContext,
   resetVideoGenerationNodeForRetry,
+  applyVideoFirstLastFrameParameters,
 } from '../../videoGen'
 export { useCanvasKeyboard } from '../useCanvasKeyboard'
 export { default as api } from '@/services/api'
