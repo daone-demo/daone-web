@@ -123,15 +123,15 @@
             <span class="canvas__node-toolbar-label">{{ VIDEO_NODE_TOOLBAR.chat.label }}</span>
           </button>
         </div>
-        <span class="canvas__node-toolbar-divider" aria-hidden="true" />
+        <!-- <span class="canvas__node-toolbar-divider" aria-hidden="true" /> -->
         <div class="canvas__node-toolbar-group">
-          <div class="canvas__node-toolbar-hd">
+          <!-- <div class="canvas__node-toolbar-hd">
             <img
               src="@assets/images/addToDialog.png"
               class="canvas__node-toolbar-addToDialog-img"
               @click="emitVideoAction({ key: 'addToDialog', label: '' })"
             />
-          </div>
+          </div> -->
           <button
             v-for="item in videoToolbarActions"
             :key="item.key"

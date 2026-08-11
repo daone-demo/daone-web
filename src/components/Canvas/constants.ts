@@ -1752,7 +1752,7 @@ export const IMAGE_CONTEXT_MENU_SECTIONS: ImageContextMenuItem[][] = [
 export const VIDEO_CONTEXT_MENU_SECTIONS: ImageContextMenuItem[][] = [
   [
     { key: 'chat', label: '对话', icon: 'icon-duihuaqipao' },
-    { key: 'send-agent', label: '添加到智能体', icon: 'icon-contact-customer-service' },
+    // { key: 'send-agent', label: '添加到智能体', icon: 'icon-contact-customer-service' },
   ],
   [
     { key: 'preview', label: '预览', icon: 'icon-yulan1' },
