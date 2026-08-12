@@ -140,7 +140,7 @@
       @upload-images="emit('upload-image-dialogue-images', $event)"
       @add-canvas-node="emit('add-image-dialogue-canvas-node', $event)"
       @toggle-canvas-pick="emit('toggle-image-dialogue-canvas-pick')"
-      @toggle-mark="emit('toggle-image-dialogue-mark')"
+      @toggle-mark="emit('toggle-image-dialogue-mark', $event)"
       @add-digital-human-ref="emit('add-image-dialogue-digital-human', $event)"
       @mention-inserted="emit('mention-inserted')"
       @select-mark-label="(markId, index) => emit('select-mark-label', markId, index)"
@@ -359,7 +359,7 @@
       @upload-images="emit('upload-image-dialogue-images', $event)"
       @add-canvas-node="emit('add-image-dialogue-canvas-node', $event)"
       @toggle-canvas-pick="emit('toggle-image-dialogue-canvas-pick')"
-      @toggle-mark="emit('toggle-image-dialogue-mark')"
+      @toggle-mark="emit('toggle-image-dialogue-mark', $event)"
       @add-digital-human-ref="emit('add-image-dialogue-digital-human', $event)"
       @mention-inserted="emit('mention-inserted')"
       @select-mark-label="(markId, index) => emit('select-mark-label', markId, index)"
@@ -650,7 +650,7 @@ const emit = defineEmits<{
   'add-video-gen-canvas-node': [nodeId: string]
   'toggle-video-gen-canvas-pick': []
   'toggle-image-dialogue-canvas-pick': []
-  'toggle-image-dialogue-mark': []
+  'toggle-image-dialogue-mark': [options?: { coordinateOnly?: boolean }]
   'add-image-dialogue-digital-human': [payload: { assetId: string; previewUrl: string }]
   'mention-inserted': []
   'select-mark-label': [markId: string, index: number]

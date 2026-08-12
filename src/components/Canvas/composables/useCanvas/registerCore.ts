@@ -361,6 +361,8 @@ export function registerCore(bind: CanvasBindings) {
   let videoToolbarDeferTimer: ReturnType<typeof setTimeout> | null = null
   const videoToolbarClickDeferred = ref(false)
   const imageMarkRecognizing = ref(false)
+  /** 工作流选点：只落坐标钉点，不调用 IMAGE_MARK_RECOGNIZE */
+  const imageMarkCoordinateOnly = ref(false)
   const selectedElementMarkId = ref('')
   // const VIDEO_TOOLBAR_CLICK_DEFER_MS = 280
 
@@ -5833,13 +5835,17 @@ export function registerCore(bind: CanvasBindings) {
     })
   }
 
-  function enterElementSelectMode(context: 'image-dialogue' | 'video-gen' = 'video-gen') {
+  function enterElementSelectMode(
+    context: 'image-dialogue' | 'video-gen' = 'video-gen',
+    options?: { coordinateOnly?: boolean },
+  ) {
     const returnId = context === 'image-dialogue'
       ? getActiveImageDialogueTargetNodeId()
       : activeVideoGenPromptNodeId.value
     if (!returnId) return
     elementSelectContext.value = context
     elementSelectReturnNodeId.value = returnId
+    imageMarkCoordinateOnly.value = Boolean(options?.coordinateOnly)
     exitVideoGenCanvasPickMode()
     exitImageDialogueCanvasPickMode()
     showElementSelectMode.value = true
@@ -5860,6 +5866,7 @@ export function registerCore(bind: CanvasBindings) {
     showElementSelectMode.value = false
     elementSelectContext.value = null
     elementSelectReturnNodeId.value = ''
+    imageMarkCoordinateOnly.value = false
 
     if (!options?.force && isImageMarkAnalysisInProgress()) {
       // 分析进行中：仅退出元素选择 UI，保留节点「分析中」状态直至任务结束
@@ -5884,7 +5891,9 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     if (!g || !showElementSelectMode.value || !event) return
 
-    if (imageMarkRecognizing.value || isImageMarkAnalyzing(g)) {
+    const coordinateOnly = imageMarkCoordinateOnly.value
+
+    if (!coordinateOnly && (imageMarkRecognizing.value || isImageMarkAnalyzing(g))) {
       message.warning('正在分析标记，请等待完成后再试')
       return
     }
@@ -5909,25 +5918,45 @@ export function registerCore(bind: CanvasBindings) {
 
     const existingCount = (sourceData.imageElementMarks?.length ?? 0)
     const markIndex = existingCount + 1
-    const pendingMark = buildImageMarkItem({
+    const markLabel = `标记${markIndex}`
+    const markItem = buildImageMarkItem({
       sourceNodeId: sourceNode.id,
       assetId,
       x: point.x,
       y: point.y,
       imageWidth: point.imageWidth,
       imageHeight: point.imageHeight,
-      label: `标记${markIndex}`,
-      labelOptions: [`标记${markIndex}`],
+      label: markLabel,
+      labelOptions: [markLabel],
     })
-    pendingMark.pending = true
 
-    appendImageMarkToNode(sourceNode, pendingMark)
-    const returnCell = g.getCellById(returnNodeId)
-    if (returnCell?.isNode()) {
-      appendElementMarkToNode(returnCell as Node, pendingMark)
+    // 工作流选点：只保留坐标钉点并显示在图片上，不调用 AI 识别；标记一次后退出
+    if (coordinateOnly) {
+      markItem.pending = false
+      appendImageMarkToNode(sourceNode, markItem)
+      const returnCell = g.getCellById(returnNodeId)
+      if (returnCell?.isNode()) {
+        appendElementMarkToNode(returnCell as Node, markItem)
+      }
+      syncNodeImageMarkLists(sourceNode)
+      if (returnCell?.isNode() && returnCell.id !== sourceNode.id) {
+        syncNodeImageMarkLists(returnCell as Node)
+      }
+      if (showImageDialogue.value) persistImageDialogueFields(returnNodeId)
+      bumpToolbarRevision()
+      scheduleHistoryPush()
+      exitElementSelectMode({ force: true })
+      return
     }
 
-    const markDetail = `标记${markIndex}`
+    markItem.pending = true
+    appendImageMarkToNode(sourceNode, markItem)
+    const returnCell = g.getCellById(returnNodeId)
+    if (returnCell?.isNode()) {
+      appendElementMarkToNode(returnCell as Node, markItem)
+    }
+
+    const markDetail = markLabel
     recordCanvasDescription(markDetail, '标记识别')
 
     imageMarkRecognizing.value = true
@@ -5986,17 +6015,17 @@ export function registerCore(bind: CanvasBindings) {
         ? parsed.labelOptions
         : [parsed.label]
       const completedMark: ImageMarkItem = {
-        ...pendingMark,
+        ...markItem,
         label: labelOptions[0],
         labelOptions,
         selectedLabelIndex: 0,
         description: parsed.description,
         bbox: parsed.bbox,
         pending: false,
-        mentionToken: pendingMark.mentionToken,
+        mentionToken: markItem.mentionToken,
       }
 
-      replaceImageMarkOnGraph(g, pendingMark.id, completedMark)
+      replaceImageMarkOnGraph(g, markItem.id, completedMark)
       syncNodeImageMarkLists(sourceNode)
       if (returnCell?.isNode() && returnCell.id !== sourceNode.id) {
         syncNodeImageMarkLists(returnCell as Node)
@@ -6006,7 +6035,7 @@ export function registerCore(bind: CanvasBindings) {
       message.success(`已识别：${completedMark.label}`)
       exitElementSelectMode({ force: true })
     } catch (error) {
-      removeImageMarkFromGraph(g, pendingMark.id)
+      removeImageMarkFromGraph(g, markItem.id)
       message.error(error instanceof Error ? error.message : '标记识别失败，请稍后重试')
     } finally {
       imageMarkRecognizing.value = false
@@ -6221,7 +6250,7 @@ export function registerCore(bind: CanvasBindings) {
     enterElementSelectMode('image-dialogue')
   }
 
-  function toggleImageDialogueMarkMode() {
+  function toggleImageDialogueMarkMode(options?: { coordinateOnly?: boolean }) {
     if (showElementSelectMode.value && elementSelectContext.value === 'image-dialogue') {
       exitElementSelectMode({ force: true })
       return
@@ -6230,7 +6259,7 @@ export function registerCore(bind: CanvasBindings) {
     if (!targetId) return
     const data = graph.value?.getCellById(targetId)?.getData() as CanvasNodeData | undefined
     if (isPendingImageGenDialogueTarget(data)) return
-    enterElementSelectMode('image-dialogue')
+    enterElementSelectMode('image-dialogue', options)
   }
 
   function enterVideoGenCanvasPickMode() {

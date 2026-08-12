@@ -359,7 +359,7 @@ const emit = defineEmits<{
   'upload-images': [files: File[]]
   'add-canvas-node': [nodeId: string]
   'toggle-canvas-pick': []
-  'toggle-mark': []
+  'toggle-mark': [options?: { coordinateOnly?: boolean }]
   'add-digital-human-ref': [payload: { assetId: string; previewUrl: string }]
   'mention-inserted': []
   'select-mark-label': [markId: string, index: number]
@@ -579,7 +579,8 @@ function onWorkflowChange(workflowId: string | undefined) {
   const workflow = workflowOptions.value.find((item) => item.id === workflowId)
   if (isMyModelWorkflow(workflow)) return
   if (!workflowId || hasCompletedElementMarks() || props.elementSelectMode) return
-  emit('toggle-mark')
+  // 工作流选点：只采坐标钉点，不触发 AI 识别
+  emit('toggle-mark', { coordinateOnly: true })
 }
 
 function onDigitalHumanSelect(item: DigitalHumanPickerItem) {
