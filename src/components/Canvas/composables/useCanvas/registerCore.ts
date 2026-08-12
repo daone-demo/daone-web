@@ -868,13 +868,34 @@ export function registerCore(bind: CanvasBindings) {
     return String(item.nodeId ?? '').startsWith('digital-human-')
   }
 
+  /** 参考图缺 previewUrl 时，按 nodeId 从画布节点补齐，避免溯源列表偶发空白 */
+  function enrichImageSourceRefPreview(item: ImageSourceRef): ImageSourceRef {
+    if (item.previewUrl?.trim()) return item
+    const g = graph.value
+    const refId = String(item.nodeId ?? '').trim()
+    if (!g || !refId) return item
+    const cell = g.getCellById(refId)
+    if (!cell?.isNode()) return item
+    const data = cell.getData() as CanvasNodeData
+    const previewUrl = data.previewUrl?.trim()
+    if (!previewUrl) return item
+    return {
+      ...item,
+      previewUrl,
+      assetId: item.assetId || data.assetId,
+      fileName: item.fileName || data.fileName || data.title || '',
+    }
+  }
+
   /** 自身已有媒体时，排除溯源/上游节点，只保留自己与用户额外添加的参考图 */
   function resolveImageDialogueRefs(
     data: CanvasNodeData,
     targetNodeId: string,
   ): ImageSourceRef[] {
     const existing = Array.isArray(data.imageSourceRefs)
-      ? data.imageSourceRefs.filter((item) => item.previewUrl?.trim())
+      ? data.imageSourceRefs
+          .map(enrichImageSourceRefPreview)
+          .filter((item) => item.previewUrl?.trim())
       : []
 
     // 生成结果节点：保留持久化的图生图输入参考图，不因自身已有预览而折叠为仅自己
@@ -2777,7 +2798,10 @@ export function registerCore(bind: CanvasBindings) {
         }),
         onError: (reason) => message.error(reason),
         onComplete: async (result) => {
-          resetSourceImageDialogueAfterSuccess(sourceNode, resultNode, result)
+          // 空宿主已复用为结果节点时，禁止当「源」清空溯源（否则 sibling 完成会擦掉第一张结果的参考图）
+          if (!reuseEmptyHostAsFirstResult) {
+            resetSourceImageDialogueAfterSuccess(sourceNode, resultNode, result)
+          }
           if (!result.success || index !== 0) return
 
           const extraResults = result.extraResults ?? []
@@ -2796,6 +2820,25 @@ export function registerCore(bind: CanvasBindings) {
 
           if (!extraNodes.length) return
           extraNodes.forEach((node) => {
+            // 用提交时捕获的溯源显式回写，避免 primary 被清空后 clone 得到空 refs
+            applyImageDialogueProvenance(node, {
+              prompt,
+              settings: provenanceSettings,
+              sourceRefs: provenanceRefs,
+              elementMarks: dialogueElementMarks.length ? dialogueElementMarks : undefined,
+              generationParams: buildImageGenerationParams({
+                prompt,
+                capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+                parameters: taskParameters,
+                workflowId: resolveGenerationTaskWorkflowId(payload.workflowId, payload.workflow) ?? undefined,
+                referenceAssetIds:
+                  referenceAssetIds.length > 0
+                    ? referenceAssetIds
+                    : assetId
+                      ? [assetId]
+                      : undefined,
+              }),
+            })
             // 空宿主已复用为结果时，去掉结果间连线，改为各源图连到新结果
             if (reuseEmptyHostAsFirstResult) {
               disconnectDirectEdge(sourceNode.id, node.id)
@@ -4153,6 +4196,7 @@ export function registerCore(bind: CanvasBindings) {
     },
   ) {
     const refs = options.sourceRefs
+      .map(enrichImageSourceRefPreview)
       .filter((item) => item.previewUrl?.trim() || item.assetId?.trim())
       .map((item) => ({
         nodeId: item.nodeId,

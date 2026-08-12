@@ -339,7 +339,8 @@ const onLoadHistorySessions = async (options?: { forceSelectFirst?: boolean }) =
     return
   }
 
-  const res = await api.getChatSessions({ projectId: currentProjectId.value, page: 1, pageSize: 100 });
+  // const res = await api.getChatSessions({ projectId: currentProjectId.value, page: 1, pageSize: 100 });
+  const res = await api.getChatSessions({ page: 1, pageSize: 100 });
   historySessions.value = res.records as unknown as any[];
 
   if (historySessions.value.length) {
