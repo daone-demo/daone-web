@@ -213,74 +213,113 @@ export function createPromptMentionApi(
   }
 
   function setPlainTextOffset(root: HTMLElement, offset: number) {
+    setPlainTextSelection(root, offset, offset)
+  }
+
+  /** 将纯文本起止偏移还原为 DOM Selection（支持非折叠选区） */
+  function setPlainTextSelection(root: HTMLElement, start: number, end = start) {
     const sel = window.getSelection()
     if (!sel) return
 
-    let remaining = Math.max(0, offset)
-    let placed = false
+    const resolve = (offset: number): { node: Node; offset: number } | null => {
+      let remaining = Math.max(0, offset)
+      let result: { node: Node; offset: number } | null = null
 
-    const placeBefore = (node: Node) => {
-      const range = document.createRange()
-      range.setStartBefore(node)
-      range.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(range)
-      placed = true
-    }
-
-    const placeAfter = (node: Node) => {
-      const range = document.createRange()
-      range.setStartAfter(node)
-      range.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(range)
-      placed = true
-    }
-
-    const walk = (node: Node): void => {
-      if (placed) return
-
-      if (node.nodeType === Node.TEXT_NODE) {
-        const len = node.textContent?.length ?? 0
-        if (remaining <= len) {
-          const range = document.createRange()
-          range.setStart(node, remaining)
-          range.collapse(true)
-          sel.removeAllRanges()
-          sel.addRange(range)
-          placed = true
-          return
-        }
-        remaining -= len
-        return
+      const placeAtParent = (node: Node, after: boolean) => {
+        const parent = node.parentNode
+        if (!parent) return
+        const index = Array.from(parent.childNodes).indexOf(node as ChildNode)
+        if (index < 0) return
+        result = { node: parent, offset: after ? index + 1 : index }
       }
 
-      if (isMentionEl(node)) {
-        const len = (node.dataset.mention ?? node.textContent ?? '').length
-        if (remaining === 0) {
-          placeBefore(node)
+      const walk = (node: Node): void => {
+        if (result) return
+
+        if (node.nodeType === Node.TEXT_NODE) {
+          const len = node.textContent?.length ?? 0
+          if (remaining <= len) {
+            result = { node, offset: remaining }
+            return
+          }
+          remaining -= len
           return
         }
-        if (remaining <= len) {
-          placeAfter(node)
+
+        if (isMentionEl(node)) {
+          const len = (node.dataset.mention ?? node.textContent ?? '').length
+          if (remaining === 0) {
+            placeAtParent(node, false)
+            return
+          }
+          if (remaining <= len) {
+            placeAtParent(node, true)
+            return
+          }
+          remaining -= len
           return
         }
-        remaining -= len
-        return
+
+        node.childNodes.forEach(walk)
       }
 
-      node.childNodes.forEach(walk)
+      root.childNodes.forEach(walk)
+      if (!result) {
+        result = { node: root, offset: root.childNodes.length }
+      }
+      return result
     }
 
-    root.childNodes.forEach(walk)
+    const a = resolve(Math.min(start, end))
+    const b = resolve(Math.max(start, end))
+    if (!a || !b) return
 
-    if (!placed) {
+    try {
+      const range = document.createRange()
+      range.setStart(a.node, a.offset)
+      range.setEnd(b.node, b.offset)
+      sel.removeAllRanges()
+      sel.addRange(range)
+    } catch {
       const range = document.createRange()
       range.selectNodeContents(root)
       range.collapse(false)
       sel.removeAllRanges()
       sel.addRange(range)
     }
+  }
+
+  /** 读取当前选区在纯文本中的起止偏移；选区不在 root 内时返回 null */
+  function getSelectionPlainOffsets(root: HTMLElement): { start: number; end: number } | null {
+    const sel = window.getSelection()
+    if (!sel?.rangeCount) return null
+    const range = sel.getRangeAt(0)
+    if (!root.contains(range.commonAncestorContainer)) return null
+    const start = getPlainTextOffset(root, range.startContainer, range.startOffset)
+    const end = getPlainTextOffset(root, range.endContainer, range.endOffset)
+    return {
+      start: Math.min(start, end),
+      end: Math.max(start, end),
+    }
+  }
+
+  /** 纯文本节点中仍含未转成 mention 的 @图片/@标记 时才需要重绘 */
+  function needsMentionRerender(root: HTMLElement): boolean {
+    let needs = false
+    const walk = (node: Node): void => {
+      if (needs) return
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent ?? ''
+        if (!text) return
+        const regex = new RegExp(PROMPT_MENTION_REGEX.source, 'g')
+        if (regex.test(text)) needs = true
+        return
+      }
+      if (isMentionEl(node)) return
+      node.childNodes.forEach(walk)
+    }
+    root.childNodes.forEach(walk)
+    return needs
   }
 
   function findMentionBeforeCursor(): HTMLElement | null {
@@ -336,6 +375,9 @@ export function createPromptMentionApi(
     renderPromptToEl,
     getPlainTextOffset,
     setPlainTextOffset,
+    setPlainTextSelection,
+    getSelectionPlainOffsets,
+    needsMentionRerender,
     findMentionBeforeCursor,
     findMentionAfterCursor,
   }

@@ -727,14 +727,12 @@ function syncPromptView(text = props.promptText) {
   const el = promptInputRef.value
   if (!el) return
 
-  const sel = window.getSelection()
-  const range = sel?.rangeCount ? sel.getRangeAt(0) : null
-  const offset = range && el.contains(range.startContainer)
-    ? mentionApi.getPlainTextOffset(el, range.startContainer, range.startOffset)
-    : text.length
+  const offsets = mentionApi.getSelectionPlainOffsets(el)
+  const start = offsets?.start ?? text.length
+  const end = offsets?.end ?? start
 
   mentionApi.renderPromptToEl(el, text)
-  mentionApi.setPlainTextOffset(el, offset)
+  mentionApi.setPlainTextSelection(el, start, end)
 }
 
 function onPromptCompositionStart() {
@@ -753,6 +751,7 @@ function onPromptInput(event?: Event) {
   const text = mentionApi.serializePromptEl(el)
   emitPrompt(text)
   if (isPromptComposing.value || isInputComposing(event)) return
+  if (!mentionApi.needsMentionRerender(el)) return
   nextTick(() => syncPromptView(text))
 }
 
@@ -763,6 +762,20 @@ function onPromptKeydown(event: KeyboardEvent) {
 
   const el = promptInputRef.value
   if (!el) return
+
+  const sel = window.getSelection()
+  if (!sel?.rangeCount) return
+
+  if (!sel.isCollapsed) {
+    const range = sel.getRangeAt(0)
+    if (!el.contains(range.commonAncestorContainer)) return
+    event.preventDefault()
+    range.deleteContents()
+    const text = mentionApi.serializePromptEl(el)
+    emitPrompt(text)
+    nextTick(() => syncPromptView(text))
+    return
+  }
 
   const mention = event.key === 'Backspace'
     ? mentionApi.findMentionBeforeCursor()

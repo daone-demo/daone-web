@@ -37,7 +37,7 @@
           :key="item.key"
           class="image-dialogue__thumb"
           :title="`点击插入 @图片${index + 1}`"
-          @mousedown.stop
+          @mousedown.prevent.stop="onRefMouseDown"
           @click.stop="insertRefMention(index + 1)"
           @mouseenter="hoveredThumb = item.key"
           @mouseleave="hoveredThumb = null"
@@ -101,6 +101,10 @@
         @keydown="onPromptKeydown"
         @paste="onPromptPaste"
         @click="onPromptClick"
+        @keyup="capturePromptCaret"
+        @mouseup="capturePromptCaret"
+        @focus="capturePromptCaret"
+        @blur="capturePromptCaret"
       />
       <MarkLabelOptionMenu
         :visible="Boolean(markLabelMenuState)"
@@ -372,6 +376,20 @@ const { isLightTheme } = useCanvasBgTheme()
 const promptInputRef = ref<HTMLElement | null>(null)
 let skipPromptWatch = false
 const isPromptComposing = ref(false)
+/** 点击缩略图插入前缓存光标，避免抢焦点导致插入到末尾 */
+let savedPromptCaret = { start: 0, end: 0 }
+
+function capturePromptCaret() {
+  const el = promptInputRef.value
+  if (!el) return
+  const offsets = mentionApi.getSelectionPlainOffsets(el)
+  if (!offsets) return
+  savedPromptCaret = offsets
+}
+
+function onRefMouseDown() {
+  capturePromptCaret()
+}
 
 const previewList = computed(() => {
   const list = Array.isArray(props.previews)
@@ -677,14 +695,13 @@ function syncPromptView(text = props.modelValue) {
   const el = promptInputRef.value
   if (!el) return
 
-  const sel = window.getSelection()
-  const range = sel?.rangeCount ? sel.getRangeAt(0) : null
-  const offset = range && el.contains(range.startContainer)
-    ? mentionApi.getPlainTextOffset(el, range.startContainer, range.startOffset)
-    : text.length
+  const offsets = mentionApi.getSelectionPlainOffsets(el)
+  const start = offsets?.start ?? text.length
+  const end = offsets?.end ?? start
 
   mentionApi.renderPromptToEl(el, text)
-  mentionApi.setPlainTextOffset(el, offset)
+  mentionApi.setPlainTextSelection(el, start, end)
+  savedPromptCaret = { start, end }
 }
 
 function insertMentionToken(token: string) {
@@ -699,27 +716,36 @@ function insertMentionToken(token: string) {
 
   el.focus()
   const sel = window.getSelection()
-  if (!sel?.rangeCount) {
+  if (!sel) {
     emitPrompt(`${props.modelValue}${props.modelValue && !/[\s]$/.test(props.modelValue) ? ' ' : ''}${token} `)
     nextTick(() => syncPromptView())
     return
   }
 
-  const range = sel.getRangeAt(0)
-  if (!el.contains(range.commonAncestorContainer)) {
-    range.selectNodeContents(el)
-    range.collapse(false)
+  const live = mentionApi.getSelectionPlainOffsets(el)
+  if (!live) {
+    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
   }
 
-  range.deleteContents()
+  if (!sel.rangeCount) {
+    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
+  }
 
-  if (needsSpaceBeforeMention(range, el, mentionApi.isMentionEl)) {
-    range.insertNode(document.createTextNode(' '))
-    range.collapse(false)
+  const range = sel.getRangeAt(0)
+  if (!el.contains(range.commonAncestorContainer)) {
+    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
+  }
+
+  const insertRange = sel.getRangeAt(0)
+  insertRange.deleteContents()
+
+  if (needsSpaceBeforeMention(insertRange, el, mentionApi.isMentionEl)) {
+    insertRange.insertNode(document.createTextNode(' '))
+    insertRange.collapse(false)
   }
 
   const mention = mentionApi.createMentionSpan(token)
-  range.insertNode(mention)
+  insertRange.insertNode(mention)
   const space = document.createTextNode(' ')
   mention.after(space)
 
@@ -729,8 +755,11 @@ function insertMentionToken(token: string) {
   sel.removeAllRanges()
   sel.addRange(nextRange)
 
-  emitPrompt(mentionApi.serializePromptEl(el))
-  nextTick(() => syncPromptView())
+  const nextText = mentionApi.serializePromptEl(el)
+  const nextOffsets = mentionApi.getSelectionPlainOffsets(el)
+  if (nextOffsets) savedPromptCaret = nextOffsets
+
+  emitPrompt(nextText)
 }
 
 function insertRefMention(index: number) {
@@ -776,8 +805,10 @@ function onPromptInput(event?: Event) {
   if (!el) return
 
   const text = mentionApi.serializePromptEl(el)
+  capturePromptCaret()
   emitPrompt(text)
   if (isPromptComposing.value || isInputComposing(event)) return
+  if (!mentionApi.needsMentionRerender(el)) return
   nextTick(() => syncPromptView(text))
 }
 
@@ -795,6 +826,22 @@ function onPromptKeydown(event: KeyboardEvent) {
   const el = promptInputRef.value
   if (!el) return
 
+  const sel = window.getSelection()
+  if (!sel?.rangeCount) return
+
+  if (!sel.isCollapsed) {
+    const range = sel.getRangeAt(0)
+    if (!el.contains(range.commonAncestorContainer)) return
+    event.preventDefault()
+    range.deleteContents()
+    const text = mentionApi.serializePromptEl(el)
+    const offsets = mentionApi.getSelectionPlainOffsets(el)
+    if (offsets) savedPromptCaret = offsets
+    emitPrompt(text)
+    nextTick(() => syncPromptView(text))
+    return
+  }
+
   const mention = event.key === 'Backspace'
     ? mentionApi.findMentionBeforeCursor()
     : mentionApi.findMentionAfterCursor()
@@ -803,8 +850,10 @@ function onPromptKeydown(event: KeyboardEvent) {
 
   event.preventDefault()
   mention.remove()
-  emitPrompt(mentionApi.serializePromptEl(el))
-  nextTick(() => syncPromptView())
+  const text = mentionApi.serializePromptEl(el)
+  capturePromptCaret()
+  emitPrompt(text)
+  nextTick(() => syncPromptView(text))
 }
 
 function onPromptPaste(event: ClipboardEvent) {

@@ -90,7 +90,7 @@
           'video-gen-prompt-panel__ref--invalid': validationError,
         }"
         :title="ref.kind === 'text' ? ref.textPreview : `点击插入 @${getRefDisplayName(ref)}`"
-        @mousedown.stop
+        @mousedown.prevent.stop="onRefMouseDown"
         @click.stop="ref.kind === 'text' ? undefined : insertRefMention(ref)"
       >
         <img v-if="ref.kind !== 'text'" :src="ref.previewUrl" alt="" />
@@ -192,6 +192,10 @@
         @keydown="onPromptKeydown"
         @paste="onPromptPaste"
         @click="onPromptClick"
+        @keyup="capturePromptCaret"
+        @mouseup="capturePromptCaret"
+        @focus="capturePromptCaret"
+        @blur="capturePromptCaret"
       />
       <MarkLabelOptionMenu
         :visible="Boolean(markLabelMenuState)"
@@ -665,12 +669,27 @@ const promptInputRef = ref<HTMLElement | null>(null)
 let skipPromptWatch = false
 const isPromptComposing = ref(false)
 const translating = ref(false)
+/** 点击缩略图插入前缓存光标，避免 mousedown 抢焦点导致插入到末尾 */
+let savedPromptCaret = { start: 0, end: 0 }
 
 function getRefDisplayName(ref: VideoSourceRef) {
   if (ref.kind === 'text') {
     return ref.textPreview || ref.title || `文本${ref.index}`
   }
   return `图片${ref.index}`
+}
+
+function capturePromptCaret() {
+  const el = promptInputRef.value
+  if (!el) return
+  const offsets = mentionApi.getSelectionPlainOffsets(el)
+  if (!offsets) return
+  savedPromptCaret = offsets
+}
+
+function onRefMouseDown() {
+  // 先记下当前光标，再 preventDefault 保住输入框焦点
+  capturePromptCaret()
 }
 
 function emitPrompt(text: string) {
@@ -795,14 +814,13 @@ function syncPromptView(text = props.prompt) {
   const el = promptInputRef.value
   if (!el) return
 
-  const sel = window.getSelection()
-  const range = sel?.rangeCount ? sel.getRangeAt(0) : null
-  const offset = range && el.contains(range.startContainer)
-    ? mentionApi.getPlainTextOffset(el, range.startContainer, range.startOffset)
-    : text.length
+  const offsets = mentionApi.getSelectionPlainOffsets(el)
+  const start = offsets?.start ?? text.length
+  const end = offsets?.end ?? start
 
   mentionApi.renderPromptToEl(el, text)
-  mentionApi.setPlainTextOffset(el, offset)
+  mentionApi.setPlainTextSelection(el, start, end)
+  savedPromptCaret = { start, end }
 }
 
 function needsSpaceBefore(range: Range, root: HTMLElement): boolean {
@@ -821,27 +839,37 @@ function insertMentionToken(token: string) {
 
   el.focus()
   const sel = window.getSelection()
-  if (!sel?.rangeCount) {
+  if (!sel) {
     emitPrompt(`${props.prompt}${props.prompt && !/[\s]$/.test(props.prompt) ? ' ' : ''}${token} `)
     nextTick(() => syncPromptView())
     return
   }
 
-  const range = sel.getRangeAt(0)
-  if (!el.contains(range.commonAncestorContainer)) {
-    range.selectNodeContents(el)
-    range.collapse(false)
+  // 选区不在输入框内（点缩略图丢焦点）时，恢复到点击前光标位置
+  const live = mentionApi.getSelectionPlainOffsets(el)
+  if (!live) {
+    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
   }
 
-  range.deleteContents()
+  if (!sel.rangeCount) {
+    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
+  }
 
-  if (needsSpaceBefore(range, el)) {
-    range.insertNode(document.createTextNode(' '))
-    range.collapse(false)
+  const range = sel.getRangeAt(0)
+  if (!el.contains(range.commonAncestorContainer)) {
+    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
+  }
+
+  const insertRange = sel.getRangeAt(0)
+  insertRange.deleteContents()
+
+  if (needsSpaceBefore(insertRange, el)) {
+    insertRange.insertNode(document.createTextNode(' '))
+    insertRange.collapse(false)
   }
 
   const mention = mentionApi.createMentionSpan(token)
-  range.insertNode(mention)
+  insertRange.insertNode(mention)
   const space = document.createTextNode(' ')
   mention.after(space)
 
@@ -851,8 +879,12 @@ function insertMentionToken(token: string) {
   sel.removeAllRanges()
   sel.addRange(nextRange)
 
-  emitPrompt(mentionApi.serializePromptEl(el))
-  nextTick(() => syncPromptView())
+  const nextText = mentionApi.serializePromptEl(el)
+  const nextOffsets = mentionApi.getSelectionPlainOffsets(el)
+  if (nextOffsets) savedPromptCaret = nextOffsets
+
+  emitPrompt(nextText)
+  // 已手工插入 mention 节点，无需整段重绘以免光标跳动
 }
 
 function insertRefMention(ref: VideoSourceRef) {
@@ -898,8 +930,11 @@ function onPromptInput(event?: Event) {
   if (!el) return
 
   const text = mentionApi.serializePromptEl(el)
+  capturePromptCaret()
   emitPrompt(text)
   if (isPromptComposing.value || isInputComposing(event)) return
+  // 仅当纯文本里出现未转成 chip 的 @图片/@标记 时才重绘，避免输入时光标乱跳
+  if (!mentionApi.needsMentionRerender(el)) return
   nextTick(() => syncPromptView(text))
 }
 
@@ -911,6 +946,23 @@ function onPromptKeydown(event: KeyboardEvent) {
   const el = promptInputRef.value
   if (!el) return
 
+  const sel = window.getSelection()
+  if (!sel?.rangeCount) return
+
+  // 框选多个 @图片 / 文本后删除
+  if (!sel.isCollapsed) {
+    const range = sel.getRangeAt(0)
+    if (!el.contains(range.commonAncestorContainer)) return
+    event.preventDefault()
+    range.deleteContents()
+    const text = mentionApi.serializePromptEl(el)
+    const offsets = mentionApi.getSelectionPlainOffsets(el)
+    if (offsets) savedPromptCaret = offsets
+    emitPrompt(text)
+    nextTick(() => syncPromptView(text))
+    return
+  }
+
   const mention = event.key === 'Backspace'
     ? mentionApi.findMentionBeforeCursor()
     : mentionApi.findMentionAfterCursor()
@@ -919,8 +971,10 @@ function onPromptKeydown(event: KeyboardEvent) {
 
   event.preventDefault()
   mention.remove()
-  emitPrompt(mentionApi.serializePromptEl(el))
-  nextTick(() => syncPromptView())
+  const text = mentionApi.serializePromptEl(el)
+  capturePromptCaret()
+  emitPrompt(text)
+  nextTick(() => syncPromptView(text))
 }
 
 function onPromptPaste(event: ClipboardEvent) {
