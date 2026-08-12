@@ -20,6 +20,8 @@ export type MaterialItem = {
 
 export type AssetItem = {
   id: string
+  /** 素材库资源 ID；数字人等接口可能与 id 不同，优先用此字段绑定画布节点 */
+  assetId?: string
   previewUrl?: string
   url?: string
   fileName?: string
@@ -54,13 +56,30 @@ export function resolveAssetTitle(item: AssetItem): string {
 
 export function normalizeAssetItem(item: AssetItem): AssetItem {
   const type = String(item.type ?? 'IMAGE').toUpperCase()
+  const rawAssetId = item.assetId
+  const assetId =
+    rawAssetId != null && String(rawAssetId).trim()
+      ? String(rawAssetId).trim()
+      : undefined
+  // 列表主键保留接口 id；绑定画布时再通过 resolveAssetBindId 优先取 assetId
+  const id = String(item.id ?? assetId ?? '').trim()
   return {
     ...item,
+    id,
+    ...(assetId ? { assetId } : {}),
     type,
     previewUrl: item.previewUrl || item.url || '',
     url: item.url || item.previewUrl || '',
     favorited: Boolean(item.favorited),
   }
+}
+
+/** 解析素材拖入画布时应绑定到节点的资源 ID（优先 assetId，其次 id） */
+export function resolveAssetBindId(item: Pick<AssetItem, 'id' | 'assetId'> | Pick<MaterialItem, 'id'>): string {
+  if ('assetId' in item && item.assetId != null && String(item.assetId).trim()) {
+    return String(item.assetId).trim()
+  }
+  return String(item.id ?? '').trim()
 }
 
 export function resolveMaterialMediaUrl(item: MaterialItem): string {

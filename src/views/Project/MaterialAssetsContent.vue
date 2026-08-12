@@ -239,6 +239,7 @@ import {
   resolveAssetTitle,
   resolveMaterialMediaUrl,
   resolveMaterialTitle,
+  resolveAssetBindId,
   type AssetItem,
   type MaterialItem,
 } from './materialAssets'
@@ -379,8 +380,9 @@ function onMaterialClick(item: MaterialItem) {
 
 function materialToDragPayload(item: MaterialItem): CanvasAssetDragPayload {
   const isVideo = item.type === 'VIDEO'
+  const assetId = resolveAssetBindId(item)
   return {
-    assetId: item.id,
+    ...(assetId ? { assetId } : {}),
     previewUrl: resolveMaterialMediaUrl(item),
     fileName: resolveMaterialTitle(item),
     mediaType: isVideo ? 'VIDEO' : 'IMAGE',
@@ -466,8 +468,9 @@ watch(
 )
 
 function toDragPayload(item: AssetItem): CanvasAssetDragPayload {
+  const assetId = resolveAssetBindId(item)
   return {
-    assetId: item.id,
+    ...(assetId ? { assetId } : {}),
     previewUrl: resolveAssetMediaUrl(item),
     fileName: resolveAssetTitle(item),
     width: item.width ?? null,

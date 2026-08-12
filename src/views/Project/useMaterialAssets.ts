@@ -168,9 +168,11 @@ export function useMaterialAssets(
   }
 
   function normalizeDigitalHumanItem(item: any): AssetItem {
+    // 数字人接口：id 为数字人记录 ID，assetId 才是素材库资源 ID（绑画布节点用）
     const assetId = item?.assetId ?? item?.id
     return normalizeAssetItem({
-      id: String(assetId ?? ''),
+      id: String(item?.id ?? assetId ?? ''),
+      assetId: assetId != null && String(assetId).trim() ? String(assetId).trim() : undefined,
       previewUrl: item?.previewUrl || '',
       url: item?.previewUrl || '',
       type: 'IMAGE',

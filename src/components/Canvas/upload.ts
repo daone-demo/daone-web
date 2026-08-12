@@ -503,7 +503,8 @@ async function finishUpload(
 export async function applyRemoteImageToNode(
   graphNode: Node,
   payload: {
-    assetId?: string
+    assetId?: string | number | null
+    id?: string | number | null
     previewUrl: string
     fileName?: string
     width?: number | null
@@ -520,7 +521,7 @@ export async function applyRemoteImageToNode(
   data.mode = 'editor'
   data.fileName = payload.fileName || '图片'
   data.title = data.fileName
-  const assetId = normalizeAssetId(payload.assetId)
+  const assetId = normalizeAssetId(payload.assetId) || normalizeAssetId(payload.id)
   if (assetId) {
     data.assetId = assetId
   }
@@ -539,6 +540,8 @@ export async function applyRemoteImageToNode(
     const current = { ...(graphNode.getData() as CanvasNodeData) }
     if (current.previewUrl?.trim() !== previewUrl) return
     if (current.mediaWidth && current.mediaHeight) return
+    // 异步补尺寸时保留已绑定的 assetId，避免被中间态覆盖丢失
+    if (assetId && !current.assetId) current.assetId = assetId
     current.mediaWidth = size.width
     current.mediaHeight = size.height
     applyNodeMedia(graphNode, current)
@@ -550,7 +553,8 @@ export async function applyRemoteImageToNode(
 export async function applyRemoteVideoToNode(
   graphNode: Node,
   payload: {
-    assetId?: string
+    assetId?: string | number | null
+    id?: string | number | null
     previewUrl: string
     fileName?: string
     width?: number | null
@@ -567,7 +571,7 @@ export async function applyRemoteVideoToNode(
   data.mode = 'editor'
   data.fileName = payload.fileName || '视频'
   data.title = data.fileName
-  const assetId = normalizeAssetId(payload.assetId)
+  const assetId = normalizeAssetId(payload.assetId) || normalizeAssetId(payload.id)
   if (assetId) {
     data.assetId = assetId
   }
@@ -587,6 +591,7 @@ export async function applyRemoteVideoToNode(
     const size = await resolveVideoNaturalSize(previewUrl)
     const current = { ...(graphNode.getData() as CanvasNodeData) }
     if (current.previewUrl !== previewUrl) return
+    if (assetId && !current.assetId) current.assetId = assetId
     current.mediaWidth = size.width
     current.mediaHeight = size.height
     if (size.durationSeconds) {
@@ -596,6 +601,7 @@ export async function applyRemoteVideoToNode(
   } catch {
     const current = { ...(graphNode.getData() as CanvasNodeData) }
     if (current.previewUrl !== previewUrl) return
+    if (assetId && !current.assetId) current.assetId = assetId
     current.mediaWidth = current.mediaWidth || 2560
     current.mediaHeight = current.mediaHeight || 1440
     applyNodeMedia(graphNode, current)

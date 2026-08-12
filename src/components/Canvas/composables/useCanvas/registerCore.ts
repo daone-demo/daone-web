@@ -42,7 +42,7 @@ import {
   normalizeCanvasSnapshot, applyCanvasSnapshot, createCanvasHistory, disconnectImageFromVideo, findImageToVideoEdge, findIncomingTextNodes, getVideoSourceRefs, getVideoTextSourceRefs, shouldOpenImageGenPromptBar, resolveVideoSourceRefsForNode, toPersistedVideoSourceRefs, plainTextFromNodeContent, VIDEO_GEN_TAB_IMAGE_RULES, isVideoGenerationFailedNode, findReusableVideoGenerationNode, resolveVideoGenerationSubmitContext, resetVideoGenerationNodeForRetry, applyVideoFirstLastFrameParameters,
   useCanvasKeyboard, api, buildGroupSkillMarkdown, extractGroupSubgraph, parseElementGroupRecord,
 } from './sharedImports';
-import { isNodeFileUploading } from '../../constants'
+import { isNodeFileUploading, normalizeAssetId } from '../../constants'
 import {
   normalizeOcrRecognizeResult,
   type ImageEditTextChange,
@@ -11659,9 +11659,17 @@ export function registerCore(bind: CanvasBindings) {
     ensureInfiniteCanvasArea(g)
   }
 
+  function resolveLibraryAssetBindId(asset: {
+    assetId?: string | number | null
+    id?: string | number | null
+  }) {
+    return normalizeAssetId(asset.assetId) || normalizeAssetId(asset.id) || undefined
+  }
+
   function addImageFromAsset(
     asset: {
       assetId?: string
+      id?: string | number
       previewUrl: string
       fileName?: string
       width?: number | null
@@ -11673,13 +11681,18 @@ export function registerCore(bind: CanvasBindings) {
     if (!g || !asset.previewUrl) return null
 
     const position = point ?? getRandomViewportLocalPoint(g, { kind: 'image', mode: 'editor' })
+    const boundAssetId = resolveLibraryAssetBindId(asset)
     const node = addCanvasNode(g, 'image', position, {
       mode: 'editor',
       title: asset.fileName || '图片',
       fileName: asset.fileName || '图片',
+      ...(boundAssetId ? { assetId: boundAssetId } : {}),
     })
 
-    void applyRemoteImageToNode(node, asset)
+    void applyRemoteImageToNode(node, {
+      ...asset,
+      assetId: boundAssetId,
+    })
     selectGraphNodes(node)
     syncNodeCount()
     scheduleHistoryPush()
@@ -11689,6 +11702,7 @@ export function registerCore(bind: CanvasBindings) {
   function addVideoFromAsset(
     asset: {
       assetId?: string
+      id?: string | number
       previewUrl: string
       fileName?: string
       width?: number | null
@@ -11700,13 +11714,18 @@ export function registerCore(bind: CanvasBindings) {
     if (!g || !asset.previewUrl) return
 
     const position = point ?? getRandomViewportLocalPoint(g, { kind: 'video', mode: 'editor' })
+    const boundAssetId = resolveLibraryAssetBindId(asset)
     const node = addCanvasNode(g, 'video', position, {
       mode: 'editor',
       title: asset.fileName || '视频',
       fileName: asset.fileName || '视频',
+      ...(boundAssetId ? { assetId: boundAssetId } : {}),
     })
 
-    void applyRemoteVideoToNode(node, asset)
+    void applyRemoteVideoToNode(node, {
+      ...asset,
+      assetId: boundAssetId,
+    })
     selectGraphNodes(node)
     syncNodeCount()
     scheduleHistoryPush()
@@ -11726,16 +11745,19 @@ export function registerCore(bind: CanvasBindings) {
       const kind = asset.mediaType === 'VIDEO' ? 'video' : 'image'
       const point = getMultiUploadSpawnPoint(basePoint, index, kind)
       const title = asset.fileName || (kind === 'video' ? '视频' : '图片')
+      const boundAssetId = resolveLibraryAssetBindId(asset)
       const node = addCanvasNode(g, kind, point, {
         mode: 'editor',
         title,
         fileName: title,
+        ...(boundAssetId ? { assetId: boundAssetId } : {}),
       })
 
+      const payload = { ...asset, assetId: boundAssetId }
       if (asset.mediaType === 'VIDEO') {
-        void applyRemoteVideoToNode(node, asset)
+        void applyRemoteVideoToNode(node, payload)
       } else {
-        applyRemoteImageToNode(node, asset)
+        void applyRemoteImageToNode(node, payload)
       }
 
       createdNodes.push(node)
