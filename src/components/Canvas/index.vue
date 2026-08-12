@@ -805,6 +805,7 @@ const {
   zoomOut,
   zoomPercent,
   addElementGroupFromRecord,
+  addImageFromAsset,
   addImageFromFile,
   addImagesFromFiles,
   createNodeFromChatTask,
@@ -823,6 +824,7 @@ function onMentionInserted() {
 }
 
 defineExpose({
+  addImageFromAsset,
   addImageFromFile,
   addImagesFromFiles,
   createNodeFromChatTask,

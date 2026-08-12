@@ -37,6 +37,7 @@
         @load-history-sessions="onLoadHistorySessions"
         @set-current-session-id="onSetCurrentSessionId"
         @send="onChatSend"
+        @insert-image-to-canvas="onInsertImageToCanvas"
         @task-created="onChatTaskCreated"
         @task-updated="onChatTaskUpdated"
         @new-chat="onNewChat"
@@ -91,6 +92,13 @@ const workflows = ref<WorkflowCategoryGroup[]>([]);
 const page = ref(1);
 
 type CanvasExpose = {
+  addImageFromAsset: (asset: {
+    assetId?: string
+    previewUrl: string
+    fileName?: string
+    width?: number | null
+    height?: number | null
+  }) => Node | null
   addImagesFromFiles: (files: File[]) => Promise<Node[]>
   getNodeCount: () => number
   hasUnsavedChanges: () => boolean
@@ -172,26 +180,33 @@ function onAddAssetToChat(payload: { id: string; role: string; name: string }) {
   chatPanelRef.value?.insertAssetMention(payload)
 }
 
-async function onChatSend(payload: ChatSendPayload) {
+/** 聊天侧栏上传成功：插入画布图片节点，并把 nodeId 回绑到附件 */
+function onInsertImageToCanvas(payload: {
+  attachmentId: string
+  assetId?: string
+  previewUrl: string
+  fileName?: string
+  width?: number | null
+  height?: number | null
+}) {
+  const node = canvasRef.value?.addImageFromAsset?.({
+    assetId: payload.assetId,
+    previewUrl: payload.previewUrl,
+    fileName: payload.fileName,
+    width: payload.width,
+    height: payload.height,
+  })
+  if (node?.id) {
+    chatPanelRef.value?.bindAttachmentNodeId?.(payload.attachmentId, node.id)
+  }
+}
+
+function onChatSend(payload: ChatSendPayload) {
   const text = payload.text.trim()
   if (text) {
     canvasRef.value?.setCanvasDescription?.(text, '对话')
   }
-
-  const canvas = canvasRef.value
-  if (!canvas) return
-
-  const files = payload.attachments
-    .filter((item) => item.file.type.startsWith('image/') && item.file.size > 0)
-    .map((item) => item.file)
-
-  if (!files.length) return
-  chatPanelRef.value?.beginProcessing()
-  try {
-    await canvas.addImagesFromFiles(files)
-  } finally {
-    chatPanelRef.value?.endProcessing()
-  }
+  // 图片已在上传成功时插入画布并绑定 nodeId，发送时不再重复插入
 }
 
 function onChatTaskCreated(payload: ChatTaskCreatedPayload) {

@@ -11528,9 +11528,9 @@ export function registerCore(bind: CanvasBindings) {
       height?: number | null
     },
     point?: { x: number; y: number },
-  ) {
+  ): Node | null {
     const g = graph.value
-    if (!g || !asset.previewUrl) return
+    if (!g || !asset.previewUrl) return null
 
     const position = point ?? getRandomViewportLocalPoint(g, { kind: 'image', mode: 'editor' })
     const node = addCanvasNode(g, 'image', position, {
@@ -11539,10 +11539,11 @@ export function registerCore(bind: CanvasBindings) {
       fileName: asset.fileName || '图片',
     })
 
-    applyRemoteImageToNode(node, asset)
+    void applyRemoteImageToNode(node, asset)
     selectGraphNodes(node)
     syncNodeCount()
     scheduleHistoryPush()
+    return node
   }
 
   function addVideoFromAsset(

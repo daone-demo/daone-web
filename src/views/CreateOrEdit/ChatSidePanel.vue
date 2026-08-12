@@ -694,6 +694,15 @@ const emit = defineEmits<{
   'close-chat': [],
   'task-created': [payload: ChatTaskCreatedPayload],
   'task-updated': [payload: { taskId: string | number; taskName: string }],
+  /** 聊天上传成功后，请求父级插入画布并回绑 nodeId */
+  'insert-image-to-canvas': [payload: {
+    attachmentId: string
+    assetId?: string
+    previewUrl: string
+    fileName?: string
+    width?: number | null
+    height?: number | null
+  }],
 }>()
 
 const onTargetCollapse = () => {
@@ -1288,12 +1297,35 @@ async function uploadAttachmentToOss(attachmentId: string) {
       uploading: false,
       uploadError: undefined,
     })
+
+    // 上传成功后插入画布，便于 agent 通过 nodeId 交互；已有 nodeId（如从画布加入）则跳过
+    const current = attachments.value.find((item) => item.id === attachmentId)
+    if (current && !current.nodeId && nextPreviewUrl) {
+      emit('insert-image-to-canvas', {
+        attachmentId,
+        assetId: result.assetId || undefined,
+        previewUrl: nextPreviewUrl,
+        fileName: current.fileName,
+        width: result.width,
+        height: result.height,
+      })
+    }
   } catch (error) {
     patchAttachment(attachmentId, {
       uploading: false,
       uploadError: error instanceof Error ? error.message : '上传失败',
     })
   }
+}
+
+function bindAttachmentNodeId(attachmentId: string, nodeId: string) {
+  const id = attachmentId?.trim()
+  const nextNodeId = nodeId?.trim()
+  if (!id || !nextNodeId) return
+  const target = attachments.value.find((item) => item.id === id)
+  if (!target || target.nodeId === nextNodeId) return
+  patchAttachment(id, { nodeId: nextNodeId })
+  saveActiveDraft()
 }
 
 function clearAssetMentions() {
@@ -2626,6 +2658,7 @@ defineExpose({
   addAttachmentFromCanvas,
   addSkillFile,
   insertAssetMention,
+  bindAttachmentNodeId,
 })
 </script>
 
@@ -4252,8 +4285,8 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -4275,7 +4308,6 @@ defineExpose({
   border-radius: 50%;
   object-fit: contain;
   pointer-events: none;
-  animation: chat-panel-msg-icon-logo-glow 2.8s ease-in-out infinite;
 }
 
 @keyframes chat-panel-msg-icon-logo-glow {
