@@ -113,7 +113,6 @@ function openLoginModal() {
 }
 
 onMounted(() => {
-  console.log('onMounted', import.meta.env.VITE_API_BASE_URL);
   bindOnUnauthorized(openLoginModal)
 })
 
