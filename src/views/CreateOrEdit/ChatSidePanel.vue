@@ -2136,7 +2136,8 @@ function startChatStream(
   const skillName = options.skillName?.trim()
   const nodeId = options.nodeId?.trim()
   void connect({
-    url: `${API_BASE}/chat-sessions/${chatId}/messages/stream`,
+    // url: `${API_BASE}/chat-sessions/${chatId}/messages/stream`,
+    ur: `/api/api/v1/chat-sessions/${chatId}/messages/stream`,
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: {

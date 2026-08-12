@@ -178,7 +178,6 @@ import {
   estimateGroupExecuteCredits,
   findGroupOutgoingAiResultNode,
   resolveGroupAiReferenceContext,
-  groupGroupAiTasksByDependencyLevel,
   sortGroupAiTasksByDependency,
   type GroupAiReferenceContext,
   type GroupAiTask,
@@ -10455,14 +10454,59 @@ export function registerCore(bind: CanvasBindings) {
   async function runGroupAiGenerationPipeline(g: Graph, groupId: string, tasks: GroupAiTask[]) {
     const scopeIds = new Set(getGroupBoxNodeIds(g, groupId))
     const finishedAssets = new Map<string, string>()
-    const levels = groupGroupAiTasksByDependencyLevel(tasks)
+    if (!tasks.length) {
+      scheduleHistoryPush()
+      return
+    }
 
-    for (const levelTasks of levels) {
-      const outcomes = await Promise.all(
-        levelTasks.map(async (task) => {
+    const taskMap = new Map(tasks.map((task) => [task.nodeId, task]))
+    const inDegree = new Map<string, number>()
+    const adjacency = new Map<string, string[]>()
+    const started = new Set<string>()
+
+    tasks.forEach((task) => {
+      inDegree.set(task.nodeId, 0)
+      adjacency.set(task.nodeId, [])
+    })
+    tasks.forEach((task) => {
+      task.dependsOn.forEach((depId) => {
+        if (!taskMap.has(depId)) return
+        adjacency.get(depId)?.push(task.nodeId)
+        inDegree.set(task.nodeId, (inDegree.get(task.nodeId) ?? 0) + 1)
+      })
+    })
+
+    let remaining = tasks.length
+    let failed = false
+    let settle!: (error?: Error) => void
+    const done = new Promise<void>((resolve, reject) => {
+      settle = (error) => {
+        if (error) reject(error)
+        else resolve()
+      }
+    })
+
+    const markSettled = () => {
+      remaining -= 1
+      if (remaining > 0) return
+      if (failed) {
+        settle(new Error('group execute failed'))
+        return
+      }
+      scheduleHistoryPush()
+      settle()
+    }
+
+    const startTask = (task: GroupAiTask) => {
+      if (failed || started.has(task.nodeId)) return
+      started.add(task.nodeId)
+
+      void (async () => {
+        try {
           const cell = g.getCellById(task.nodeId)
           if (!cell?.isNode()) {
-            return { task, success: false, resultNodeId: task.nodeId, node: null as Node | null }
+            failed = true
+            return
           }
 
           const node = cell as Node
@@ -10471,35 +10515,47 @@ export function registerCore(bind: CanvasBindings) {
             message.warning(
               `节点「${(node.getData() as CanvasNodeData).title || task.nodeId}」缺少可用参考资源，已跳过`,
             )
-            return { task, success: false, resultNodeId: task.nodeId, node }
+            failed = true
+            return
           }
 
           const outcome = await executeGroupAiTask(g, node, task, refCtx, scopeIds, finishedAssets)
-          return { task, ...outcome, node }
-        }),
-      )
+          if (!outcome.success) {
+            failed = true
+            return
+          }
 
-      if (outcomes.some((outcome) => !outcome.success)) {
-        throw new Error('group execute failed')
-      }
+          recordGroupTaskFinishedAsset(g, task, outcome.resultNodeId, node, finishedAssets)
 
-      for (const outcome of outcomes) {
-        if (!outcome.node) continue
-        recordGroupTaskFinishedAsset(
-          g,
-          outcome.task,
-          outcome.resultNodeId,
-          outcome.node,
-          finishedAssets,
-        )
-      }
+          bumpToolbarRevision()
+          updateGroupToolbarPosition()
+          persistGenerationTaskBinding()
 
-      bumpToolbarRevision()
-      updateGroupToolbarPosition()
-      persistGenerationTaskBinding()
+          // 任一上游完成后立即启动其下游，不等待同层其它节点
+          if (!failed) {
+            for (const nextId of adjacency.get(task.nodeId) ?? []) {
+              const nextDegree = (inDegree.get(nextId) ?? 0) - 1
+              inDegree.set(nextId, nextDegree)
+              if (nextDegree === 0) {
+                const nextTask = taskMap.get(nextId)
+                if (nextTask) startTask(nextTask)
+              }
+            }
+          }
+        } catch {
+          failed = true
+        } finally {
+          markSettled()
+        }
+      })()
     }
 
-    scheduleHistoryPush()
+    const roots = tasks.filter((task) => (inDegree.get(task.nodeId) ?? 0) === 0)
+    if (!roots.length) {
+      throw new Error('group execute failed')
+    }
+    roots.forEach(startTask)
+    await done
   }
 
   function handleGroupAddToToolbox() {

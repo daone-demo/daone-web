@@ -333,7 +333,10 @@ function collectAiDependencies(graph: Graph, nodeId: string, scopeIds: Set<strin
 
   if (data?.sourceNodeId && scopeIds.has(data.sourceNodeId)) {
     const upstream = graph.getCellById(data.sourceNodeId)
-    if (upstream?.isNode() && isAiGeneratedCanvasNode(upstream.getData() as CanvasNodeData)) {
+    if (
+      upstream?.isNode() &&
+      isGroupAiGenerationTarget(graph, upstream as Node, scopeIds, upstream.getData() as CanvasNodeData)
+    ) {
       deps.add(data.sourceNodeId)
     }
   }
@@ -344,11 +347,48 @@ function collectAiDependencies(graph: Graph, nodeId: string, scopeIds: Set<strin
     if (!sourceId || !scopeIds.has(sourceId) || sourceId === nodeId) continue
     const source = graph.getCellById(sourceId)
     if (!source?.isNode()) continue
-    if (!isAiGeneratedCanvasNode(source.getData() as CanvasNodeData)) continue
+    if (
+      !isGroupAiGenerationTarget(graph, source as Node, scopeIds, source.getData() as CanvasNodeData)
+    ) {
+      continue
+    }
     deps.add(sourceId)
   }
 
   return [...deps]
+}
+
+/** 仅保留本轮任务集合内的依赖边（源图等非任务节点不阻塞下游） */
+function rewireTaskDependencies(
+  graph: Graph,
+  tasks: GroupAiTask[],
+  scopeIds: Set<string>,
+): GroupAiTask[] {
+  const taskIds = new Set(tasks.map((task) => task.nodeId))
+  return tasks.map((task) => {
+    const deps = new Set<string>()
+    const cell = graph.getCellById(task.nodeId)
+    const data = cell?.isNode() ? (cell.getData() as CanvasNodeData) : null
+
+    if (data?.sourceNodeId && taskIds.has(data.sourceNodeId)) {
+      deps.add(data.sourceNodeId)
+    }
+
+    for (const edge of graph.getEdges()) {
+      if (edge.getTargetCellId() !== task.nodeId) continue
+      const sourceId = edge.getSourceCellId()
+      if (!sourceId || !taskIds.has(sourceId) || sourceId === task.nodeId) continue
+      if (!scopeIds.has(sourceId)) continue
+      deps.add(sourceId)
+    }
+
+    // 兜底：沿用 resolve 时已收集的 dependsOn，再与任务集合求交
+    for (const depId of task.dependsOn) {
+      if (taskIds.has(depId)) deps.add(depId)
+    }
+
+    return { ...task, dependsOn: [...deps] }
+  })
 }
 
 export function collectGroupAiTasks(graph: Graph, groupId: string): GroupAiTask[] {
@@ -362,7 +402,7 @@ export function collectGroupAiTasks(graph: Graph, groupId: string): GroupAiTask[
     if (task) tasks.push(task)
   })
 
-  return tasks
+  return rewireTaskDependencies(graph, tasks, scopeIds)
 }
 
 export function sortGroupAiTasksByDependency(tasks: GroupAiTask[]): GroupAiTask[] {
@@ -778,6 +818,6 @@ export function buildGroupExecuteConfirmContent(taskCount: number, _credits: num
   return {
     // main: `即将对组内 ${taskCount} 个生成节点分批执行，预计消耗 ${credits} 积分，是否继续？`,
     main: `即将对组内 ${taskCount} 个生成节点分批执行`,
-    hint: '同一层级的节点将并行执行；有上下游依赖时，会等上游完成后再执行下游。均在组内已有 AI 节点上原地重新生成，不会新建节点。',
+    hint: '无依赖的节点将并行执行；任一上游完成后，立即执行其下游节点。均在组内已有 AI 节点上原地重新生成，不会新建节点。',
   }
 }

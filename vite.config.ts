@@ -112,8 +112,9 @@ export default defineConfig(({ mode }) => {
       host: true,
       proxy: {
         '/api': {
-          target: env.VITE_API_BASE_HOST,
+          target: 'https://43.161.199.75:8088',
           changeOrigin: true,
+          secure: false,
           configure: (proxy) => {
             const bypass = env.VITE_VERCEL_PROTECTION_BYPASS
             if (!bypass) return
