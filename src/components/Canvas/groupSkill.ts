@@ -1,5 +1,11 @@
 import type { Graph, Node } from '@antv/x6'
-import type { CanvasNodeData, NodeKind } from './constants'
+import type {
+  CanvasGenerationParams,
+  CanvasNodeData,
+  ImageDialogueSettings,
+  NodeKind,
+  VideoDialogueSettings,
+} from './constants'
 import { isAiGeneratedCanvasNode, normalizeAssetId } from './constants'
 
 export interface GroupSkillNode {
@@ -16,6 +22,17 @@ export interface GroupSkillNode {
   sourceAssetId?: string
   /** 是否为 AI 生成结果，落画布后不可重新上传原图 */
   aiGenerated?: boolean
+  /** 文本任务类型，整组执行识别反推/文生图等必需 */
+  textPickerTask?: CanvasNodeData['textPickerTask']
+  textGenState?: CanvasNodeData['textGenState']
+  imageGenState?: CanvasNodeData['imageGenState']
+  generationTaskType?: CanvasNodeData['generationTaskType']
+  imageDialogueText?: string
+  imageDialogueSettings?: Partial<ImageDialogueSettings>
+  videoDialogueText?: string
+  videoDialogueSettings?: Partial<VideoDialogueSettings>
+  /** AI 生成参数快照，导入后整组执行需据此识别能力与 prompt */
+  generationParams?: CanvasGenerationParams
   position: { x: number; y: number }
 }
 
@@ -36,6 +53,25 @@ const KIND_LABELS: Record<NodeKind, string> = {
   model3d: '3D',
 }
 
+function pickGenerationParams(
+  value: CanvasNodeData['generationParams'],
+): CanvasGenerationParams | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const capabilityCode = String(value.capabilityCode ?? '').trim()
+  const taskType = value.taskType
+  if (!capabilityCode && !taskType && !String(value.prompt ?? '').trim()) return undefined
+  return {
+    taskType: taskType === 'TEXT' || taskType === 'MODEL' || taskType === 'VIDEO' ? taskType : 'IMAGE',
+    capabilityCode,
+    prompt: String(value.prompt ?? ''),
+    parameters: value.parameters && typeof value.parameters === 'object' ? { ...value.parameters } : {},
+    workflowId: value.workflowId,
+    referenceAssetIds: Array.isArray(value.referenceAssetIds)
+      ? value.referenceAssetIds.filter((id): id is string => Boolean(id))
+      : undefined,
+  }
+}
+
 export function extractGroupSubgraph(graph: Graph, nodeIds: string[]): GroupSkillSubgraph | null {
   const idSet = new Set(nodeIds)
   const nodes = nodeIds
@@ -46,6 +82,7 @@ export function extractGroupSubgraph(graph: Graph, nodeIds: string[]): GroupSkil
       const pos = node.getPosition()
       const assetId = normalizeAssetId(data.assetId)
       const sourceAssetId = normalizeAssetId(data.sourceAssetId)
+      const generationParams = pickGenerationParams(data.generationParams)
       return {
         id: node.id,
         kind: data.kind,
@@ -57,6 +94,19 @@ export function extractGroupSubgraph(graph: Graph, nodeIds: string[]): GroupSkil
         assetId,
         sourceAssetId,
         aiGenerated: isAiGeneratedCanvasNode(data) || undefined,
+        textPickerTask: data.textPickerTask || undefined,
+        textGenState: data.textGenState || undefined,
+        imageGenState: data.imageGenState || undefined,
+        generationTaskType: data.generationTaskType || undefined,
+        imageDialogueText: data.imageDialogueText || undefined,
+        imageDialogueSettings: data.imageDialogueSettings
+          ? { ...data.imageDialogueSettings }
+          : undefined,
+        videoDialogueText: data.videoDialogueText || undefined,
+        videoDialogueSettings: data.videoDialogueSettings
+          ? { ...data.videoDialogueSettings }
+          : undefined,
+        generationParams,
         position: { x: pos.x, y: pos.y },
       }
     })
@@ -102,6 +152,49 @@ function parseNodeKind(value: unknown): NodeKind {
   return 'text'
 }
 
+function parseTextPickerTask(
+  value: unknown,
+): CanvasNodeData['textPickerTask'] | undefined {
+  if (
+    value === 'img2prompt' ||
+    value === 'text2video' ||
+    value === 'text2image' ||
+    value === 'write' ||
+    value === ''
+  ) {
+    return value
+  }
+  return undefined
+}
+
+function parseTextGenState(value: unknown): CanvasNodeData['textGenState'] | undefined {
+  if (value === 'idle' || value === 'loading' || value === 'done' || value === 'failed') {
+    return value
+  }
+  return undefined
+}
+
+function parseImageGenState(value: unknown): CanvasNodeData['imageGenState'] | undefined {
+  if (value === 'idle' || value === 'loading' || value === 'done' || value === 'failed') {
+    return value
+  }
+  return undefined
+}
+
+function parseGenerationTaskType(
+  value: unknown,
+): CanvasNodeData['generationTaskType'] | undefined {
+  if (value === 'IMAGE' || value === 'TEXT' || value === 'MODEL' || value === 'VIDEO') {
+    return value
+  }
+  return undefined
+}
+
+function parsePersistedGenerationParams(value: unknown): CanvasGenerationParams | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  return pickGenerationParams(value as CanvasGenerationParams)
+}
+
 /** 从元素组 cells 解析为可落画布子图 */
 export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | null {
   if (!Array.isArray(cells) || !cells.length) return null
@@ -123,10 +216,11 @@ export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | n
 
     if (item.type === 'node' || item.kind) {
       const position = item.position as { x?: number; y?: number } | undefined
+      const title = String(item.title ?? '')
       nodes.push({
         id: String(item.id ?? `node-${nodes.length}`),
         kind: parseNodeKind(item.kind),
-        title: String(item.title ?? ''),
+        title,
         content: String(item.content ?? ''),
         genPrompt: typeof item.genPrompt === 'string' ? item.genPrompt : undefined,
         previewUrl: typeof item.previewUrl === 'string' ? item.previewUrl : undefined,
@@ -134,6 +228,23 @@ export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | n
         assetId: normalizeAssetId(item.assetId ?? item.asset_id),
         sourceAssetId: normalizeAssetId(item.sourceAssetId ?? item.source_asset_id),
         aiGenerated: item.aiGenerated === true ? true : undefined,
+        textPickerTask: parseTextPickerTask(item.textPickerTask),
+        textGenState: parseTextGenState(item.textGenState),
+        imageGenState: parseImageGenState(item.imageGenState),
+        generationTaskType: parseGenerationTaskType(item.generationTaskType),
+        imageDialogueText:
+          typeof item.imageDialogueText === 'string' ? item.imageDialogueText : undefined,
+        imageDialogueSettings:
+          item.imageDialogueSettings && typeof item.imageDialogueSettings === 'object'
+            ? (item.imageDialogueSettings as Partial<ImageDialogueSettings>)
+            : undefined,
+        videoDialogueText:
+          typeof item.videoDialogueText === 'string' ? item.videoDialogueText : undefined,
+        videoDialogueSettings:
+          item.videoDialogueSettings && typeof item.videoDialogueSettings === 'object'
+            ? (item.videoDialogueSettings as Partial<VideoDialogueSettings>)
+            : undefined,
+        generationParams: parsePersistedGenerationParams(item.generationParams),
         position: {
           x: Number(position?.x ?? 0),
           y: Number(position?.y ?? 0),
@@ -145,7 +256,21 @@ export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | n
   return nodes.length ? { nodes, edges } : null
 }
 
-/** 推断工作流中 AI 生成节点（显式标记或组内有上游连线的图/视频节点） */
+function isWorkflowAiTextTaskNode(node: GroupSkillNode): boolean {
+  if (node.kind !== 'text') return false
+  if (node.aiGenerated || node.textGenState === 'done' || node.textGenState === 'loading') {
+    return true
+  }
+  if (node.generationTaskType === 'TEXT') return true
+  if (node.textPickerTask === 'img2prompt' || node.textPickerTask === 'text2image' || node.textPickerTask === 'text2video') {
+    return true
+  }
+  const title = node.title.trim()
+  const prefix = title.includes('-') ? title.slice(0, title.indexOf('-')).trim() : title
+  return title === '反推提示词' || prefix === '反推提示词'
+}
+
+/** 推断工作流中 AI 生成节点（显式标记或组内有上游连线的图/视频/文本任务节点） */
 export function inferWorkflowAiGeneratedNodeIds(workflow: GroupSkillSubgraph): Set<string> {
   const internalTargets = new Set(workflow.edges.map((edge) => edge.target))
   const result = new Set<string>()
@@ -156,6 +281,10 @@ export function inferWorkflowAiGeneratedNodeIds(workflow: GroupSkillSubgraph): S
       continue
     }
     if (internalTargets.has(node.id) && (node.kind === 'image' || node.kind === 'video')) {
+      result.add(node.id)
+      continue
+    }
+    if (internalTargets.has(node.id) && isWorkflowAiTextTaskNode(node)) {
       result.add(node.id)
     }
   }

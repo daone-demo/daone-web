@@ -2900,6 +2900,7 @@ export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
     const g = graph.value
     if (!g || g.getNodes().length === 0) return
     tidyCanvas(g)
+    bumpToolbarRevision()
     updateNodeToolbar()
   }
 

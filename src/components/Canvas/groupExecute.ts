@@ -11,6 +11,7 @@ import {
   VIDEO_GENERAL_CAPABILITY_CODE,
   hasPersistedImageDialogueProvenance,
   isAiGeneratedCanvasNode,
+  isCanvasGenerationFailed,
   isVideoNodeGenerating,
   resolveImageAssetId,
   type CanvasNodeData,
@@ -132,13 +133,22 @@ function isGroupAiGenerationTarget(
   data: CanvasNodeData,
 ): boolean {
   if (isAiGeneratedCanvasNode(data)) return true
-  if (data.kind !== 'image') return false
   if (isExcludedFromGroupExecute(data)) return false
+
+  // 工作流导入后文本节点可能丢失 textGenState，仍需按标题/连线识别
+  if (data.kind === 'text') {
+    if (!hasGroupInternalIncomingEdge(graph, node.id, scopeIds)) return false
+    return Boolean(resolveTextTaskKind(graph, node, data))
+  }
+
+  if (data.kind !== 'image') return false
   if (isGridSplitDerivedImageData(data)) return false
   if (isCropDerivedImageData(data)) return false
   if (isGroupSourceImageNode(graph, node)) return false
-  if (!data.previewUrl?.trim() && data.imageGenState !== 'loading') return false
   if (!hasGroupInternalIncomingEdge(graph, node.id, scopeIds)) return false
+  // 生成失败节点（仅标题标记）在导入后仍应可重跑
+  if (isCanvasGenerationFailed(data)) return true
+  if (!data.previewUrl?.trim() && data.imageGenState !== 'loading') return false
   return hasImageGenerationProvenance(data)
 }
 
@@ -187,7 +197,22 @@ export function resolveImageCapabilityFromNode(data: CanvasNodeData): { code: st
     if (matched) return { code: matched.code, label: matched.label }
   }
 
-  const prompt = data.imageDialogueText?.trim() || data.genPrompt?.trim() || ''
+  const savedCapabilityCode = String(data.generationParams?.capabilityCode ?? '').trim()
+  if (savedCapabilityCode) {
+    return {
+      code: savedCapabilityCode,
+      label:
+        titlePrefix ||
+        data.title ||
+        (savedCapabilityCode === IMAGE_GENERAL_CAPABILITY_CODE ? '图生图' : '生成'),
+    }
+  }
+
+  const prompt =
+    data.imageDialogueText?.trim() ||
+    data.genPrompt?.trim() ||
+    data.generationParams?.prompt?.trim() ||
+    ''
   const hasDialogueConfig = Boolean(
     data.generationParams ||
       data.imageDialogueSettings?.modelKey ||
@@ -210,14 +235,46 @@ function isImg2PromptTextNode(data: CanvasNodeData): boolean {
   return false
 }
 
-function resolveTextTaskKind(data: CanvasNodeData): GroupAiTaskKind | null {
+function resolveTextTaskKind(
+  graph: Graph,
+  node: Node,
+  data: CanvasNodeData,
+): GroupAiTaskKind | null {
   if (isImg2PromptTextNode(data)) return 'textImg2Prompt'
 
   const pickerTask = data.textPickerTask
   if (pickerTask === 'text2video') return 'text2video'
   if (pickerTask === 'text2image') return 'text2image'
   if ((pickerTask === 'write' || !pickerTask) && data.genPrompt?.trim()) return 'textCopy'
+
+  // 工作流导入的反推文本：有上游图片连线且已有文案内容时，按反推任务识别
+  if (plainTextFromNodeContent(data.content) && findIncomingImageNodes(graph, node.id).length) {
+    return 'textImg2Prompt'
+  }
+
   return null
+}
+
+/** 反推提示词优先取「入边」图片素材，避免误用下游文生图结果节点的 assetId */
+function resolveImg2PromptReferenceAssetId(
+  graph: Graph,
+  data: CanvasNodeData,
+  scopeIds: Set<string>,
+  finishedAssets: Map<string, string>,
+  nodeId: string,
+): string {
+  const incoming = findIncomingImageNodes(graph, nodeId)
+  const ordered = [
+    ...incoming.filter((imageNode) => scopeIds.has(imageNode.id)),
+    ...incoming.filter((imageNode) => !scopeIds.has(imageNode.id)),
+  ]
+  for (const imageNode of ordered) {
+    const finished = finishedAssets.get(imageNode.id)
+    if (finished) return finished
+    const assetId = resolveImageAssetId(imageNode.getData() as CanvasNodeData)
+    if (assetId) return assetId
+  }
+  return resolveReferenceAssetIdFromNode(graph, data, scopeIds, finishedAssets)
 }
 
 function resolveIncomingTextPrompt(graph: Graph, nodeId: string): string {
@@ -233,9 +290,12 @@ function resolveIncomingTextPrompt(graph: Graph, nodeId: string): string {
 function resolveIncomingAiTextPrompt(graph: Graph, nodeId: string): string {
   for (const textNode of findIncomingTextNodes(graph, nodeId)) {
     const data = textNode.getData() as CanvasNodeData
-    if (!isAiGeneratedCanvasNode(data) && !isImg2PromptTextNode(data)) continue
     const text = plainTextFromNodeContent(data.content)
-    if (text) return text
+    if (!text) continue
+    // 工作流导入后反推文本可能丢失 AI 标记，只要有正文即可作为下游 prompt
+    if (isAiGeneratedCanvasNode(data) || isImg2PromptTextNode(data) || text.length > 0) {
+      return text
+    }
   }
   return ''
 }
@@ -249,10 +309,34 @@ function resolveGroupAiTask(graph: Graph, node: Node, scopeIds: Set<string>): Gr
   const dependsOn = collectAiDependencies(graph, node.id, scopeIds)
 
   if (data.kind === 'image') {
-    const capability = resolveImageCapabilityFromNode(data)
+    const capability =
+      resolveImageCapabilityFromNode(data) ??
+      // 工作流导入后可能丢失 prompt/参数，但已是 AI 结果/失败节点：仍纳入整组执行
+      (isAiGeneratedCanvasNode(data) ||
+      isCanvasGenerationFailed(data) ||
+      hasImageGenerationProvenance(data)
+        ? {
+            code: IMAGE_GENERAL_CAPABILITY_CODE,
+            label: resolveTitlePrefix(data.title) || data.title || '图生图',
+          }
+        : null)
     if (!capability) return null
+
+    const incomingTextPrompt = resolveIncomingTextPrompt(graph, node.id)
+    const hasPromptOrParams = Boolean(
+      data.imageDialogueText?.trim() ||
+        data.genPrompt?.trim() ||
+        data.generationParams?.prompt?.trim() ||
+        data.generationParams ||
+        data.imageDialogueSettings?.modelKey ||
+        resolveAdvisorPromptFromTitle(data.title || data.fileName || '') ||
+        incomingTextPrompt,
+    )
+    // 上游是文本（反推→文生图）或已有 prompt 时走 imageDialogue；否则走能力重跑
     const kind: GroupAiTaskKind =
-      capability.code === IMAGE_GENERAL_CAPABILITY_CODE ? 'imageDialogue' : 'imageCapability'
+      capability.code === IMAGE_GENERAL_CAPABILITY_CODE && hasPromptOrParams
+        ? 'imageDialogue'
+        : 'imageCapability'
     const count = Math.max(1, Math.floor(Number(data.imageDialogueSettings?.imageCount)) || 1)
     return {
       nodeId: node.id,
@@ -264,11 +348,17 @@ function resolveGroupAiTask(graph: Graph, node: Node, scopeIds: Set<string>): Gr
   }
 
   if (data.kind === 'text') {
-    const kind = resolveTextTaskKind(data)
+    const kind = resolveTextTaskKind(graph, node, data)
     if (!kind) return null
     if (kind === 'textImg2Prompt') {
       const synced = syncTextNodeImageSource(graph, node)
-      const assetId = resolveReferenceAssetIdFromNode(graph, synced, scopeIds, new Map())
+      const assetId = resolveImg2PromptReferenceAssetId(
+        graph,
+        synced,
+        scopeIds,
+        new Map(),
+        node.id,
+      )
       if (!assetId) return null
       return {
         nodeId: node.id,
@@ -288,7 +378,7 @@ function resolveGroupAiTask(graph: Graph, node: Node, scopeIds: Set<string>): Gr
       }
     }
     if (kind === 'text2image') {
-      if (!data.genPrompt?.trim()) return null
+      if (!data.genPrompt?.trim() && !plainTextFromNodeContent(data.content)) return null
       return {
         nodeId: node.id,
         kind,
@@ -687,7 +777,8 @@ export function resolveGroupAiReferenceContext(
     }
 
     // 文生图允许无参考图；图生图优先用已保存参数，但参考图始终取上游最新
-    if (!prompt && !savedParams) return null
+    // 工作流导入节点可能仅有参考图、缺少 prompt：有参考图时仍允许执行
+    if (!prompt && !savedParams && !referenceAssetIds.length) return null
 
     const settings = data.imageDialogueSettings
     const parameters = withPrimaryAssetId(

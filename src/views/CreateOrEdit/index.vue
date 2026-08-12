@@ -343,16 +343,30 @@ const onLoadHistorySessions = async (options?: { forceSelectFirst?: boolean }) =
   const res = await api.getChatSessions({ page: 1, pageSize: 100 });
   historySessions.value = res.records as unknown as any[];
 
-  if (historySessions.value.length) {
-    const first = historySessions.value[0]
-    sessionName.value = first?.title || '新建对话'
-    if (!currentSessionId.value || options?.forceSelectFirst) {
-      currentSessionId.value = first.id;
-    }
-  } else {
+  if (!historySessions.value.length) {
     sessionName.value = '新建对话'
     currentSessionId.value = ''
+    return
   }
+
+  // 仅在显式要求时选中历史首条；进入画布默认保持「新建对话」
+  if (options?.forceSelectFirst) {
+    const first = historySessions.value[0]
+    sessionName.value = first?.title || '新建对话'
+    currentSessionId.value = first.id
+    return
+  }
+
+  if (currentSessionId.value) {
+    const current = historySessions.value.find((item) => item.id === currentSessionId.value)
+    if (current) {
+      sessionName.value = current.title || sessionName.value || '新建对话'
+      return
+    }
+  }
+
+  sessionName.value = '新建对话'
+  currentSessionId.value = ''
 }
 
 async function reloadChatForCurrentProject() {
@@ -360,7 +374,7 @@ async function reloadChatForCurrentProject() {
   currentSessionId.value = ''
   sessionName.value = '新建对话'
   historySessions.value = []
-  await onLoadHistorySessions({ forceSelectFirst: true })
+  await onLoadHistorySessions()
 }
 
 const onSetCurrentSessionId = (sessionId: string) => {

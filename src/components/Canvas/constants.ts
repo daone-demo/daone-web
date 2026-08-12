@@ -2459,6 +2459,7 @@ function buildVideoCapabilityFallbackEntry(
     resolutions,
     generateAudio: generateAudio.length ? generateAudio : [true, false],
     countOptions: parseCapabilityCountRange(capability?.parameters),
+    modes: [],
   }
 }
 
@@ -3075,7 +3076,13 @@ export function isPortrait(width: number, height: number) {
 /** 是否为 AI 生成的图片节点（不可手动替换原图） */
 export function isAiGeneratedImageNode(data?: Partial<CanvasNodeData> | null): boolean {
   if (!data || data.kind !== 'image') return false
-  if (data.imageGenState === 'loading' || data.imageGenState === 'done') return true
+  if (
+    data.imageGenState === 'loading' ||
+    data.imageGenState === 'done' ||
+    data.imageGenState === 'failed'
+  ) {
+    return true
+  }
   if (data.generationTaskType === 'IMAGE') return true
   if (data.generationParams?.taskType === 'IMAGE') return true
   if (String(data.generationParams?.capabilityCode ?? '').trim()) return true

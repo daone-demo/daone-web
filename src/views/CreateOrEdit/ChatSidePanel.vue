@@ -1137,7 +1137,10 @@ async function loadSessionMessages(session: ChatSession) {
 
 function openSessionTab(historyItem: { id: string; title?: string; createdAt?: string; updatedAt?: string }, options?: {
   asDefault?: boolean
+  /** 是否拉取历史消息；初始化/props 同步时不拉，仅用户从历史打开时拉取 */
+  loadMessages?: boolean
 }) {
+  const shouldLoadMessages = options?.loadMessages === true
   const existing = sessions.value.find(
     (item) => item.id === historyItem.id || item.chatId === historyItem.id,
   )
@@ -1156,7 +1159,12 @@ function openSessionTab(historyItem: { id: string; title?: string; createdAt?: s
     }
     loadSessionDraft(existing)
     // 本地已有消息或正在流式输出时，不要被历史拉取覆盖
-    if (!existing.messages.length && !isStreaming.value && !isSending.value) {
+    if (
+      shouldLoadMessages
+      && !existing.messages.length
+      && !isStreaming.value
+      && !isSending.value
+    ) {
       void loadSessionMessages(existing)
     }
     return existing
@@ -1179,7 +1187,9 @@ function openSessionTab(historyItem: { id: string; title?: string; createdAt?: s
 
   activeSessionId.value = session.id
   loadSessionDraft(session)
-  void loadSessionMessages(session)
+  if (shouldLoadMessages) {
+    void loadSessionMessages(session)
+  }
   return session
 }
 
@@ -1222,7 +1232,7 @@ function openFromHistory(session: any) {
   emit('set-current-session-id', session.id)
   emit('set-session-name', session.title || '未命名对话')
   showHistoryMenu.value = false
-  openSessionTab(session)
+  openSessionTab(session, { loadMessages: true })
   focusInput()
 }
 
@@ -2690,8 +2700,11 @@ watch(
       && !active.messages.length
       && !active.chatId
 
+    // 进入画布默认展示「新建对话」，不自动用历史会话替换欢迎页
+    if (isEmptyPlaceholder) return
+
     // 正在发送/流式中：不要用历史 tab 覆盖当前会话
-    if (isStreaming.value || isSending.value || (active && active.messages.length > 0 && !isEmptyPlaceholder)) {
+    if (isStreaming.value || isSending.value || (active && active.messages.length > 0)) {
       // 若当前会话已绑定同一 chatId，只做 id 对齐
       if (active && (active.chatId === target.id || active.id === target.id)) {
         openSessionTab(target, { asDefault: false })
@@ -2699,7 +2712,7 @@ watch(
       return
     }
 
-    openSessionTab(target, { asDefault: isEmptyPlaceholder })
+    openSessionTab(target, { asDefault: false })
   },
   { immediate: true },
 )

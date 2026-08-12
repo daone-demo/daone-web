@@ -1,6 +1,7 @@
 import type { Graph, Node } from '@antv/x6'
 import type { CanvasNodeData } from './constants'
 import { getScroller } from './graph'
+import { fitStoredGroupSelectionBoxToMembers, listCanvasGroups } from './nodeGroup'
 
 const START_X = 120
 const START_Y = 120
@@ -627,6 +628,11 @@ export function tidyCanvas(graph: Graph) {
   if (nodes.length === 0) return
 
   layoutByTaskBlocks(graph, nodes)
+
+  // 节点位置已变，组框按成员包围盒自适应，避免组内节点溢出到打组框外
+  listCanvasGroups(graph).forEach((group) => {
+    fitStoredGroupSelectionBoxToMembers(graph, group.groupId)
+  })
 
   const scroller = getScroller(graph)
   scroller?.resize()

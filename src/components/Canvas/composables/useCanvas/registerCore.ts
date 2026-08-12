@@ -9219,6 +9219,7 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     if (!g || g.getNodes().length === 0) return
     tidyCanvas(g)
+    bumpToolbarRevision()
     updateNodeToolbar()
   }
 
@@ -10478,6 +10479,7 @@ export function registerCore(bind: CanvasBindings) {
 
     let remaining = tasks.length
     let failed = false
+    let successCount = 0
     let settle!: (error?: Error) => void
     const done = new Promise<void>((resolve, reject) => {
       settle = (error) => {
@@ -10489,7 +10491,8 @@ export function registerCore(bind: CanvasBindings) {
     const markSettled = () => {
       remaining -= 1
       if (remaining > 0) return
-      if (failed) {
+      // 至少有一个节点成功则视为整组完成；全部失败才抛错
+      if (successCount <= 0 && failed) {
         settle(new Error('group execute failed'))
         return
       }
@@ -10497,11 +10500,38 @@ export function registerCore(bind: CanvasBindings) {
       settle()
     }
 
+    /** 上游失败/跳过时取消已就绪的下游，避免 remaining 无法归零 */
+    const cancelTaskTree = (taskNodeId: string) => {
+      if (started.has(taskNodeId)) return
+      started.add(taskNodeId)
+      markSettled()
+      for (const nextId of adjacency.get(taskNodeId) ?? []) {
+        const nextDegree = (inDegree.get(nextId) ?? 0) - 1
+        inDegree.set(nextId, nextDegree)
+        if (nextDegree === 0) cancelTaskTree(nextId)
+      }
+    }
+
+    const releaseDownstream = (taskNodeId: string, upstreamSucceeded: boolean) => {
+      for (const nextId of adjacency.get(taskNodeId) ?? []) {
+        const nextDegree = (inDegree.get(nextId) ?? 0) - 1
+        inDegree.set(nextId, nextDegree)
+        if (nextDegree !== 0) continue
+        if (upstreamSucceeded) {
+          const nextTask = taskMap.get(nextId)
+          if (nextTask) startTask(nextTask)
+        } else {
+          cancelTaskTree(nextId)
+        }
+      }
+    }
+
     const startTask = (task: GroupAiTask) => {
-      if (failed || started.has(task.nodeId)) return
+      if (started.has(task.nodeId)) return
       started.add(task.nodeId)
 
       void (async () => {
+        let upstreamSucceeded = false
         try {
           const cell = g.getCellById(task.nodeId)
           if (!cell?.isNode()) {
@@ -10521,30 +10551,24 @@ export function registerCore(bind: CanvasBindings) {
 
           const outcome = await executeGroupAiTask(g, node, task, refCtx, scopeIds, finishedAssets)
           if (!outcome.success) {
+            message.warning(
+              `节点「${(node.getData() as CanvasNodeData).title || task.nodeId}」执行失败，已跳过`,
+            )
             failed = true
             return
           }
 
+          successCount += 1
+          upstreamSucceeded = true
           recordGroupTaskFinishedAsset(g, task, outcome.resultNodeId, node, finishedAssets)
 
           bumpToolbarRevision()
           updateGroupToolbarPosition()
           persistGenerationTaskBinding()
-
-          // 任一上游完成后立即启动其下游，不等待同层其它节点
-          if (!failed) {
-            for (const nextId of adjacency.get(task.nodeId) ?? []) {
-              const nextDegree = (inDegree.get(nextId) ?? 0) - 1
-              inDegree.set(nextId, nextDegree)
-              if (nextDegree === 0) {
-                const nextTask = taskMap.get(nextId)
-                if (nextTask) startTask(nextTask)
-              }
-            }
-          }
         } catch {
           failed = true
         } finally {
+          releaseDownstream(task.nodeId, upstreamSucceeded)
           markSettled()
         }
       })()
