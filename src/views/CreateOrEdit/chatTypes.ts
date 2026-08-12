@@ -25,6 +25,8 @@ export interface QuestionnaireStep {
   label?: string
   question: string
   allowCustom: boolean
+  /** 当前步骤是否允许多选；多选答案以英文逗号拼接后回传 */
+  allowMulti?: boolean
   options: QuestionnaireOption[]
 }
 
@@ -35,6 +37,8 @@ export interface Questionnaire {
   step: number
   totalSteps: number
   allowCustom: boolean
+  /** 当前步骤是否允许多选；多选答案以英文逗号拼接后回传 */
+  allowMulti?: boolean
   /** 当前步骤选项（兼容单题 / 多步） */
   options: QuestionnaireOption[]
   /** 多步问卷完整步骤；有值时前端本地推进 */

@@ -1491,12 +1491,14 @@ type StreamEvent = {
       step?: number
       totalSteps?: number
       allowCustom?: boolean
+      allowMulti?: boolean
       options?: Array<{ label?: string; value?: string; description?: string }>
       steps?: Array<{
         name?: string
         label?: string
         question?: string
         allowCustom?: boolean
+        allowMulti?: boolean
         options?: Array<{ label?: string; value?: string; description?: string }>
       }>
     }
@@ -1514,12 +1516,14 @@ type StreamEvent = {
       step?: number
       totalSteps?: number
       allowCustom?: boolean
+      allowMulti?: boolean
       options?: Array<{ label?: string; value?: string; description?: string }>
       steps?: Array<{
         name?: string
         label?: string
         question?: string
         allowCustom?: boolean
+        allowMulti?: boolean
         options?: Array<{ label?: string; value?: string; description?: string }>
       }>
       taskId?: string | number
@@ -1591,6 +1595,7 @@ type QuestionnaireStepSource = {
   label?: string
   question?: string
   allowCustom?: boolean
+  allowMulti?: boolean
   options?: QuestionnaireOptionSource[]
 }
 
@@ -1599,6 +1604,7 @@ type QuestionnaireSource = {
   step?: number
   totalSteps?: number
   allowCustom?: boolean
+  allowMulti?: boolean
   options?: QuestionnaireOptionSource[]
   steps?: QuestionnaireStepSource[]
 }
@@ -1631,6 +1637,7 @@ function normalizeQuestionnaireSteps(
       label: step.label,
       question: step.question || '',
       allowCustom: step.allowCustom ?? false,
+      allowMulti: Boolean(step.allowMulti),
       options,
     })
   })
@@ -1661,6 +1668,7 @@ function normalizeQuestionnaire(
     step,
     totalSteps,
     allowCustom: activeStep?.allowCustom ?? data.allowCustom ?? false,
+    allowMulti: activeStep?.allowMulti ?? Boolean(data.allowMulti),
     options,
     steps: steps.length ? steps : undefined,
     stepQuestion,
@@ -1816,6 +1824,18 @@ function getQuestionnaireCurrentAnswer(message: ChatMessage): string {
   return String(message.questionnaireAnswers?.[answerKey] ?? '').trim()
 }
 
+/** 多选答案按英文逗号拆分；单选保持整段匹配 */
+function splitQuestionnaireMultiValues(answer: string): string[] {
+  return answer
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function joinQuestionnaireMultiValues(values: string[]): string {
+  return values.map((item) => item.trim()).filter(Boolean).join(',')
+}
+
 function hasQuestionnaireCurrentAnswer(message: ChatMessage): boolean {
   return Boolean(getQuestionnaireCurrentAnswer(message))
 }
@@ -1833,13 +1853,24 @@ function isQuestionnaireOptionSelected(
 ): boolean {
   const answer = getQuestionnaireCurrentAnswer(message)
   if (!answer) return false
-  return answer === (option.value || option.label)
+  const optionValue = option.value || option.label
+  if (message.questionnaire?.allowMulti) {
+    return splitQuestionnaireMultiValues(answer).includes(optionValue)
+  }
+  return answer === optionValue
 }
 
 function getQuestionnaireCustomDraft(message: ChatMessage): string {
   const answer = getQuestionnaireCurrentAnswer(message)
   if (!answer) return ''
-  const matched = message.questionnaire?.options.some(
+  const options = message.questionnaire?.options ?? []
+  if (message.questionnaire?.allowMulti) {
+    // 多选时：自定义草稿为答案中不属于预设选项的部分（逗号拼接）
+    const optionValues = new Set(options.map((item) => item.value || item.label))
+    const customs = splitQuestionnaireMultiValues(answer).filter((item) => !optionValues.has(item))
+    return customs.join(',')
+  }
+  const matched = options.some(
     (option) => (option.value || option.label) === answer,
   )
   return matched ? '' : answer
@@ -1859,6 +1890,24 @@ function setQuestionnaireAnswer(message: ChatMessage, value: string) {
   message.questionnaireAnswers = answers
 }
 
+function toggleQuestionnaireMultiOption(message: ChatMessage, option: QuestionnaireOption) {
+  const optionValue = (option.value || option.label).trim()
+  if (!optionValue) return
+
+  const optionValues = new Set(
+    (message.questionnaire?.options ?? []).map((item) => item.value || item.label),
+  )
+  const current = splitQuestionnaireMultiValues(getQuestionnaireCurrentAnswer(message))
+  // 保留自定义片段，仅切换预设选项
+  const customs = current.filter((item) => !optionValues.has(item))
+  const selected = current.filter((item) => optionValues.has(item))
+  const nextSelected = selected.includes(optionValue)
+    ? selected.filter((item) => item !== optionValue)
+    : [...selected, optionValue]
+
+  setQuestionnaireAnswer(message, joinQuestionnaireMultiValues([...nextSelected, ...customs]))
+}
+
 function applyQuestionnaireStep(message: ChatMessage, stepIndex: number): boolean {
   const questionnaire = message.questionnaire
   if (!questionnaire?.steps?.length) return false
@@ -1870,6 +1919,7 @@ function applyQuestionnaireStep(message: ChatMessage, stepIndex: number): boolea
     ...questionnaire,
     step: stepIndex + 1,
     allowCustom: nextStep.allowCustom,
+    allowMulti: Boolean(nextStep.allowMulti),
     options: nextStep.options,
     stepQuestion: nextStep.question,
     stepName: nextStep.name,
@@ -2427,11 +2477,29 @@ async function onSendMessage(
 
 function onQuestionnaireOptionPick(message: ChatMessage, option: QuestionnaireOption) {
   if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
+  if (message.questionnaire?.allowMulti) {
+    toggleQuestionnaireMultiOption(message, option)
+    return
+  }
   setQuestionnaireAnswer(message, option.value || option.label)
 }
 
 function onQuestionnaireCustomInput(message: ChatMessage, value: string) {
   if (isStreaming.value || isProcessing.value || isSending.value || message.questionnaireAnswered) return
+  if (message.questionnaire?.allowMulti) {
+    // 多选：自定义文本替换答案中的自定义部分，保留已选预设选项
+    const optionValues = new Set(
+      (message.questionnaire.options ?? []).map((item) => item.value || item.label),
+    )
+    const selected = splitQuestionnaireMultiValues(getQuestionnaireCurrentAnswer(message))
+      .filter((item) => optionValues.has(item))
+    const custom = value.trim()
+    setQuestionnaireAnswer(
+      message,
+      joinQuestionnaireMultiValues(custom ? [...selected, custom] : selected),
+    )
+    return
+  }
   setQuestionnaireAnswer(message, value)
 }
 
