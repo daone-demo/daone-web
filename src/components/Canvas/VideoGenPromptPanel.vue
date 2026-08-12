@@ -291,7 +291,7 @@
           </svg>
         </button>
       </a-tooltip>
-      <a-tooltip>
+      <a-tooltip v-if="showCanvasPick">
         <template #title>从画布选图</template>
         <button
           type="button"
@@ -614,7 +614,26 @@ const validationError = computed(() => {
 
 const showSourceRefs = computed(() => props.activeTab !== 'text2video')
 
-const showImageUpload = computed(() => props.activeTab !== 'text2video')
+/** 首尾帧最多 2 张；满员后隐藏上传/从画布选图，不影响全能参考等其它模式 */
+const canAddMoreImages = computed(() => {
+  if (props.activeTab === 'frames') {
+    return imageSourceCount.value < 2
+  }
+  return true
+})
+
+const showImageUpload = computed(
+  () => props.activeTab !== 'text2video' && canAddMoreImages.value,
+)
+
+const showCanvasPick = computed(() => canAddMoreImages.value)
+
+/** 首尾帧已满时若仍处于画布选图模式，自动退出，避免入口隐藏后仍可点选 */
+watch(canAddMoreImages, (canAdd) => {
+  if (!canAdd && props.canvasPickMode) {
+    emit('toggle-canvas-pick')
+  }
+})
 
 const isDragOver = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -918,12 +937,12 @@ function hasPanelDropContent(event: DragEvent) {
 }
 
 function onPanelDragEnter(event: DragEvent) {
-  if (!showSourceRefs.value || !hasPanelDropContent(event)) return
+  if (!showSourceRefs.value || !canAddMoreImages.value || !hasPanelDropContent(event)) return
   isDragOver.value = true
 }
 
 function onPanelDragOver(event: DragEvent) {
-  if (!showSourceRefs.value || !hasPanelDropContent(event)) return
+  if (!showSourceRefs.value || !canAddMoreImages.value || !hasPanelDropContent(event)) return
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   isDragOver.value = true
 }
@@ -937,7 +956,7 @@ function onPanelDragLeave(event: DragEvent) {
 
 function onPanelDrop(event: DragEvent) {
   isDragOver.value = false
-  if (!showSourceRefs.value) return
+  if (!showSourceRefs.value || !canAddMoreImages.value) return
 
   const nodeId = event.dataTransfer?.getData(CANVAS_IMAGE_NODE_DRAG_TYPE)
   if (nodeId) {
