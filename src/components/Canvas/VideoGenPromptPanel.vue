@@ -373,16 +373,17 @@ import { getMarkLabelOptions, hasMultipleMarkLabels, useImageMarkLabelMenu } fro
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
   VIDEO_GEN_PROMPT_PLACEHOLDER,
-  VIDEO_GEN_TABS,
   VIDEO_DIALOGUE_MODEL_MENU,
   VIDEO_GEN_DURATIONS,
   buildVideoDialogueCountOptionsFromCapabilities,
   buildVideoDialogueModelsFromCapabilities,
+  buildVideoGenTabsForModel,
   formatVideoGenSettings,
   isDialogueModelIconfont,
   normalizeDialogueModelIcon,
   normalizeVideoDialogueSettingsForModel,
   resolveVideoDialogueModelApiValue,
+  resolveVideoGenTabForModel,
   type ChatTools,
   type VideoDialogueModelItem,
   type VideoDialogueSettings,
@@ -398,13 +399,6 @@ import type { VideoSourceRef } from './videoGen'
 
 
 const { isLightTheme } = useCanvasBgTheme()
-const videoGenTabs = ref<Array<{ key: string; label: string; disabled?: boolean; disabledHint?: string }>>([
-  { key: 'text2video', label: '文生视频', disabled: true, disabledHint: '已接入媒体输入,无法使用纯文生视频' },
-  { key: 'reference', label: '全能参考', disabled: false, disabledHint: '' },
-  // { key: 'img2video', label: '图生视频', disabled: false, disabledHint: '' },
-  { key: 'frames', label: '首尾帧', disabled: false, disabledHint: '' },
-  // { key: 'imageRef', label: '图片参考', disabled: false, disabledHint: '' },
-])
 
 const props = defineProps<{
   videoNum: number
@@ -476,6 +470,50 @@ const countOptions = computed(() =>
   buildVideoDialogueCountOptionsFromCapabilities(props.chatTools, selectedModelKey.value),
 )
 
+/** 按当前模型 modes 展示 tabs；再叠加图片数量禁用规则 */
+const videoGenTabs = computed(() => {
+  const imageCount = imageSourceCount.value
+  return buildVideoGenTabsForModel(props.chatTools, selectedModelKey.value).map((item) => {
+    const next = { ...item }
+    if (next.key === 'text2video') {
+      next.disabled = imageCount > 0
+      next.disabledHint = imageCount > 0 ? '已接入媒体输入,无法使用纯文生视频' : ''
+    }
+    if (next.key === 'img2video') {
+      next.disabledHint = `当前图片数量 ${imageCount} 个，需要1个`
+      next.disabled = imageCount > 1
+    }
+    if (next.key === 'frames') {
+      next.disabledHint = `当前图片数量 ${imageCount} 个，需要1~2个`
+      next.disabled = imageCount > 2
+    }
+    return next
+  })
+})
+
+function ensureActiveTabSupportedByModel(modelKey = selectedModelKey.value) {
+  const nextTab = resolveVideoGenTabForModel(props.activeTab, props.chatTools, modelKey)
+  if (nextTab !== props.activeTab) {
+    emit('update:activeTab', nextTab)
+  }
+}
+
+function syncActiveTabBySourceCount() {
+  const imageCount = imageSourceCount.value
+  const active = props.activeTab
+  if (imageCount > 0 && active === 'text2video') {
+    emit('update:activeTab', resolveVideoGenTabForModel('reference', props.chatTools, selectedModelKey.value))
+    return
+  }
+  if (imageCount > 1 && active === 'img2video') {
+    emit('update:activeTab', resolveVideoGenTabForModel('reference', props.chatTools, selectedModelKey.value))
+    return
+  }
+  if (imageCount > 2 && active === 'frames') {
+    emit('update:activeTab', resolveVideoGenTabForModel('reference', props.chatTools, selectedModelKey.value))
+  }
+}
+
 function applyNormalizedToolbarSettings(
   partial: Partial<VideoDialogueSettings> = {},
 ) {
@@ -541,6 +579,8 @@ const videoSettingsLabel = computed(() =>
 function selectModel(model: VideoDialogueModelItem) {
   selectedModelKey.value = model.key
   showVideoModelPicker.value = false
+  // 新模型不支持当前模式（如首尾帧）时，回退到全能参考
+  ensureActiveTabSupportedByModel(model.key)
 }
 
 function toggleVideoModelPicker() {
@@ -567,44 +607,15 @@ function dismissTopOverlay() {
 
 defineExpose({ dismissTopOverlay })
 
-function syncVideoGenTabsBySourceCount() {
-  const imageCount = imageSourceCount.value
-  videoGenTabs.value = videoGenTabs.value.map((item) => {
-    const next = { ...item }
-    if (next.key === 'text2video') {
-      next.disabled = imageCount > 0
-      next.disabledHint = imageCount > 0 ? '已接入媒体输入,无法使用纯文生视频' : ''
-      if (imageCount > 0 && props.activeTab === 'text2video') {
-        emit('update:activeTab', 'reference')
-      }
-    }
-    if (next.key === 'img2video') {
-      next.disabledHint = `当前图片数量 ${imageCount} 个，需要1个`
-      if (imageCount > 1) {
-        if (props.activeTab === 'img2video') {
-          emit('update:activeTab', 'reference')
-        }
-        next.disabled = true
-      } else {
-        next.disabled = false
-      }
-    }
-    if (next.key === 'frames') {
-      next.disabledHint = `当前图片数量 ${imageCount} 个，需要1~2个`
-      if (imageCount > 2) {
-        if (props.activeTab === 'frames') {
-          emit('update:activeTab', 'reference')
-        }
-        next.disabled = true
-      } else {
-        next.disabled = false
-      }
-    }
-    return next
-  })
-}
+watch([imageSourceCount, textSourceCount], syncActiveTabBySourceCount, { immediate: true })
 
-watch([imageSourceCount, textSourceCount], syncVideoGenTabsBySourceCount, { immediate: true })
+watch(
+  [() => props.chatTools, selectedModelKey],
+  () => {
+    ensureActiveTabSupportedByModel()
+  },
+  { deep: true },
+)
 
 const validationHint = computed(() =>
   getVideoGenTabValidation(props.activeTab, imageSourceCount.value),
@@ -660,9 +671,9 @@ const displayRefs = computed(() => {
 })
 
 function selectTab(key: string) {
-  const tab = VIDEO_GEN_TABS.find((item) => item.key === key);
+  const tab = videoGenTabs.value.find((item) => item.key === key)
   if (tab?.disabled) return
-  emit('update:activeTab', key);
+  emit('update:activeTab', key)
 }
 
 const promptInputRef = ref<HTMLElement | null>(null)

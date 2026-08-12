@@ -2230,6 +2230,12 @@ export type VideoDialogueResolutionOption = {
   apiValue: string
 }
 
+export type VideoDialogueModelMode = {
+  label: string
+  value: VideoDialogueMode
+  enable: boolean
+}
+
 export type VideoDialogueModelEntry = {
   key: string
   label: string
@@ -2239,6 +2245,8 @@ export type VideoDialogueModelEntry = {
   resolutions: VideoDialogueResolutionOption[]
   generateAudio: boolean[]
   countOptions: number[]
+  /** 模型支持的生成模式（来自 capabilities.models[].modes） */
+  modes: VideoDialogueModelMode[]
 }
 
 function parseVideoModelDuration(value: unknown): VideoDialogueDurationRange {
@@ -2291,6 +2299,98 @@ function parseVideoModelResolutions(value: unknown): VideoDialogueResolutionOpti
   return result
 }
 
+function parseVideoModelModes(value: unknown): VideoDialogueModelMode[] {
+  if (!Array.isArray(value)) return []
+  const result: VideoDialogueModelMode[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const row = item as Record<string, unknown>
+    const rawValue = row.value ?? row.key ?? row.mode
+    const modeValue = typeof rawValue === 'string' ? rawValue.trim() : ''
+    if (!modeValue) continue
+    if (
+      modeValue !== 'text-to-video' &&
+      modeValue !== 'image-to-video' &&
+      modeValue !== 'reference' &&
+      modeValue !== 'first-last-frame'
+    ) {
+      continue
+    }
+    const rawLabel = row.label ?? row.name ?? modeValue
+    const label = typeof rawLabel === 'string' && rawLabel.trim() ? rawLabel.trim() : modeValue
+    const enable = row.enable === false || row.enabled === false ? false : true
+    result.push({
+      label,
+      value: modeValue as VideoDialogueMode,
+      enable,
+    })
+  }
+  return result
+}
+
+/** API mode → 视频生成面板 tab key */
+export function mapVideoApiModeToTab(mode: string): string {
+  switch (mode) {
+    case 'image-to-video':
+      return 'img2video'
+    case 'first-last-frame':
+      return 'frames'
+    case 'reference':
+      return 'reference'
+    case 'text-to-video':
+    default:
+      return 'text2video'
+  }
+}
+
+/** 当前模型可用的视频生成模式（仅 enable=true） */
+export function listEnabledVideoDialogueModesForModel(
+  source: VideoDialogueSource | undefined | null,
+  modelKey?: string | null,
+): VideoDialogueModelMode[] {
+  const entry = findVideoDialogueModelEntry(source ?? undefined, modelKey)
+  const modes = entry?.modes ?? []
+  return modes.filter((mode) => mode.enable)
+}
+
+/**
+ * 按模型 modes 构建视频生成面板 tabs。
+ * 无 modes 配置时回退到默认 VIDEO_GEN_TABS（兼容旧接口）。
+ */
+export function buildVideoGenTabsForModel(
+  source: VideoDialogueSource | undefined | null,
+  modelKey?: string | null,
+): Array<{ key: string; label: string; disabled?: boolean; disabledHint?: string }> {
+  const modes = listEnabledVideoDialogueModesForModel(source, modelKey)
+  if (!modes.length) {
+    return VIDEO_GEN_TABS.filter((tab) =>
+      tab.key === 'text2video' || tab.key === 'reference' || tab.key === 'frames',
+    ).map((tab) => ({ ...tab }))
+  }
+  return modes.map((mode) => ({
+    key: mapVideoApiModeToTab(mode.value),
+    label: mode.label,
+    disabled: false,
+    disabledHint: '',
+  }))
+}
+
+/**
+ * 切换模型后校正当前 tab：
+ * 当前模式不被新模型支持时，优先回退到「全能参考」，否则取第一个可用 tab。
+ */
+export function resolveVideoGenTabForModel(
+  currentTab: string,
+  source: VideoDialogueSource | undefined | null,
+  modelKey?: string | null,
+): string {
+  const tabs = buildVideoGenTabsForModel(source, modelKey)
+  if (!tabs.length) return currentTab || 'reference'
+  if (tabs.some((tab) => tab.key === currentTab)) return currentTab
+  if (tabs.some((tab) => tab.key === 'reference')) return 'reference'
+  return tabs[0].key
+}
+
 function parseVideoCapabilityModelEntry(
   item: unknown,
   fallback: {
@@ -2321,6 +2421,7 @@ function parseVideoCapabilityModelEntry(
     count: row.videoCount ?? row.count,
   })
   const icon = normalizeDialogueModelIcon(typeof row.icon === 'string' ? row.icon : '')
+  const modes = parseVideoModelModes(row.modes)
 
   return {
     key: value,
@@ -2331,6 +2432,7 @@ function parseVideoCapabilityModelEntry(
     resolutions: resolutions.length ? resolutions : fallback.resolutions,
     generateAudio: generateAudio.length ? generateAudio : fallback.generateAudio,
     countOptions: countOptions.length ? countOptions : fallback.countOptions,
+    modes,
   }
 }
 
@@ -2603,8 +2705,22 @@ export function normalizeVideoDialogueSettingsForModel(
     duration: duration as VideoGenDuration,
     generateAudio,
     videoCount,
-    mode: partial.mode ?? 'reference',
+    mode: resolveVideoDialogueModeForModel(partial.mode ?? 'reference', source, modelKey),
   }
+}
+
+/** 切换模型后校正 mode：不支持时优先回退到 reference */
+export function resolveVideoDialogueModeForModel(
+  currentMode: VideoDialogueMode | string | undefined,
+  source?: VideoDialogueSource,
+  modelKey?: string | null,
+): VideoDialogueMode {
+  const mode = (currentMode as VideoDialogueMode) || 'reference'
+  const modes = listEnabledVideoDialogueModesForModel(source, modelKey)
+  if (!modes.length) return mode
+  if (modes.some((item) => item.value === mode)) return mode
+  if (modes.some((item) => item.value === 'reference')) return 'reference'
+  return modes[0].value
 }
 
 function resolveVideoDialogueModelIcon(key: string, index: number): VideoDialogueModelIcon {
