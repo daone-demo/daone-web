@@ -130,7 +130,7 @@ const currentProjectId = computed(() => {
   const id = route.params.id
   return typeof id === 'string' && id.trim() ? id : undefined
 })
-const canvasRef = ref<InstanceType<typeof Canvas> & CanvasExpose | null>(null)
+const canvasRef = ref<(Omit<InstanceType<typeof Canvas>, keyof CanvasExpose> & CanvasExpose) | null>(null)
 const chatPanelRef = ref<InstanceType<typeof ChatSidePanel> | null>(null)
 const pageLoading = ref(true)
 const pendingCanvasPayload = ref<ProjectCanvasResponse | null>(null);
