@@ -217,6 +217,7 @@ const genProgressText = computed(() => {
 })
 
 function triggerUpload() {
+  if (data.imageGenState === 'loading') return
   requestCanvasUpload?.(getNode().id)
 }
 
@@ -227,6 +228,7 @@ function hasDraggedFiles(event: DragEvent) {
 }
 
 function onDragOver(event: DragEvent) {
+  if (data.imageGenState === 'loading') return
   if (!hasDraggedFiles(event)) return
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   isDragOver.value = true
@@ -238,6 +240,7 @@ function onDragLeave() {
 
 function onDrop(event: DragEvent) {
   isDragOver.value = false
+  if (data.imageGenState === 'loading') return
   const file = event.dataTransfer?.files?.[0]
   if (!file || !file.type.startsWith('image/')) return
   uploadFileToCanvasNode?.(getNode().id, file)

@@ -2581,6 +2581,35 @@ export function registerCore(bind: CanvasBindings) {
     const buildIndexedFileName = (index: number) =>
       resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount)
 
+    /** 将对话框中的源图节点连到结果节点（多源多结果时形成多对多，与视频生成一致） */
+    const connectImageRefsToResultNode = (resultNode: Node) => {
+      for (const ref of provenanceRefs) {
+        const refId = String(ref.nodeId ?? '').trim()
+        if (!refId || refId === resultNode.id) continue
+        const cell = g.getCellById(refId)
+        if (!cell?.isNode()) continue
+        if (!findImageToVideoEdge(g, refId, resultNode.id)) {
+          connectGenEdge(g, refId, resultNode.id)
+        }
+      }
+    }
+
+    const disconnectDirectEdge = (fromId: string, toId: string) => {
+      const edge = findImageToVideoEdge(g, fromId, toId)
+      if (edge) g.removeEdge(edge.id)
+    }
+
+    /**
+     * 多源图生图时，对话框宿主若是空占位节点，复用为第一个生成结果，
+     * 避免中间残留「空上传过渡态」节点。
+     */
+    const reuseEmptyHostAsFirstResult =
+      hasReferenceImages &&
+      sourceData.kind === 'image' &&
+      !sourceData.previewUrl?.trim() &&
+      sourceData.uploadState !== 'uploading' &&
+      sourceData.imageGenState !== 'loading'
+
     const resultNodes: Node[] = []
     const inPlaceTarget =
       requestedCount === 1 &&
@@ -2618,6 +2647,36 @@ export function registerCore(bind: CanvasBindings) {
           prompt,
         })
         resultNodes.push(reusableNode)
+      } else if (reuseEmptyHostAsFirstResult) {
+        prepareImageNodeForInPlaceGeneration(sourceNode, {
+          title,
+          fileName: buildIndexedFileName(0),
+          prompt,
+        })
+        resultNodes.push(sourceNode)
+
+        if (requestedCount > 1) {
+          const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode)
+          const plannedPoints = planOutgoingResultPoints(
+            g,
+            sourceNode,
+            batchPreviewSize,
+            requestedCount,
+            'above',
+          )
+          for (let index = 1; index < requestedCount; index += 1) {
+            const node = spawnGenerationResultNode(g, sourceNode, {
+              title,
+              fileName: buildIndexedFileName(index),
+              centerPoint: plannedPoints[index],
+              layoutSlot: index,
+              layoutTotal: requestedCount,
+            })
+            // 去掉结果之间的宿主连线，最终由各源图分别连到结果（多对多）
+            disconnectDirectEdge(sourceNode.id, node.id)
+            resultNodes.push(node)
+          }
+        }
       } else {
         const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode)
         const plannedPoints = planOutgoingResultPoints(
@@ -2661,6 +2720,7 @@ export function registerCore(bind: CanvasBindings) {
                 : undefined,
         }),
       })
+      connectImageRefsToResultNode(resultNode)
     })
 
     const primaryNode = resultNodes[0]
@@ -2733,6 +2793,13 @@ export function registerCore(bind: CanvasBindings) {
           })
 
           if (!extraNodes.length) return
+          extraNodes.forEach((node) => {
+            // 空宿主已复用为结果时，去掉结果间连线，改为各源图连到新结果
+            if (reuseEmptyHostAsFirstResult) {
+              disconnectDirectEdge(sourceNode.id, node.id)
+            }
+            connectImageRefsToResultNode(node)
+          })
           syncNodeCount()
           bumpToolbarRevision()
           updateNodeToolbar()

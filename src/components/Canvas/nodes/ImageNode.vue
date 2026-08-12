@@ -399,8 +399,11 @@ function hasDraggedFiles(event: DragEvent) {
   return Array.from(event.dataTransfer?.types ?? []).includes('Files')
 }
 
+/** 生成中不允许唤起上传 / 接受拖入，避免拖拽节点时误开文件选择框 */
+const isGenerating = computed(() => data.imageGenState === 'loading')
+
 function onDragOver(event: DragEvent) {
-  if (isGridSplitNode.value || isAiGenerated.value || isFileUploading.value) return
+  if (isGridSplitNode.value || isAiGenerated.value || isFileUploading.value || isGenerating.value) return
   if (!hasDraggedFiles(event)) return
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   isDragOver.value = true
@@ -411,13 +414,13 @@ function onDragLeave() {
 }
 
 function onPreviewDragStart(event: DragEvent) {
-  if (!data.previewUrl || data.uploadState === 'uploading') return
+  if (!data.previewUrl || data.uploadState === 'uploading' || isGenerating.value) return
   event.dataTransfer?.setData(CANVAS_IMAGE_NODE_DRAG_TYPE, getNode().id)
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy'
 }
 
 function uploadImageFile(file: File) {
-  if (isFileUploading.value) return
+  if (isFileUploading.value || isGenerating.value) return
   const node = getNode()
   const g = node.model?.graph as CanvasGraph | undefined
   if (typeof g?.__uploadFileToCanvasNode === 'function') {
@@ -428,7 +431,7 @@ function uploadImageFile(file: File) {
 }
 
 function onDrop(event: DragEvent) {
-  if (isGridSplitNode.value || isAiGenerated.value || isFileUploading.value) return
+  if (isGridSplitNode.value || isAiGenerated.value || isFileUploading.value || isGenerating.value) return
   isDragOver.value = false
   const file = event.dataTransfer?.files?.[0]
   if (!file || !file.type.startsWith('image/')) return
@@ -437,6 +440,7 @@ function onDrop(event: DragEvent) {
 }
 
 function openCanvasUploadPicker() {
+  if (isGenerating.value || isFileUploading.value) return
   const node = getNode()
   const g = getGraph() as CanvasGraph
   if (typeof g.__requestCanvasUpload === 'function') {
@@ -458,9 +462,14 @@ function cancelPendingUpload() {
 
 function onPreviewClick() {
   if (isGridSplitNode.value) return
-  if (isFileUploading.value) return
+  if (isFileUploading.value || isGenerating.value) return
   // 有预览时单击仅选中节点（由 graph node:click 处理，显示上方操作栏），双击再打开下方对话框
   if (data.previewUrl?.trim() && data.uploadState !== 'uploading') {
+    cancelPendingUpload()
+    return
+  }
+  // AI 生成节点（含失败占位）不允许点空白唤起上传，与 drop 拦截一致
+  if (isAiGenerated.value) {
     cancelPendingUpload()
     return
   }
