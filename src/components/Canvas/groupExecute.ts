@@ -39,6 +39,11 @@ export interface GroupAiTask {
   capabilityCode: string
   creditCost: number
   dependsOn: string[]
+  /**
+   * 与本节点共享同一 generationTaskId 的兄弟节点 id。
+   * 整组执行时只创建一次任务，再按 generationResultIndex 分发 results。
+   */
+  sharedResultNodeIds?: string[]
 }
 
 export interface GroupAiReferenceContext {
@@ -493,6 +498,95 @@ export function collectGroupAiTasks(graph: Graph, groupId: string): GroupAiTask[
   })
 
   return rewireTaskDependencies(graph, tasks, scopeIds)
+}
+
+function readNodeGenerationResultIndex(graph: Graph, nodeId: string): number {
+  const cell = graph.getCellById(nodeId)
+  if (!cell?.isNode()) return 0
+  const raw = (cell.getData() as CanvasNodeData).generationResultIndex
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) {
+    return Math.round(raw)
+  }
+  return 0
+}
+
+function isShareableImageGroupTask(task: GroupAiTask): boolean {
+  return (
+    task.kind === 'imageCapability' ||
+    task.kind === 'imageDialogue' ||
+    task.kind === 'text2image'
+  )
+}
+
+/**
+ * 将共享同一 generationTaskId 的图片任务合并：只保留一个 leader 执行，
+ * 其余节点挂到 sharedResultNodeIds，整组执行时只创建一次任务并按结果下标回写。
+ */
+export function coalesceSharedGenerationTasks(graph: Graph, tasks: GroupAiTask[]): GroupAiTask[] {
+  if (tasks.length <= 1) return tasks
+
+  const clusters = new Map<string, string[]>()
+  for (const task of tasks) {
+    if (!isShareableImageGroupTask(task)) continue
+    const cell = graph.getCellById(task.nodeId)
+    if (!cell?.isNode()) continue
+    const taskId = String((cell.getData() as CanvasNodeData).generationTaskId ?? '').trim()
+    if (!taskId) continue
+    const list = clusters.get(taskId) ?? []
+    list.push(task.nodeId)
+    clusters.set(taskId, list)
+  }
+
+  const followerIds = new Set<string>()
+  const leaderFollowers = new Map<string, string[]>()
+  const followerToLeader = new Map<string, string>()
+
+  for (const nodeIds of clusters.values()) {
+    if (nodeIds.length < 2) continue
+    const sorted = [...nodeIds].sort((a, b) => {
+      const indexDiff =
+        readNodeGenerationResultIndex(graph, a) - readNodeGenerationResultIndex(graph, b)
+      if (indexDiff !== 0) return indexDiff
+      return a.localeCompare(b)
+    })
+    const leaderId = sorted[0]
+    const followers = sorted.slice(1)
+    leaderFollowers.set(leaderId, followers)
+    for (const followerId of followers) {
+      followerIds.add(followerId)
+      followerToLeader.set(followerId, leaderId)
+    }
+  }
+
+  if (!followerIds.size) return tasks
+
+  const taskById = new Map(tasks.map((task) => [task.nodeId, task]))
+  const leaders = tasks.filter((task) => !followerIds.has(task.nodeId))
+
+  return leaders.map((task) => {
+    const followers = leaderFollowers.get(task.nodeId) ?? []
+    const dependsOn = new Set<string>()
+
+    const remapDep = (depId: string) => {
+      if (depId === task.nodeId) return
+      if (followers.includes(depId)) return
+      const remapped = followerToLeader.get(depId) ?? depId
+      if (remapped === task.nodeId || followers.includes(remapped)) return
+      if (followerIds.has(remapped)) return
+      dependsOn.add(remapped)
+    }
+
+    task.dependsOn.forEach(remapDep)
+    for (const followerId of followers) {
+      taskById.get(followerId)?.dependsOn.forEach(remapDep)
+    }
+
+    return {
+      ...task,
+      dependsOn: [...dependsOn],
+      sharedResultNodeIds: followers.length ? followers : undefined,
+    }
+  })
 }
 
 export function sortGroupAiTasksByDependency(tasks: GroupAiTask[]): GroupAiTask[] {

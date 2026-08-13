@@ -27,6 +27,10 @@ export interface GroupSkillNode {
   textGenState?: CanvasNodeData['textGenState']
   imageGenState?: CanvasNodeData['imageGenState']
   generationTaskType?: CanvasNodeData['generationTaskType']
+  /** 最新生成任务 ID，整组执行时用于合并同任务多结果节点 */
+  generationTaskId?: string
+  /** 同任务多结果下标 */
+  generationResultIndex?: number
   imageDialogueText?: string
   imageDialogueSettings?: Partial<ImageDialogueSettings>
   videoDialogueText?: string
@@ -98,6 +102,11 @@ export function extractGroupSubgraph(graph: Graph, nodeIds: string[]): GroupSkil
         textGenState: data.textGenState || undefined,
         imageGenState: data.imageGenState || undefined,
         generationTaskType: data.generationTaskType || undefined,
+        generationTaskId: String(data.generationTaskId ?? '').trim() || undefined,
+        generationResultIndex:
+          typeof data.generationResultIndex === 'number' && Number.isFinite(data.generationResultIndex)
+            ? Math.max(0, Math.round(data.generationResultIndex))
+            : undefined,
         imageDialogueText: data.imageDialogueText || undefined,
         imageDialogueSettings: data.imageDialogueSettings
           ? { ...data.imageDialogueSettings }
@@ -232,6 +241,14 @@ export function parseElementGroupCells(cells: unknown[]): GroupSkillSubgraph | n
         textGenState: parseTextGenState(item.textGenState),
         imageGenState: parseImageGenState(item.imageGenState),
         generationTaskType: parseGenerationTaskType(item.generationTaskType),
+        generationTaskId:
+          typeof item.generationTaskId === 'string' && item.generationTaskId.trim()
+            ? item.generationTaskId.trim()
+            : undefined,
+        generationResultIndex:
+          typeof item.generationResultIndex === 'number' && Number.isFinite(item.generationResultIndex)
+            ? Math.max(0, Math.round(item.generationResultIndex))
+            : undefined,
         imageDialogueText:
           typeof item.imageDialogueText === 'string' ? item.imageDialogueText : undefined,
         imageDialogueSettings:

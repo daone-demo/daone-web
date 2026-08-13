@@ -156,6 +156,11 @@ export interface CanvasNodeData {
   imageGenProgress?: number
   /** 关联的后端生成任务 ID，用于多任务并发追踪与刷新后恢复 */
   generationTaskId?: string
+  /**
+   * 同一 generationTaskId 多结果时的结果下标（0-based）。
+   * 整组执行时用于识别共享任务节点，并将 results[index] 写回对应节点。
+   */
+  generationResultIndex?: number
   /** Agent / 后端返回的生成任务名称，用于节点完成态标题 */
   generationTaskName?: string
   /** 关联生成任务类型，刷新后用于恢复轮询 */

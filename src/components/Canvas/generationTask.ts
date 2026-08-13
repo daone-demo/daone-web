@@ -466,13 +466,41 @@ export function bindGenerationTaskId(
   node: Node,
   taskId: string,
   taskType?: GenerationTaskType,
+  resultIndex?: number,
 ) {
   if (!isNodeOnGraph(node) || !taskId.trim()) return
   const data = { ...(node.getData() as CanvasNodeData), generationTaskId: taskId.trim() }
   if (taskType) {
     data.generationTaskType = taskType
   }
+  if (resultIndex !== undefined && Number.isFinite(resultIndex)) {
+    data.generationResultIndex = Math.max(0, Math.round(resultIndex))
+  } else if (data.generationResultIndex === undefined) {
+    data.generationResultIndex = 0
+  }
   setNodeData(node, data)
+}
+
+/** 将同一 taskId 绑定到多个结果节点，并写入各自的 resultIndex */
+export function bindSharedGenerationTaskId(
+  nodes: Array<{ node: Node; resultIndex: number }>,
+  taskId: string,
+  taskType?: GenerationTaskType,
+) {
+  const trimmed = taskId.trim()
+  if (!trimmed || !nodes.length) return
+  for (const item of nodes) {
+    if (!item.node) continue
+    bindGenerationTaskId(item.node, trimmed, taskType, item.resultIndex)
+  }
+}
+
+export function readGenerationResultIndex(data?: CanvasNodeData | null): number {
+  const raw = data?.generationResultIndex
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) {
+    return Math.round(raw)
+  }
+  return 0
 }
 
 export function updateTextGenerationNodeProgress(

@@ -77,6 +77,12 @@ function buildPersistedNodeOverrides(item: GroupSkillNode): Partial<CanvasNodeDa
   if (item.generationTaskType) {
     overrides.generationTaskType = item.generationTaskType
   }
+  if (item.generationTaskId) {
+    overrides.generationTaskId = item.generationTaskId
+  }
+  if (typeof item.generationResultIndex === 'number' && Number.isFinite(item.generationResultIndex)) {
+    overrides.generationResultIndex = Math.max(0, Math.round(item.generationResultIndex))
+  }
   if (item.imageDialogueText) {
     overrides.imageDialogueText = item.imageDialogueText
   }

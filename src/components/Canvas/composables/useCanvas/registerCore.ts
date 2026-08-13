@@ -89,6 +89,7 @@ import {
 } from '../../chatGenerationTask'
 import {
   bindGenerationTaskId,
+  bindSharedGenerationTaskId,
   followModelGenerationTaskOnNode,
   followTextGenerationTaskOnNode,
   followVideoGenerationTaskOnNode,
@@ -105,6 +106,7 @@ import {
   resetResumedGenerationTaskCache,
   recoverOrphanedGenerationTasks,
   resumePendingGenerationTasks,
+  readGenerationResultIndex,
   runImageGenerationOnNode,
   setGenerationTaskSettledHandler,
   setGenerationTaskSucceededHandler,
@@ -174,6 +176,7 @@ import type { AssetCenterItem } from '../../assetCenterData'
 import type { GroupLayoutDirection, ImageResizeCorner } from './sharedImports'
 import {
   buildGroupExecuteConfirmContent,
+  coalesceSharedGenerationTasks,
   collectGroupAiTasks,
   estimateGroupExecuteCredits,
   findGroupOutgoingAiResultNode,
@@ -2818,6 +2821,21 @@ export function registerCore(bind: CanvasBindings) {
           })
 
           if (!extraNodes.length) return
+
+          const dialogueSharedTaskId = String(
+            (primaryNode.getData() as CanvasNodeData).generationTaskId ?? '',
+          ).trim()
+          if (dialogueSharedTaskId) {
+            bindSharedGenerationTaskId(
+              [
+                { node: primaryNode, resultIndex: 0 },
+                ...extraNodes.map((node, offset) => ({ node, resultIndex: 1 + offset })),
+              ],
+              dialogueSharedTaskId,
+              'IMAGE',
+            )
+          }
+
           extraNodes.forEach((node) => {
             // 用提交时捕获的溯源显式回写，避免 primary 被清空后 clone 得到空 refs
             applyImageDialogueProvenance(node, {
@@ -3334,6 +3352,15 @@ export function registerCore(bind: CanvasBindings) {
       })
       if (snapshotSource) {
         cloneNodeGenerationSnapshot(snapshotSource, node)
+        const sharedTaskId = String(
+          (snapshotSource.getData() as CanvasNodeData).generationTaskId ?? '',
+        ).trim()
+        if (sharedTaskId) {
+          bindGenerationTaskId(node, sharedTaskId, 'IMAGE', index)
+        } else {
+          const data = { ...(node.getData() as CanvasNodeData), generationResultIndex: index }
+          node.setData(data, { overwrite: true })
+        }
       }
       resultNodes.push(node)
     }
@@ -3408,6 +3435,26 @@ export function registerCore(bind: CanvasBindings) {
       appliedNodes.push(...spawnedNodes)
     }
 
+    // 多结果共享同一 taskId，便于整组执行时只跑一次
+    const primary = resultNodes[0]
+    const sharedTaskId = primary
+      ? String((primary.getData() as CanvasNodeData).generationTaskId ?? '').trim()
+      : ''
+    if (sharedTaskId) {
+      const members: Array<{ node: Node; resultIndex: number }> = []
+      for (let index = 0; index < resultNodes.length; index += 1) {
+        const node = resultNodes[index]
+        if (!node) continue
+        members.push({ node, resultIndex: index })
+      }
+      for (const node of appliedNodes) {
+        if (members.some((item) => item.node.id === node.id)) continue
+        const idx = readGenerationResultIndex(node.getData() as CanvasNodeData)
+        members.push({ node, resultIndex: idx })
+      }
+      bindSharedGenerationTaskId(members, sharedTaskId, 'IMAGE')
+    }
+
     return appliedNodes
   }
 
@@ -3459,9 +3506,22 @@ export function registerCore(bind: CanvasBindings) {
       if (config.snapshotSourceNode) {
         cloneNodeGenerationSnapshot(config.snapshotSourceNode, node)
       }
+      const sharedTaskId = String(
+        (
+          (config.snapshotSourceNode?.getData() as CanvasNodeData | undefined) ??
+          (sourceNode.getData() as CanvasNodeData)
+        ).generationTaskId ?? '',
+      ).trim()
+      const resultIndex = config.resultIndexOffset + index
+      if (sharedTaskId) {
+        bindGenerationTaskId(node, sharedTaskId, 'IMAGE', resultIndex)
+      }
       const extraData = { ...(node.getData() as CanvasNodeData) }
       extraData.imageGenState = 'done'
       extraData.imageGenProgress = 100
+      if (!sharedTaskId) {
+        extraData.generationResultIndex = resultIndex
+      }
       node.setData(extraData, { overwrite: true })
       pointIndex += 1
       nodes.push(node)
@@ -10025,7 +10085,10 @@ export function registerCore(bind: CanvasBindings) {
     const group = overlayGroupSelection.value
     if (!g || !group || groupExecuting) return
 
-    const tasks = sortGroupAiTasksByDependency(collectGroupAiTasks(g, group.groupId))
+    const tasks = coalesceSharedGenerationTasks(
+      g,
+      sortGroupAiTasksByDependency(collectGroupAiTasks(g, group.groupId)),
+    )
     const credits = estimateGroupExecuteCredits(tasks)
     const content = buildGroupExecuteConfirmContent(tasks.length, credits)
 
@@ -10086,13 +10149,42 @@ export function registerCore(bind: CanvasBindings) {
   async function executeGroupAiImageTask(
     node: Node,
     refCtx: GroupAiReferenceContext,
+    options?: { sharedSiblingNodes?: Node[] },
   ): Promise<boolean> {
     const data = node.getData() as CanvasNodeData
     const title = refCtx.taskTitle || data.title || '生成'
     const fileName = data.fileName || `${title}.png`
     const prompt = refCtx.prompt
 
-    prepareImageNodeForInPlaceGeneration(node, { title, fileName, prompt })
+    const siblingNodes = (options?.sharedSiblingNodes ?? []).filter(
+      (item) => item.id !== node.id,
+    )
+    const sharedMembers = [
+      {
+        node,
+        resultIndex: readGenerationResultIndex(data),
+        title,
+        fileName,
+      },
+      ...siblingNodes.map((sibling) => {
+        const siblingData = sibling.getData() as CanvasNodeData
+        const siblingTitle = refCtx.taskTitle || siblingData.title || title
+        return {
+          node: sibling,
+          resultIndex: readGenerationResultIndex(siblingData),
+          title: siblingTitle,
+          fileName: siblingData.fileName || `${siblingTitle}.png`,
+        }
+      }),
+    ]
+
+    for (const member of sharedMembers) {
+      prepareImageNodeForInPlaceGeneration(member.node, {
+        title: member.title,
+        fileName: member.fileName,
+        prompt,
+      })
+    }
 
     const outcome = await runImageGenerationOnNode(node, {
       title,
@@ -10124,7 +10216,49 @@ export function registerCore(bind: CanvasBindings) {
       onError: (reason) => message.error(reason),
     })
 
-    return outcome.success
+    if (!outcome.success) {
+      for (const member of sharedMembers) {
+        if (member.node.id === node.id) continue
+        if ((member.node.getData() as CanvasNodeData).imageGenState === 'loading') {
+          markGenerationNodeFailed(member.node)
+        }
+      }
+      return false
+    }
+
+    const allResults = outcome.allResults ?? []
+    const newTaskId = String((node.getData() as CanvasNodeData).generationTaskId ?? '').trim()
+
+    // 按 generationResultIndex 把同一任务的 results 写回各个共享节点
+    for (const member of sharedMembers) {
+      const raw =
+        allResults[member.resultIndex] ??
+        (member.node.id === node.id ? allResults[0] : undefined)
+      if (!raw) {
+        if (member.node.id !== node.id) {
+          markGenerationNodeFailed(member.node, '未返回对应结果图片')
+        }
+        continue
+      }
+
+      const resolved = await resolveGenerationResultPreview(raw)
+      if (!resolved?.previewUrl?.trim()) {
+        if (member.node.id !== node.id) {
+          markGenerationNodeFailed(member.node, '未返回对应结果图片')
+        }
+        continue
+      }
+
+      await applyGenerationResultToNode(member.node, resolved, {
+        title: member.title,
+        fileName: member.fileName,
+      })
+      if (newTaskId) {
+        bindGenerationTaskId(member.node, newTaskId, 'IMAGE', member.resultIndex)
+      }
+    }
+
+    return true
   }
 
   async function executeGroupAiTextImg2PromptTask(
@@ -10346,18 +10480,23 @@ export function registerCore(bind: CanvasBindings) {
     refCtx: GroupAiReferenceContext,
     scopeIds: Set<string>,
     finishedAssets: Map<string, string>,
-  ): Promise<{ success: boolean; resultNodeId: string }> {
+  ): Promise<{ success: boolean; resultNodeId: string; sharedResultNodeIds?: string[] }> {
     selectedNodeId.value = task.nodeId
     selectedKind.value = (node.getData() as CanvasNodeData).kind
     syncNodeSelectionHighlight(task.nodeId)
+
+    const sharedSiblingNodes = (task.sharedResultNodeIds ?? [])
+      .map((id) => g.getCellById(id))
+      .filter((cell): cell is Node => Boolean(cell?.isNode()))
 
     switch (task.kind) {
       case 'imageCapability':
       case 'imageDialogue':
         await syncGroupAiProvenance(node, refCtx)
         return {
-          success: await executeGroupAiImageTask(node, refCtx),
+          success: await executeGroupAiImageTask(node, refCtx, { sharedSiblingNodes }),
           resultNodeId: node.id,
+          sharedResultNodeIds: task.sharedResultNodeIds,
         }
       case 'textImg2Prompt':
         return {
@@ -10391,8 +10530,9 @@ export function registerCore(bind: CanvasBindings) {
         selectedKind.value = 'image'
         syncNodeSelectionHighlight(target.id)
         return {
-          success: await executeGroupAiImageTask(target, targetCtx),
+          success: await executeGroupAiImageTask(target, targetCtx, { sharedSiblingNodes }),
           resultNodeId: target.id,
+          sharedResultNodeIds: task.sharedResultNodeIds,
         }
       }
       case 'text2video': {
@@ -10449,6 +10589,12 @@ export function registerCore(bind: CanvasBindings) {
     finishedAssets.set(task.nodeId, assetId)
     if (resultNodeId !== task.nodeId) {
       finishedAssets.set(resultNodeId, assetId)
+    }
+    for (const siblingId of task.sharedResultNodeIds ?? []) {
+      const siblingCell = g.getCellById(siblingId)
+      if (!siblingCell?.isNode()) continue
+      const siblingAssetId = resolveImageAssetId(siblingCell.getData() as CanvasNodeData)
+      if (siblingAssetId) finishedAssets.set(siblingId, siblingAssetId)
     }
   }
 
