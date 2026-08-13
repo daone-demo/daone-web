@@ -117,7 +117,7 @@
             <!-- legacy mark pill UI removed -->
             <template v-for="(mark, index) in data.imageElementMarks ?? []" :key="mark.id">
               <div
-                v-if="mark.bbox && !mark.pending"
+                v-if="shouldShowMarkBox(mark)"
                 class="image-node__mark-box"
                 :class="{ 'image-node__mark-box--selected': data.selectedImageElementMarkId === mark.id }"
                 :style="markBoxStyle(mark)"
@@ -354,6 +354,13 @@ function markPinStyle(mark: ImageMarkItem) {
     left: markStyleFromNatural(mark.x, imageWidth, 'x'),
     top: markStyleFromNatural(mark.y, imageHeight, 'y'),
   }
+}
+
+/** 坐标钉点（标记1/2…）不展示红色包围盒，仅保留钉点图标 */
+function shouldShowMarkBox(mark: ImageMarkItem) {
+  if (!mark.bbox || mark.pending) return false
+  if (/^标记\d+$/.test(String(mark.label ?? '').trim())) return false
+  return true
 }
 
 function markBoxStyle(mark: ImageMarkItem) {

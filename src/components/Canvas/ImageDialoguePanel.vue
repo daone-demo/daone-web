@@ -591,18 +591,8 @@ function hasCompletedElementMarks() {
   return hasCompletedImageMarks(props.elementMarks)
 }
 
-/** 已选工作流时只采坐标；无工作流时保持现有 AI 识别 */
+/** 标记只采坐标钉点，不请求 AI 识别 */
 function onToggleMark() {
-  const workflowId = selectedWorkFlow.value?.trim()
-  if (!workflowId) {
-    emit('toggle-mark')
-    return
-  }
-  const workflow = workflowOptions.value.find((item) => item.id === workflowId)
-  if (isMyModelWorkflow(workflow)) {
-    emit('toggle-mark')
-    return
-  }
   emit('toggle-mark', { coordinateOnly: true })
 }
 

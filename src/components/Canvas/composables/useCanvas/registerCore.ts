@@ -113,6 +113,7 @@ import {
   startImageGenerationOnNode,
   startVideoGenerationTaskFollow,
   resolveGenerationResultPreview,
+  updateGenerationNodeProgress,
   type GenerationTaskDetail,
   type GenerationTaskResult,
 } from '../../generationTask'
@@ -363,8 +364,8 @@ export function registerCore(bind: CanvasBindings) {
   let videoToolbarDeferTimer: ReturnType<typeof setTimeout> | null = null
   const videoToolbarClickDeferred = ref(false)
   const imageMarkRecognizing = ref(false)
-  /** 工作流选点：只落坐标钉点，不调用 IMAGE_MARK_RECOGNIZE */
-  const imageMarkCoordinateOnly = ref(false)
+  /** 标记选点：只落坐标钉点，不调用 IMAGE_MARK_RECOGNIZE */
+  const imageMarkCoordinateOnly = ref(true)
   const selectedElementMarkId = ref('')
   // const VIDEO_TOOLBAR_CLICK_DEFER_MS = 280
 
@@ -5948,7 +5949,8 @@ export function registerCore(bind: CanvasBindings) {
     if (!returnId) return
     elementSelectContext.value = context
     elementSelectReturnNodeId.value = returnId
-    imageMarkCoordinateOnly.value = Boolean(options?.coordinateOnly)
+    // 默认只采坐标；显式传 false 时才走 AI 识别（当前 UI 不启用）
+    imageMarkCoordinateOnly.value = options?.coordinateOnly !== false
     exitVideoGenCanvasPickMode()
     exitImageDialogueCanvasPickMode()
     showElementSelectMode.value = true
@@ -5994,7 +5996,8 @@ export function registerCore(bind: CanvasBindings) {
     const g = graph.value
     if (!g || !showElementSelectMode.value || !event) return
 
-    const coordinateOnly = imageMarkCoordinateOnly.value
+    // 标记功能一律只采坐标，绝不请求 IMAGE_MARK_RECOGNIZE
+    const coordinateOnly = true
 
     if (!coordinateOnly && (imageMarkRecognizing.value || isImageMarkAnalyzing(g))) {
       message.warning('正在分析标记，请等待完成后再试')
@@ -6033,9 +6036,11 @@ export function registerCore(bind: CanvasBindings) {
       labelOptions: [markLabel],
     })
 
-    // 工作流选点：只保留坐标钉点并显示在图片上，不调用 AI 识别；标记一次后退出
+    // 标记：只保留坐标钉点并显示在图片上，不调用 AI 识别；标记一次后退出
     if (coordinateOnly) {
       markItem.pending = false
+      // 坐标标记不写 bbox，避免钉点下方出现红色选区框
+      delete markItem.bbox
       appendImageMarkToNode(sourceNode, markItem)
       const returnCell = g.getCellById(returnNodeId)
       if (returnCell?.isNode()) {
@@ -6350,7 +6355,7 @@ export function registerCore(bind: CanvasBindings) {
     if (!showImageDialogue.value || getActiveImageDialogueTargetNodeId() !== id) {
       openImageDialogue(id)
     }
-    enterElementSelectMode('image-dialogue')
+    enterElementSelectMode('image-dialogue', { coordinateOnly: true })
   }
 
   function toggleImageDialogueMarkMode(options?: { coordinateOnly?: boolean }) {
@@ -6362,7 +6367,9 @@ export function registerCore(bind: CanvasBindings) {
     if (!targetId) return
     const data = graph.value?.getCellById(targetId)?.getData() as CanvasNodeData | undefined
     if (isPendingImageGenDialogueTarget(data)) return
-    enterElementSelectMode('image-dialogue', options)
+    enterElementSelectMode('image-dialogue', {
+      coordinateOnly: options?.coordinateOnly !== false,
+    })
   }
 
   function enterVideoGenCanvasPickMode() {
@@ -6505,7 +6512,7 @@ export function registerCore(bind: CanvasBindings) {
         exitElementSelectMode({ force: true })
         return
       }
-      enterElementSelectMode('video-gen')
+      enterElementSelectMode('video-gen', { coordinateOnly: true })
     }
   }
 
@@ -10211,8 +10218,20 @@ export function registerCore(bind: CanvasBindings) {
         userInfoStore.queryPointAccount()
         return created
       },
-      onTaskBound: () =>
-        persistGenerationTaskBinding(node, { detail: prompt || title, taskType: title }),
+      onTaskBound: (taskId) => {
+        // 共享节点一并绑定同一 taskId，便于进度与结果对齐
+        for (const member of sharedMembers) {
+          bindGenerationTaskId(member.node, taskId, 'IMAGE', member.resultIndex)
+        }
+        persistGenerationTaskBinding(node, { detail: prompt || title, taskType: title })
+      },
+      onProgress: (progress) => {
+        if (sharedMembers.length <= 1) return
+        for (const member of sharedMembers) {
+          if (member.node.id === node.id) continue
+          updateGenerationNodeProgress(member.node, progress)
+        }
+      },
       onError: (reason) => message.error(reason),
     })
 

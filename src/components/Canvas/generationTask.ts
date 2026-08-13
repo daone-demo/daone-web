@@ -890,6 +890,8 @@ async function pollAndApplyImageTaskOnNode(
     onError?: (message: string) => void
     initialTask?: GenerationTaskDetail
     onTaskBound?: (taskId: string) => void
+    /** 主节点进度更新时回调（整组共享 taskId 时可同步兄弟节点） */
+    onProgress?: (progress: number, task: GenerationTaskDetail) => void
   },
 ): Promise<ImageGenerationOnNodeResult> {
   const graph = getNodeGraph(node)
@@ -956,6 +958,7 @@ async function pollAndApplyImageTaskOnNode(
     }
 
     updateGenerationNodeProgress(initialTarget, first.progress ?? 5)
+    options.onProgress?.(first.progress ?? 5, first)
     if (graph) {
       const taskName = pickGenerationTaskName(first)
       if (taskName) updateGenerationTaskNodeTitleByTaskId(graph, taskId, taskName)
@@ -983,6 +986,7 @@ async function pollAndApplyImageTaskOnNode(
           if (data.imageGenState !== 'loading') return
 
           updateGenerationNodeProgress(target, task.progress ?? 0)
+          options.onProgress?.(task.progress ?? 0, task)
           tryApplyDuringPoll(task)
         },
       })
@@ -1547,6 +1551,7 @@ export async function runImageGenerationOnNode(
     createTask: () => Promise<GenerationTaskDetail>
     onError?: (message: string) => void
     onTaskBound?: (taskId: string) => void
+    onProgress?: (progress: number, task: GenerationTaskDetail) => void
   },
 ): Promise<ImageGenerationOnNodeResult> {
   if (!isNodeOnGraph(node)) return { success: false }
@@ -1574,6 +1579,7 @@ export async function runImageGenerationOnNode(
     fileName: options.fileName,
     onError: options.onError,
     onTaskBound: options.onTaskBound,
+    onProgress: options.onProgress,
     initialTask: created,
   })
   if (!result.success) notifyGenerationTaskSettled()
