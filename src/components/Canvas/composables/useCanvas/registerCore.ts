@@ -9911,6 +9911,63 @@ export function registerCore(bind: CanvasBindings) {
     copySelectedNode()
   }
 
+  function createPastedCanvasNodeId() {
+    return `node_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+  }
+
+  /** 粘贴/复制出的节点：去掉分组态，并切断与原节点共享的任务绑定 */
+  function sanitizePastedNodeData(
+    data: CanvasNodeData,
+    options?: { oldId?: string; idMap?: Map<string, string> },
+  ): CanvasNodeData {
+    const {
+      groupId: _groupId,
+      groupSelectionBox: _box,
+      groupTitle: _title,
+      isSelected: _selected,
+      generationTaskId: _taskId,
+      generationResultIndex: _resultIndex,
+      ...rest
+    } = data
+
+    const next: CanvasNodeData = { ...rest }
+
+    if (options?.oldId && next.sourceNodeId === options.oldId) {
+      const remapped = options.idMap?.get(options.oldId)
+      if (remapped) next.sourceNodeId = remapped
+      else delete next.sourceNodeId
+    } else if (next.sourceNodeId && options?.idMap?.has(next.sourceNodeId)) {
+      next.sourceNodeId = options.idMap.get(next.sourceNodeId)!
+    }
+
+    if (next.linkedImageNodeId && options?.idMap?.has(next.linkedImageNodeId)) {
+      next.linkedImageNodeId = options.idMap.get(next.linkedImageNodeId)!
+    }
+
+    if (Array.isArray(next.imageSourceRefs) && options?.idMap?.size) {
+      next.imageSourceRefs = next.imageSourceRefs.map((ref) => {
+        if (!ref.nodeId || !options.idMap?.has(ref.nodeId)) return { ...ref }
+        return { ...ref, nodeId: options.idMap.get(ref.nodeId)! }
+      })
+    }
+
+    if (Array.isArray(next.imageElementMarks) && options?.idMap?.size) {
+      next.imageElementMarks = next.imageElementMarks.map((mark) => {
+        if (!mark.sourceNodeId || !options.idMap?.has(mark.sourceNodeId)) return { ...mark }
+        return { ...mark, sourceNodeId: options.idMap.get(mark.sourceNodeId)! }
+      })
+    }
+
+    if (Array.isArray(next.elementMarks) && options?.idMap?.size) {
+      next.elementMarks = next.elementMarks.map((mark) => {
+        if (!mark.sourceNodeId || !options.idMap?.has(mark.sourceNodeId)) return { ...mark }
+        return { ...mark, sourceNodeId: options.idMap.get(mark.sourceNodeId)! }
+      })
+    }
+
+    return next
+  }
+
   function duplicateSelectedNodes() {
     const g = graph.value
     const ids = getActiveSelectedNodeIds()
@@ -9923,15 +9980,33 @@ export function registerCore(bind: CanvasBindings) {
     ids.forEach((id) => {
       const cell = g.getCellById(id)
       if (!cell?.isNode()) return
-      const clone = (cell as Node).clone() as Node
-      const cloneData = clone.getData() as CanvasNodeData
-      const { groupId: _groupId, groupSelectionBox: _box, groupTitle: _title, ...cloneRest } = cloneData
-      clone.setData(cloneRest as CanvasNodeData)
-      const pos = clone.getPosition()
-      clone.position(pos.x + 32, pos.y + 32)
-      g.addCell(clone)
-      idMap.set(id, clone.id)
+      const json = (cell as Node).toJSON() as Record<string, unknown>
+      const oldId = String(json.id ?? id)
+      const newId = createPastedCanvasNodeId()
+      idMap.set(oldId, newId)
+
+      const x = typeof json.x === 'number' ? json.x : (cell as Node).getPosition().x
+      const y = typeof json.y === 'number' ? json.y : (cell as Node).getPosition().y
+      const rawData = (json.data ?? (cell as Node).getData()) as CanvasNodeData
+      const data = sanitizePastedNodeData(rawData, { oldId, idMap })
+
+      const { id: _id, data: _data, x: _x, y: _y, ...rest } = json
+      const clone = g.addNode({
+        ...rest,
+        id: newId,
+        x: x + 32,
+        y: y + 32,
+        data,
+      })
       newNodes.push(clone)
+    })
+
+    // 二次回写：idMap 已齐全，修正引用旧 id 的字段
+    newNodes.forEach((node, index) => {
+      const oldId = ids[index]
+      if (!oldId) return
+      const data = sanitizePastedNodeData(node.getData() as CanvasNodeData, { oldId, idMap })
+      node.setData(data, { overwrite: true })
     })
 
     g.getEdges().forEach((edge) => {
@@ -11191,28 +11266,47 @@ export function registerCore(bind: CanvasBindings) {
     window.addEventListener('mouseup', onUp)
   }
 
-  function pasteNodePayload(payload: Record<string, unknown>, offsetIndex = 0) {
+  function pasteNodePayload(
+    payload: Record<string, unknown>,
+    offsetIndex = 0,
+    options?: { newId?: string; idMap?: Map<string, string> },
+  ) {
     const g = graph.value
     if (!g) return null
 
-    const source = g.getCellById(String(payload.id ?? ''))
-    let node: Node
-    if (source?.isNode()) {
-      node = (source as Node).clone() as Node
-      const clonedData = node.getData() as CanvasNodeData
-      const { groupId: _groupId, groupSelectionBox: _box, groupTitle: _title, ...clonedRest } = clonedData
-      node.setData(clonedRest as CanvasNodeData)
-      const pos = node.getPosition()
-      node.position(pos.x + 32 + offsetIndex * 16, pos.y + 32 + offsetIndex * 16)
-      g.addCell(node)
-    } else {
-      const { id: _removed, x, y, ...rest } = payload
-      node = g.addNode({
-        ...rest,
-        x: (typeof x === 'number' ? x : 0) + 32 + offsetIndex * 16,
-        y: (typeof y === 'number' ? y : 0) + 32 + offsetIndex * 16,
-      })
+    const oldId = String(payload.id ?? '')
+    const newId = options?.newId || createPastedCanvasNodeId()
+    if (oldId && options?.idMap) {
+      options.idMap.set(oldId, newId)
     }
+
+    const x =
+      typeof payload.x === 'number'
+        ? payload.x
+        : typeof (payload.position as { x?: number } | undefined)?.x === 'number'
+          ? (payload.position as { x: number }).x
+          : 0
+    const y =
+      typeof payload.y === 'number'
+        ? payload.y
+        : typeof (payload.position as { y?: number } | undefined)?.y === 'number'
+          ? (payload.position as { y: number }).y
+          : 0
+
+    const rawData = (payload.data ?? {}) as CanvasNodeData
+    const data = sanitizePastedNodeData(rawData, {
+      oldId: oldId || undefined,
+      idMap: options?.idMap,
+    })
+
+    const { id: _removed, data: _data, x: _x, y: _y, position: _position, ...rest } = payload
+    const node = g.addNode({
+      ...rest,
+      id: newId,
+      x: x + 32 + offsetIndex * 16,
+      y: y + 32 + offsetIndex * 16,
+      data,
+    })
 
     return node
   }
@@ -11223,9 +11317,60 @@ export function registerCore(bind: CanvasBindings) {
     if (!g || !payload) return
 
     if (Array.isArray(payload)) {
+      const idMap = new Map<string, string>()
       const newNodes = payload
-        .map((item, index) => pasteNodePayload(item, index))
+        .map((item, index) => {
+          const oldId = String(item.id ?? '')
+          const newId = createPastedCanvasNodeId()
+          if (oldId) idMap.set(oldId, newId)
+          return pasteNodePayload(item, index, { newId, idMap })
+        })
         .filter((node): node is Node => node != null)
+
+      // idMap 齐全后再修正节点间引用
+      newNodes.forEach((node, index) => {
+        const oldId = String(payload[index]?.id ?? '')
+        const data = sanitizePastedNodeData(node.getData() as CanvasNodeData, {
+          oldId: oldId || undefined,
+          idMap,
+        })
+        node.setData(data, { overwrite: true })
+      })
+
+      // 粘贴多选时，按原图画布上仍存在的边结构，复制到新节点之间
+      const oldIds = new Set(
+        payload.map((item) => String(item.id ?? '')).filter(Boolean),
+      )
+      const edgesToClone: Array<{
+        source: string
+        target: string
+        attrs: Record<string, unknown>
+        zIndex: number | undefined
+      }> = []
+      g.getEdges().forEach((edge) => {
+        const sourceId = edge.getSourceCellId()
+        const targetId = edge.getTargetCellId()
+        if (!sourceId || !targetId || !oldIds.has(sourceId) || !oldIds.has(targetId)) return
+        if (!idMap.has(sourceId) || !idMap.has(targetId)) return
+        edgesToClone.push({
+          source: sourceId,
+          target: targetId,
+          attrs: edge.getAttrs() as Record<string, unknown>,
+          zIndex: edge.getZIndex(),
+        })
+      })
+      edgesToClone.forEach((item) => {
+        const nextSourceId = idMap.get(item.source)
+        const nextTargetId = idMap.get(item.target)
+        if (!nextSourceId || !nextTargetId) return
+        g.addEdge({
+          source: { cell: nextSourceId, port: 'right' },
+          target: { cell: nextTargetId, port: 'left' },
+          attrs: item.attrs,
+          zIndex: item.zIndex,
+        })
+      })
+
       if (!newNodes.length) return
       selectGraphNodes(newNodes)
       syncNodeCount()
@@ -11237,7 +11382,7 @@ export function registerCore(bind: CanvasBindings) {
     if (!node) return
 
     const data = node.getData() as CanvasNodeData
-    node.setData({ ...data, isSelected: true })
+    node.setData({ ...data, isSelected: true }, { overwrite: true })
 
     selectGraphNodes(node)
     syncNodeCount()
