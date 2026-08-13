@@ -92,39 +92,6 @@ function resolveUploadProjectId(projectId?: string) {
   return projectId || resolveProjectId?.() || undefined
 }
 
-function fileToBase64(file: File, onReadProgress?: (ratio: number) => void): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    let lastRatio = 0
-
-    reader.onprogress = (event) => {
-      if (!event.lengthComputable) return
-      const ratio = event.loaded / event.total
-      if (ratio <= lastRatio) return
-      lastRatio = ratio
-      onReadProgress?.(ratio)
-    }
-
-    reader.onload = () => {
-      onReadProgress?.(1)
-      const result = reader.result
-      if (typeof result !== 'string') {
-        reject(new Error('Failed to read file'))
-        return
-      }
-      const base64 = result.split(',')[1]
-      if (!base64) {
-        reject(new Error('Failed to encode file'))
-        return
-      }
-      resolve(base64)
-    }
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'))
-    onReadProgress?.(0)
-    reader.readAsDataURL(file)
-  })
-}
-
 /** 将预览地址（blob / data / http）转为可上传的 File，fetch 失败时回退 canvas 绘制 */
 export async function previewUrlToUploadFile(
   previewUrl: string,
@@ -294,35 +261,111 @@ async function ensureImageMediaDimensions(
   }
 }
 
-/** 上传本地文件到 OSS，返回素材访问地址。 */
+function resolveAssetType(file: File): 'IMAGE' | 'VIDEO' | 'DOCUMENT' {
+  if (file.type.startsWith('image/')) return 'IMAGE'
+  if (file.type.startsWith('video/')) return 'VIDEO'
+  return 'DOCUMENT'
+}
+
+function resolveCosAuthorization(ticket: {
+  authorization?: string
+  Authorization?: string
+  headers?: Record<string, string>
+}): string | undefined {
+  const headers = ticket.headers
+  return (
+    ticket.authorization ||
+    ticket.Authorization ||
+    (headers && (headers.Authorization || headers.authorization)) ||
+    undefined
+  )
+}
+
+/** 按 Apifox binary 方式：PUT 原始文件二进制到 COS。 */
+function putBinaryToOss(
+  url: string,
+  file: File,
+  headers: Record<string, string>,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', url)
+    Object.entries(headers).forEach(([key, value]) => {
+      xhr.setRequestHeader(key, value)
+    })
+    xhr.timeout = UPLOAD_HTTP_TIMEOUT
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return
+      onProgress?.(event.loaded, event.total)
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve()
+        return
+      }
+      reject(new Error(`OSS 上传失败: HTTP ${xhr.status}`))
+    }
+    xhr.onerror = () => reject(new Error('OSS 上传网络错误'))
+    xhr.ontimeout = () => reject(new Error('OSS 上传超时'))
+    xhr.send(file)
+  })
+}
+
+/**
+ * 上传本地文件到 OSS：
+ * 1) POST /assets/upload-credentials 申请直传凭证
+ * 2) PUT {uploadUrl} 二进制直传（Authorization 使用凭证原值，不加 Bearer）
+ * 3) POST /assets/upload-complete 完成确认（入参来自步骤 1）
+ */
 export async function uploadAssetFile(
   file: File,
   options: UploadAssetOptions = {},
 ): Promise<UploadAssetResult> {
   const contentType = file.type || 'application/octet-stream'
   const projectId = resolveUploadProjectId(options.projectId)
+  const type = resolveAssetType(file)
 
-  const fileBase64 = await fileToBase64(file, (readRatio) => {
-    options.onProgress?.(mapUploadProgress(readRatio, 0, 0))
+  options.onProgress?.(mapUploadProgress(0, 0, 0))
+
+  const ticket = await api.createAssetUploadCredentials({
+    projectId,
+    fileName: file.name,
+    contentType,
+    fileSize: file.size,
+    type,
   })
 
-  const asset = await api.createAssetUploadTicket(
-    {
-      projectId,
-      fileName: file.name,
-      contentType,
-      fileSize: file.size,
-      fileBase64,
-    },
-    {
-      timeout: UPLOAD_HTTP_TIMEOUT,
-      onUploadProgress: (event) => {
-        const total = event.total ?? 0
-        if (!total) return
-        options.onProgress?.(mapUploadProgress(1, event.loaded, total))
-      },
-    },
-  )
+  const putUrl = ticket.uploadUrl || ticket.previewUrl || ticket.url
+  if (!putUrl) {
+    throw new Error('上传凭证缺少 uploadUrl')
+  }
+  if (!ticket.objectKey) {
+    throw new Error('上传凭证缺少 objectKey')
+  }
+
+  const authorization = resolveCosAuthorization(ticket)
+  const putHeaders: Record<string, string> = {
+    'Content-Type': contentType,
+  }
+  if (authorization) {
+    putHeaders.Authorization = authorization
+  }
+
+  await putBinaryToOss(putUrl, file, putHeaders, (loaded, total) => {
+    options.onProgress?.(mapUploadProgress(1, loaded, total || file.size))
+  })
+
+  options.onProgress?.(UPLOAD_XHR_MAX_PERCENT)
+
+  const asset = await api.completeAssetCompleteUpload({
+    projectId,
+    fileName: file.name,
+    contentType,
+    fileSize: file.size,
+    objectKey: ticket.objectKey,
+    type,
+  })
 
   return {
     url: asset.previewUrl || asset.url || '',

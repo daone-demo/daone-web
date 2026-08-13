@@ -337,10 +337,12 @@ export interface AssetUploadCredentialsResponse {
   previewUrl?: string
   url?: string
   objectKey: string
+  method?: string
   authorization?: string
   Authorization?: string
   headers?: Record<string, string>
   prefix?: string
+  expiredAt?: number
 }
 
 /** `POST /assets` 文件上传完成后确认上传并创建素材记录（旧流程）。 */
