@@ -118,8 +118,8 @@ export function installUniRequestInterceptor(
   const uniRuntime = getUniRuntime()
   if (!uniRuntime || uniRequestInterceptorInstalled) return () => undefined
 
-  const baseURL = options.baseURL ?? import.meta.env.VITE_API_BASE_URL ?? ''
-  // const baseURL = '/api/api/v1'
+  // const baseURL = options.baseURL ?? import.meta.env.VITE_API_BASE_URL ?? ''
+  const baseURL = '/api/api/v1'
   const timeout = options.timeout ?? (Number(import.meta.env.VITE_HTTP_TIMEOUT) || 60_000)
   const publicPaths = options.publicPaths ?? [
     /\/auth\/sms-codes(?:\?|$)/,

@@ -223,7 +223,7 @@
             :class="{ 'video-gen-prompt-panel__tool--active': elementSelectMode }"
             title="标记"
             @mousedown.stop
-            @click.stop="emit('toggle-mark')"
+            @click.stop="onToggleMark"
           >
             <i class="iconfont icon-biaoji" style="font-size: 16px;"></i>
           </button>
@@ -589,6 +589,21 @@ function emitSettings() {
 
 function hasCompletedElementMarks() {
   return hasCompletedImageMarks(props.elementMarks)
+}
+
+/** 已选工作流时只采坐标；无工作流时保持现有 AI 识别 */
+function onToggleMark() {
+  const workflowId = selectedWorkFlow.value?.trim()
+  if (!workflowId) {
+    emit('toggle-mark')
+    return
+  }
+  const workflow = workflowOptions.value.find((item) => item.id === workflowId)
+  if (isMyModelWorkflow(workflow)) {
+    emit('toggle-mark')
+    return
+  }
+  emit('toggle-mark', { coordinateOnly: true })
 }
 
 function onWorkflowChange(workflowId: string | undefined) {
