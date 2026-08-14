@@ -126,6 +126,7 @@
       :settings="imageDialogueSettings"
       :preview-url="imageDialoguePreviewUrl"
       :previews="imageDialoguePreviews"
+      :workflow-disabled="imageDialogueWorkflowDisabled"
       :canvas-pick-mode="imageDialogueCanvasPickMode"
       :element-select-mode="elementSelectMode"
       :element-marks="elementMarks"
@@ -344,6 +345,7 @@
       :settings="imageDialogueSettings"
       :preview-url="imageDialoguePreviewUrl"
       :previews="imageDialoguePreviews"
+      :workflow-disabled="imageDialogueWorkflowDisabled"
       :canvas-pick-mode="imageDialogueCanvasPickMode"
       :element-select-mode="elementSelectMode"
       :element-marks="elementMarks"
@@ -577,6 +579,7 @@ const props = defineProps<{
   imageDialogueSettings: ImageDialogueSettings
   imageDialoguePreviewUrl: string
   imageDialoguePreviews: ImageSourceRef[]
+  imageDialogueWorkflowDisabled?: boolean
   imageDialogueHideWorkflowAndMark?: boolean
   elementMarks: ImageMarkItem[]
   mentionInsertSerial: number

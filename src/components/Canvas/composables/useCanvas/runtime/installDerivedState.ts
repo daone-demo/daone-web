@@ -14,7 +14,7 @@ import { areAllGridSplitResultNodes } from '../../../gridSplitUtils';
 import { collectDialogueElementMarks,isImageMarkAnalyzing } from '../../../imageMarkUtils';
 import { filterUploadFiles as filterUploadFilesHelper,isImageUploadFile as isImageUploadFileHelper,isVideoUploadFile as isVideoUploadFileHelper,normalizeCutoutMode as normalizeCutoutModeHelper,plainTextToEditorHtml as plainTextToEditorHtmlHelper,resolveGenerationResultFileName as resolveGenerationResultFileNameHelper,resolveVideoResultLayoutSize as resolveVideoResultLayoutSizeHelper,} from '.././coreHelpers';
 import type { CanvasNodeData,ImageSourceRef,UserMenuKey } from '.././sharedImports';
-import { getCanvasBgThemeMeta,getCompleteGroupSelection,getGroupSelectionForNodeIds,getVideoSourceRefs,getVideoTextSourceRefs,hydrateImageNodeDimensions,isVideoGenerationFailedNode,resolveVideoSourceRefsForNode,toPersistedVideoSourceRefs } from '.././sharedImports';
+import { collectUpstreamImageSourceRefs,getCanvasBgThemeMeta,getCompleteGroupSelection,getGroupSelectionForNodeIds,getVideoSourceRefs,getVideoTextSourceRefs,hydrateImageNodeDimensions,isVideoGenerationFailedNode,resolveVideoSourceRefsForNode,toPersistedVideoSourceRefs } from '.././sharedImports';
 import type { CoreRuntimeContext } from './context';
 
 export function installDerivedState(ctx: CoreRuntimeContext) {
@@ -690,6 +690,29 @@ export function installDerivedState(ctx: CoreRuntimeContext) {
       const g = ctx.graph.value;
       const data = g?.getCellById(id)?.getData() as CanvasNodeData | undefined;
       return isPendingImageGenDialogueTarget(data);
+  });
+
+  ctx.imageDialogueWorkflowDisabled = computed(() => {
+      void ctx.toolbarRevision.value;
+      const g = ctx.graph.value;
+      let id = '';
+      if (ctx.showImageDialogue.value) {
+          id = ctx.activeImageDialogueNodeId
+              || (ctx.selectedKind.value === 'image' ? ctx.selectedNodeId.value : '');
+      }
+      else if (ctx.activeImageGenPromptNodeId.value) {
+          id = ctx.activeImageGenPromptNodeId.value;
+      }
+      else {
+          id = ctx.selectedNodeId.value;
+      }
+      if (!g || !id)
+          return false;
+      const cell = g.getCellById(id);
+      if (!cell?.isNode())
+          return false;
+      const data = cell.getData() as CanvasNodeData;
+      return collectUpstreamImageSourceRefs(g, id, data).length > 1;
   });
   
   ctx.imageDialoguePreviewUrl = computed(() => {

@@ -14,7 +14,7 @@ import { applyGenerationResultToNode,bindGenerationTaskId,bindSharedGenerationTa
 import { syncNodeImageMarkLists } from '../../../imageMarkUtils';
 import { downloadCanvasMedia } from '../../../mediaDownload';
 import type { CanvasNodeData,ImageSourceRef } from '.././sharedImports';
-import { api,connectGenEdge,getImageGenerationPlaceholderSize,getNodeDialoguePosition,getScroller,isVideoGenerationFailedNode,planOutgoingResultPoints,spawnCompletedImageResultNode,spawnCroppedImageNode,spawnGenerationResultNode } from '.././sharedImports';
+import { api,connectGenEdge,getImageGenerationPlaceholderSize,getNodeDialoguePosition,getScroller,isVideoGenerationFailedNode,planOutgoingResultPoints,spawnCompletedImageResultNode,spawnCroppedImageNode,spawnGenerationResultNode,syncPendingImageTargetFromSources } from '.././sharedImports';
 import type { UploadFilter } from '.././state';
 import type { CoreRuntimeContext } from './context';
 
@@ -496,6 +496,7 @@ export function installPromptGeneration(ctx: CoreRuntimeContext) {
               ctx.syncImageDialogueSourceRefs(cell as Node, refs);
           }
       }
+      syncPendingImageTargetFromSources(g, cell as Node);
       ctx.loadImageDialogueFields(id);
       ctx.showImageDialogue.value = true;
       ctx.showImageHdMenu.value = false;
@@ -840,6 +841,9 @@ export function installPromptGeneration(ctx: CoreRuntimeContext) {
       }));
       data.inputUpdated = data.imageSourceRefs.some((item) => Boolean(item.previewUrl));
       targetNode.setData(data, { overwrite: true });
+      const g = ctx.graph.value;
+      if (g)
+          syncPendingImageTargetFromSources(g, targetNode);
   };
   
   ctx.applyImageDialogueProvenance = function applyImageDialogueProvenance(targetNode: Node, options: {

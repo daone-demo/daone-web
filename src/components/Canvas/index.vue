@@ -255,6 +255,7 @@
       :image-dialogue-settings="imageDialogueSettings"
       :image-dialogue-preview-url="imageDialoguePreviewUrl"
       :image-dialogue-previews="imageDialoguePreviews"
+      :image-dialogue-workflow-disabled="imageDialogueWorkflowDisabled"
       :image-dialogue-hide-workflow-and-mark="imageDialogueHideWorkflowAndMark"
       :element-marks="elementMarks"
       :mention-insert-serial="mentionInsertSerial"
@@ -630,6 +631,7 @@ const {
   gridSplitCols,
   imageDialoguePreviewUrl,
   imageDialoguePreviews,
+  imageDialogueWorkflowDisabled,
   imageDialogueHideWorkflowAndMark,
   imageDialogueText,
   imageDialogueSettings,

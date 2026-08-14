@@ -1,5 +1,6 @@
 import type { Edge, Graph, Node } from '@antv/x6'
 import type { CanvasNodeData } from './constants'
+import { syncPendingImageTargetFromSources } from './imageGen'
 import { syncTextNodeImageSource } from './textPrompt'
 
 /** 两端都已连接到节点的有效连线（排除拖拽中的预览线） */
@@ -44,6 +45,8 @@ export function detachEdgeRelation(graph: Graph, edge: Edge) {
     } else {
       target.setData(data, { overwrite: true })
     }
+
+    syncPendingImageTargetFromSources(graph, target)
 
     return { targetId, targetKind: data.kind as 'image' | 'text' }
   }

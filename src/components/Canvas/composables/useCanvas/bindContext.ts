@@ -41,7 +41,7 @@ export const BIND_KEYS = [
   'activeGroupSelection', 'overlayGroupSelection', 'showGroupOverlay', 'showGroupToolbar', 'showPromptBar', 'showImageGenPromptBar',
   'showVideoGenPromptBar', 'videoGenSourceRefs', 'videoGenSavedSettings', 'videoDialogueSourceRefs', 'onVideoGenAspectRatioChange', 'showImageCreativeToolbar',
   'showTextFormatToolbar', 'isImg2PromptTask', 'isText2VideoTask', 'isText2ImageTask', 'promptSubmitLabel', 'canSubmitTextPrompt', 'imageCropSource',
-  'imageGridSplitSource', 'imageEraseSource', 'imageInpaintSource', 'imageExpandSource', 'imageDialoguePreviews', 'imageDialoguePreviewUrl', 'imageDialogueHideWorkflowAndMark', 'showNodeToolbar', 'showMultiSelectToolbar',
+  'imageGridSplitSource', 'imageEraseSource', 'imageInpaintSource', 'imageExpandSource', 'imageDialoguePreviews', 'imageDialoguePreviewUrl', 'imageDialogueWorkflowDisabled', 'imageDialogueHideWorkflowAndMark', 'showNodeToolbar', 'showMultiSelectToolbar',
   'showToolbarFeatureButtons', 'isLightNodeToolbar', 'altVoiceTimer', 'bindKeyboard',
   'unbindKeyboard', 'unbindLongPressPan', 'endSpacePan',
 ] as const

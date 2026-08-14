@@ -189,6 +189,7 @@ export function createCoreRuntime(bind: CanvasBindings, ports: CanvasCorePorts) 
     imageGridSplitSource: ctx.imageGridSplitSource,
     imageDialoguePreviewUrl: ctx.imageDialoguePreviewUrl,
     imageDialoguePreviews: ctx.imageDialoguePreviews,
+    imageDialogueWorkflowDisabled: ctx.imageDialogueWorkflowDisabled,
     imageDialogueHideWorkflowAndMark: ctx.imageDialogueHideWorkflowAndMark,
     isImageUploadFile: ctx.isImageUploadFile,
     isImg2PromptTask: ctx.isImg2PromptTask,

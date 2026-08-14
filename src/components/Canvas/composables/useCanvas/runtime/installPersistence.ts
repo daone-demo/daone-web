@@ -12,7 +12,7 @@ import { formatCanvasDescription,formatUploadCanvasDescription,resolveCanvasSave
 import { buildProjectCanvasPayloadFromVersionDetail } from '../../../canvasHistoryRecords';
 import { resetResumedGenerationTaskCache } from '../../../generationTask';
 import type { CanvasGraph,CanvasNodeData,CanvasSnapshot,ConnectMenuKey } from '.././sharedImports';
-import { api,applyCanvasBgTheme,applyCanvasSnapshot,applyFlowEdgeStyle,canImageNodeAcceptIncoming,canOpenConnectMenu,CONNECT_GENERATE_MENU,createNodeFromConnectMenu,ensureInfiniteCanvasArea,getCanvasSnapshot,getConnectMenuPosition,getFlowEdgeAttrs,getPreviewEdgeAttrs,getScroller,graphLocalToContainerOffset,hydrateMissingImageNodeDimensions,normalizeCanvasSnapshot,refreshCanvasNodeViews,resolveConnectSpawnPoint,saveCanvasSnapshotToStorage,shouldOpenImageGenPromptBar,syncAllNodeSizes } from '.././sharedImports';
+import { api,applyCanvasBgTheme,applyCanvasSnapshot,applyFlowEdgeStyle,canImageNodeAcceptIncoming,canOpenConnectMenu,CONNECT_GENERATE_MENU,createNodeFromConnectMenu,ensureInfiniteCanvasArea,getCanvasSnapshot,getConnectMenuPosition,getFlowEdgeAttrs,getPreviewEdgeAttrs,getScroller,graphLocalToContainerOffset,hydrateMissingImageNodeDimensions,normalizeCanvasSnapshot,refreshCanvasNodeViews,resolveConnectSpawnPoint,saveCanvasSnapshotToStorage,shouldOpenImageGenPromptBar,syncAllNodeSizes,syncPendingImageTargetFromSources } from '.././sharedImports';
 import type { CoreRuntimeContext } from './context';
 
 export function installPersistenceState(ctx: CoreRuntimeContext) {
@@ -517,6 +517,9 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       const spawned = createNodeFromConnectMenu(g, source as Node, point, item.key as ConnectMenuKey);
       if (!spawned)
           return;
+
+      syncPendingImageTargetFromSources(g, spawned);
+
       const data = spawned.getData() as CanvasNodeData;
       if (data.mode === 'picker' && (data.kind === 'text' || data.kind === 'audio')) {
           ctx.activePickerNodeId.value = spawned.id;

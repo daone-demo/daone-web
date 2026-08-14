@@ -8,7 +8,7 @@ import { sanitizeRichTextHtml } from '@/utils/sanitizeHtml';
 import type { Edge,Graph,Node } from '@antv/x6';
 import { computed,nextTick,provide } from 'vue';
 import type { CanvasGraph,CanvasNodeData,ImageResizeCorner,ImageSourceRef,NodeKind,TextFormatCommand } from '.././sharedImports';
-import { addCanvasNode,canImageNodeAcceptIncoming,centerGraphContent,connectGenEdge,detachEdgeRelation,disconnectImageFromVideo,findImageToVideoEdge,findIncomingTextNodes,formatDimensions,getEdgeDeleteButtonPosition,getGroupBoxNodeIds,getGroupDisplayMemberCount,getGroupScreenBoxFromGraphBox,getImageExpandOverlayLayout,getImageNodeMediaScreenBox,getMultiSelectionToolbarPosition,getNodeCropOverlayPosition,getNodeDialoguePosition,getNodeImageGenPromptPosition,getNodePromptPosition,getNodeSidePanelPosition,getNodeTextDownloadPosition,getNodeTextFormatToolbarPosition,getNodeToolbarPosition,getNodeVideoGenPromptPosition,getVideoSourceRefs,getViewportCenterLocal,graphLocalToContainerOffset,hasVisibleNodesInViewport,IMG2PROMPT_DEFAULT_INSTRUCTION,isPersistedEdge,listCanvasGroups,normalizeGroupMembership,resolveGroupDisplayTitle,resolveGroupGraphBBox,shouldOpenImageGenPromptBar,startImageNodeCornerResize,syncEdgeSelectionHighlight,syncImageNodeSizeToMediaAspect,syncTextNodeImageSource,toPersistedVideoSourceRefs,VIDEO_GEN_TAB_IMAGE_RULES } from '.././sharedImports';
+import { addCanvasNode,canImageNodeAcceptIncoming,centerGraphContent,connectGenEdge,detachEdgeRelation,disconnectImageFromVideo,findImageToVideoEdge,findIncomingTextNodes,formatDimensions,getEdgeDeleteButtonPosition,getGroupBoxNodeIds,getGroupDisplayMemberCount,getGroupScreenBoxFromGraphBox,getImageExpandOverlayLayout,getImageNodeMediaScreenBox,getMultiSelectionToolbarPosition,getNodeCropOverlayPosition,getNodeDialoguePosition,getNodeImageGenPromptPosition,getNodePromptPosition,getNodeSidePanelPosition,getNodeTextDownloadPosition,getNodeTextFormatToolbarPosition,getNodeToolbarPosition,getNodeVideoGenPromptPosition,getVideoSourceRefs,getViewportCenterLocal,graphLocalToContainerOffset,hasVisibleNodesInViewport,IMG2PROMPT_DEFAULT_INSTRUCTION,isPersistedEdge,listCanvasGroups,normalizeGroupMembership,resolveGroupDisplayTitle,resolveGroupGraphBBox,shouldOpenImageGenPromptBar,startImageNodeCornerResize,syncEdgeSelectionHighlight,syncImageNodeSizeToMediaAspect,syncPendingImageTargetFromSources,syncTextNodeImageSource,toPersistedVideoSourceRefs,VIDEO_GEN_TAB_IMAGE_RULES } from '.././sharedImports';
 import type { CoreRuntimeContext } from './context';
 
 export function installConnections(ctx: CoreRuntimeContext) {
@@ -47,6 +47,9 @@ export function installConnections(ctx: CoreRuntimeContext) {
       data.inputUpdated = refs.some((item) => Boolean(item.previewUrl));
       // overwrite: true —— 避免 X6 默认深合并对 imageSourceRefs 数组按索引合并导致脏数据
       target.setData(data, { overwrite: true });
+      const g = ctx.graph.value;
+      if (g)
+          syncPendingImageTargetFromSources(g, target);
       return true;
   };
   
@@ -55,6 +58,9 @@ export function installConnections(ctx: CoreRuntimeContext) {
       if (!source?.isNode() || !ctx.applyIncomingImageSource(target, source)) {
           g.removeEdge(edge.id);
           return;
+      }
+      if (ctx.showImageDialogue.value && ctx.getActiveImageDialogueTargetNodeId() === target.id) {
+          ctx.loadImageDialogueFields(target.id);
       }
       ctx.bumpToolbarRevision();
       ctx.updateNodeToolbar();
