@@ -6,10 +6,7 @@ import Components from 'unplugin-vue-components/vite'
 import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers'
 import { loadEnv, type Plugin } from 'vite'
 import type { IncomingMessage, ServerResponse } from 'http'
-import {
-  proxyMediaTargetUrl,
-  resolveMediaProxyTargetUrl,
-} from './scripts/media-proxy.mjs'
+import { handleMediaProxyNodeRequest } from './scripts/media-proxy.mjs'
 
 const VERCEL_API_TARGETS = {
   production: {
@@ -30,24 +27,7 @@ function createMediaProxyPlugin(): Plugin {
       return
     }
 
-    try {
-      const targetUrl = resolveMediaProxyTargetUrl(rawUrl)
-      if (!targetUrl) {
-        res.statusCode = 400
-        res.end('Missing or invalid url')
-        return
-      }
-
-      const { contentType, buffer } = await proxyMediaTargetUrl(targetUrl)
-      res.statusCode = 200
-      res.setHeader('Content-Type', contentType)
-      res.setHeader('Cache-Control', 'public, max-age=3600')
-      res.setHeader('Access-Control-Allow-Origin', '*')
-      res.end(buffer)
-    } catch (error) {
-      res.statusCode = Number((error as { statusCode?: number })?.statusCode) || 502
-      res.end(error instanceof Error ? error.message : 'Proxy failed')
-    }
+    await handleMediaProxyNodeRequest(req, res, rawUrl)
   }
 
   return {
