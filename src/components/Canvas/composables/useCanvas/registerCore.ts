@@ -76,6 +76,7 @@ import {
   updateImageMarkLabelOnNode,
 } from '../../imageMarkUtils'
 import { toVideoApiPrompt } from '../../promptMention'
+import { sanitizeRichTextHtml } from '@/utils/sanitizeHtml'
 import {
   attachChatTaskToNode,
   followChatGenerationTaskOnNode,
@@ -7879,7 +7880,11 @@ export function registerCore(bind: CanvasBindings) {
     nextTick(() => {
       const el = textExpandEditorRef.value
       if (!el) return
-      el.innerHTML = data.content || ''
+      const html = sanitizeRichTextHtml(data.content || '')
+      el.innerHTML = html
+      if (html !== data.content) {
+        cell.setData({ ...data, content: html })
+      }
       el.focus()
     })
   }
@@ -7901,7 +7906,11 @@ export function registerCore(bind: CanvasBindings) {
     if (!g || !nodeId || !el) return
     const cell = g.getCellById(nodeId)
     if (!cell?.isNode()) return
-    const data = { ...(cell.getData() as CanvasNodeData), content: el.innerHTML }
+    const content = sanitizeRichTextHtml(el.innerHTML)
+    if (content !== el.innerHTML) {
+      el.innerHTML = content
+    }
+    const data = { ...(cell.getData() as CanvasNodeData), content }
     cell.setData(data)
   }
 

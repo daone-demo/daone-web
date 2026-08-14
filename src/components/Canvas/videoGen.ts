@@ -1,4 +1,5 @@
 import type { Graph, Node } from '@antv/x6'
+import { sanitizeRichTextHtml } from '@/utils/sanitizeHtml'
 import type { CanvasNodeData, ImageSourceRef, VideoDialogueMode } from './constants'
 import { isVideoNodeGenerating, resolveVideoAssetId } from './constants'
 
@@ -139,7 +140,7 @@ export function plainTextFromNodeContent(content?: string): string {
   if (!html) return ''
   if (typeof document !== 'undefined') {
     const div = document.createElement('div')
-    div.innerHTML = html
+    div.innerHTML = sanitizeRichTextHtml(html)
     return (div.textContent || div.innerText || '').trim()
   }
   return html.replace(/<[^>]+>/g, '').trim()
