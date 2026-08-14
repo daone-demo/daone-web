@@ -1,4 +1,17 @@
 const MEDIA_PROXY_HOST_RE = /(^|\.)(aliyuncs\.com|myqcloud\.com)$/i
+const MEDIA_PROXY_TIMEOUT_MS = 15_000
+const MEDIA_PROXY_MAX_BYTES = 50 * 1024 * 1024
+const MEDIA_PROXY_MAX_REDIRECTS = 3
+
+function isAllowedMediaProxyUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl)
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      MEDIA_PROXY_HOST_RE.test(parsed.hostname)
+  } catch {
+    return false
+  }
+}
 
 export function resolveMediaProxyTargetUrl(rawUrl) {
   const incoming = new URL(rawUrl, 'http://localhost')
@@ -14,10 +27,7 @@ export function resolveMediaProxyTargetUrl(rawUrl) {
   if (!targetUrl) return null
 
   const parsed = new URL(targetUrl)
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return null
-  }
-  if (!MEDIA_PROXY_HOST_RE.test(parsed.hostname)) {
+  if (!isAllowedMediaProxyUrl(parsed.toString())) {
     return null
   }
 
@@ -25,20 +35,52 @@ export function resolveMediaProxyTargetUrl(rawUrl) {
 }
 
 export async function proxyMediaTargetUrl(targetUrl) {
-  const upstream = await fetch(targetUrl, {
-    method: 'GET',
-    headers: { 'User-Agent': 'daone-media-proxy/1.0' },
-    redirect: 'follow',
-  })
+  let currentUrl = targetUrl
+  let upstream
 
-  if (!upstream.ok) {
+  for (let redirectCount = 0; redirectCount <= MEDIA_PROXY_MAX_REDIRECTS; redirectCount += 1) {
+    if (!isAllowedMediaProxyUrl(currentUrl)) {
+      const error = new Error('Upstream host not allowed')
+      error.statusCode = 403
+      throw error
+    }
+
+    upstream = await fetch(currentUrl, {
+      method: 'GET',
+      headers: { 'User-Agent': 'daone-media-proxy/1.0' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(MEDIA_PROXY_TIMEOUT_MS),
+    })
+
+    if (upstream.status < 300 || upstream.status >= 400) break
+    const location = upstream.headers.get('location')
+    if (!location || redirectCount === MEDIA_PROXY_MAX_REDIRECTS) {
+      const error = new Error('Too many upstream redirects')
+      error.statusCode = 502
+      throw error
+    }
+    currentUrl = new URL(location, currentUrl).toString()
+  }
+
+  if (!upstream?.ok) {
     const error = new Error(`Upstream ${upstream.status}`)
     error.statusCode = upstream.status
     throw error
   }
 
   const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+  const contentLength = Number(upstream.headers.get('content-length') || 0)
+  if (contentLength > MEDIA_PROXY_MAX_BYTES) {
+    const error = new Error('Upstream response too large')
+    error.statusCode = 413
+    throw error
+  }
   const buffer = Buffer.from(await upstream.arrayBuffer())
+  if (buffer.byteLength > MEDIA_PROXY_MAX_BYTES) {
+    const error = new Error('Upstream response too large')
+    error.statusCode = 413
+    throw error
+  }
   return { contentType, buffer }
 }
 

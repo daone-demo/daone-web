@@ -427,7 +427,7 @@
               <span class="chat-panel__icon chat-panel__icon--plus" aria-hidden="true" />
             </button>
             <span class="chat-panel__composer-divider" aria-hidden="true" />
-            <div class="chat-panel__model-wrap">
+            <div class="chat-panel__model-wrap" style="display: none;">
               <button
                 type="button"
                 class="chat-panel__meta-btn"
@@ -606,6 +606,7 @@ import type {
 import { CHAT_TIPS } from './chatTypes'
 import { useSSE } from '@/hooks/useSSE'
 import { getToken } from '@/utils/request'
+import { sanitizeMarkdownHtml } from '@/utils/sanitizeHtml'
 import api from '@/services/api';
 import { uploadAssetFile } from '@/components/Canvas/upload'
 import dayjs from 'dayjs'
@@ -614,7 +615,7 @@ marked.setOptions({ breaks: true, gfm: true })
 
 function renderMarkdown(source: string): string {
   const html = marked.parse(source || '', { async: false })
-  return typeof html === 'string' ? html : ''
+  return sanitizeMarkdownHtml(typeof html === 'string' ? html : '')
 }
 
 function shouldAnimateTip(item: ChatMessage): boolean {
@@ -940,7 +941,6 @@ function resolveEnabledSkill(skill: any) {
 }
 
 function selectChatSkill(skill: ChatSkillItem | Record<string, any>) {
-  console.log('skill123123', skill);
   selectedSkill.value = skill
   skillChipSelected.value = false
   message.value = message.value.replace(/(^|\s)\/[a-zA-Z0-9-]*$/, '').trimStart()
@@ -2420,8 +2420,6 @@ function sendMessage() {
   const skillName = String(
     selectedSkill.value?.name ?? selectedSkill.value?.skillName ?? '',
   ).trim() || undefined
-
-  console.log('skillName', skillName)
 
   void onSendMessage(session, payloadAttachments, text, assetIds, { nodeId, skillName })
 }

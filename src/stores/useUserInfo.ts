@@ -97,7 +97,6 @@ export const useUserInfo = defineStore('userInfo', () => {
   }
 
   function setPointAccount(value: PointAccount | null) {
-    console.log('setPointAccount', value)
     pointAccount.value = value
     if (value) {
       localStorage.setItem(POINT_ACCOUNT_KEY, JSON.stringify(value))

@@ -1211,7 +1211,6 @@ export function registerCore(bind: CanvasBindings) {
       label: payload.label,
       assetId: resolveImageAssetId(data),
     }
-    console.log('onImageToolbarAction', payload, event);
 
     if (event.key !== 'hd') {
       showImageHdMenu.value = false
@@ -7207,9 +7206,6 @@ export function registerCore(bind: CanvasBindings) {
         canvasRevision.value = res.revision
       }
       if (project) project.saved = true
-      if (saveType === 'MANUAL') {
-        console.info('[Canvas] saved to server', res)
-      }
       return
     } catch (error) {
       const latestRevision = extractLatestRevision(error)
@@ -7222,9 +7218,6 @@ export function registerCore(bind: CanvasBindings) {
         canvasRevision.value = res.revision
       }
       if (project) project.saved = true
-      if (saveType === 'MANUAL') {
-        console.info('[Canvas] saved to server after revision sync', res)
-      }
     }
   }
 

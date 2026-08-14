@@ -6,6 +6,10 @@ import Components from 'unplugin-vue-components/vite'
 import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers'
 import { loadEnv, type Plugin } from 'vite'
 import type { IncomingMessage, ServerResponse } from 'http'
+import {
+  proxyMediaTargetUrl,
+  resolveMediaProxyTargetUrl,
+} from './scripts/media-proxy.mjs'
 
 const VERCEL_API_TARGETS = {
   production: {
@@ -18,8 +22,6 @@ const VERCEL_API_TARGETS = {
   },
 } as const
 
-const MEDIA_PROXY_HOST_RE = /(^|\.)(aliyuncs\.com|myqcloud\.com)$/i
-
 function createMediaProxyPlugin(): Plugin {
   const handle = async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const rawUrl = req.url || ''
@@ -29,53 +31,21 @@ function createMediaProxyPlugin(): Plugin {
     }
 
     try {
-      const incoming = new URL(rawUrl, 'http://localhost')
-      let targetUrl = incoming.searchParams.get('url') || ''
-
-      if (!targetUrl) {
-        const pathMatch = incoming.pathname.match(/^\/media-proxy\/([^/]+)\/(.+)$/)
-        if (pathMatch) {
-          targetUrl = `https://${pathMatch[1]}/${pathMatch[2]}${incoming.search || ''}`
-        }
-      }
-
+      const targetUrl = resolveMediaProxyTargetUrl(rawUrl)
       if (!targetUrl) {
         res.statusCode = 400
-        res.end('Missing url')
+        res.end('Missing or invalid url')
         return
       }
 
-      const parsed = new URL(targetUrl)
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        res.statusCode = 400
-        res.end('Invalid protocol')
-        return
-      }
-      if (!MEDIA_PROXY_HOST_RE.test(parsed.hostname)) {
-        res.statusCode = 403
-        res.end('Host not allowed')
-        return
-      }
-
-      const upstream = await fetch(parsed.toString(), {
-        headers: { 'User-Agent': 'daone-media-proxy/1.0' },
-        redirect: 'follow',
-      })
-      if (!upstream.ok) {
-        res.statusCode = upstream.status
-        res.end(`Upstream ${upstream.status}`)
-        return
-      }
-
-      const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
-      const buffer = Buffer.from(await upstream.arrayBuffer())
+      const { contentType, buffer } = await proxyMediaTargetUrl(targetUrl)
       res.statusCode = 200
       res.setHeader('Content-Type', contentType)
       res.setHeader('Cache-Control', 'public, max-age=3600')
       res.setHeader('Access-Control-Allow-Origin', '*')
       res.end(buffer)
     } catch (error) {
-      res.statusCode = 502
+      res.statusCode = Number((error as { statusCode?: number })?.statusCode) || 502
       res.end(error instanceof Error ? error.message : 'Proxy failed')
     }
   }
@@ -145,15 +115,15 @@ export default defineConfig(({ mode }) => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, 'src'),
-        '@assets': path.resolve(__dirname, 'src/assets'),
-        '@components': path.resolve(__dirname, 'src/components'),
-        '@views': path.resolve(__dirname, 'src/views'),
-        '@stores': path.resolve(__dirname, 'src/stores'),
-        '@utils': path.resolve(__dirname, 'src/utils'),
-        '@services': path.resolve(__dirname, 'src/services'),
-        '@types': path.resolve(__dirname, 'src/types'),
-        '@hooks': path.resolve(__dirname, 'src/hooks'),
+        '@': path.resolve(import.meta.dirname, 'src'),
+        '@assets': path.resolve(import.meta.dirname, 'src/assets'),
+        '@components': path.resolve(import.meta.dirname, 'src/components'),
+        '@views': path.resolve(import.meta.dirname, 'src/views'),
+        '@stores': path.resolve(import.meta.dirname, 'src/stores'),
+        '@utils': path.resolve(import.meta.dirname, 'src/utils'),
+        '@services': path.resolve(import.meta.dirname, 'src/services'),
+        '@types': path.resolve(import.meta.dirname, 'src/types'),
+        '@hooks': path.resolve(import.meta.dirname, 'src/hooks'),
       },
     },
   }

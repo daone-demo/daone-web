@@ -245,7 +245,6 @@ const router = useRouter();
 const userInfoStore = useUserInfo();
 
 const projectStore = useProject();
-console.log('userInfoStore123', userInfoStore.userInfo);
 
 export type CanvasProjectItem = {
   id: string

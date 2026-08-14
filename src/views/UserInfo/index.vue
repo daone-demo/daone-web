@@ -735,7 +735,6 @@ const onLoadPayUrl = async () => {
 const queryOrder = () => {
   if (!orderNo.value) return
   api.getOrder(orderNo.value).then((res:any)=>{
-    console.log('queryOrder', res)
     const status = res?.status
     if (status === 'PAID') {
       stopOrderPolling()
@@ -1095,6 +1094,8 @@ watch([orderNo, selectedPayMethod], ([no, method]) => {
 });
 
 onBeforeUnmount(() => {
+  stopOrderPolling()
+  revokeAvatarPreview()
   if (invoiceTitleSearchTimer) {
     clearTimeout(invoiceTitleSearchTimer)
     invoiceTitleSearchTimer = null

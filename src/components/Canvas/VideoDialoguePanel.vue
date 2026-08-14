@@ -373,7 +373,6 @@ watch(
 const modelMenu = computed(() =>
   buildVideoDialogueModelsFromCapabilities(props.chatTools),
 )
-console.log('modelMenu_video', buildVideoDialogueModelsFromCapabilities(props.chatTools))
 const selectedModelName = computed(
   () =>
     modelMenu.value.find((model) => model.key === selectedModelKey.value)?.name ??

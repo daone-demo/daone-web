@@ -23,6 +23,7 @@
     "ant-design-vue": "4.x",
     "axios": "^1.18.0",
     "dayjs": "^1.11.21",
+    "dompurify": "^3.4.13",
     "jszip": "^3.10.1",
     "marked": "^18.0.9",
     "pdfjs-dist": "^6.0.227",

@@ -126,6 +126,7 @@
         @input="onEditorInput"
         @compositionstart="onEditorCompositionStart"
         @compositionend="onEditorCompositionEnd"
+        @paste.prevent="onEditorPaste"
         @blur="onEditorBlur"
         @focus="onEditorFocus"
         @keyup="saveEditorSelection"
@@ -178,6 +179,7 @@ import { message } from 'ant-design-vue'
 import type { Node } from '@antv/x6'
 import api, { type PromptTranslationData } from '@/services/api'
 import { isRequestError } from '@/utils/request'
+import { sanitizeRichTextHtml } from '@/utils/sanitizeHtml'
 import {
   TEXT_EDITOR_PLACEHOLDER,
   TEXT_PICKER_TRY_ACTIONS,
@@ -317,7 +319,11 @@ function syncEditorHtml() {
   if (isEditorComposing.value) return
   const el = editorRef.value
   if (!el) return
-  const html = data.content || ''
+  const html = sanitizeRichTextHtml(data.content || '')
+  if (html !== data.content) {
+    data.content = html
+    getNode().setData({ ...data })
+  }
   if (el.innerHTML !== html) {
     el.innerHTML = html
     normalizeItalicMarkup(el)
@@ -348,8 +354,15 @@ function onEditorCompositionEnd() {
 function onEditorInput() {
   const el = editorRef.value
   if (!el) return
-  data.content = el.innerHTML
+  data.content = sanitizeRichTextHtml(el.innerHTML)
   getNode().setData({ ...data })
+}
+
+function onEditorPaste(event: ClipboardEvent) {
+  const text = event.clipboardData?.getData('text/plain') ?? ''
+  if (!text) return
+  document.execCommand('insertText', false, text)
+  onEditorInput()
 }
 
 function onEditorFocus() {

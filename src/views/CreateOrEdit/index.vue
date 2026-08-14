@@ -323,7 +323,6 @@ const onRefreshProjects = async () => {
 const onLoadWorkflows = async () => {
   const res = await api.getWorkflows({ page: 1, pageSize: 50 });
   workflows.value = groupWorkflowsByCategory(res.records as WorkflowRecord[]);
-  console.log('workflows', workflows.value);
 }
 
 const onLoadChatModels = async () => {
@@ -402,7 +401,6 @@ const onLoadAiCapabilities = async (key: string) => {
       break
     case 'IMAGE':
       ImageCapabilities.value = list
-      console.log('ImageCapabilities', ImageCapabilities.value);
       break
     case 'VIDEO':
       VideoCapabilities.value = list
@@ -420,7 +418,6 @@ const onLoadChatTools = async () => {
 
 const onLoadAiSkills = async () => {
   const res: any = await api.queryAiSkills()
-  console.log('aiSkills', res);
   aiSkills.value = res ?? [];
 }
 

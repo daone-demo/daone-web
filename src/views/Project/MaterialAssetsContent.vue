@@ -324,7 +324,6 @@ const {
 } = useMaterialAssets(scopeRef, columnCountRef, assetTypeRef, assetDateRef)
 
 const onDoToggleMaterialFavorite = (item: MaterialItem) => {
-  console.log(userInfoStore.userInfo?.isVip)
   if (userInfoStore.userInfo?.isVip) {
     toggleMaterialFavorite(item)
   } else {

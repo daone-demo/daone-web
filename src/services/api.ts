@@ -464,13 +464,6 @@ export interface PaymentCreateRequest {
   payType: 'WECHAT' | 'ALIPAY' | string
 }
 
-export interface PaymentNotifyRequest {
-  orderNo: string
-  amountFen: number
-  currency: string
-  channelTransactionNo?: string
-}
-
 export interface AdminUserStatusRequest {
   status: string
 }
@@ -832,19 +825,6 @@ const api = {
   createPayment<T = unknown>(orderNo: string, data: PaymentCreateRequest) {
     return http.post<T>(`/orders/${pathId(orderNo)}/payments`, data)
   },
-  /** 在本地 Mock 环境中将指定订单标记为支付成功。 */
-  mockOrderPaid<T = unknown>(orderNo: string) {
-    return http.post<T>(`/orders/${pathId(orderNo)}/mock-paid`)
-  },
-  /**
-   * 处理支付渠道的服务端通知。
-   * @param signature 支付通知签名，对应 `X-Daone-Payment-Signature` 请求头。
-   */
-  notifyPayment<T = unknown>(payType: string, data: PaymentNotifyRequest, signature?: string) {
-    return http.post<T>(`/payments/${pathId(payType)}/notify`, data, {
-      headers: signature ? { 'X-Daone-Payment-Signature': signature } : undefined,
-    })
-  },
   /** 取消当前订阅的自动续费。 */
   cancelSubscriptionAutoRenew<T = unknown>() {
     return http.post<T>('/subscriptions/cancel-auto-renew')
@@ -962,4 +942,3 @@ const api = {
   },
 }
 export default api
-

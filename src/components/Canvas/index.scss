@@ -4599,7 +4599,7 @@
 .canvas__project-browser-pagination {
   margin: 0;
 
-  :deep(.ant-pagination-item-active) {
+  .ant-pagination-item-active {
     border-color: #111827;
     background: #111827;
 
@@ -4608,11 +4608,11 @@
     }
   }
 
-  :deep(.ant-pagination-item:hover) {
+  .ant-pagination-item:hover {
     border-color: #cbd5e1;
   }
 
-  :deep(.ant-select-selector) {
+  .ant-select-selector {
     border-radius: 8px !important;
   }
 }
