@@ -1,133 +1,18 @@
 import { useModalStore } from '@stores/useModal'
 import { useRouter } from 'vue-router'
-import type { Node } from '@antv/x6'
 import { TEXT_EDITOR_PLACEHOLDER } from '../../constants'
 import { createCanvasState } from './state'
-import type { CanvasBindings, CanvasDomRefs, CanvasEmit } from './types'
-import type { CanvasState } from './state'
+import type { CanvasBindings, CanvasDomRefs, CanvasEmit, UseCanvasApi } from './types'
 import { registerCore } from './registerCore'
 
-export type { CanvasEmit, CanvasDomRefs } from './types'
+export type { CanvasEmit, CanvasDomRefs, UseCanvasApi } from './types'
 
-import type { ChatTaskCreatedPayload, ChatTaskUpdatedPayload } from '../../chatGenerationTask'
-
-type GridSplitCanvasApi = Pick<
-  CanvasState,
-  | 'showImageGridSplit'
-  | 'imageGridSplitPos'
-  | 'gridSplitRows'
-  | 'gridSplitCols'
-  | 'showImageErase'
-  | 'eraseSourceNodeId'
-  | 'imageErasePos'
-  | 'showImageInpaint'
-  | 'inpaintSourceNodeId'
-  | 'imageInpaintPos'
-  | 'showImageExpand'
-  | 'expandSourceNodeId'
-  | 'imageExpandPos'
-  | 'showImageEditText'
-  | 'editTextSourceNodeId'
-  | 'imageEditTextPos'
-  | 'imageEditTextEntries'
-  | 'imageEditTextRecognizing'
-  | 'showImageResizeOverlay'
-  | 'imageResizeOverlay'
-  | 'videoGenAspectRatio'
-  | 'showVideoGenCanvasPickMode'
-    | 'showImageDialogueCanvasPickMode'
-    | 'imageDialogueSettings'
-    | 'videoDialogueSettings'
-    | 'showImageToolbarCustomize'
-    | 'imageToolbarCustomizeSettings'
-    | 'mentionInsertSerial'
-    | 'mentionInsertToken'
-    | 'showImageContextMenu'
-    | 'imageContextMenuPos'
-    | 'imageContextMenuNodeId'
-    | 'imageContextMenuKind'
-    | 'imagePreviewKind'
-    | 'showProjectBrowser'
-> &
-  Pick<
-    CanvasBindings,
-    | 'closeImageGridSplit'
-    | 'onImageGridSplitComplete'
-    | 'imageGridSplitSource'
-    | 'closeImageErase'
-    | 'onImageEraseComplete'
-    | 'imageEraseSource'
-    | 'closeImageInpaint'
-    | 'onImageInpaintComplete'
-    | 'imageInpaintSource'
-    | 'closeImageExpand'
-    | 'onImageExpandComplete'
-    | 'imageExpandSource'
-    | 'closeImageEditText'
-    | 'onImageEditTextApply'
-    | 'handleImageDialogueSubmit'
-    | 'handleVideoDialogueSubmit'
-    | 'handleVideoGenPromptSubmit'
-    | 'onImageDialogueAddCanvasNode'
-    | 'onImageDialogueAddDigitalHumanRef'
-    | 'onVideoGenAspectRatioChange'
-    | 'onVideoToolbarAction'
-    | 'isText2VideoTask'
-    | 'isText2ImageTask'
-    | 'promptSubmitLabel'
-    | 'onImageResizePointerDown'
-    | 'persistImageDialogueFields'
-    | 'persistVideoDialogueFields'
-    | 'videoDialogueSourceRefs'
-    | 'videoGenSavedSettings'
-    | 'showVideoDialoguePanel'
-    | 'closeImageToolbarCustomize'
-    | 'saveImageToolbarCustomize'
-    | 'toggleVideoGenCanvasPickMode'
-    | 'toggleImageDialogueCanvasPickMode'
-    | 'elementMarks'
-    | 'imageMarkAnalyzingActive'
-    | 'imageDialogueHideWorkflowAndMark'
-    | 'toggleImageDialogueMarkMode'
-    | 'updateImageMarkLabel'
-    | 'removeElementMark'
-    | 'clearElementMarks'
-    | 'resolveElementMarkPreviewUrl'
-    | 'onImageContextMenuAction'
-    | 'imageContextMenuLocked'
-    | 'showElementSelectBar'
-    | 'imageMarkHintVisible'
-    | 'imageMarkHints'
-    | 'openProjectBrowser'
-    | 'closeProjectBrowser'
-  > & {
-    createNodeFromChatTask: (payload: ChatTaskCreatedPayload) => Node | null
-    updateChatTaskNodeTitleFromPayload: (payload: ChatTaskUpdatedPayload) => void
-    overlayGroupSelection: import('vue').ComputedRef<
-      ReturnType<typeof import('../../nodeGroup').getGroupSelectionForNodeIds> | null
-    >
-    groupOverlayItems: import('vue').Ref<
-      Array<{
-        groupId: string
-        nodeIds: string[]
-        nodeCount: number
-        title: string
-        left: number
-        top: number
-        width: number
-        height: number
-      }>
-    >
-    onGroupOverlayDragStart: (payload: { event: MouseEvent; groupId: string }) => void
-    onGroupOverlayResizeStart: (payload: {
-      event: MouseEvent
-      handle: import('../../nodeGroup').GroupResizeHandle
-      groupId: string
-    }) => void
-    onGroupOverlaySelectGroup: (groupId: string) => void
-    onGroupOverlayTitleChange: (payload: { groupId: string; title: string }) => void
-  }
-
+/**
+ * 组装画布运行时绑定：
+ * 1. createCanvasState —— 全部响应式状态
+ * 2. registerCore —— computed / 方法 / 生命周期 / provide
+ * 对外签名与解构字段必须保持稳定（见 Canvas/index.vue、defineExpose）。
+ */
 function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBindings {
   const state = createCanvasState(emit, domRefs)
   const bind = {
@@ -163,19 +48,11 @@ function createBindings(emit: CanvasEmit, domRefs: CanvasDomRefs): CanvasBinding
   return bind
 }
 
-export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs) {
+export function useCanvas(emit: CanvasEmit, domRefs: CanvasDomRefs): UseCanvasApi {
   const bind = createBindings(emit, domRefs)
   return {
     ...bind,
     TEXT_EDITOR_PLACEHOLDER,
     getNodeCount: () => bind.nodeCount.value,
-  } as unknown as Omit<
-    ReturnType<typeof import('./_legacy').useCanvas>,
-    | 'onGroupOverlayDragStart'
-    | 'overlayGroupSelection'
-    | 'groupOverlayItems'
-    | 'onGroupOverlayResizeStart'
-    | 'onGroupOverlaySelectGroup'
-  > &
-    GridSplitCanvasApi
+  } as UseCanvasApi
 }

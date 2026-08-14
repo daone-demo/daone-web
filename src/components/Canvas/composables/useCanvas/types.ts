@@ -160,3 +160,22 @@ export type CanvasBindings = CanvasState & {
   graph: ShallowRef<Graph | null>
   [key: string]: unknown
 }
+
+/**
+ * useCanvas 对外公开 API。
+ * 由 CanvasState + registerCore 返回面 + 入口附加字段组成。
+ * 使用 ReturnType<typeof registerCore> 推断方法签名，避免维护重复的公开方法声明。
+ * 注意：不要把带 [key: string]: unknown 的 CanvasBindings 直接当作模板消费类型，
+ * 否则未在 Bindings 显式声明的方法会全部变成 unknown。
+ */
+export type UseCanvasApi = CanvasState &
+  ReturnType<typeof import('./registerCore').registerCore> & {
+    router: ReturnType<typeof import('vue-router').useRouter>
+    modalStore: ReturnType<typeof import('@stores/useModal').useModalStore>
+    textEditorApis: Map<string, TextEditorApi>
+    groupOverlayDrag: CanvasBindings['groupOverlayDrag']
+    groupOverlayResize: CanvasBindings['groupOverlayResize']
+    groupMoveState: CanvasBindings['groupMoveState']
+    TEXT_EDITOR_PLACEHOLDER: string
+    getNodeCount: () => number
+  }

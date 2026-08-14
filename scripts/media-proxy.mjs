@@ -74,6 +74,19 @@ export function isBlockedMediaProxyAddress(address) {
     normalized.startsWith('2001:db8:')
 }
 
+/**
+ * DNS 预检是否强制生效。
+ * fake-IP 模式的本地 DNS 代理（Clash / Surge 等）会把公网域名解析到 198.18.0.0/15、
+ * fdfe:dcba:9876::/48 等保留段，使合法对象存储域名被判为私网地址而返回 403。
+ * 因此开发服务器可显式关闭预检；生产入口（server.mjs、api/*）默认保持开启。
+ * 关闭后仍受 MEDIA_PROXY_HOST_RE 域名白名单约束，目标不可由外部任意指定。
+ */
+function shouldEnforceDnsGuard(override) {
+  if (process.env.MEDIA_PROXY_ENFORCE_DNS_GUARD === '0') return false
+  if (process.env.MEDIA_PROXY_ENFORCE_DNS_GUARD === '1') return true
+  return override !== false
+}
+
 async function assertPublicMediaProxyHost(hostname) {
   let addresses
   try {
@@ -118,7 +131,8 @@ export function resolveMediaProxyTargetUrl(rawUrl) {
   return parsed.toString()
 }
 
-export async function proxyMediaTargetUrl(targetUrl) {
+export async function proxyMediaTargetUrl(targetUrl, options = {}) {
+  const enforceDnsGuard = shouldEnforceDnsGuard(options.enforceDnsGuard)
   let currentUrl = targetUrl
   let upstream
 
@@ -129,7 +143,9 @@ export async function proxyMediaTargetUrl(targetUrl) {
       throw error
     }
 
-    await assertPublicMediaProxyHost(new URL(currentUrl).hostname)
+    if (enforceDnsGuard) {
+      await assertPublicMediaProxyHost(new URL(currentUrl).hostname)
+    }
     upstream = await fetch(currentUrl, {
       method: 'GET',
       headers: { 'User-Agent': 'daone-media-proxy/1.0' },
@@ -189,7 +205,7 @@ async function pipeMediaProxyBody(body, res) {
   res.end()
 }
 
-export async function handleMediaProxyNodeRequest(req, res, requestUrl) {
+export async function handleMediaProxyNodeRequest(req, res, requestUrl, options = {}) {
   if (req.method !== 'GET') {
     res.statusCode = 405
     res.end('Method Not Allowed')
@@ -210,7 +226,7 @@ export async function handleMediaProxyNodeRequest(req, res, requestUrl) {
   }
 
   try {
-    const { contentType, contentLength, body } = await proxyMediaTargetUrl(targetUrl)
+    const { contentType, contentLength, body } = await proxyMediaTargetUrl(targetUrl, options)
     res.statusCode = 200
     res.setHeader('Content-Type', contentType)
     if (contentLength > 0) {

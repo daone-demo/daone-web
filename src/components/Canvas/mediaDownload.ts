@@ -24,7 +24,6 @@ export interface CanvasMediaBatchDownloadResult {
   success: number
   failed: number
   packagedAsZip: boolean
-  proxyUnavailable?: boolean
 }
 
 function fileNameFromUrl(url: string): string {
@@ -77,13 +76,15 @@ function uniqueDownloadFileName(name: string, used: Set<string>): string {
   return next
 }
 
-function buildDownloadFetchCandidates(sourceUrl: string, options: { proxyOnly?: boolean } = {}): string[] {
+/**
+ * 下载取流顺序：直连对象存储 → 同源 media-proxy 兜底。
+ * 对象存储已返回 Access-Control-Allow-Origin，直连即可拿到 blob；
+ * 只有直连被跨域或网络策略拦截时才需要走代理，避免每次下载都先打两个必然失败的代理请求。
+ */
+function buildDownloadFetchCandidates(sourceUrl: string): string[] {
   const downloadUrl = resolveOriginalMediaDownloadUrl(sourceUrl)
   const proxies = buildMediaProxyCandidates(downloadUrl)
-  const candidates = options.proxyOnly
-    ? proxies
-    : [...new Set([...proxies, downloadUrl].filter(Boolean))]
-  return [...new Set(candidates.filter(Boolean))]
+  return [...new Set([downloadUrl, ...proxies].filter(Boolean))]
 }
 
 function formatBatchZipName() {
@@ -171,31 +172,7 @@ function triggerDirectResourceDownload(url: string, fileName: string) {
   triggerLinkDownload(url, fileName)
 }
 
-function isMediaProxyEndpointResponse(response: Response): boolean {
-  if (response.status === 400 || response.status === 403 || response.status === 502) return true
-  const contentType = (response.headers.get('content-type') || '').toLowerCase()
-  return response.ok && !contentType.includes('text/html')
-}
-
-async function probeMediaProxyAvailable(): Promise<boolean> {
-  const probes = [
-    '/media-proxy/probe.invalid.aliyuncs.com/probe',
-    '/media-proxy?url=',
-  ]
-
-  for (const probeUrl of probes) {
-    try {
-      const response = await fetch(probeUrl, { method: 'GET', cache: 'no-store' })
-      if (isMediaProxyEndpointResponse(response)) return true
-    } catch {
-      // try next probe
-    }
-  }
-
-  return false
-}
-
-async function fetchMediaBlob(sourceUrl: string, options: { proxyOnly?: boolean } = {}): Promise<Blob> {
+async function fetchMediaBlob(sourceUrl: string): Promise<Blob> {
   const trimmed = sourceUrl.trim()
   if (!trimmed) {
     throw new Error('无可下载资源')
@@ -209,7 +186,7 @@ async function fetchMediaBlob(sourceUrl: string, options: { proxyOnly?: boolean 
     return readResponseBlob(response)
   }
 
-  const candidates = buildDownloadFetchCandidates(trimmed, options)
+  const candidates = buildDownloadFetchCandidates(trimmed)
 
   let lastError: unknown
   for (const candidate of candidates) {
@@ -272,35 +249,19 @@ export async function downloadCanvasMediaBatch(
     return { total: 0, success: 0, failed: 0, packagedAsZip: false }
   }
 
-  const hasRemoteAssets = items.some((item) => {
-    const url = item.url.trim()
-    return url && !url.startsWith('blob:') && !url.startsWith('data:')
-  })
-  if (hasRemoteAssets) {
-    const proxyReady = await probeMediaProxyAvailable()
-    if (!proxyReady) {
-      return {
-        total,
-        success: 0,
-        failed: total,
-        packagedAsZip: false,
-        proxyUnavailable: true,
-      }
-    }
-  }
-
   const zip = new JSZip()
   let success = 0
 
+  // 逐个取流：zip 必须拿到 blob，无法退化成浏览器直接下载
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index]
     options.onProgress?.(index, total)
     try {
-      const blob = await fetchMediaBlob(item.url, { proxyOnly: hasRemoteAssets })
+      const blob = await fetchMediaBlob(item.url)
       zip.file(item.fileName, blob)
       success += 1
-    } catch {
-      // ignore
+    } catch (error) {
+      console.warn('[Canvas] batch download item failed', item.fileName, error)
     }
   }
 
@@ -325,6 +286,5 @@ export async function downloadCanvasMediaBatch(
     success: 0,
     failed: total,
     packagedAsZip: false,
-    proxyUnavailable: hasRemoteAssets,
   }
 }

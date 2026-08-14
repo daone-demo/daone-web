@@ -8,17 +8,6 @@ import { loadEnv, type Plugin } from 'vite'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { handleMediaProxyNodeRequest } from './scripts/media-proxy.mjs'
 
-const VERCEL_API_TARGETS = {
-  production: {
-    baseUrl: 'https://api.daoneai.com/api/v1',
-    host: 'https://api.daoneai.com',
-  },
-  preview: {
-    baseUrl: 'https://api-test.daoneai.com/api/v1',
-    host: 'https://api-test.daoneai.com',
-  },
-} as const
-
 function createMediaProxyPlugin(): Plugin {
   const handle = async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const rawUrl = req.url || ''
@@ -27,7 +16,9 @@ function createMediaProxyPlugin(): Plugin {
       return
     }
 
-    await handleMediaProxyNodeRequest(req, res, rawUrl)
+    // 本机常挂 fake-IP DNS 代理，会把对象存储域名解析到保留段；
+    // 开发/预览服务器跳过 DNS 预检，域名白名单仍然生效
+    await handleMediaProxyNodeRequest(req, res, rawUrl, { enforceDnsGuard: false })
   }
 
   return {
@@ -44,29 +35,17 @@ function createMediaProxyPlugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const vercelTarget =
-    process.env.VERCEL_ENV === 'production'
-      ? VERCEL_API_TARGETS.production
-      : process.env.VERCEL_ENV === 'preview'
-        ? VERCEL_API_TARGETS.preview
-        : undefined
-
-  if (vercelTarget) {
-    process.env.VITE_API_BASE_URL = vercelTarget.baseUrl
-    env.VITE_API_BASE_URL = vercelTarget.baseUrl
-    env.VITE_API_BASE_HOST = vercelTarget.host
-  }
 
   return {
     server: {
       host: true,
       proxy: {
         '/api': {
-          target: env.VITE_API_BASE_HOST,
-          changeOrigin: true,
-          // target: 'https://43.161.199.75:8088',
+          // target: env.VITE_API_BASE_HOST,
           // changeOrigin: true,
-          // secure: false,
+          target: 'https://43.161.199.75:8088',
+          changeOrigin: true,
+          secure: false,
           configure: (proxy) => {
             const bypass = env.VITE_VERCEL_PROTECTION_BYPASS
             if (!bypass) return
