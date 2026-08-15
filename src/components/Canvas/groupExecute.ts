@@ -6,14 +6,15 @@ import {
   IMAGE_DESIGN_ADVISOR_MENU,
   IMAGE_DESIGN_WORKFLOW_MENU,
   IMAGE_GENERAL_CAPABILITY_CODE,
-  IMAGE_NODE_TOOLBAR,
   VIDEO_DIALOGUE_CREDITS,
   VIDEO_GENERAL_CAPABILITY_CODE,
+  findCapabilityCodeByName,
   hasPersistedImageDialogueProvenance,
   isAiGeneratedCanvasNode,
   isCanvasGenerationFailed,
   isVideoNodeGenerating,
   resolveImageAssetId,
+  resolveSubmittableCapabilityCode,
   type CanvasNodeData,
   type ImageDialogueSettings,
   type ImageSourceRef,
@@ -82,15 +83,18 @@ function flattenImageDialogueMenuLabels(
   return entries
 }
 
+/**
+ * 节点标题前缀 → 能力码。只登记后端真实存在的能力码：
+ * 工具栏兜底常量里的 hd / crop / preview 等只是本地 UI key，提交会被判为「AI 能力不存在」。
+ * 未覆盖的能力名走接口返回的能力列表匹配。
+ */
 const CAPABILITY_LABEL_ENTRIES: CapabilityLabelEntry[] = [
-  ...IMAGE_NODE_TOOLBAR.actions.map((item) => ({ label: item.label, code: item.key })),
-  ...flattenImageDialogueMenuLabels(IMAGE_DESIGN_ADVISOR_MENU),
-  ...flattenImageDialogueMenuLabels(IMAGE_DESIGN_WORKFLOW_MENU),
-  { label: '去水印', code: 'watermark' },
-  { label: 'HD 高清', code: 'hd' },
+  { label: '抠图', code: 'IMAGE_REMOVE_BG' },
   { label: '局部修改', code: 'IMAGE_INPAINT' },
   { label: '反推提示词', code: 'IMAGE_PROMPT_REVERSE' },
   { label: '图生3D', code: 'IMAGE_TO_3D' },
+  ...flattenImageDialogueMenuLabels(IMAGE_DESIGN_ADVISOR_MENU),
+  ...flattenImageDialogueMenuLabels(IMAGE_DESIGN_WORKFLOW_MENU),
 ]
 
 function findCapabilityLabelEntry(titlePrefix: string): CapabilityLabelEntry | null {
@@ -199,17 +203,32 @@ export function resolveImageCapabilityFromNode(data: CanvasNodeData): { code: st
   const titlePrefix = resolveTitlePrefix(data.title || data.fileName || '')
   if (titlePrefix) {
     const matched = findCapabilityLabelEntry(titlePrefix)
-    if (matched) return { code: matched.code, label: matched.label }
+    if (matched) {
+      return {
+        code: resolveSubmittableCapabilityCode(matched.code, IMAGE_GENERAL_CAPABILITY_CODE),
+        label: matched.label,
+      }
+    }
   }
 
   const savedCapabilityCode = String(data.generationParams?.capabilityCode ?? '').trim()
   if (savedCapabilityCode) {
+    const code = resolveSubmittableCapabilityCode(savedCapabilityCode, IMAGE_GENERAL_CAPABILITY_CODE)
     return {
-      code: savedCapabilityCode,
+      code,
       label:
         titlePrefix ||
         data.title ||
-        (savedCapabilityCode === IMAGE_GENERAL_CAPABILITY_CODE ? '图生图' : '生成'),
+        (code === IMAGE_GENERAL_CAPABILITY_CODE ? '图生图' : '生成'),
+    }
+  }
+
+  // 静态表未覆盖的能力：工作流节点标题由能力名生成，按接口能力列表回查
+  const liveCapability = titlePrefix ? findCapabilityCodeByName(titlePrefix) : null
+  if (liveCapability) {
+    return {
+      code: resolveSubmittableCapabilityCode(liveCapability.code, IMAGE_GENERAL_CAPABILITY_CODE),
+      label: liveCapability.label,
     }
   }
 
@@ -866,7 +885,10 @@ export function resolveGroupAiReferenceContext(
           primaryAssetId,
         ),
         taskTitle: resolveTitlePrefix(data.title) || data.title || '生成',
-        capabilityCode: savedParams?.capabilityCode || task.capabilityCode,
+        capabilityCode: resolveSubmittableCapabilityCode(
+          savedParams?.capabilityCode || task.capabilityCode,
+          IMAGE_GENERAL_CAPABILITY_CODE,
+        ),
       }
     }
 
@@ -901,7 +923,10 @@ export function resolveGroupAiReferenceContext(
       settings: settings as ImageDialogueSettings | undefined,
       workflowId: savedParams?.workflowId ?? settings?.workflowId,
       taskTitle: data.title || '文生图',
-      capabilityCode: savedParams?.capabilityCode || IMAGE_GENERAL_CAPABILITY_CODE,
+      capabilityCode: resolveSubmittableCapabilityCode(
+        savedParams?.capabilityCode,
+        IMAGE_GENERAL_CAPABILITY_CODE,
+      ),
     }
   }
 
@@ -956,7 +981,10 @@ export function resolveGroupAiReferenceContext(
       settings: data.imageDialogueSettings as ImageDialogueSettings | undefined,
       workflowId: savedParams?.workflowId ?? data.imageDialogueSettings?.workflowId,
       taskTitle: '文生图',
-      capabilityCode: savedParams?.capabilityCode || IMAGE_GENERAL_CAPABILITY_CODE,
+      capabilityCode: resolveSubmittableCapabilityCode(
+        savedParams?.capabilityCode,
+        IMAGE_GENERAL_CAPABILITY_CODE,
+      ),
     }
   }
 
@@ -981,7 +1009,10 @@ export function resolveGroupAiReferenceContext(
         primaryAssetId,
       ),
       taskTitle: task.kind === 'text2video' ? '文生视频' : '视频生成',
-      capabilityCode: savedParams?.capabilityCode || VIDEO_GENERAL_CAPABILITY_CODE,
+      capabilityCode: resolveSubmittableCapabilityCode(
+        savedParams?.capabilityCode,
+        VIDEO_GENERAL_CAPABILITY_CODE,
+      ),
     }
   }
 

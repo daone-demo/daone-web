@@ -71,6 +71,7 @@ import { useUserInfo } from '@stores/useUserInfo';
 import {
   groupWorkflowsByCategory,
   normalizeImageCapabilities,
+  registerCanvasCapabilities,
   type ImageCapability,
   type WorkflowCategoryGroup,
   type WorkflowRecord,
@@ -394,6 +395,8 @@ const onLoadAiCapabilities = async (key: string) => {
   }
   const res: any = await api.queryAiCapabilities(params)
   const list = normalizeImageCapabilities(res)
+  // 登记真实能力码，整组执行按节点标题回推能力时据此校正
+  registerCanvasCapabilities(list)
   switch (key) {
     case 'TEXT':
       TextCapabilities.value = list

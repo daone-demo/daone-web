@@ -737,6 +737,71 @@ export function normalizeImageCapabilities(
 
 export const IMAGE_GENERAL_CAPABILITY_CODE = 'IMAGE_GENERAL_V1'
 
+/** /canvas/capabilities 返回的能力码与能力名，供提交任务前校正 capabilityCode */
+const registeredCapabilityCodes = new Set<string>()
+const registeredCapabilityCodeByName = new Map<string, string>()
+
+export function registerCanvasCapabilities(
+  capabilities: ImageCapability[] | null | undefined,
+) {
+  for (const item of capabilities ?? []) {
+    const code = String(item?.code ?? '').trim()
+    if (!code) continue
+    registeredCapabilityCodes.add(code)
+    const name = String(item?.name ?? '').trim()
+    if (name) registeredCapabilityCodeByName.set(name, code)
+  }
+}
+
+/** 按能力名（节点标题前缀即由能力名生成）查后端能力码 */
+export function findCapabilityCodeByName(name: string): { code: string; label: string } | null {
+  const trimmed = name.trim()
+  if (!trimmed) return null
+  const exact = registeredCapabilityCodeByName.get(trimmed)
+  if (exact) return { code: exact, label: trimmed }
+  for (const [label, code] of registeredCapabilityCodeByName) {
+    if (trimmed.includes(label)) return { code, label }
+  }
+  return null
+}
+
+/** 工具栏兜底常量里的本地 UI key → 后端能力码 */
+const UI_KEY_TO_CAPABILITY_CODE = new Map<string, string>([
+  ['crop', 'IMAGE_CROP'],
+  ['inpaint', 'IMAGE_INPAINT'],
+  ['preview', 'IMAGE_PREVIEW'],
+  ['expand', 'IMAGE_EXPAND'],
+  ['grid-split', 'IMAGE_GRID_SPLIT'],
+  ['text-edit', 'IMAGE_EDIT_TEXT'],
+  ['customize', 'IMAGE_CUSTOM'],
+])
+
+/** 后端能力码统一是 XXX_YYY 形式，单词型标识只可能是前端 UI key */
+function looksLikeCapabilityCode(code: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+$/.test(code)
+}
+
+/**
+ * 提交生成任务前校正能力码。
+ * 工具栏兜底常量与旧工作流快照里可能残留 hd / crop 之类的本地 UI key，
+ * 直接提交会被后端判为「AI 能力不存在」，此处回退到 fallback 能力。
+ */
+export function resolveSubmittableCapabilityCode(
+  code: string | undefined | null,
+  fallback: string,
+): string {
+  const trimmed = String(code ?? '').trim()
+  if (!trimmed) return fallback
+  if (registeredCapabilityCodes.has(trimmed)) return trimmed
+  const mapped = UI_KEY_TO_CAPABILITY_CODE.get(trimmed)
+  if (mapped) {
+    if (registeredCapabilityCodes.size > 0 && !registeredCapabilityCodes.has(mapped)) return fallback
+    return mapped
+  }
+  if (looksLikeCapabilityCode(trimmed)) return trimmed
+  return fallback
+}
+
 /** AI 生成任务完整参数快照（随节点 data 持久化，用于溯源与重试） */
 export interface CanvasGenerationParams {
   taskType: 'IMAGE' | 'TEXT' | 'MODEL' | 'VIDEO'
