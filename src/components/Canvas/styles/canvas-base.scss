@@ -1,0 +1,134 @@
+/**
+ * Canvas 样式分片：画布根容器、背景与全局基础状态。
+ * 从原 index.scss 第 1-130 行按顶层选择器边界迁出；请勿改变入口中的加载顺序。
+ */
+.canvas {
+  --canvas-page-bg: #141416;
+  --canvas-graph-bg: #141416;
+  --canvas-group-bg: rgba(255, 255, 255, 0.06);
+  --canvas-group-border: rgba(255, 255, 255, 0.28);
+  --canvas-group-bg-active: rgba(255, 255, 255, 0.1);
+  --canvas-group-border-active: rgba(255, 255, 255, 0.42);
+  --canvas-group-handle-bg: #fff;
+  --canvas-group-handle-border: rgba(255, 255, 255, 0.45);
+  --canvas-group-label-color: #9ca3af;
+  --canvas-group-shadow-active: 0 0 0 1px rgba(255, 255, 255, 0.12);
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+  background: var(--canvas-page-bg);
+  color: #f3f4f6;
+
+  &--bg-light {
+    --canvas-page-bg: #FAFAFA;
+    --canvas-graph-bg: #FAFAFA;
+    --canvas-group-bg: #EDEDED;
+    --canvas-group-border: rgba(100, 116, 139, 0.42);
+    --canvas-group-bg-active: #EDEDED;
+    --canvas-group-border-active: rgba(71, 85, 105, 0.55);
+    --canvas-group-handle-bg: #fff;
+    --canvas-group-handle-border: rgba(71, 85, 105, 0.28);
+    --canvas-group-label-color: #6b7280;
+    --canvas-group-shadow-active: 0 0 0 1px rgba(15, 23, 42, 0.08), 0 4px 16px rgba(15, 23, 42, 0.06);
+    color: #1f2937;
+
+    .canvas__hint {
+      color: #6b7280;
+    }
+
+    .canvas__template {
+      border-color: #d1d5db;
+      background: rgba(255, 255, 255, 0.85);
+      color: #374151;
+    }
+
+    .canvas__toolbar--bottom {
+      border-color: #e5e7eb;
+      background: rgba(255, 255, 255, 0.96);
+      color: #374151;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+      .canvas__tool-btn:hover {
+        background: #f3f4f6;
+      }
+
+      .canvas__tool-btn--active {
+        background: #e5e7eb;
+        color: #111827;
+      }
+
+      .canvas__zoom-value-btn {
+        color: #6b7280;
+      }
+    }
+
+    .canvas__minimap-host {
+      border-color: #d1d5db;
+      background: #FAFAFA;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+      .x6-widget-minimap {
+        background-color: #FAFAFA;
+      }
+    }
+
+    .canvas__toolbar--left {
+      .canvas__tool-btn:hover {
+        background: #f3f4f6;
+        color: #111827;
+      }
+
+      .canvas__tool-btn--active {
+        background: #e5e7eb;
+        color: #111827;
+      }
+    }
+  }
+
+  /* ---- Dark-theme overrides for brand-bar children ---- */
+  &:not(.canvas--bg-light) {
+    .canvas__brand-project {
+      background: #333;
+      border-color: #4a4a52;
+      color: #e5e7eb;
+
+      &:hover,
+      &--active {
+        background: #3d3d45;
+        border-color: #555;
+      }
+    }
+
+    .canvas__brand-add {
+      background: #333;
+      border-color: #4a4a52;
+      color: #e5e7eb;
+
+      &:hover {
+        background: #3d3d45;
+      }
+    }
+
+    .canvas__brand-icon-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .canvas__brand-divider {
+      background: #4a4a52;
+    }
+
+    .canvas__hint-link {
+      border-color: #4a4a52;
+      background: #2a2a2e;
+      color: #e5e7eb;
+
+      &:hover {
+        border-color: #555;
+        background: #333;
+      }
+    }
+  }
+}

@@ -1014,5 +1014,5 @@ watch(showHistoryPanel, (open) => {
 
 <style lang="scss">
 /* 子组件在 panels/ 中，样式须为非 scoped 才能作用于子组件 DOM */
-@import './index.scss';
+@use './index';
 </style>

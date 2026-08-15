@@ -1,0 +1,237 @@
+import { ref, toValue } from 'vue'
+import type { MaybeRefOrGetter } from 'vue'
+import { uploadAssetFile } from '@/components/Canvas/upload'
+import type { ChatAttachment } from '../chatTypes'
+
+export interface InsertImageToCanvasPayload {
+  attachmentId: string
+  assetId?: string
+  previewUrl: string
+  fileName?: string
+  width?: number | null
+  height?: number | null
+}
+
+export interface UseChatAttachmentsOptions {
+  projectId: MaybeRefOrGetter<string | undefined>
+  emitInsertImageToCanvas: (payload: InsertImageToCanvasPayload) => void
+  ensureActiveSession: () => unknown
+  focusInput: () => void
+  saveActiveDraft: () => void
+  setMessage: (message: string) => void
+}
+
+export function useChatAttachments(options: UseChatAttachmentsOptions) {
+  const attachments = ref<ChatAttachment[]>([])
+  const assetMentions = ref<Array<{ id: string; role: string; name: string }>>([])
+  const fileInputRef = ref<HTMLInputElement | null>(null)
+
+  function createAttachment(file: File, assetId?: string, nodeId?: string): ChatAttachment {
+    const isImage = file.type.startsWith('image/')
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file,
+      previewUrl: isImage ? URL.createObjectURL(file) : '',
+      fileName: file.name,
+      assetId,
+      nodeId,
+      uploading: isImage && !assetId ? true : undefined,
+    }
+  }
+
+  function patchAttachment(id: string, patch: Partial<ChatAttachment>) {
+    attachments.value = attachments.value.map((item) =>
+      (item.id === id ? { ...item, ...patch } : item),
+    )
+  }
+
+  async function uploadAttachmentToOss(attachmentId: string) {
+    const attachment = attachments.value.find((item) => item.id === attachmentId)
+    if (!attachment) return
+
+    patchAttachment(attachmentId, { uploading: true, uploadError: undefined })
+
+    try {
+      const result = await uploadAssetFile(attachment.file, { projectId: toValue(options.projectId) })
+      const nextPreviewUrl = result.url || attachment.previewUrl
+      if (result.url && attachment.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(attachment.previewUrl)
+      }
+      patchAttachment(attachmentId, {
+        assetId: result.assetId,
+        previewUrl: nextPreviewUrl,
+        uploading: false,
+        uploadError: undefined,
+      })
+
+      // 上传成功后插入画布，便于 agent 通过 nodeId 交互；已有 nodeId（如从画布加入）则跳过
+      const current = attachments.value.find((item) => item.id === attachmentId)
+      if (current && !current.nodeId && nextPreviewUrl) {
+        options.emitInsertImageToCanvas({
+          attachmentId,
+          assetId: result.assetId || undefined,
+          previewUrl: nextPreviewUrl,
+          fileName: current.fileName,
+          width: result.width,
+          height: result.height,
+        })
+      }
+    } catch (error) {
+      patchAttachment(attachmentId, {
+        uploading: false,
+        uploadError: error instanceof Error ? error.message : '上传失败',
+      })
+    }
+  }
+
+  function bindAttachmentNodeId(attachmentId: string, nodeId: string) {
+    const id = attachmentId?.trim()
+    const nextNodeId = nodeId?.trim()
+    if (!id || !nextNodeId) return
+    const target = attachments.value.find((item) => item.id === id)
+    if (!target || target.nodeId === nextNodeId) return
+    patchAttachment(id, { nodeId: nextNodeId })
+    options.saveActiveDraft()
+  }
+
+  function clearAssetMentions() {
+    assetMentions.value = []
+  }
+
+  function removeAssetMention(id: string) {
+    assetMentions.value = assetMentions.value.filter((item) => item.id !== id)
+  }
+
+  function insertAssetMention(payload: { id: string; role: string; name: string }) {
+    options.ensureActiveSession()
+    if (assetMentions.value.some((item) => item.id === payload.id)) {
+      options.focusInput()
+      return
+    }
+    assetMentions.value = [...assetMentions.value, payload]
+    options.focusInput()
+  }
+
+  function addAttachments(files: File[], assetId?: string, nodeId?: string) {
+    options.ensureActiveSession()
+    files.forEach((file) => {
+      if (!file.type.startsWith('image/')) return
+      const attachment = createAttachment(file, assetId, nodeId)
+      attachments.value.push(attachment)
+      if (!assetId) {
+        void uploadAttachmentToOss(attachment.id)
+      }
+    })
+  }
+
+  async function addAttachmentFromCanvas(payload: {
+    previewUrl: string
+    fileName: string
+    assetId?: string
+    nodeId?: string
+  }) {
+    options.ensureActiveSession()
+    if (!payload.previewUrl) return
+
+    // 已存在相同资源时，仅聚焦输入框，避免重复添加；若缺少 nodeId 则补上
+    const existing = attachments.value.find(
+      (item) =>
+        item.previewUrl === payload.previewUrl ||
+        (payload.nodeId && item.nodeId === payload.nodeId) ||
+        (payload.assetId && item.assetId === payload.assetId),
+    )
+    if (existing) {
+      if (payload.nodeId && !existing.nodeId) {
+        patchAttachment(existing.id, { nodeId: payload.nodeId })
+      }
+      if (payload.assetId && !existing.assetId) {
+        patchAttachment(existing.id, { assetId: payload.assetId })
+      }
+      options.focusInput()
+      return
+    }
+
+    const fileName = payload.fileName || 'canvas-image.jpg'
+    const assetId = payload.assetId || undefined
+    const nodeId = payload.nodeId?.trim() || undefined
+
+    try {
+      const response = await fetch(payload.previewUrl, { mode: 'cors' })
+      if (!response.ok) throw new Error(`fetch failed: ${response.status}`)
+      const blob = await response.blob()
+      const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' })
+      addAttachments([file], assetId, nodeId)
+    } catch (error) {
+      // 跨域/网络失败时不静默丢弃，降级为远程链接附件，保证资源仍出现在对话框中
+      console.warn('[ChatSidePanel] 拉取画布图片失败，降级为远程附件', error)
+      attachments.value.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        file: new File([], fileName, { type: 'image/jpeg' }),
+        previewUrl: payload.previewUrl,
+        fileName,
+        assetId,
+        nodeId,
+      })
+    }
+
+    options.focusInput()
+  }
+
+  function addSkillFile(file: File, skillName?: string) {
+    options.ensureActiveSession()
+    if (!file.name.endsWith('.md')) return
+    attachments.value.push(createAttachment(file))
+    if (skillName) {
+      options.setMessage(`请使用技能「${skillName}」处理以下工作流`)
+    }
+    options.focusInput()
+  }
+
+  function removeAttachment(id: string) {
+    const target = attachments.value.find((item) => item.id === id)
+    if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl)
+    attachments.value = attachments.value.filter((item) => item.id !== id)
+  }
+
+  function clearAttachments() {
+    attachments.value.forEach((item) => {
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+    })
+    attachments.value = []
+  }
+
+  function openFilePicker() {
+    fileInputRef.value?.click()
+  }
+
+  function onFileInputChange(event: Event) {
+    const input = event.target as HTMLInputElement
+    addAttachments(Array.from(input.files ?? []))
+    input.value = ''
+  }
+
+  function onComposerDrop(event: DragEvent) {
+    addAttachments(Array.from(event.dataTransfer?.files ?? []))
+  }
+
+  return {
+    attachments,
+    assetMentions,
+    fileInputRef,
+    createAttachment,
+    patchAttachment,
+    uploadAttachmentToOss,
+    bindAttachmentNodeId,
+    clearAssetMentions,
+    removeAssetMention,
+    insertAssetMention,
+    addAttachments,
+    addAttachmentFromCanvas,
+    addSkillFile,
+    removeAttachment,
+    clearAttachments,
+    openFilePicker,
+    onFileInputChange,
+    onComposerDrop,
+  }
+}
