@@ -106,5 +106,5 @@ async function copyTaskId() {
 </script>
 
 <style scoped lang="scss">
-@import './node-generation-fail.scss';
+@use './node-generation-fail.scss' as *;
 </style>

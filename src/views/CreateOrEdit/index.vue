@@ -326,8 +326,7 @@ const onLoadWorkflows = async () => {
 }
 
 const onLoadChatModels = async () => {
-  /* const res = */ await api.getChatModels();
-  // console.log('chatModels', res);
+  await api.getChatModels();
 }
 
 const onLoadHistorySessions = async (options?: { forceSelectFirst?: boolean }) => {
@@ -595,5 +594,5 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
-@import './index.scss';
+@use './index.scss' as *;
 </style>

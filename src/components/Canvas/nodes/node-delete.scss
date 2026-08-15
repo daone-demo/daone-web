@@ -1,5 +1,4 @@
-@import './node-glyphs';
-
+@use './node-glyphs' as *;
 .canvas-node__delete {
   flex-shrink: 0;
   display: flex;

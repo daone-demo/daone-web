@@ -64,7 +64,6 @@ declare module 'vue' {
     DialogueWorkflowSelect: typeof import('./components/Canvas/DialogueWorkflowSelect.vue')['default']
     DigitalHumanPickerPanel: typeof import('./components/Canvas/DigitalHumanPickerPanel.vue')['default']
     EmbeddedVideoPlayer: typeof import('./components/EmbeddedVideoPlayer/index.vue')['default']
-    HelloWorld: typeof import('./components/HelloWorld.vue')['default']
     ImageColorPickerPanel: typeof import('./components/Canvas/ImageColorPickerPanel.vue')['default']
     ImageCropOverlay: typeof import('./components/Canvas/ImageCropOverlay.vue')['default']
     ImageDialogueFooter: typeof import('./components/Canvas/ImageDialogueFooter.vue')['default']

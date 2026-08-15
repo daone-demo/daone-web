@@ -179,7 +179,6 @@ function startCountdown(seconds = 60) {
 // const onLoadWeChatCode = () => {
 //   api.createWechatQrSession()
 //     .then((res:any)=>{
-//       // console.log('res', res)
 //       wechatQrUrl.value = res.qrCodeUrl
 //     })
 //     .catch(err=>{
@@ -262,5 +261,5 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-@import './index.scss';
+@use './index.scss' as *;
 </style>

@@ -300,10 +300,9 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-@import './node-delete.scss';
-@import './node-port-plus.scss';
-@import './node-generating-bg.scss';
-
+@use './node-delete.scss' as *;
+@use './node-port-plus.scss' as *;
+@use './node-generating-bg.scss' as *;
 .model3d-node {
   position: relative;
   display: flex;

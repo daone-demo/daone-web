@@ -751,8 +751,7 @@ function submitTrial() {
     code: trialCode.value.trim(),
     contactName: trialName.value.trim(),
     position: trialPosition.value.trim(),
-  }).then((/* res:any */)=>{
-    // console.log('submitTrial', res)
+  }).then(()=>{
     message.success('操作成功');
     close()
   })
@@ -843,8 +842,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-@import './index.scss';
-
+@use './index.scss' as *;
 .visually-hidden {
   position: absolute;
   width: 1px;

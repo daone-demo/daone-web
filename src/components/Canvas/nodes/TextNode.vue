@@ -213,8 +213,6 @@ function removeSelf(event?: Event) {
   const node = getNode()
   const nodeId = node.id
   const g = node.model?.graph as CanvasGraph | undefined
-  // eslint-disable-next-line no-console
-  // console.log('[delete] TextNode removeSelf', { nodeId, hasGraph: !!g })
   if (!g) return
 
   ;(document.activeElement as HTMLElement | null)?.blur?.()
@@ -229,8 +227,6 @@ function removeSelf(event?: Event) {
       }
     }
     const cell = g.getCellById(nodeId)
-    // eslint-disable-next-line no-console
-    // console.log('[delete] TextNode force removeCell', { nodeId, stillExists: !!cell })
     if (cell) g.removeCell(cell)
   })
 }
@@ -1029,10 +1025,9 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-@import './node-delete.scss';
-@import './node-port-plus.scss';
-@import './node-light-theme.scss';
-
+@use './node-delete.scss' as *;
+@use './node-port-plus.scss' as *;
+@use './node-light-theme.scss' as *;
 .text-node {
   position: relative;
   display: flex;

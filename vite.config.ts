@@ -85,5 +85,39 @@ export default defineConfig(({ mode }) => {
         '@hooks': path.resolve(import.meta.dirname, 'src/hooks'),
       },
     },
+    build: {
+      // 保持 Vite 默认 500 kB 告警，用拆包降低体积而非掩盖信号
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return
+
+            if (
+              id.includes('/vue/') ||
+              id.includes('/vue-router/') ||
+              id.includes('/pinia/') ||
+              id.includes('/@vue/')
+            ) {
+              return 'vendor-vue'
+            }
+            if (id.includes('/ant-design-vue/') || id.includes('/@ant-design/')) {
+              return 'vendor-antd'
+            }
+            if (id.includes('/@antv/x6') || id.includes('/x6-html-shape/')) {
+              return 'vendor-x6'
+            }
+            if (id.includes('/three/')) {
+              return 'vendor-three'
+            }
+            if (id.includes('/marked/') || id.includes('/dompurify/')) {
+              return 'vendor-markdown'
+            }
+            if (id.includes('/jszip/')) {
+              return 'vendor-zip'
+            }
+          },
+        },
+      },
+    },
   }
 })

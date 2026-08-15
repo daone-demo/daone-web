@@ -2140,17 +2140,6 @@ export const IMAGE_DESIGN_WORKFLOW_MENU = [
   },
 ] as const
 
-export type CanvasProjectItem = {
-  id: string
-  name: string
-  saved: boolean
-}
-
-export const CANVAS_PROJECTS: CanvasProjectItem[] = [
-  { id: 'draft-1', name: '未命名创作', saved: true },
-  { id: 'draft-2', name: '未命名创作1', saved: false },
-]
-
 export const VIDEO_DIALOGUE_GREETING = 'Hi, 我是你的AI设计助理'
 export const VIDEO_DIALOGUE_PLACEHOLDER = '让我们开始创作吧...'
 export const VIDEO_DIALOGUE_VIDEO_SETTINGS = '5s · 16:9 · 720P'

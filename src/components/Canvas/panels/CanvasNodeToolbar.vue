@@ -14,6 +14,8 @@
               :key="item.key"
               type="button"
               class="canvas__node-toolbar-btn"
+              :title="item.label"
+              @click="emitCreativeToolbarAction(item.key, item.label)"
             >
               {{ item.label }}
               <span v-if="'badge' in item && item.badge" class="canvas__node-toolbar-badge">{{ item.badge }}</span>
@@ -26,6 +28,7 @@
             type="button"
             class="canvas__node-toolbar-btn canvas__node-toolbar-btn--icon"
             :title="item.label"
+            @click="emitCreativeToolbarAction(item.key, item.label)"
           >
             <span class="canvas__node-toolbar-icon" :data-icon="item.icon" aria-hidden="true" />
           </button>
@@ -256,11 +259,21 @@ function isVideoFramesAction(item: ImageCapabilityToolbarAction) {
   return uiKey === 'frames' || item.key.includes('FRAME')
 }
 
+/** 创作工具栏别名 → 主工具栏已实现的 action key，避免同功能走不通 */
+const CREATIVE_TOOLBAR_ACTION_KEY_MAP: Record<string, string> = {
+  'grid-split': 'IMAGE_GRID_SPLIT',
+  expand: 'IMAGE_EXPAND',
+}
+
 function emitImageAction(key: string, option?: string, label?: string) {
   const payload: ImageToolbarClickPayload = { key }
   if (option) payload.option = option
   if (label) payload.label = label
   emit('image-toolbar-action', payload)
+}
+
+function emitCreativeToolbarAction(key: string, label?: string) {
+  emitImageAction(CREATIVE_TOOLBAR_ACTION_KEY_MAP[key] ?? key, undefined, label)
 }
 
 function emitVideoAction(item: { key: string; label?: string; option?: string }) {

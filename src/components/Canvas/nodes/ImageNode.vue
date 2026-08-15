@@ -555,10 +555,10 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-@import './node-delete.scss';
-@import './node-port-plus.scss';
-@import './node-light-theme.scss';
-@import './node-generating-bg.scss';
+@use './node-delete.scss' as *;
+@use './node-port-plus.scss' as *;
+@use './node-light-theme.scss' as *;
+@use './node-generating-bg.scss' as *;
 .image-node {
   position: relative;
   display: flex;

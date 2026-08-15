@@ -5,7 +5,7 @@ import { Selection } from '@antv/x6-plugin-selection'
 import '@antv/x6-plugin-selection/es/index.css'
 import { register as registerHtmlShape, HTMLShapeView } from 'x6-html-shape'
 import createVueRender from 'x6-html-shape/dist/vue'
-import type { Component } from 'vue'
+import { defineAsyncComponent, type Component } from 'vue'
 import { getDefaultEdgeStroke } from './canvasTheme'
 import { bindFlowEdgeInteraction, getFlowEdgeAttrs, getPreviewEdgeAttrs, registerCanvasEdgeDefaults } from './edgeStyle'
 import { canOpenConnectMenu } from './nodeConnect'
@@ -14,7 +14,9 @@ import TextNode from './nodes/TextNode.vue'
 import ImageNode from './nodes/ImageNode.vue'
 import ImageGenNode from './nodes/ImageGenNode.vue'
 import VideoNode from './nodes/VideoNode.vue'
-import Model3DNode from './nodes/Model3DNode.vue'
+
+/** 延迟加载 three / GLTFLoader，仅在渲染 3D 节点时进入产物首屏之外的独立 chunk */
+const Model3DNode = defineAsyncComponent(() => import('./nodes/Model3DNode.vue'))
 import {
   CANVAS_MAX_ZOOM,
   CANVAS_MIN_ZOOM,

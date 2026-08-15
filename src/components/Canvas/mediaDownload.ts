@@ -1,4 +1,3 @@
-import JSZip from 'jszip'
 import { resolveOriginalMediaDownloadUrl } from './cloudImageProcess'
 import { buildMediaProxyCandidates } from './mediaProxy'
 import { runWithoutLeaveConfirm } from '@/utils/leaveGuard'
@@ -249,6 +248,8 @@ export async function downloadCanvasMediaBatch(
     return { total: 0, success: 0, failed: 0, packagedAsZip: false }
   }
 
+  // 仅批量 ZIP 下载时才加载 jszip，避免拖入创作页首屏 chunk
+  const { default: JSZip } = await import('jszip')
   const zip = new JSZip()
   let success = 0
 

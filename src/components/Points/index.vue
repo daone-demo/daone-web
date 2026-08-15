@@ -522,8 +522,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-@import './index.scss';
-
+@use './index.scss' as *;
 .visually-hidden {
   position: absolute;
   width: 1px;

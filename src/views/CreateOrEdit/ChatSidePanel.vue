@@ -564,8 +564,8 @@ defineExpose({
 </script>
 
 <style lang="scss">
-@import './chat/styles/chat-shell.scss';
-@import './chat/styles/chat-messages.scss';
-@import './chat/styles/chat-composer.scss';
-@import './chat/styles/chat-theme.scss';
+@use './chat/styles/chat-shell.scss' as *;
+@use './chat/styles/chat-messages.scss' as *;
+@use './chat/styles/chat-composer.scss' as *;
+@use './chat/styles/chat-theme.scss' as *;
 </style>

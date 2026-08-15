@@ -1041,7 +1041,7 @@ function onDocumentMouseDown(event: MouseEvent) {
 </script>
 
 <style scoped lang="scss">
-@import './promptMention.scss';
+@use './promptMention.scss' as *;
 .image-dialogue {
   position: relative;
   width: 100%;

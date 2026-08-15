@@ -23,7 +23,7 @@
                 <i class="iconfont icon-huiyuanjifen" style="font-size: 14px;color: rgb(255, 198, 0);"></i>
                 {{profileState.vipName}}
               </span>
-              <!-- <span class="user-info__plan">{{ USER_PROFILE.plan }}</span> -->
+              <!-- <span class="user-info__plan">{{ profileState.vipName }}</span> -->
             </div>
             <p class="user-info__phone">{{ profileState.phoneMasked }}</p>
           </div>
@@ -536,7 +536,6 @@ import {
   BILL_STATUS_LABEL,
   USER_INFO_TABS,
   USER_MEMBERSHIP_NOTES,
-  // USER_PROFILE,
   type PointsLogFilterKey,
   type UserInfoTabKey,
 } from './userInfoData'
@@ -946,7 +945,6 @@ const onLoadOrderList = async () => {
   }
   api.getOrders(params)
     .then(res=>{
-      // console.log('res', res);
       orderList.value = res.records || [];
       orderTotal.value = res.total || 0;
     })
@@ -1079,12 +1077,6 @@ const handleInvoiceTitleChange: SelectProps['onChange'] = (value) => {
   }
 }
 
-// const openPointsLogDetail = (id: string) => {
-//   api.getPointsLedgerDetail(id).then(res=>{
-//     console.log('res', res);
-//   });
-//   console.log('openPointsLogDetail', id);
-// }
 watch([orderNo, selectedPayMethod], ([no, method]) => {
   if (no && method !== 'BANK_TRANSFER') {
     onLoadPayUrl();
@@ -1114,5 +1106,5 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-@import './index.scss';
+@use './index.scss' as *;
 </style>

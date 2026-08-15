@@ -449,12 +449,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-@import './node-glyphs';
-@import './node-delete.scss';
-@import './node-port-plus.scss';
-@import './node-light-theme.scss';
-@import './node-generating-bg.scss';
-
+@use './node-glyphs' as *;
+@use './node-delete.scss' as *;
+@use './node-port-plus.scss' as *;
+@use './node-light-theme.scss' as *;
+@use './node-generating-bg.scss' as *;
 .video-node {
   position: relative;
   display: flex;

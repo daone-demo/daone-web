@@ -544,8 +544,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
-@import './index.scss';
-
+@use './index.scss' as *;
 .material-assets--draggable {
   .home__inspiration-media,
   .home__inspiration-media :deep(*) {

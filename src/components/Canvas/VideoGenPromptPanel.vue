@@ -1099,7 +1099,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-@import './promptMention.scss';
+@use './promptMention.scss' as *;
 .video-gen-prompt-panel {
   position: relative;
   box-sizing: border-box;
