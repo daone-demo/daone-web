@@ -391,14 +391,21 @@ export function installGraphLifecycle(ctx: CoreRuntimeContext) {
                   ctx.markCanvasContentReady();
               }
               else {
-                  // 快照为空/无效时仍绑定项目并放开自动保存，避免操作后无法落库
-                  if (pending.projectId) {
-                      ctx.activeProjectId.value = String(pending.projectId).trim();
+                  // 仅在与当前路由一致（或无路由约束）时绑定，避免过期 pending 改写活动项目
+                  const pendingId = pending.projectId != null ? String(pending.projectId).trim() : '';
+                  const routeProjectId = ctx.router?.currentRoute?.value?.params?.id;
+                  const routeId = typeof routeProjectId === 'string'
+                      ? routeProjectId.trim()
+                      : Array.isArray(routeProjectId)
+                          ? String(routeProjectId[0] ?? '').trim()
+                          : '';
+                  if (pendingId && (!routeId || pendingId === routeId)) {
+                      ctx.activeProjectId.value = pendingId;
+                      if (typeof pending.revision === 'number') {
+                          ctx.canvasRevision.value = pending.revision;
+                      }
+                      ctx.markCanvasContentReady();
                   }
-                  if (typeof pending.revision === 'number') {
-                      ctx.canvasRevision.value = pending.revision;
-                  }
-                  ctx.markCanvasContentReady();
               }
           }
       });

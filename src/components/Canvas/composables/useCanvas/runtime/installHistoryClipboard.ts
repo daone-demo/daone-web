@@ -26,6 +26,10 @@ export function installHistoryClipboard(ctx: CoreRuntimeContext) {
   ctx.scheduleHistoryPush = function scheduleHistoryPush(options: {
       autoSave?: boolean;
   } = {}) {
+      // 同步标记 dirty，不等待 280ms 历史防抖，避免「保存并离开」跳过窗口内修改
+      if (typeof ctx.markLocalCanvasChange === 'function') {
+          ctx.markLocalCanvasChange();
+      }
       const shouldAutoSave = options.autoSave !== false;
       const g = ctx.graph.value;
       if (g && ctx.canvasHistory) {
@@ -71,6 +75,9 @@ export function installHistoryClipboard(ctx: CoreRuntimeContext) {
       const g = ctx.graph.value;
       if (!g || !ctx.canvasHistory?.undo(g))
           return;
+      if (typeof ctx.markLocalCanvasChange === 'function') {
+          ctx.markLocalCanvasChange();
+      }
       ctx.syncHistoryState();
       ctx.syncNodeCount();
       ctx.resetCanvasInteractionState();
@@ -82,6 +89,9 @@ export function installHistoryClipboard(ctx: CoreRuntimeContext) {
       const g = ctx.graph.value;
       if (!g || !ctx.canvasHistory?.redo(g))
           return;
+      if (typeof ctx.markLocalCanvasChange === 'function') {
+          ctx.markLocalCanvasChange();
+      }
       ctx.syncHistoryState();
       ctx.syncNodeCount();
       ctx.resetCanvasInteractionState();

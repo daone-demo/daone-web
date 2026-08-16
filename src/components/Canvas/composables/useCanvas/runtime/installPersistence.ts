@@ -25,13 +25,28 @@ function normalizeSaveType(saveType: unknown): 'MANUAL' | 'AUTO' {
   return saveType === 'AUTO' ? 'AUTO' : 'MANUAL';
 }
 
+function readRouteProjectId(ctx: CoreRuntimeContext): string {
+  const routeId = ctx.router?.currentRoute?.value?.params?.id;
+  return normalizeProjectId(Array.isArray(routeId) ? routeId[0] : routeId);
+}
+
+type PendingSaveJob = {
+  projectId: string
+  snapshot: CanvasSnapshot
+  type: 'MANUAL' | 'AUTO'
+  resolve: (ok: boolean) => void
+};
+
 export function installPersistenceState(ctx: CoreRuntimeContext) {
   ctx.autoSaveDebounceTimer = null;
   ctx.autoSaveEnabled = true;
   ctx.canvasContentReady = false;
   ctx.saveInFlight = false;
   ctx.pendingRemoteSaveType = null;
+  ctx.pendingSaveJobs = [];
   ctx.pendingProjectCanvas = null;
+  ctx.localDirty = false;
+  ctx.localChangeEpoch = 0;
 }
 
 export function installPersistence(ctx: CoreRuntimeContext) {
@@ -60,17 +75,23 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       const g = ctx.graph.value;
       if (!g)
           return false;
+      const projectId = normalizeProjectId(payload.projectId);
+      const routeId = readRouteProjectId(ctx);
+      // 路由项目页：拒绝把其他项目的响应写进当前画布 / 活动 ID
+      if (routeId && projectId && projectId !== routeId)
+          return false;
       resetResumedGenerationTaskCache();
       const canvasData = payload.canvasData ?? payload.canvas ?? { graph: { cells: [] } };
-      const projectId = normalizeProjectId(payload.projectId);
-      ctx.activeProjectId.value = projectId;
+      const boundProjectId = projectId || routeId;
+      ctx.activeProjectId.value = boundProjectId;
+      ctx.localDirty = false;
       ctx.canvasRevision.value = payload.revision;
       ctx.lastCanvasDescription.value = payload.description?.trim() || '';
       const snapshot = normalizeCanvasSnapshot(canvasData as Partial<CanvasSnapshot>, {
-          projectId,
+          projectId: boundProjectId,
           projectName: (canvasData as { meta?: { projectName?: string } }).meta?.projectName ?? '未命名创作',
       });
-      ctx.upsertCanvasProject(projectId, snapshot.meta.projectName, true);
+      ctx.upsertCanvasProject(boundProjectId, snapshot.meta.projectName, true);
       if (snapshot.meta.canvasBgTheme === 'dark' || snapshot.meta.canvasBgTheme === 'light') {
           ctx.canvasBgTheme.value = snapshot.meta.canvasBgTheme;
       }
@@ -111,6 +132,18 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       return true;
   };
   
+  ctx.markLocalCanvasChange = function markLocalCanvasChange() {
+      ctx.localChangeEpoch = (ctx.localChangeEpoch || 0) + 1;
+      ctx.localDirty = true;
+      const projectId = ctx.resolveActiveProjectId();
+      if (!projectId)
+          return;
+      const project = ctx.findCanvasProject(projectId);
+      if (project) {
+          project.saved = false;
+      }
+  };
+
   ctx.pauseAutoSave = function pauseAutoSave() {
       // 仅暂停发送，不清 canvasContentReady，避免 pagehide 后操作/生成结果永久无法落库
       ctx.autoSaveEnabled = false;
@@ -118,7 +151,24 @@ export function installPersistence(ctx: CoreRuntimeContext) {
           clearTimeout(ctx.autoSaveDebounceTimer);
           ctx.autoSaveDebounceTimer = null;
       }
-      ctx.pendingRemoteSaveType = null;
+      // pagehide 只能丢弃可重建的自动保存；已确认的手动保存请求必须保留
+      const jobs = Array.isArray(ctx.pendingSaveJobs) ? ctx.pendingSaveJobs : [];
+      const kept: PendingSaveJob[] = [];
+      for (const job of jobs) {
+          if (job.type === 'MANUAL') {
+              kept.push(job);
+          }
+          else {
+              job.resolve(false);
+          }
+      }
+      ctx.pendingSaveJobs = kept;
+      if (kept.some((job) => job.type === 'MANUAL')) {
+          ctx.pendingRemoteSaveType = 'MANUAL';
+      }
+      else {
+          ctx.pendingRemoteSaveType = null;
+      }
   };
 
   ctx.stopAutoSave = function stopAutoSave() {
@@ -248,6 +298,7 @@ export function installPersistence(ctx: CoreRuntimeContext) {
           }
           if (project)
               project.saved = true;
+          ctx.localDirty = false;
           return;
       }
       catch (error) {
@@ -262,26 +313,112 @@ export function installPersistence(ctx: CoreRuntimeContext) {
           }
           if (project)
               project.saved = true;
+          ctx.localDirty = false;
       }
   };
   
   ctx.resolveActiveProjectId = function resolveActiveProjectId(): string {
+      // 路由项目页以当前路由为权威约束，禁止过期响应把保存目标改回旧项目
+      const fromRoute = readRouteProjectId(ctx);
+      if (fromRoute) {
+          if (normalizeProjectId(ctx.activeProjectId.value) !== fromRoute) {
+              ctx.activeProjectId.value = fromRoute;
+          }
+          return fromRoute;
+      }
       const current = normalizeProjectId(ctx.activeProjectId.value);
       if (current) {
           ctx.activeProjectId.value = current;
           return current;
       }
-      const routeId = ctx.router.currentRoute.value.params.id;
-      const fromRoute = normalizeProjectId(Array.isArray(routeId) ? routeId[0] : routeId);
-      if (fromRoute) {
-          ctx.activeProjectId.value = fromRoute;
-      }
-      return fromRoute;
+      return '';
   };
 
   ctx.findCanvasProject = function findCanvasProject(projectId: string) {
       const normalized = normalizeProjectId(projectId);
       return ctx.canvasProjects.value.find((item) => normalizeProjectId(item.id) === normalized);
+  };
+
+  ctx.syncPendingRemoteSaveTypeFlag = function syncPendingRemoteSaveTypeFlag() {
+      const jobs: PendingSaveJob[] = Array.isArray(ctx.pendingSaveJobs) ? ctx.pendingSaveJobs : [];
+      if (jobs.some((job) => job.type === 'MANUAL')) {
+          ctx.pendingRemoteSaveType = 'MANUAL';
+      }
+      else if (jobs.length > 0) {
+          ctx.pendingRemoteSaveType = 'AUTO';
+      }
+      else {
+          ctx.pendingRemoteSaveType = null;
+      }
+  };
+
+  ctx.enqueuePendingSaveJob = function enqueuePendingSaveJob(job: Omit<PendingSaveJob, 'resolve'>): Promise<boolean> {
+      return new Promise<boolean>((resolve) => {
+          if (!Array.isArray(ctx.pendingSaveJobs)) {
+              ctx.pendingSaveJobs = [];
+          }
+          ctx.pendingSaveJobs.push({ ...job, resolve });
+          ctx.syncPendingRemoteSaveTypeFlag();
+      });
+  };
+
+  ctx.drainPendingSaveJobs = async function drainPendingSaveJobs() {
+      while (Array.isArray(ctx.pendingSaveJobs) && ctx.pendingSaveJobs.length > 0) {
+          const jobs: PendingSaveJob[] = ctx.pendingSaveJobs.splice(0);
+          ctx.syncPendingRemoteSaveTypeFlag();
+          const type: 'MANUAL' | 'AUTO' = jobs.some((job) => job.type === 'MANUAL') ? 'MANUAL' : 'AUTO';
+          if (type === 'AUTO' && !ctx.autoSaveEnabled) {
+              jobs.forEach((job) => job.resolve(false));
+              continue;
+          }
+          // 取队列末次快照（含点击离开时的最新编辑）；项目以路由约束后的 ID 为准
+          const latest = jobs[jobs.length - 1];
+          const routeId = readRouteProjectId(ctx);
+          const projectId = routeId || latest.projectId;
+          const matchingJobs = jobs.filter((job) => !routeId || job.projectId === projectId);
+          const dropped = jobs.filter((job) => routeId && job.projectId !== projectId);
+          dropped.forEach((job) => job.resolve(false));
+          if (!matchingJobs.length) {
+              continue;
+          }
+          const snapshot = matchingJobs[matchingJobs.length - 1].snapshot;
+          const ok = await ctx.runRemoteCanvasSaveJob({
+              projectId,
+              snapshot,
+              type,
+          });
+          matchingJobs.forEach((job) => job.resolve(ok));
+      }
+  };
+
+  ctx.runRemoteCanvasSaveJob = async function runRemoteCanvasSaveJob(job: {
+      projectId: string
+      snapshot: CanvasSnapshot
+      type: 'MANUAL' | 'AUTO'
+  }): Promise<boolean> {
+      const projectId = normalizeProjectId(job.projectId);
+      if (!projectId)
+          return false;
+      const routeId = readRouteProjectId(ctx);
+      if (routeId && projectId !== routeId)
+          return false;
+      const project = ctx.findCanvasProject(projectId);
+      ctx.saveInFlight = true;
+      let ok = false;
+      try {
+          await ctx.persistCanvasToServer(projectId, job.snapshot, job.type, project);
+          ok = true;
+      }
+      catch (error) {
+          console.error('[Canvas] save to server failed', error);
+          if (project)
+              project.saved = false;
+          ok = false;
+      }
+      finally {
+          ctx.saveInFlight = false;
+      }
+      return ok;
   };
 
   ctx.flushRemoteCanvasSave = async function flushRemoteCanvasSave(saveType: 'MANUAL' | 'AUTO', reusedSnapshot?: CanvasSnapshot | null): Promise<boolean> {
@@ -296,52 +433,19 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       else if (!ctx.ensureCanvasReadyForAutoSave()) {
           return false;
       }
-      if (ctx.saveInFlight) {
-          ctx.pendingRemoteSaveType = ctx.mergePendingSaveType(type);
-          if (type !== 'MANUAL')
-              return false;
-          try {
-              await ctx.waitForSaveSettled();
-          }
-          catch {
-              return false;
-          }
-          const projectId = ctx.resolveActiveProjectId();
-          const project = ctx.findCanvasProject(projectId);
-          // 有本地项目记录时看 saved；没有记录时只要队列落完即视为成功
-          return project ? project.saved === true : true;
-      }
       const projectId = ctx.resolveActiveProjectId();
       if (!projectId)
           return false;
       const snapshot = reusedSnapshot ?? ctx.buildCanvasSnapshot();
       if (!snapshot)
           return false;
-      const project = ctx.findCanvasProject(projectId);
-      ctx.saveInFlight = true;
-      ctx.pendingRemoteSaveType = null;
-      let ok = false;
-      try {
-          await ctx.persistCanvasToServer(projectId, snapshot, type, project);
-          ok = true;
+
+      if (ctx.saveInFlight) {
+          return ctx.enqueuePendingSaveJob({ projectId, snapshot, type });
       }
-      catch (error) {
-          console.error('[Canvas] save to server failed', error);
-          if (project)
-              project.saved = false;
-          ok = false;
-      }
-      finally {
-          ctx.saveInFlight = false;
-          if (ctx.pendingRemoteSaveType) {
-              const nextSaveType = ctx.pendingRemoteSaveType;
-              ctx.pendingRemoteSaveType = null;
-              // 队列中的 MANUAL 即使 autoSave 曾被关掉也要落库
-              if (nextSaveType === 'MANUAL' || ctx.autoSaveEnabled) {
-                  void ctx.flushRemoteCanvasSave(nextSaveType);
-              }
-          }
-      }
+
+      const ok = await ctx.runRemoteCanvasSaveJob({ projectId, snapshot, type });
+      await ctx.drainPendingSaveJobs();
       return ok;
   };
   
@@ -371,6 +475,7 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       if (project) {
           project.saved = false;
       }
+      ctx.localDirty = true;
       if (!projectId) {
           if (type === 'MANUAL') {
               message.warning('无法保存：未找到当前项目');
@@ -393,7 +498,12 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       const projectId = ctx.resolveActiveProjectId();
       if (!projectId)
           return false;
+      if (ctx.localDirty)
+          return true;
       if (ctx.saveInFlight || ctx.pendingRemoteSaveType)
+          return true;
+      const pendingJobs = Array.isArray(ctx.pendingSaveJobs) ? ctx.pendingSaveJobs : [];
+      if (pendingJobs.length > 0)
           return true;
       const project = ctx.findCanvasProject(projectId);
       return project?.saved === false;
@@ -403,7 +513,8 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       return new Promise((resolve, reject) => {
           const start = Date.now();
           const tick = () => {
-              if (!ctx.saveInFlight && !ctx.pendingRemoteSaveType) {
+              const pendingJobs = Array.isArray(ctx.pendingSaveJobs) ? ctx.pendingSaveJobs : [];
+              if (!ctx.saveInFlight && !ctx.pendingRemoteSaveType && pendingJobs.length === 0) {
                   resolve();
                   return;
               }
@@ -420,10 +531,36 @@ export function installPersistence(ctx: CoreRuntimeContext) {
   ctx.saveCanvasAndWait = 
   /** 触发保存并等待远端落库完成 */
   async function saveCanvasAndWait(saveType: 'MANUAL' | 'AUTO' = 'MANUAL'): Promise<boolean> {
+      const type = normalizeSaveType(saveType);
+      // MANUAL（保存并离开）：必须构建当前快照并等待该次结果，不得凭旧 saved 提前成功
+      if (type === 'MANUAL') {
+          try {
+              ctx.autoSaveEnabled = true;
+              if (!ctx.canvasContentReady && ctx.graph.value) {
+                  ctx.markCanvasContentReady();
+              }
+              const snapshot = ctx.buildCanvasSnapshot();
+              if (!snapshot)
+                  return false;
+              saveCanvasSnapshotToStorage(snapshot);
+              const projectId = ctx.resolveActiveProjectId();
+              if (!projectId)
+                  return false;
+              const project = ctx.findCanvasProject(projectId);
+              if (project)
+                  project.saved = false;
+              ctx.localDirty = true;
+              return await ctx.flushRemoteCanvasSave('MANUAL', snapshot);
+          }
+          catch (error) {
+              console.error('[Canvas] saveCanvasAndWait failed', error);
+              return false;
+          }
+      }
       if (!ctx.hasUnsavedChanges())
           return true;
       try {
-          ctx.handleSaveCanvas(saveType);
+          ctx.handleSaveCanvas(type);
           await ctx.waitForSaveSettled();
           return !ctx.hasUnsavedChanges();
       }

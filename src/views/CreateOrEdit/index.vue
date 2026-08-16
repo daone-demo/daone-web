@@ -75,6 +75,12 @@ import {
   type WorkflowCategoryGroup,
   type WorkflowRecord,
 } from '@/components/Canvas/constants'
+import {
+  isCanvasResponseApplicable,
+  normalizeRouteProjectId,
+  shouldFlushPendingCanvasSlot,
+  type PendingCanvasSlot,
+} from './canvasLoadGuard'
 import { flushPendingCanvasPayload } from './waitForCanvasRef'
 
 /** 画布（含 X6）延迟加载，避免 CreateOrEdit 主包同步打入 vendor-x6 */
@@ -137,12 +143,19 @@ const currentProjectId = computed(() => {
 const canvasRef = ref<(Omit<InstanceType<typeof Canvas>, keyof CanvasExpose> & CanvasExpose) | null>(null)
 const chatPanelRef = ref<InstanceType<typeof ChatSidePanel> | null>(null)
 const pageLoading = ref(true)
-const pendingCanvasPayload = ref<ProjectCanvasResponse | null>(null);
+/** 带 epoch/projectId 归属的 pending，避免无归属单槽被旧响应覆盖 */
+const pendingCanvasPayload = ref<PendingCanvasSlot<ProjectCanvasResponse> | null>(null)
 const aiSkills = ref<any[]>([]);
+/** 画布加载代数：每次发起/作废请求递增，用于丢弃乱序旧响应 */
+let canvasLoadEpoch = 0
 /** 用户已确认离开时跳过二次弹窗 */
 let leaveConfirmed = false
 /** 避免同时弹出多个离开确认框 */
 let pendingLeaveConfirm: Promise<boolean> | null = null
+
+function currentRouteProjectId(): string {
+  return normalizeRouteProjectId(route.params.id)
+}
 
 type BrowserNavigateEvent = Event & {
   navigationType: 'reload' | 'push' | 'replace' | 'traverse'
@@ -226,45 +239,92 @@ function onNewChat() {
 }
 
 /**
- * 投递画布快照：已有 Canvas 则立即注入，否则写入 pending。
+ * 投递画布快照：已有 Canvas 则立即注入，否则写入带归属的 pending。
  * 注意：初始化阶段 pageLoading=true 时 Canvas 未挂载，绝不能在此阻塞等待，
  * 否则会与「loading 结束后才渲染 Canvas」形成死锁（最长约 wait 超时）。
  */
-const queueOrApplyCanvasPayload = (payload: ProjectCanvasResponse) => {
+const queueOrApplyCanvasPayload = (
+  payload: ProjectCanvasResponse,
+  meta: { epoch: number; projectId: string },
+) => {
+  if (!shouldFlushPendingCanvasSlot(
+    { epoch: meta.epoch, projectId: meta.projectId, payload },
+    { currentEpoch: canvasLoadEpoch, routeId: currentRouteProjectId() },
+  )) {
+    return false
+  }
   if (flushPendingCanvasPayload(canvasRef.value, payload)) {
     pendingCanvasPayload.value = null
     return true
   }
-  pendingCanvasPayload.value = payload
+  pendingCanvasPayload.value = {
+    epoch: meta.epoch,
+    projectId: meta.projectId,
+    payload,
+  }
+  return false
+}
+
+/** 冲刷当前仍归属有效的 pending（旧 epoch / 错项目直接丢弃） */
+const tryFlushOwnedPendingCanvas = (): boolean => {
+  const pending = pendingCanvasPayload.value
+  if (!shouldFlushPendingCanvasSlot(pending, {
+    currentEpoch: canvasLoadEpoch,
+    routeId: currentRouteProjectId(),
+  })) {
+    if (pending) pendingCanvasPayload.value = null
+    return false
+  }
+  if (flushPendingCanvasPayload(canvasRef.value, pending.payload)) {
+    pendingCanvasPayload.value = null
+    return true
+  }
   return false
 }
 
 /** 页面已展示后，短等异步 Canvas（含内部 graph 就绪）再冲刷 pending */
 const flushPendingCanvasWhenReady = async () => {
   if (!pendingCanvasPayload.value) return
-  if (flushPendingCanvasPayload(canvasRef.value, pendingCanvasPayload.value)) {
-    pendingCanvasPayload.value = null
-    return
-  }
+  if (tryFlushOwnedPendingCanvas()) return
   // ref 可能先于 graph 就绪：在超时内重试 load，直到真正注入成功
   const started = Date.now()
   while (Date.now() - started < 8_000 && pendingCanvasPayload.value) {
     await nextTick()
-    const canvas = canvasRef.value
-    if (canvas && flushPendingCanvasPayload(canvas, pendingCanvasPayload.value)) {
-      pendingCanvasPayload.value = null
-      return
-    }
+    if (tryFlushOwnedPendingCanvas()) return
+    // pending 已被判定过期清空
+    if (!pendingCanvasPayload.value) return
     await new Promise<void>((resolve) => setTimeout(resolve, 16))
   }
 }
 
 const onLoadProjectCanvas = async (id?: string) => {
-  const targetId = (id ?? route.params.id) as string
-  if (!targetId?.trim()) return
+  const targetId = normalizeRouteProjectId(id ?? route.params.id)
+  if (!targetId) return
 
-  const res = await api.getProjectCanvas(targetId)
-  queueOrApplyCanvasPayload(res)
+  const requestEpoch = ++canvasLoadEpoch
+  // 新请求作废旧 pending，避免 A 慢返回覆盖 B
+  pendingCanvasPayload.value = null
+
+  let res: ProjectCanvasResponse
+  try {
+    res = await api.getProjectCanvas(targetId)
+  } catch (error) {
+    // 失败也不让旧逻辑误用；仅当仍是最新请求时向上抛
+    if (requestEpoch !== canvasLoadEpoch) return
+    throw error
+  }
+
+  if (!isCanvasResponseApplicable({
+    requestEpoch,
+    currentEpoch: canvasLoadEpoch,
+    targetId,
+    routeId: currentRouteProjectId(),
+    responseProjectId: res.projectId,
+  })) {
+    return
+  }
+
+  queueOrApplyCanvasPayload(res, { epoch: requestEpoch, projectId: targetId })
   // 切换项目时页面已展示，可短等 Canvas；初始化时由 initializePage finally 冲刷
   if (!pageLoading.value) {
     await flushPendingCanvasWhenReady()
@@ -458,12 +518,12 @@ const onLoadAiSkills = async () => {
 async function initializePage() {
   pageLoading.value = true
   pendingCanvasPayload.value = null
+  const initProjectId = currentRouteProjectId()
 
   try {
-    const projectId = typeof route.params.id === 'string' ? route.params.id.trim() : ''
     await Promise.all([
       onLoadProjects(),
-      projectId ? onLoadProjectCanvas(projectId) : Promise.resolve(),
+      initProjectId ? onLoadProjectCanvas(initProjectId) : Promise.resolve(),
     ])
   } catch (error) {
     console.error('[CreateOrEdit] page init failed', error)
@@ -472,6 +532,11 @@ async function initializePage() {
     pageLoading.value = false
     await nextTick()
     await flushPendingCanvasWhenReady()
+    // 初始化期间切路由由 watch 已加载画布，但当时跳过了聊天重载
+    const routeIdAfterInit = currentRouteProjectId()
+    if (routeIdAfterInit && routeIdAfterInit !== initProjectId) {
+      await reloadChatForCurrentProject()
+    }
   }
 
   void Promise.all([
@@ -590,24 +655,25 @@ function onRefreshKeydown(event: KeyboardEvent) {
 watch(
   () => route.params.id,
   async (newId, oldId) => {
-    if (pageLoading.value) return
-    if (typeof newId === 'string' && newId.trim() && newId !== oldId) {
-      try {
-        await onLoadProjectCanvas(newId)
+    const nextId = normalizeRouteProjectId(newId)
+    const prevId = normalizeRouteProjectId(oldId)
+    if (!nextId || nextId === prevId) return
+    // 初始化期间也接受切路由：用 epoch 作废旧请求，避免 pageLoading 直接忽略导致串项目
+    try {
+      await onLoadProjectCanvas(nextId)
+      if (!pageLoading.value) {
         await reloadChatForCurrentProject()
-      } catch (error) {
-        console.error('[CreateOrEdit] load project failed', error)
       }
+    } catch (error) {
+      console.error('[CreateOrEdit] load project failed', error)
     }
   },
 )
 
-// Canvas 异步 chunk 就绪后，补投递初始化期间缓存的快照
+// Canvas 异步 chunk 就绪后，补投递仍归属当前路由的 pending
 watch(canvasRef, (canvas) => {
   if (!canvas || !pendingCanvasPayload.value) return
-  if (flushPendingCanvasPayload(canvas, pendingCanvasPayload.value)) {
-    pendingCanvasPayload.value = null
-  }
+  tryFlushOwnedPendingCanvas()
 })
 
 onMounted(() => {

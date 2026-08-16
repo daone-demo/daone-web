@@ -112,9 +112,11 @@ test('自动保存：仍受 autoSaveEnabled 约束；pause 后不可发', () => 
 test('pagehide 软暂停不应清掉 contentReady（恢复后可继续自动保存）', () => {
   let autoSaveEnabled = true
   let canvasContentReady = true
-  // pauseAutoSave
+  let pendingRemoteSaveType: 'MANUAL' | 'AUTO' | null = 'MANUAL'
+  // pauseAutoSave：可清 AUTO，但不得清已确认的 MANUAL 排队
   autoSaveEnabled = false
   assert.equal(canvasContentReady, true)
+  assert.equal(pendingRemoteSaveType, 'MANUAL')
   // pageshow resume
   autoSaveEnabled = true
   const healed = ensureCanvasReadyForAutoSave({
