@@ -1,4 +1,4 @@
-/** 仅代理受信对象存储域名，避免开放代理被滥用 */
+/** 仅代理受信对象存储域名（HTTPS），避免开放代理被滥用 */
 const ALLOWED_PROXY_HOST_RE = /(^|\.)(aliyuncs\.com|myqcloud\.com)$/i
 
 function parseRemoteMediaUrl(url: string): URL | null {
@@ -7,7 +7,8 @@ function parseRemoteMediaUrl(url: string): URL | null {
   }
   try {
     const parsed = new URL(url, typeof window !== 'undefined' ? window.location.href : 'http://localhost')
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
+    // 与服务端一致：仅 HTTPS，避免客户端构造已被拒绝的 HTTP 代理请求
+    if (parsed.protocol !== 'https:') return null
     if (!ALLOWED_PROXY_HOST_RE.test(parsed.hostname)) return null
     return parsed
   } catch {

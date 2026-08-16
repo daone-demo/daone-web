@@ -32,8 +32,23 @@ const MIME_TYPES = {
   '.map': 'application/json',
 }
 
+function sendText(res, statusCode, message) {
+  if (res.headersSent) return
+  res.statusCode = statusCode
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.end(message)
+}
+
 function resolveStaticPath(urlPathname) {
-  const decoded = decodeURIComponent(urlPathname.split('?')[0] || '/')
+  let decoded
+  try {
+    decoded = decodeURIComponent(urlPathname.split('?')[0] || '/')
+  } catch {
+    const error = new Error('Bad Request')
+    error.statusCode = 400
+    throw error
+  }
+
   const relative = decoded.replace(/^\/+/, '')
   const filePath = path.join(DIST_DIR, relative || 'index.html')
   const normalized = path.normalize(filePath)
@@ -49,36 +64,60 @@ function sendFile(res, filePath) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const requestUrl = req.url || '/'
+  try {
+    const requestUrl = req.url || '/'
 
-  if (requestUrl.startsWith('/media-proxy')) {
-    await handleMediaProxyNodeRequest(req, res, requestUrl)
-    return
-  }
-
-  const filePath = resolveStaticPath(new URL(requestUrl, 'http://localhost').pathname)
-  if (!filePath) {
-    res.statusCode = 403
-    res.end('Forbidden')
-    return
-  }
-
-  fs.stat(filePath, (error, stats) => {
-    if (!error && stats.isFile()) {
-      sendFile(res, filePath)
+    if (requestUrl.startsWith('/media-proxy')) {
+      await handleMediaProxyNodeRequest(req, res, requestUrl)
       return
     }
 
-    const indexPath = path.join(DIST_DIR, 'index.html')
-    fs.stat(indexPath, (indexError, indexStats) => {
-      if (indexError || !indexStats.isFile()) {
-        res.statusCode = 404
-        res.end('Not Found')
-        return
+    let pathname
+    try {
+      pathname = new URL(requestUrl, 'http://localhost').pathname
+    } catch {
+      sendText(res, 400, 'Bad Request')
+      return
+    }
+
+    const filePath = resolveStaticPath(pathname)
+    if (!filePath) {
+      sendText(res, 403, 'Forbidden')
+      return
+    }
+
+    fs.stat(filePath, (error, stats) => {
+      try {
+        if (!error && stats.isFile()) {
+          sendFile(res, filePath)
+          return
+        }
+
+        const indexPath = path.join(DIST_DIR, 'index.html')
+        fs.stat(indexPath, (indexError, indexStats) => {
+          try {
+            if (indexError || !indexStats.isFile()) {
+              sendText(res, 404, 'Not Found')
+              return
+            }
+            sendFile(res, indexPath)
+          } catch (statHandlerError) {
+            sendText(res, 500, 'Internal Server Error')
+            console.error('[daone-web] static index handler failed:', statHandlerError)
+          }
+        })
+      } catch (statHandlerError) {
+        sendText(res, 500, 'Internal Server Error')
+        console.error('[daone-web] static file handler failed:', statHandlerError)
       }
-      sendFile(res, indexPath)
     })
-  })
+  } catch (error) {
+    const statusCode = Number(error?.statusCode) || 500
+    sendText(res, statusCode, statusCode === 400 ? 'Bad Request' : 'Internal Server Error')
+    if (statusCode >= 500) {
+      console.error('[daone-web] request handler failed:', error)
+    }
+  }
 })
 
 server.listen(PORT, HOST, () => {

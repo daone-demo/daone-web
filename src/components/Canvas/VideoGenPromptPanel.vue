@@ -355,9 +355,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import api, { type PromptTranslationData } from '@/services/api'
-import { isRequestError } from '@/utils/request'
 import { useCanvasBgTheme } from './useCanvasBgTheme'
+import { useCanvasImageDropUpload } from './composables/useCanvasImageDropUpload'
+import { usePromptTranslate } from './composables/usePromptTranslate'
 import {
   buildMarkMentionThumbStyle,
   createPromptMentionApi,
@@ -371,7 +371,6 @@ import MarkLabelOptionMenu from './MarkLabelOptionMenu.vue'
 import MarkTagsEcho from './MarkTagsEcho.vue'
 import { getMarkLabelOptions, hasMultipleMarkLabels, useImageMarkLabelMenu } from './useImageMarkLabelMenu'
 import {
-  CANVAS_IMAGE_NODE_DRAG_TYPE,
   VIDEO_GEN_PROMPT_PLACEHOLDER,
   VIDEO_DIALOGUE_MODEL_MENU,
   VIDEO_GEN_DURATIONS,
@@ -650,8 +649,21 @@ watch(canAddMoreImages, (canAdd) => {
   }
 })
 
-const isDragOver = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const {
+  isDragOver,
+  onDragEnter: onPanelDragEnter,
+  onDragOver: onPanelDragOver,
+  onDragLeave: onPanelDragLeave,
+  onDrop: onPanelDrop,
+  openFilePicker,
+  onFileInputChange,
+} = useCanvasImageDropUpload({
+  fileInputRef,
+  canAccept: () => showSourceRefs.value && canAddMoreImages.value,
+  onAddCanvasNode: (nodeId) => emit('add-canvas-node', nodeId),
+  onUploadImages: (files) => emit('upload-images', files),
+})
 
 const displayRefs = computed(() => {
   const refs = (props.sourceRefs ?? []).filter((ref) => {
@@ -679,7 +691,13 @@ function selectTab(key: string) {
 const promptInputRef = ref<HTMLElement | null>(null)
 let skipPromptWatch = false
 const isPromptComposing = ref(false)
-const translating = ref(false)
+const { translating, onTranslatePrompt } = usePromptTranslate({
+  getText: () => props.prompt,
+  onTranslated: (translated) => {
+    emitPrompt(translated)
+    nextTick(() => syncPromptView(translated))
+  },
+})
 /** 点击缩略图插入前缓存光标，避免 mousedown 抢焦点导致插入到末尾 */
 let savedPromptCaret = { start: 0, end: 0 }
 
@@ -709,34 +727,6 @@ function emitPrompt(text: string) {
   nextTick(() => {
     skipPromptWatch = false
   })
-}
-
-async function onTranslatePrompt() {
-  const text = props.prompt.trim()
-  if (!text) {
-    message.warning('请输入需要翻译的提示词')
-    return
-  }
-  if (translating.value) return
-
-  translating.value = true
-  try {
-    const result = await api.translatePrompt<PromptTranslationData>({
-      text,
-      targetLanguage: 'EN',
-    })
-    const translated = result?.translatedText?.trim()
-    if (!translated) {
-      message.warning('翻译结果为空')
-      return
-    }
-    emitPrompt(translated)
-    nextTick(() => syncPromptView(translated))
-  } catch (error) {
-    message.error(isRequestError(error) ? error.message : '提示词翻译失败，请稍后重试')
-  } finally {
-    translating.value = false
-  }
 }
 
 function resolveMarkPreviewUrl(mark: ImageMarkItem) {
@@ -994,56 +984,6 @@ function onPromptPaste(event: ClipboardEvent) {
   if (!text) return
   document.execCommand('insertText', false, text)
   onPromptInput()
-}
-
-function hasPanelDropContent(event: DragEvent) {
-  const types = Array.from(event.dataTransfer?.types ?? [])
-  return types.includes('Files') || types.includes(CANVAS_IMAGE_NODE_DRAG_TYPE)
-}
-
-function onPanelDragEnter(event: DragEvent) {
-  if (!showSourceRefs.value || !canAddMoreImages.value || !hasPanelDropContent(event)) return
-  isDragOver.value = true
-}
-
-function onPanelDragOver(event: DragEvent) {
-  if (!showSourceRefs.value || !canAddMoreImages.value || !hasPanelDropContent(event)) return
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-  isDragOver.value = true
-}
-
-function onPanelDragLeave(event: DragEvent) {
-  const related = event.relatedTarget as Node | null
-  const current = event.currentTarget as HTMLElement | null
-  if (related && current?.contains(related)) return
-  isDragOver.value = false
-}
-
-function onPanelDrop(event: DragEvent) {
-  isDragOver.value = false
-  if (!showSourceRefs.value || !canAddMoreImages.value) return
-
-  const nodeId = event.dataTransfer?.getData(CANVAS_IMAGE_NODE_DRAG_TYPE)
-  if (nodeId) {
-    emit('add-canvas-node', nodeId)
-    return
-  }
-
-  const files = Array.from(event.dataTransfer?.files ?? []).filter((file) =>
-    file.type.startsWith('image/'),
-  )
-  if (files.length) emit('upload-images', files)
-}
-
-function openFilePicker() {
-  fileInputRef.value?.click()
-}
-
-function onFileInputChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = Array.from(input.files ?? []).filter((file) => file.type.startsWith('image/'))
-  if (files.length) emit('upload-images', files)
-  input.value = ''
 }
 
 function onSend() {

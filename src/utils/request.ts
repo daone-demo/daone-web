@@ -176,10 +176,16 @@ function rejectUnauthorized(
 }
 
 const HTTP_TIMEOUT = Number(import.meta.env.VITE_HTTP_TIMEOUT) || 60_000
+const DEFAULT_API_BASE_URL = '/api/api/v1'
+
+/** 单一 API 基址：优先 VITE_API_BASE_URL；缺省回退同源相对前缀（开发代理 / 兼容旧配置） */
+export function getApiBaseURL(): string {
+  const fromEnv = String(import.meta.env.VITE_API_BASE_URL || '').trim()
+  return fromEnv || DEFAULT_API_BASE_URL
+}
 
 const instance: AxiosInstance = axios.create({
-  // baseURL: import.meta.env.DEV ? '/api/v1' : import.meta.env.VITE_API_BASE_URL || '/api/v1',
-  baseURL: '/api/api/v1',
+  baseURL: getApiBaseURL(),
   timeout: HTTP_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',

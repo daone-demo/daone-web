@@ -8,289 +8,38 @@ import { addCanvasNode, getNodeSize, syncNodeShapeFromData } from './graph'
 import { GRID_SPLIT_GAP, computeGridSplitContentOrigin } from './gridSplitUtils'
 
 import { getFlowEdgeAttrs } from './edgeStyle'
+import type { OutgoingResultLayoutOptions, ResultPlacement } from './imageGenOutgoingResultLayout'
+import {
+  resolveOutgoingResultNodePoint,
+} from './imageGenOutgoingResultLayout'
+import {
+  isImageGenerationFailedNode,
+  isImageGenerationUploadPlaceholderNode,
+  isPendingImageGenerationTarget,
+  isText2ImagePlaceholderNode,
+} from './imageGenPredicates'
 
 const GEN_GAP = 56
 
-export type ResultPlacement = 'right' | 'above'
-
-type OutgoingResultLayoutOptions = {
-  layoutSlot?: number
-  layoutTotal?: number
-  placement?: ResultPlacement
-  /** 多批次结果时向右（或向上）错开整列，避免与已有子节点重叠 */
-  columnOffset?: number
-}
-
-type LayoutRect = { x: number; y: number; width: number; height: number }
+export type { ResultPlacement } from './imageGenOutgoingResultLayout'
+export {
+  computeOutgoingResultNodePoint,
+  planOutgoingResultPoints,
+  reserveOutgoingBatchColumnOffset,
+  resolveOutgoingResultNodePoint,
+} from './imageGenOutgoingResultLayout'
+export {
+  isCropDerivedImageData,
+  isImageGenerationFailedNode,
+  isImageGenerationUploadPlaceholderNode,
+  isPendingImageGenerationTarget,
+  isText2ImagePlaceholderNode,
+  resolveImageGenerationProgressLabel,
+  shouldGenerateImageInPlaceOnNode,
+} from './imageGenPredicates'
 
 function countOutgoingSlots(graph: Graph, sourceId: string) {
   return graph.getEdges().filter((edge) => edge.getSourceCellId() === sourceId).length
-}
-
-function centerToRect(
-  center: { x: number; y: number },
-  size: { width: number; height: number },
-): LayoutRect {
-  return {
-    x: center.x - size.width / 2,
-    y: center.y - size.height / 2,
-    width: size.width,
-    height: size.height,
-  }
-}
-
-function rectsOverlap(a: LayoutRect, b: LayoutRect, gap = GEN_GAP) {
-  return !(
-    a.x + a.width + gap <= b.x ||
-    b.x + b.width + gap <= a.x ||
-    a.y + a.height + gap <= b.y ||
-    b.y + b.height + gap <= a.y
-  )
-}
-
-function getNodeLayoutRect(node: Node): LayoutRect {
-  const pos = node.position()
-  const size = node.getSize()
-  return {
-    x: pos.x,
-    y: pos.y,
-    width: size.width,
-    height: size.height,
-  }
-}
-
-/** 收集画布上已有节点占位（用于碰撞检测） */
-function collectGraphNodeRects(graph: Graph, excludeNodeIds: string[] = []): LayoutRect[] {
-  const excluded = new Set(excludeNodeIds)
-  return graph
-    .getNodes()
-    .filter((cell) => !excluded.has(cell.id))
-    .map((cell) => getNodeLayoutRect(cell as Node))
-}
-
-function isPointFree(
-  point: { x: number; y: number },
-  size: { width: number; height: number },
-  occupied: LayoutRect[],
-) {
-  const rect = centerToRect(point, size)
-  return !occupied.some((item) => rectsOverlap(rect, item))
-}
-
-function fallbackOutgoingPoint(
-  sourceNode: Node,
-  size: { width: number; height: number },
-  occupied: LayoutRect[],
-  placement: ResultPlacement,
-) {
-  const sourceRect = getNodeLayoutRect(sourceNode)
-  if (!occupied.length) {
-    return computeOutgoingResultNodePoint(sourceNode, size, { placement, layoutSlot: 0 })
-  }
-
-  if (placement === 'above') {
-    const minY = Math.min(...occupied.map((rect) => rect.y))
-    const centerX =
-      occupied.reduce((sum, rect) => sum + rect.x + rect.width / 2, 0) / occupied.length
-    return {
-      x: centerX,
-      y: minY - GEN_GAP - size.height / 2,
-    }
-  }
-
-  const maxRight = Math.max(sourceRect.x + sourceRect.width, ...occupied.map((rect) => rect.x + rect.width))
-  const centerY = sourceRect.y + sourceRect.height / 2
-  return {
-    x: maxRight + GEN_GAP + size.width / 2,
-    y: centerY,
-  }
-}
-
-function findFreePointNearSource(
-  sourceNode: Node,
-  size: { width: number; height: number },
-  occupied: LayoutRect[],
-  placement: ResultPlacement,
-  hint?: {
-    layoutSlot?: number
-    layoutTotal?: number
-    columnOffset?: number
-  },
-) {
-  if (
-    typeof hint?.layoutTotal === 'number' &&
-    hint.layoutTotal > 1 &&
-    typeof hint.layoutSlot === 'number'
-  ) {
-    const startColumn = hint.columnOffset ?? 0
-    for (let column = startColumn; column < startColumn + 40; column += 1) {
-      const point = computeOutgoingResultNodePoint(sourceNode, size, {
-        placement,
-        layoutSlot: hint.layoutSlot,
-        layoutTotal: hint.layoutTotal,
-        columnOffset: column,
-      })
-      if (isPointFree(point, size, occupied)) return point
-    }
-  }
-
-  const sourceRect = getNodeLayoutRect(sourceNode)
-  const colStep = size.width + GEN_GAP
-  const rowStep = size.height + GEN_GAP
-
-  if (placement === 'above') {
-    for (let column = 0; column < 40; column += 1) {
-      const centerY = sourceRect.y - GEN_GAP - size.height / 2 - column * colStep
-      for (let row = 0; row < 40; row += 1) {
-        const rowOffsets = row === 0 ? [0] : [row, -row]
-        for (const rowOffset of rowOffsets) {
-          const centerX = sourceRect.x + sourceRect.width / 2 + rowOffset * rowStep
-          const point = { x: centerX, y: centerY }
-          if (isPointFree(point, size, occupied)) return point
-        }
-      }
-    }
-  } else {
-    for (let column = 0; column < 40; column += 1) {
-      const centerX = sourceRect.x + sourceRect.width + GEN_GAP + column * colStep + size.width / 2
-      for (let row = 0; row < 40; row += 1) {
-        const rowOffsets = row === 0 ? [0] : [row, -row]
-        for (const rowOffset of rowOffsets) {
-          const centerY = sourceRect.y + sourceRect.height / 2 + rowOffset * rowStep
-          const point = { x: centerX, y: centerY }
-          if (isPointFree(point, size, occupied)) return point
-        }
-      }
-    }
-  }
-
-  return fallbackOutgoingPoint(sourceNode, size, occupied, placement)
-}
-
-/** 规划一批结果节点中心点，保证彼此及与画布已有节点不重叠 */
-export function planOutgoingResultPoints(
-  graph: Graph,
-  sourceNode: Node,
-  size: { width: number; height: number },
-  count: number,
-  placement: ResultPlacement = 'right',
-) {
-  const safeCount = Math.max(1, Math.floor(count) || 1)
-  const occupied = collectGraphNodeRects(graph)
-  const points: { x: number; y: number }[] = []
-
-  for (let index = 0; index < safeCount; index += 1) {
-    const point = findFreePointNearSource(sourceNode, size, occupied, placement, {
-      layoutSlot: safeCount > 1 ? index : undefined,
-      layoutTotal: safeCount > 1 ? safeCount : undefined,
-    })
-    points.push(point)
-    occupied.push(centerToRect(point, size))
-  }
-
-  return points
-}
-
-/** 并行生成结果节点：右侧纵向或上方横向错位排布 */
-export function computeOutgoingResultNodePoint(
-  sourceNode: Node,
-  size: { width: number; height: number },
-  options: OutgoingResultLayoutOptions = {},
-) {
-  const bbox = sourceNode.getBBox()
-  const placement = options.placement ?? 'right'
-  const slot = options.layoutSlot ?? 0
-  const total = options.layoutTotal
-  const columnOffset = options.columnOffset ?? 0
-
-  if (placement === 'above') {
-    const centerX = bbox.x + bbox.width / 2
-    const y = bbox.y - GEN_GAP - size.height / 2 - columnOffset * (size.height + GEN_GAP)
-    const step = size.width + GEN_GAP
-
-    if (typeof total === 'number' && total > 1) {
-      const span = total * size.width + (total - 1) * GEN_GAP
-      const startX = centerX - span / 2 + size.width / 2
-      return { x: startX + slot * step, y }
-    }
-
-    if (slot === 0) {
-      return { x: centerX, y }
-    }
-
-    const layer = Math.ceil(slot / 2)
-    const direction = slot % 2 === 1 ? 1 : -1
-    return { x: centerX + direction * layer * step, y }
-  }
-
-  const x =
-    bbox.x +
-    bbox.width +
-    GEN_GAP +
-    size.width / 2 +
-    columnOffset * (size.width + GEN_GAP)
-  const centerY = bbox.y + bbox.height / 2
-  const step = size.height + GEN_GAP
-
-  if (typeof total === 'number' && total > 1) {
-    const span = total * size.height + (total - 1) * GEN_GAP
-    const startY = centerY - span / 2 + size.height / 2
-    return { x, y: startY + slot * step }
-  }
-
-  if (slot === 0) {
-    return { x, y: centerY }
-  }
-
-  const layer = Math.ceil(slot / 2)
-  const direction = slot % 2 === 1 ? 1 : -1
-  return { x, y: centerY + direction * layer * step }
-}
-
-/** 为一批并行结果节点预留不重叠的列偏移（兼容旧调用） */
-export function reserveOutgoingBatchColumnOffset(
-  graph: Graph,
-  sourceNode: Node,
-  size: { width: number; height: number },
-  count: number,
-  placement: ResultPlacement = 'right',
-) {
-  const occupied = collectGraphNodeRects(graph)
-  for (let column = 0; column < 40; column += 1) {
-    let fits = true
-    for (let slot = 0; slot < count; slot += 1) {
-      const point = computeOutgoingResultNodePoint(sourceNode, size, {
-        placement,
-        layoutSlot: slot,
-        layoutTotal: count,
-        columnOffset: column,
-      })
-      if (!isPointFree(point, size, occupied)) {
-        fits = false
-        break
-      }
-    }
-    if (fits) return column
-  }
-  return 0
-}
-
-/** 解析不重叠的结果节点中心点，优先在原任务周边排布 */
-export function resolveOutgoingResultNodePoint(
-  graph: Graph,
-  sourceNode: Node,
-  size: { width: number; height: number },
-  options: OutgoingResultLayoutOptions = {},
-) {
-  const occupied = collectGraphNodeRects(graph)
-  const placement = options.placement ?? 'right'
-  const explicitSlot = options.layoutSlot
-
-  return findFreePointNearSource(sourceNode, size, occupied, placement, {
-    layoutSlot: explicitSlot,
-    layoutTotal: options.layoutTotal,
-    columnOffset: options.columnOffset,
-  })
 }
 
 export function connectGenEdge(graph: Graph, sourceId: string, targetId: string) {
@@ -306,19 +55,6 @@ function isUpstreamDialogueSourceRef(item: ImageSourceRef, targetId: string) {
   if (!item.previewUrl?.trim() || !item.nodeId || item.nodeId === targetId) return false
   const nodeId = String(item.nodeId)
   return !nodeId.startsWith('digital-human-') && !nodeId.startsWith('upload-')
-}
-
-/** 待生成图片节点：尚无生成结果、可接收上游图源 */
-export function isPendingImageGenerationTarget(data: CanvasNodeData): boolean {
-  if (data.kind !== 'image') return false
-  if (data.imageGenState === 'loading') return false
-  if (data.imageGenState === 'done') return false
-  if (data.generationTaskId) return false
-  return (
-    data.imageGenTask === 'picker' ||
-    data.imageGenTask === 'img2img' ||
-    data.mode === 'picker'
-  )
 }
 
 /** 统计目标节点上游图片源数量（优先以入边为准） */
@@ -688,16 +424,6 @@ export function spawnCroppedImageNode(
   return node
 }
 
-/** 裁剪产物（含工作流恢复后可能丢失 cropResult 的节点） */
-export function isCropDerivedImageData(data: CanvasNodeData | undefined) {
-  if (!data || data.kind !== 'image') return false
-  if (data.cropResult) return true
-  const title = String(data.title ?? '').trim()
-  if (title === '裁剪结果' || title.startsWith('裁剪-')) return true
-  const fileName = String(data.fileName ?? '').trim()
-  return fileName.startsWith('裁剪-') || fileName === '裁剪结果.png'
-}
-
 export function spawnErasedImageNode(
   graph: Graph,
   sourceNode: Node,
@@ -804,36 +530,6 @@ export function spawnGenerationResultNode(
   return node
 }
 
-/** 生图进行中节点左上角标签：有图片输入源为图生图，否则为文生图 */
-export function resolveImageGenerationProgressLabel(
-  data: Partial<CanvasNodeData> | null | undefined,
-): '文生图' | '图生图' {
-  if (!data) return '文生图'
-  if (data.imageGenTask === 'img2img') return '图生图'
-
-  const hasImageInput = Boolean(
-    data.sourcePreviewUrl?.trim() ||
-      data.sourceAssetId?.trim() ||
-      data.imageSourceRefs?.some((ref) => ref.assetId?.trim() || ref.previewUrl?.trim()) ||
-      (data.generationParams?.referenceAssetIds?.length ?? 0) > 0,
-  )
-
-  return hasImageInput ? '图生图' : '文生图'
-}
-
-/** 图片生成失败、尚未成片的节点（可原地重试） */
-export function isImageGenerationFailedNode(data: CanvasNodeData | undefined): boolean {
-  if (!data || data.kind !== 'image') return false
-  if (data.imageGenState === 'loading') return false
-  if (data.imageGenState === 'failed') return true
-
-  const markedFailed = data.title === '生成失败'
-  if (!markedFailed) return false
-
-  if (!data.previewUrl?.trim()) return true
-  return data.title === '生成失败'
-}
-
 /** 查找可复用的失败生成节点：无预览的源占位，或连出的失败子节点 */
 export function findReusableImageGenerationNode(graph: Graph, sourceNode: Node): Node | null {
   const sourceData = sourceNode.getData() as CanvasNodeData
@@ -881,23 +577,6 @@ export function resetImageGenerationNodeForRetry(
   node.resize(layout.width, layout.height)
 }
 
-/** 无预览图的图生图上传占位节点（显示「点击或拖拽图片到此处上传」） */
-export function isImageGenerationUploadPlaceholderNode(data: CanvasNodeData | undefined): boolean {
-  if (!data || data.kind !== 'image') return false
-  if (data.previewUrl?.trim()) return false
-  if (data.uploadState === 'uploading' || data.imageGenState === 'loading') return false
-  return data.mode === 'picker' || data.imageGenTask === 'picker' || data.imageGenTask === 'img2img'
-}
-
-/** 文生图占位节点：由文本连线拉出、尚无成片 */
-export function isText2ImagePlaceholderNode(data: CanvasNodeData | undefined): boolean {
-  if (!data || data.kind !== 'image') return false
-  if (data.previewUrl?.trim()) return false
-  if (data.uploadState === 'uploading' || data.imageGenState === 'loading') return false
-  if (data.mode === 'editor' && data.imageGenTask === 'picker') return true
-  return data.title === '文生图'
-}
-
 /** 文本节点提交文生图时，优先复用已连出的空占位/失败节点 */
 export function resolveText2ImageGenerationTargetNode(
   graph: Graph,
@@ -915,21 +594,6 @@ export function resolveText2ImageGenerationTargetNode(
   }
 
   return findReusableImageGenerationNode(graph, sourceNode)
-}
-
-/** 图生图对话提交：仅上传占位 / 失败重试节点原地生成；已有成片的节点新建子节点 */
-export function shouldGenerateImageInPlaceOnNode(
-  data: CanvasNodeData,
-  options: { requestedCount: number; hasReferenceImages: boolean },
-): boolean {
-  if (options.requestedCount !== 1 || data.kind !== 'image') return false
-  if (data.previewUrl?.trim() && !isImageGenerationFailedNode(data)) return false
-
-  if (options.hasReferenceImages) {
-    return isImageGenerationUploadPlaceholderNode(data) || isImageGenerationFailedNode(data)
-  }
-
-  return isText2ImagePlaceholderNode(data) || isImageGenerationFailedNode(data)
 }
 
 function resolveImageGenerationLayoutSourceNode(node: Node): Node {

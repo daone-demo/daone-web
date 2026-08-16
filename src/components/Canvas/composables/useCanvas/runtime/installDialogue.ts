@@ -11,8 +11,10 @@ import { nextTick,provide } from 'vue';
 import { createDefaultVideoDialogueSettings,IMAGE_GENERAL_CAPABILITY_CODE,isNodeFileUploading,normalizeImageDialogueSettingsForModel,pickImageDialogueSettingsInput,resolveGenerationTaskWorkflowId,resolveImageAssetId,toVideoApiClarity,VIDEO_GENERAL_CAPABILITY_CODE,type ImageDialogueSubmitPayload,type ImageMarkItem,type VideoDialogueSubmitPayload,type VideoGenAspectRatio } from '../../../constants';
 import { buildImageGenerationParams,buildTextGenerationParams,imageDialogueSettingsFromPayload,persistNodeGenerationSnapshot } from '../../../generationParams';
 import { bindGenerationTaskId,followTextGenerationTaskOnNode,isGenerationTaskTerminal,markTextGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,pollGenerationTask,runImageGenerationOnNode,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail } from '../../../generationTask';
+import { createIdempotencyKey } from '../../../idempotency';
 import { appendElementMarkToNode,appendImageMarkToNode,buildImageMarkItem,clientPointToImageNaturalCoords,isImageMarkAnalyzing,parseImageMarkRecognizeResult,removeImageMarkFromGraph,replaceImageMarkOnGraph,setImageMarkAnalyzing,syncNodeImageMarkLists,updateImageMarkLabelOnNode } from '../../../imageMarkUtils';
 import { toVideoApiPrompt } from '../../../promptMention';
+import { getBoundingBoxCenter } from '../../../viewport';
 import type { CanvasNodeData,ImageSourceRef } from '.././sharedImports';
 import { api,ensureImageTextEdge,findIncomingTextNodes,getImageMarkHintPosition,getNodeSize,getScroller,getVideoSourceRefs,IMG2PROMPT_DEFAULT_INSTRUCTION,isImageGenerationFailedNode,isVideoGenerationFailedNode,plainTextFromNodeContent,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resolveText2ImageGenerationTargetNode,resolveVideoSourceRefsForNode,runUploadSimulation,spawnGenerationResultNode,spawnVideoGenerationResultNode,syncNodeShapeFromData,syncTextNodeImageSource,toPersistedVideoSourceRefs,uploadAssetFile } from '.././sharedImports';
 import type { CoreRuntimeContext } from './context';
@@ -652,9 +654,7 @@ export function installDialogue(ctx: CoreRuntimeContext) {
                   }),
                   genPrompt: ctx.promptText.value.trim(),
               });
-              const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                  ? crypto.randomUUID()
-                  : `img2prompt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+              const idempotencyKey = createIdempotencyKey('img2prompt');
               try {
                   const created = normalizeGenerationTaskDetail(await api.createGenerationTask<GenerationTaskDetail>({
                       taskType: 'TEXT',
@@ -763,9 +763,7 @@ export function installDialogue(ctx: CoreRuntimeContext) {
                   parameters: videoParameters,
               });
               ctx.closeTextPromptBar();
-              const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                  ? crypto.randomUUID()
-                  : `text2video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+              const idempotencyKey = createIdempotencyKey('text2video');
               try {
                   const created = normalizeGenerationTaskDetail(await api.createGenerationTask<GenerationTaskDetail>({
                       taskType: 'VIDEO',
@@ -875,9 +873,7 @@ export function installDialogue(ctx: CoreRuntimeContext) {
                       title: '文生图',
                       fileName: '文生图.png',
                       createTask: async () => {
-                          const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                              ? crypto.randomUUID()
-                              : `text2image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                          const idempotencyKey = createIdempotencyKey('text2image');
                           const created = await api.createGenerationTask<GenerationTaskDetail>({
                               taskType: 'IMAGE',
                               capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
@@ -916,12 +912,8 @@ export function installDialogue(ctx: CoreRuntimeContext) {
                                       const scroller = getScroller(g);
                                       if (!scroller)
                                           return;
-                                      const boxes = [resultNode, ...extraNodes].map((node) => node.getBBox());
-                                      const minX = Math.min(...boxes.map((box) => box.x));
-                                      const maxX = Math.max(...boxes.map((box) => box.x + box.width));
-                                      const minY = Math.min(...boxes.map((box) => box.y));
-                                      const maxY = Math.max(...boxes.map((box) => box.y + box.height));
-                                      scroller.transitionToPoint((minX + maxX) / 2, (minY + maxY) / 2, {
+                                      const center = getBoundingBoxCenter([resultNode, ...extraNodes].map((node) => node.getBBox()));
+                                      scroller.transitionToPoint(center.x, center.y, {
                                           duration: '280ms',
                                       });
                                   });
@@ -967,9 +959,7 @@ export function installDialogue(ctx: CoreRuntimeContext) {
                   }),
                   genPrompt: trimmedPrompt,
               });
-              const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                  ? crypto.randomUUID()
-                  : `text-copy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+              const idempotencyKey = createIdempotencyKey('text-copy');
               try {
                   const created = normalizeGenerationTaskDetail(await api.createGenerationTask<GenerationTaskDetail>({
                       taskType: 'TEXT',
@@ -1078,9 +1068,7 @@ export function installDialogue(ctx: CoreRuntimeContext) {
               title: syncedData.title || '文生图',
               fileName,
               createTask: async () => {
-                  const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                      ? crypto.randomUUID()
-                      : `img-prompt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                  const idempotencyKey = createIdempotencyKey('img-prompt');
                   const created = await api.createGenerationTask<GenerationTaskDetail>({
                       taskType: 'IMAGE',
                       capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
@@ -1394,9 +1382,7 @@ export function installDialogue(ctx: CoreRuntimeContext) {
       ctx.recordCanvasDescription(markDetail, '标记识别');
       ctx.imageMarkRecognizing.value = true;
       ctx.bumpToolbarRevision();
-      const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `image-mark-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const idempotencyKey = createIdempotencyKey('image-mark');
       try {
           const created = normalizeGenerationTaskDetail(await api.createGenerationTask<GenerationTaskDetail>({
               taskType: 'TEXT',

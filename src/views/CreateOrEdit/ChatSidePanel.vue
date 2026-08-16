@@ -220,6 +220,9 @@ const {
   projectId: () => props.projectId,
   emitInsertImageToCanvas: (payload) => emit('insert-image-to-canvas', payload),
   ensureActiveSession: () => bridge.ensureActiveSession(),
+  getActiveSessionId: () => activeSessionId.value,
+  getSessionAttachments: (sessionId) =>
+    sessions.value.find((session) => session.id === sessionId)?.draft.attachments,
   focusInput: () => bridge.focusInput(),
   saveActiveDraft: () => bridge.saveActiveDraft(),
   setMessage: (next) => {

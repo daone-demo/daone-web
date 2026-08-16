@@ -41,9 +41,7 @@ export default defineConfig(({ mode }) => {
       host: true,
       proxy: {
         '/api': {
-          // target: env.VITE_API_BASE_HOST,
-          // changeOrigin: true,
-          target: 'https://43.161.199.75:8088',
+          target: env.VITE_API_BASE_HOST || 'https://43.161.199.75:8088',
           changeOrigin: true,
           secure: false,
           configure: (proxy) => {

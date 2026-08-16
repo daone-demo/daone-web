@@ -297,9 +297,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
-import api, { type PromptTranslationData } from '@/services/api';
-import { isRequestError } from '@/utils/request';
 import { useCanvasBgTheme } from './useCanvasBgTheme';
+import { useCanvasImageDropUpload } from './composables/useCanvasImageDropUpload';
+import { usePromptTranslate } from './composables/usePromptTranslate';
 import ImageGenSettingsPopover from './ImageGenSettingsPopover.vue';
 import ImageStylePanel from './ImageStylePanel.vue';
 import DialogueWorkflowSelect from './DialogueWorkflowSelect.vue';
@@ -317,7 +317,6 @@ import {
   type PromptMarkMentionMeta,
 } from './promptMention';
 import {
-  CANVAS_IMAGE_NODE_DRAG_TYPE,
   IMAGE_DIALOGUE_PLACEHOLDER,
   IMAGE_DIALOGUE_MODEL_MENU,
   buildImageDialogueModelsFromCapabilities,
@@ -514,8 +513,20 @@ const mentionApi = createPromptMentionApi('image-dialogue__mention', {
 })
 
 const hoveredThumb = ref<string | null>(null)
-const isDragOver = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const {
+  isDragOver,
+  onDragEnter: onDialogueDragEnter,
+  onDragOver: onDialogueDragOver,
+  onDragLeave: onDialogueDragLeave,
+  onDrop: onDialogueDrop,
+  openFilePicker,
+  onFileInputChange,
+} = useCanvasImageDropUpload({
+  fileInputRef,
+  onAddCanvasNode: (nodeId) => emit('add-canvas-node', nodeId),
+  onUploadImages: (files) => emit('upload-images', files),
+})
 const showStyleModal = ref(false)
 const showGenSettings = ref(false)
 const showModelMenu = ref(false)
@@ -527,7 +538,13 @@ const selectedModelKey = ref(
   resolveImageDialogueModelKey(IMAGE_DIALOGUE_MODEL_MENU[0].key, null),
 )
 const selectedWorkFlow = ref('')
-const translating = ref(false)
+const { translating, onTranslatePrompt } = usePromptTranslate({
+  getText: () => props.modelValue,
+  onTranslated: (translated) => {
+    emitPrompt(translated)
+    nextTick(() => syncPromptView(translated))
+  },
+})
 let skipSettingsWatch = false
 
 function buildSettingsFromRefs(): ImageDialogueSettings {
@@ -929,34 +946,6 @@ function selectModel(model: ImageDialogueModelItem) {
   showModelMenu.value = false
 }
 
-async function onTranslatePrompt() {
-  const text = props.modelValue.trim()
-  if (!text) {
-    message.warning('请输入需要翻译的提示词')
-    return
-  }
-  if (translating.value) return
-
-  translating.value = true
-  try {
-    const result = await api.translatePrompt<PromptTranslationData>({
-      text,
-      targetLanguage: 'EN',
-    })
-    const translated = result?.translatedText?.trim()
-    if (!translated) {
-      message.warning('翻译结果为空')
-      return
-    }
-    emitPrompt(translated)
-    nextTick(() => syncPromptView(translated))
-  } catch (error) {
-    message.error(isRequestError(error) ? error.message : '提示词翻译失败，请稍后重试')
-  } finally {
-    translating.value = false
-  }
-}
-
 function onSend() {
   const prompt = props.modelValue.trim()
   if (!canSubmitImageDialogueTask(prompt, props.elementMarks)) {
@@ -974,54 +963,6 @@ function onSend() {
     workflow: selectedWorkflowRecord.value,
   }
   emit('submit', payload)
-}
-
-function hasDialogueDropContent(event: DragEvent) {
-  const types = Array.from(event.dataTransfer?.types ?? [])
-  return types.includes('Files') || types.includes(CANVAS_IMAGE_NODE_DRAG_TYPE)
-}
-
-function onDialogueDragEnter(event: DragEvent) {
-  if (!hasDialogueDropContent(event)) return
-  isDragOver.value = true
-}
-
-function onDialogueDragOver(event: DragEvent) {
-  if (!hasDialogueDropContent(event)) return
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-  isDragOver.value = true
-}
-
-function onDialogueDragLeave(event: DragEvent) {
-  const related = event.relatedTarget as Node | null
-  const current = event.currentTarget as HTMLElement | null
-  if (related && current?.contains(related)) return
-  isDragOver.value = false
-}
-
-function onDialogueDrop(event: DragEvent) {
-  isDragOver.value = false
-  const nodeId = event.dataTransfer?.getData(CANVAS_IMAGE_NODE_DRAG_TYPE)
-  if (nodeId) {
-    emit('add-canvas-node', nodeId)
-    return
-  }
-
-  const files = Array.from(event.dataTransfer?.files ?? []).filter((file) =>
-    file.type.startsWith('image/'),
-  )
-  if (files.length) emit('upload-images', files)
-}
-
-function openFilePicker() {
-  fileInputRef.value?.click()
-}
-
-function onFileInputChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = Array.from(input.files ?? []).filter((file) => file.type.startsWith('image/'))
-  if (files.length) emit('upload-images', files)
-  input.value = ''
 }
 
 function onDocumentMouseDown(event: MouseEvent) {

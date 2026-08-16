@@ -1,4 +1,4 @@
-import { Graph, Shape, NodeView, type Edge, type Node, type TransformManager } from '@antv/x6'
+import { Graph, Shape, NodeView, type Node, type TransformManager } from '@antv/x6'
 import { Scroller } from '@antv/x6-plugin-scroller'
 import '@antv/x6-plugin-scroller/es/index.css'
 import { Selection } from '@antv/x6-plugin-selection'
@@ -14,6 +14,18 @@ import TextNode from './nodes/TextNode.vue'
 import ImageNode from './nodes/ImageNode.vue'
 import ImageGenNode from './nodes/ImageGenNode.vue'
 import VideoNode from './nodes/VideoNode.vue'
+import {
+  clientPointToGraphLocal,
+  getViewportCenterLocal,
+  graphLocalToContainerOffset,
+} from './graphCoords'
+export {
+  clientPointToGraphLocal,
+  getEdgeDeleteButtonPosition,
+  getEdgeMidpointLocal,
+  getViewportCenterLocal,
+  graphLocalToContainerOffset,
+} from './graphCoords'
 
 /** 延迟加载 three / GLTFLoader，仅在渲染 3D 节点时进入产物首屏之外的独立 chunk */
 const Model3DNode = defineAsyncComponent(() => import('./nodes/Model3DNode.vue'))
@@ -245,12 +257,6 @@ export function startImageNodeCornerResize(
   window.addEventListener('mouseup', onUp)
 }
 
-type ScrollerImplLike = {
-  localToBackgroundPoint(x: number, y: number): { x: number; y: number }
-  clientToLocalPoint(x: number, y: number): { x: number; y: number }
-  container: HTMLDivElement
-}
-
 type SelectionCancelApi = {
   selectionImpl?: {
     undelegateDocumentEvents: () => void
@@ -267,91 +273,6 @@ export function cancelActiveRubberband(graph: Graph) {
   impl.undelegateDocumentEvents()
   impl.hideRubberband()
   impl.container.removeAttribute('style')
-}
-
-/**
- * 当前可视视口中心对应的图坐标。
- * scroller 模式下必须用 scrollerImpl.clientToLocalPoint（已计入 scrollLeft/padding/缩放），
- * 直接用 graph.clientToLocal 会忽略滚动偏移，导致新建节点落点偏移很大。
- */
-export function clientPointToGraphLocal(
-  graph: Graph,
-  clientX: number,
-  clientY: number,
-): { x: number; y: number } {
-  const scroller = getScroller(graph)
-  const impl = scroller
-    ? (scroller as unknown as { scrollerImpl?: ScrollerImplLike }).scrollerImpl
-    : undefined
-
-  if (scroller && impl) {
-    const p = impl.clientToLocalPoint(clientX, clientY)
-    return { x: p.x, y: p.y }
-  }
-
-  return graph.clientToLocal(clientX, clientY)
-}
-
-export function getViewportCenterLocal(graph: Graph): { x: number; y: number } {
-  const scroller = getScroller(graph)
-  if (scroller) {
-    const el = scroller.container
-    const rect = el.getBoundingClientRect()
-    return clientPointToGraphLocal(
-      graph,
-      rect.left + el.clientWidth / 2,
-      rect.top + el.clientHeight / 2,
-    )
-  }
-
-  const rect = graph.container.getBoundingClientRect()
-  return clientPointToGraphLocal(
-    graph,
-    rect.left + rect.width / 2,
-    rect.top + rect.height / 2,
-  )
-}
-
-/**
- * 图坐标 → 浮层定位容器（.canvas）内的像素偏移。
- * 须使用不随 Scroller 滚动的容器；勿用 graph.container（会随内容滚动）。
- * 统一走 graph.localToClient，缩放/滚动时与节点视觉位置保持同步。
- */
-export function graphLocalToContainerOffset(
-  graph: Graph,
-  localX: number,
-  localY: number,
-  container: HTMLElement,
-) {
-  const containerRect = container.getBoundingClientRect()
-  const client = graph.localToClient(localX, localY)
-  return {
-    left: client.x - containerRect.left,
-    top: client.y - containerRect.top,
-  }
-}
-
-type EdgeViewLike = {
-  getPointAtRatio?: (ratio: number) => { x: number; y: number }
-}
-
-/** 连线几何中点（图坐标），优先取路径 50% 位置 */
-export function getEdgeMidpointLocal(graph: Graph, edge: Edge) {
-  const view = graph.findViewByCell(edge) as EdgeViewLike | null
-  if (view?.getPointAtRatio) {
-    return view.getPointAtRatio(0.5)
-  }
-  return edge.getBBox().getCenter()
-}
-
-/** 连线删除按钮在 .canvas 容器内的定位 */
-export function getEdgeDeleteButtonPosition(
-  graph: Graph,
-  edge: Edge,
-  container: HTMLElement,
-) {
-  const mid = getEdgeMidpointLocal(graph, edge)
-  return graphLocalToContainerOffset(graph, mid.x, mid.y, container)
 }
 
 /** 节点在容器坐标系下的屏幕包围盒（缩放后真实像素） */

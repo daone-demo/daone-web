@@ -1,4 +1,5 @@
 import { onBeforeUnmount, ref } from 'vue'
+import { createSSEParser } from './sseParser.ts'
 
 type SSEOptions = {
   url: string
@@ -18,12 +19,18 @@ export function useSSE() {
 
   let abortController: AbortController | null = null
 
-  const close = () => {
-    if (abortController) {
-      abortController.abort()
-      abortController = null
-    }
+  const finishConnection = (controller: AbortController) => {
+    // 旧连接异步结束时只能清理自己，不能覆盖后创建连接的状态
+    if (abortController !== controller) return
+    abortController = null
+    loading.value = false
+    connected.value = false
+  }
 
+  const close = () => {
+    const controller = abortController
+    abortController = null
+    controller?.abort()
     loading.value = false
     connected.value = false
   }
@@ -35,8 +42,9 @@ export function useSSE() {
     connected.value = false
     error.value = null
 
-    abortController = new AbortController()
-    const signal = abortController.signal
+    const controller = new AbortController()
+    abortController = controller
+    const signal = controller.signal
 
     try {
       const method = options.method ?? 'GET'
@@ -61,6 +69,11 @@ export function useSSE() {
 
       const response = await fetch(options.url, init)
 
+      if (abortController !== controller) {
+        await response.body?.cancel().catch(() => {})
+        return
+      }
+
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
         const message =
@@ -80,57 +93,43 @@ export function useSSE() {
       }
 
       const decoder = new TextDecoder()
-      let buffer = ''
-      let pendingEvent = ''
+      const parser = createSSEParser(({ data, event }) => {
+        if (abortController !== controller) return false
+        if (data === '[DONE]') {
+          options.onDone?.()
+          finishConnection(controller)
+          return false
+        }
+        options.onMessage?.(data, event)
+        return true
+      })
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() ?? ''
-
-        for (const line of lines) {
-          const trimmed = line.trim()
-          if (!trimmed) {
-            pendingEvent = ''
-            continue
-          }
-          if (trimmed.startsWith(':')) continue
-
-          if (trimmed.startsWith('event:')) {
-            pendingEvent = trimmed.slice(6).trim()
-            continue
-          }
-
-          if (!trimmed.startsWith('data:')) continue
-
-          const data = trimmed.slice(5).trim()
-          if (data === '[DONE]') {
-            options.onDone?.()
-            close()
-            return
-          }
-
-          const eventName = pendingEvent || undefined
-          options.onMessage?.(data, eventName)
+        if (!parser.push(decoder.decode(value, { stream: true }))) {
+          await reader.cancel().catch(() => {})
+          return
         }
       }
 
-      options.onDone?.()
-      close()
+      parser.finish(decoder.decode())
+      if (abortController === controller) {
+        options.onDone?.()
+        finishConnection(controller)
+      }
     } catch (err) {
       if (signal.aborted) {
-        close()
+        finishConnection(controller)
         return
       }
 
+      if (abortController !== controller) return
       loading.value = false
       connected.value = false
       error.value = err
       options.onError?.(err)
-      close()
+      finishConnection(controller)
     }
   }
 

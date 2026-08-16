@@ -5,6 +5,12 @@ export interface MediaProxyOptions {
   enforceDnsGuard?: boolean
 }
 
+export const MEDIA_PROXY_SECURITY_HEADERS: Readonly<Record<string, string>>
+
+export function isAllowedMediaProxyUrl(rawUrl: string): boolean
+
+export function isAllowedContentType(contentType: string): boolean
+
 export function resolveMediaProxyTargetUrl(rawUrl: string): string | null
 
 export function isBlockedMediaProxyAddress(address: string): boolean

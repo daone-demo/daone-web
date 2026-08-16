@@ -5,27 +5,53 @@ const MEDIA_PROXY_HOST_RE = /(^|\.)(aliyuncs\.com|myqcloud\.com)$/i
 const MEDIA_PROXY_TIMEOUT_MS = 15_000
 const MEDIA_PROXY_MAX_BYTES = 50 * 1024 * 1024
 const MEDIA_PROXY_MAX_REDIRECTS = 3
+
+/** 允许代理的被动媒体类型；主动可执行文档（SVG/HTML/XML/JS/PDF）一律拒绝 */
 const MEDIA_PROXY_ALLOWED_CONTENT_TYPES = [
   'image/',
   'video/',
   'audio/',
   'model/',
   'application/octet-stream',
-  'application/pdf',
   'application/zip',
   'application/x-zip-compressed',
   'application/gzip',
   'application/vnd.apple.mpegurl',
-  'application/dash+xml',
 ]
 
-function isAllowedMediaProxyUrl(rawUrl) {
+const MEDIA_PROXY_BLOCKED_CONTENT_TYPES = new Set([
+  'image/svg+xml',
+  'text/html',
+  'application/xhtml+xml',
+  'text/xml',
+  'application/xml',
+  'image/xml',
+  'text/javascript',
+  'application/javascript',
+  'application/ecmascript',
+  'text/ecmascript',
+  'application/pdf',
+  'application/x-javascript',
+  'application/dash+xml',
+])
+
+export const MEDIA_PROXY_SECURITY_HEADERS = Object.freeze({
+  'Content-Disposition': 'attachment',
+  'Content-Security-Policy': "sandbox; default-src 'none'",
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'X-Content-Type-Options': 'nosniff',
+  'Cache-Control': 'public, max-age=3600',
+})
+
+function normalizeContentType(contentType) {
+  return String(contentType || '').split(';', 1)[0].trim().toLowerCase()
+}
+
+export function isAllowedMediaProxyUrl(rawUrl) {
   try {
     const parsed = new URL(rawUrl)
-    const isStandardPort = !parsed.port ||
-      (parsed.protocol === 'http:' && parsed.port === '80') ||
-      (parsed.protocol === 'https:' && parsed.port === '443')
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+    const isStandardPort = !parsed.port || parsed.port === '443'
+    return parsed.protocol === 'https:' &&
       !parsed.username &&
       !parsed.password &&
       isStandardPort &&
@@ -103,8 +129,14 @@ async function assertPublicMediaProxyHost(hostname) {
   }
 }
 
-function isAllowedContentType(contentType) {
-  const normalized = contentType.split(';', 1)[0].trim().toLowerCase()
+export function isAllowedContentType(contentType) {
+  const normalized = normalizeContentType(contentType)
+  if (!normalized || MEDIA_PROXY_BLOCKED_CONTENT_TYPES.has(normalized)) {
+    return false
+  }
+  if (normalized.includes('svg') || normalized.includes('javascript') || normalized.endsWith('+xml')) {
+    return false
+  }
   return MEDIA_PROXY_ALLOWED_CONTENT_TYPES.some((allowed) =>
     allowed.endsWith('/') ? normalized.startsWith(allowed) : normalized === allowed,
   )
@@ -123,12 +155,21 @@ export function resolveMediaProxyTargetUrl(rawUrl) {
 
   if (!targetUrl) return null
 
-  const parsed = new URL(targetUrl)
-  if (!isAllowedMediaProxyUrl(parsed.toString())) {
+  try {
+    const parsed = new URL(targetUrl)
+    if (!isAllowedMediaProxyUrl(parsed.toString())) {
+      return null
+    }
+    return parsed.toString()
+  } catch {
     return null
   }
+}
 
-  return parsed.toString()
+function applyMediaProxySecurityHeaders(res) {
+  for (const [name, value] of Object.entries(MEDIA_PROXY_SECURITY_HEADERS)) {
+    res.setHeader(name, value)
+  }
 }
 
 export async function proxyMediaTargetUrl(targetUrl, options = {}) {
@@ -232,8 +273,7 @@ export async function handleMediaProxyNodeRequest(req, res, requestUrl, options 
     if (contentLength > 0) {
       res.setHeader('Content-Length', contentLength)
     }
-    res.setHeader('Cache-Control', 'public, max-age=3600')
-    res.setHeader('X-Content-Type-Options', 'nosniff')
+    applyMediaProxySecurityHeaders(res)
     await pipeMediaProxyBody(body, res)
   } catch (error) {
     if (res.headersSent) {

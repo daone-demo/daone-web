@@ -10,9 +10,11 @@
     "build": "vue-tsc -b && vite build",
     "build:dev": "vue-tsc -b && vite build --mode development",
     "build:test": "vue-tsc -b && vite build --mode test",
-    "build:prod": "vue-tsc -b && vite build --mode production && cp deploy/nginx-media-proxy.conf deploy/nginx-daone-web.conf deploy/nginx-site.conf dist/",
+    "build:prod": "vue-tsc -b && vite build --mode production && cp deploy/nginx-media-proxy.conf deploy/nginx-daone-web.conf deploy/nginx-site.conf dist/ && node scripts/check-api-base.mjs",
     "preview": "vite preview",
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "node --experimental-strip-types --test --test-force-exit scripts/media-proxy.test.mjs scripts/server-malformed-url.test.mjs scripts/chat-race-regressions.test.ts scripts/sse-parser.test.ts",
+    "test:media-proxy": "node --test --test-force-exit scripts/media-proxy.test.mjs"
   },
   "dependencies": {
     "@antv/x6": "^2.19.2",

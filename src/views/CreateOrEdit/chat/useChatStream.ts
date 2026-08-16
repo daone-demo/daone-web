@@ -1,7 +1,7 @@
 import { toValue } from 'vue'
 import type { MaybeRefOrGetter, Ref } from 'vue'
 import api from '@/services/api'
-import { getToken } from '@/utils/request'
+import { getApiBaseURL, getToken } from '@/utils/request'
 import type {
   ChatAttachment,
   ChatMessage,
@@ -181,8 +181,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     const skillName = streamOptions.skillName?.trim()
     const nodeId = streamOptions.nodeId?.trim()
     void options.connect({
-      // url: `${API_BASE}/chat-sessions/${chatId}/messages/stream`,
-      url: `/api/api/v1/chat-sessions/${chatId}/messages/stream`,
+      url: `${getApiBaseURL().replace(/\/$/, '')}/chat-sessions/${chatId}/messages/stream`,
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: {

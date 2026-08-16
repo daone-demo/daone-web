@@ -2,6 +2,7 @@ import { ref, toValue } from 'vue'
 import type { MaybeRefOrGetter } from 'vue'
 import { uploadAssetFile } from '@/components/Canvas/upload'
 import type { ChatAttachment } from '../chatTypes'
+import { findOwnedAttachmentTarget } from './chatAttachmentOwner'
 
 export interface InsertImageToCanvasPayload {
   attachmentId: string
@@ -15,7 +16,9 @@ export interface InsertImageToCanvasPayload {
 export interface UseChatAttachmentsOptions {
   projectId: MaybeRefOrGetter<string | undefined>
   emitInsertImageToCanvas: (payload: InsertImageToCanvasPayload) => void
-  ensureActiveSession: () => unknown
+  ensureActiveSession: () => { id: string }
+  getActiveSessionId: () => string
+  getSessionAttachments: (sessionId: string) => ChatAttachment[] | undefined
   focusInput: () => void
   saveActiveDraft: () => void
   setMessage: (message: string) => void
@@ -45,39 +48,81 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     )
   }
 
+  function findSessionAttachment(sessionId: string, attachmentId: string) {
+    return findOwnedAttachmentTarget(
+      sessionId,
+      options.getActiveSessionId(),
+      attachments.value,
+      options.getSessionAttachments,
+      attachmentId,
+    )?.attachment
+  }
+
+  function patchSessionAttachment(
+    sessionId: string,
+    attachmentId: string,
+    patch: Partial<ChatAttachment>,
+  ): ChatAttachment | undefined {
+    const target = findOwnedAttachmentTarget(
+      sessionId,
+      options.getActiveSessionId(),
+      attachments.value,
+      options.getSessionAttachments,
+      attachmentId,
+    )
+    if (!target) return undefined
+
+    if (target.isActiveSession) {
+      patchAttachment(attachmentId, patch)
+      options.saveActiveDraft()
+      return { ...target.attachment, ...patch }
+    }
+
+    const index = target.attachments.findIndex((item) => item.id === attachmentId)
+    target.attachments[index] = { ...target.attachment, ...patch }
+    return target.attachments[index]
+  }
+
   async function uploadAttachmentToOss(attachmentId: string) {
+    const ownerSessionId = options.ensureActiveSession().id
     const attachment = attachments.value.find((item) => item.id === attachmentId)
     if (!attachment) return
 
     patchAttachment(attachmentId, { uploading: true, uploadError: undefined })
+    options.saveActiveDraft()
 
     try {
       const result = await uploadAssetFile(attachment.file, { projectId: toValue(options.projectId) })
       const nextPreviewUrl = result.url || attachment.previewUrl
-      if (result.url && attachment.previewUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(attachment.previewUrl)
-      }
-      patchAttachment(attachmentId, {
+      const current = findSessionAttachment(ownerSessionId, attachmentId)
+      if (!current) return
+
+      const updated = patchSessionAttachment(ownerSessionId, attachmentId, {
         assetId: result.assetId,
         previewUrl: nextPreviewUrl,
         uploading: false,
         uploadError: undefined,
       })
+      if (!updated) return
+
+      // 确认所属会话中的附件已更新后再撤销旧 Blob URL，避免切换会话时缩略图失效
+      if (result.url && attachment.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(attachment.previewUrl)
+      }
 
       // 上传成功后插入画布，便于 agent 通过 nodeId 交互；已有 nodeId（如从画布加入）则跳过
-      const current = attachments.value.find((item) => item.id === attachmentId)
-      if (current && !current.nodeId && nextPreviewUrl) {
+      if (!updated.nodeId && nextPreviewUrl) {
         options.emitInsertImageToCanvas({
           attachmentId,
           assetId: result.assetId || undefined,
           previewUrl: nextPreviewUrl,
-          fileName: current.fileName,
+          fileName: updated.fileName,
           width: result.width,
           height: result.height,
         })
       }
     } catch (error) {
-      patchAttachment(attachmentId, {
+      patchSessionAttachment(ownerSessionId, attachmentId, {
         uploading: false,
         uploadError: error instanceof Error ? error.message : '上传失败',
       })

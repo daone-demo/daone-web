@@ -14,10 +14,12 @@ import { normalizeOcrRecognizeResult,type ImageEditTextChange,} from '../../../e
 import { buildImageGenerationParams,buildModelGenerationParams,buildTextGenerationParams,persistNodeGenerationSnapshot } from '../../../generationParams';
 import { bindGenerationTaskId,bindSharedGenerationTaskId,followModelGenerationTaskOnNode,followTextGenerationTaskOnNode,markGenerationNodeFailed,markTextGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail } from '../../../generationTask';
 import { splitImageIntoGrid } from '../../../gridSplitUtils';
+import { createIdempotencyKey } from '../../../idempotency';
 import { applyImageMarkTaskParameters,canSubmitImageDialogueTask } from '../../../imageMarkUtils';
 import { loadImageToolbarCustomizeSettings,saveImageToolbarCustomizeSettings,type ImageToolbarCustomizeSettings,} from '../../../imageToolbarCustomize';
 import { downloadCanvasMedia } from '../../../mediaDownload';
 import { toVideoApiPrompt } from '../../../promptMention';
+import { getBoundingBoxCenter } from '../../../viewport';
 import type { CanvasNodeData } from '.././sharedImports';
 import { normalizeCutoutMode } from '../coreHelpers';
 import { api,applyVideoFirstLastFrameParameters,connectGenEdge,findImageToVideoEdge,findReusableImageGenerationNode,findReusableVideoGenerationNode,getImageGenerationPlaceholderSize,getNodeSize,getScroller,getVideoSourceRefs,isImageGenerationFailedNode,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,previewUrlToUploadFile,resetImageGenerationNodeForRetry,resetVideoGenerationNodeForRetry,resolveVideoGenerationSubmitContext,shouldGenerateImageInPlaceOnNode,spawnErasedImageNode,spawnGenerationResultNode,spawnGridSplitResultNodes,spawnModel3DResultNode,spawnTextPromptResultNode,spawnVideoGenerationResultNode,syncNodeShapeFromData,toPersistedVideoSourceRefs,uploadAssetFile } from '.././sharedImports';
@@ -597,9 +599,7 @@ export function installMediaGeneration(ctx: CoreRuntimeContext) {
       });
       void Promise.all(resultNodes.map(async (resultNode, index) => {
           const nodeFileName = buildIndexedFileName(index);
-          const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-              ? crypto.randomUUID()
-              : `video-cap-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`;
+          const idempotencyKey = createIdempotencyKey('video-cap', index);
           try {
               const created = normalizeGenerationTaskDetail(await api.createGenerationTask<GenerationTaskDetail>({
                   taskType: 'VIDEO',
@@ -741,12 +741,8 @@ export function installMediaGeneration(ctx: CoreRuntimeContext) {
               const scroller = getScroller(g);
               if (!scroller || !nodes.length)
                   return;
-              const boxes = nodes.map((node) => node.getBBox());
-              const minX = Math.min(...boxes.map((box) => box.x));
-              const minY = Math.min(...boxes.map((box) => box.y));
-              const maxX = Math.max(...boxes.map((box) => box.x + box.width));
-              const maxY = Math.max(...boxes.map((box) => box.y + box.height));
-              scroller.transitionToPoint((minX + maxX) / 2, (minY + maxY) / 2, { duration: '280ms' });
+              const center = getBoundingBoxCenter(nodes.map((node) => node.getBBox()));
+              scroller.transitionToPoint(center.x, center.y, { duration: '280ms' });
           });
           void ctx.uploadGridSplitImagesInBackground(nodes);
       }
@@ -838,9 +834,7 @@ export function installMediaGeneration(ctx: CoreRuntimeContext) {
       ctx.bumpToolbarRevision();
       ctx.updateNodeToolbar();
       ctx.scheduleHistoryPush();
-      const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `prompt-reverse-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const idempotencyKey = createIdempotencyKey('prompt-reverse');
       try {
           const created = normalizeGenerationTaskDetail(await api.createGenerationTask<GenerationTaskDetail>({
               taskType: 'TEXT',
@@ -938,9 +932,7 @@ export function installMediaGeneration(ctx: CoreRuntimeContext) {
       ctx.bumpToolbarRevision();
       ctx.updateNodeToolbar();
       ctx.scheduleHistoryPush();
-      const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `model3d-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const idempotencyKey = createIdempotencyKey('model3d');
       try {
           const created = normalizeGenerationTaskDetail(await api.createGenerationTask<GenerationTaskDetail>({
               taskType: 'MODEL',
@@ -1461,9 +1453,7 @@ export function installMediaGeneration(ctx: CoreRuntimeContext) {
               title,
               fileName,
               createTask: async () => {
-                  const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                      ? crypto.randomUUID()
-                      : `img-dialogue-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`;
+                  const idempotencyKey = createIdempotencyKey('img-dialogue', index);
                   const created = await api.createGenerationTask<GenerationTaskDetail>({
                       taskType: 'IMAGE',
                       capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
@@ -1548,12 +1538,8 @@ export function installMediaGeneration(ctx: CoreRuntimeContext) {
                       const scroller = getScroller(g);
                       if (!scroller)
                           return;
-                      const boxes = [sourceNode, ...extraNodes].map((node) => node.getBBox());
-                      const minX = Math.min(...boxes.map((box) => box.x));
-                      const maxX = Math.max(...boxes.map((box) => box.x + box.width));
-                      const minY = Math.min(...boxes.map((box) => box.y));
-                      const maxY = Math.max(...boxes.map((box) => box.y + box.height));
-                      scroller.transitionToPoint((minX + maxX) / 2, (minY + maxY) / 2, {
+                      const center = getBoundingBoxCenter([sourceNode, ...extraNodes].map((node) => node.getBBox()));
+                      scroller.transitionToPoint(center.x, center.y, {
                           duration: '280ms',
                       });
                   });
@@ -1762,9 +1748,7 @@ export function installMediaGeneration(ctx: CoreRuntimeContext) {
           });
           void Promise.all(resultNodes.map(async (resultNode, index) => {
               const nodeFileName = ctx.resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount);
-              const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                  ? crypto.randomUUID()
-                  : `video-gen-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`;
+              const idempotencyKey = createIdempotencyKey('video-gen', index);
               try {
                   const created = normalizeGenerationTaskDetail(await api.createGenerationTask<GenerationTaskDetail>({
                       taskType: 'VIDEO',
@@ -1841,9 +1825,7 @@ export function installMediaGeneration(ctx: CoreRuntimeContext) {
       ctx.bumpToolbarRevision();
       ctx.updateNodeToolbar();
       ctx.scheduleHistoryPush();
-      const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `video-gen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const idempotencyKey = createIdempotencyKey('video-gen');
       void (async () => {
           try {
               const created = normalizeGenerationTaskDetail(await api.createGenerationTask<GenerationTaskDetail>({
