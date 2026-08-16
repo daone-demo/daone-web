@@ -485,7 +485,7 @@
               type="button"
               class="combo-confirm__close"
               aria-label="关闭"
-              @click="showPayModal = false"
+              @click="close"
             >
               ×
             </button>
@@ -644,6 +644,8 @@ const selectedPayMethod = ref<PayMethod>('WECHAT')
 
 let orderPollingTimer: ReturnType<typeof setInterval> | null = null
 const ORDER_POLLING_INTERVAL = 3000;
+/** 丢弃快速切换支付方式时的过期二维码响应 */
+let payLoadSeq = 0
 
 const placeholderText = computed(() => {
   const tab = USER_INFO_TABS.find((item) => item.key === activeTab.value)
@@ -701,31 +703,33 @@ async function openPayModal(key: string, payTypes: PayMethod) {
   payingPoints.value = pointsMatch ? Number(pointsMatch[1]) : undefined
   showPayModal.value = true;
   selectedPayMethod.value = payTypes;
-  try {
-    onLoadPayUrl();
-    startOrderPolling();
-  } catch (error) {
-    console.error('onLoadPayUrl', error)
-    payUrl.value = ''
-  }
+  // 拉码仅由 watch([orderNo, selectedPayMethod]) 触发，避免与此处重复 createPayment
+  startOrderPolling();
 }
 
 const onLoadPayUrl = async () => {
+  const seq = ++payLoadSeq
+  const currentOrderNo = orderNo.value
+  const currentMethod = selectedPayMethod.value
   try {
-    const res:any = await api.createPayment<PaymentResponse>(orderNo.value, {
-      payType: selectedPayMethod.value,
+    const res:any = await api.createPayment<PaymentResponse>(currentOrderNo, {
+      payType: currentMethod,
     })
+    if (seq !== payLoadSeq) return
     if (!res) return
 
-    if (selectedPayMethod.value === 'WECHAT') {
-      payUrl.value = await QRCode.toDataURL(res.redirectUrl, {
+    if (currentMethod === 'WECHAT') {
+      const dataUrl = await QRCode.toDataURL(res.redirectUrl, {
         width: 260,
         margin: 2,
       })
+      if (seq !== payLoadSeq) return
+      payUrl.value = dataUrl
     } else {
       payUrl.value = res.qrCodeContent
     }
   } catch (error) {
+    if (seq !== payLoadSeq) return
     console.error('onLoadPayUrl', error)
     payUrl.value = ''
   }
@@ -771,6 +775,7 @@ const close = () => {
   payType.value = '';
   payingProductName.value = ''
   payingPoints.value = undefined
+  payLoadSeq += 1
   stopOrderPolling()
 }
 
