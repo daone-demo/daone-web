@@ -31,7 +31,7 @@ const ISLAND_GLOBS = [
 ]
 
 /** 编排入口与部分域已去 nocheck 后的存量上限；新增文件禁止再加 @ts-nocheck */
-const RUNTIME_NOCHECK_BASELINE = 20
+const RUNTIME_NOCHECK_BASELINE = 18
 const RUNTIME_DIR = 'src/components/Canvas/composables/useCanvas/runtime'
 
 const ANY_RE = /(?<![\w$])any(?![\w$])/

@@ -430,38 +430,55 @@ const onRenameProject = (projectId: string, name: string) => {
 
 /**
  * 删除已由 Header/浏览器完成确认与接口调用。
- * 若删的是当前打开项目：导航到列表中其他有效项目；无则回项目首页并清空画布绑定。
- * 非当前项目：仅刷新列表。
+ * 若删的是当前打开项目：先冻结画布并关闭浏览器，再刷新列表（可失败）；
+ * 有其他有效项目则跳转，否则或刷新失败时回项目首页。
+ * 非当前项目：仅尝试刷新列表。
  */
 const onDeleteProject = async (projectId: string) => {
-  await onRefreshProjects()
-
   const routeId = currentRouteProjectId()
   const boundId = canvasRef.value?.getCanvasBoundProjectId?.() ?? ''
   const deletedIsCurrent = Boolean(projectId) && (projectId === routeId || projectId === boundId)
+
+  if (deletedIsCurrent) {
+    canvasRef.value?.closeProjectBrowser?.()
+    // 项目已删除：跳过离开确认，并立即冻结绑定，避免仍保存/生成到失效 ID
+    leaveConfirmed = true
+    canvasRef.value?.beginProjectCanvasSwitch?.()
+  }
+
+  let refreshOk = false
+  try {
+    await onRefreshProjects()
+    refreshOk = true
+  } catch (error) {
+    console.error('[CreateOrEdit] refresh projects after delete failed', error)
+    if (!deletedIsCurrent) {
+      message.warning('项目已删除，但列表刷新失败')
+      return
+    }
+    message.warning('项目已删除，列表刷新失败，已返回项目首页')
+  }
+
   if (!deletedIsCurrent) return
 
-  canvasRef.value?.closeProjectBrowser?.()
-  // 项目已删除，跳过离开确认，避免仍弹「未保存」
-  leaveConfirmed = true
+  // 仅在刷新成功时信任列表；失败则不依赖可能过期的列表，兜底回首页
+  const nextProject = refreshOk
+    ? projectsList.value.find((item) => item.id && item.id !== projectId)
+    : undefined
 
-  const nextProject = projectsList.value.find((item) => item.id && item.id !== projectId)
   if (nextProject?.id) {
     try {
       await router.replace({
         name: route.name ?? 'projectDetail',
         params: { ...route.params, id: nextProject.id },
       })
+      return
     } catch (error) {
-      leaveConfirmed = false
       console.error('[CreateOrEdit] navigate after delete failed', error)
-      message.error('项目已删除，但跳转失败，请手动选择其他项目')
+      message.error('跳转其他项目失败，将返回项目首页')
     }
-    return
   }
 
-  // 无其他项目：冻结当前画布绑定后回项目列表页
-  canvasRef.value?.beginProjectCanvasSwitch?.()
   try {
     await router.replace({ name: 'project' })
   } catch (error) {
