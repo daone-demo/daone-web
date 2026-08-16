@@ -1,5 +1,7 @@
-/** 仅代理受信对象存储域名（HTTPS），避免开放代理被滥用 */
-const ALLOWED_PROXY_HOST_RE = /(^|\.)(aliyuncs\.com|myqcloud\.com)$/i
+import {
+  appendMediaProxySignature,
+  isAllowedMediaProxyHostname,
+} from '../../../scripts/media-proxy-policy.mjs'
 
 function parseRemoteMediaUrl(url: string): URL | null {
   if (!url || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('/')) {
@@ -9,7 +11,7 @@ function parseRemoteMediaUrl(url: string): URL | null {
     const parsed = new URL(url, typeof window !== 'undefined' ? window.location.href : 'http://localhost')
     // 与服务端一致：仅 HTTPS，避免客户端构造已被拒绝的 HTTP 代理请求
     if (parsed.protocol !== 'https:') return null
-    if (!ALLOWED_PROXY_HOST_RE.test(parsed.hostname)) return null
+    if (!isAllowedMediaProxyHostname(parsed.hostname)) return null
     return parsed
   } catch {
     return null
@@ -18,6 +20,7 @@ function parseRemoteMediaUrl(url: string): URL | null {
 
 /**
  * Path 风格同源代理：`/media-proxy/<host>/<path>`（nginx / Vercel path rewrite）
+ * 自动附加短时 HMAC（mp_exp / mp_sig），与 Node 校验对齐。
  */
 export function buildMediaProxyPathUrl(url: string): string | null {
   const parsed = parseRemoteMediaUrl(url)
@@ -25,7 +28,7 @@ export function buildMediaProxyPathUrl(url: string): string | null {
 
   const pathname = parsed.pathname.replace(/^\//, '')
   const search = parsed.search || ''
-  return `/media-proxy/${parsed.hostname}/${pathname}${search}`
+  return appendMediaProxySignature(`/media-proxy/${parsed.hostname}/${pathname}${search}`)
 }
 
 /**
@@ -41,7 +44,7 @@ export function buildMediaProxyCandidates(url: string): string[] {
   if (!parsed) return [pathStyle]
 
   const encoded = encodeURIComponent(parsed.toString())
-  return [...new Set([pathStyle, `/media-proxy?url=${encoded}`])]
+  return [...new Set([pathStyle, appendMediaProxySignature(`/media-proxy?url=${encoded}`)])]
 }
 
 /** 将跨域对象存储地址转为同源 `/media-proxy/<host>/<path>` */
@@ -50,5 +53,5 @@ export function toMediaProxyUrl(url: string): string | null {
 }
 
 export function isAllowedMediaProxyHost(hostname: string) {
-  return ALLOWED_PROXY_HOST_RE.test(hostname)
+  return isAllowedMediaProxyHostname(hostname)
 }

@@ -6,14 +6,28 @@ export interface MediaProxyOptions {
 }
 
 export const MEDIA_PROXY_SECURITY_HEADERS: Readonly<Record<string, string>>
+export const MEDIA_PROXY_MAX_BYTES: number
+export const MEDIA_PROXY_TIMEOUT_MS: number
 
 export function isAllowedMediaProxyUrl(rawUrl: string): boolean
+
+export function isAllowedMediaProxyHostname(hostname: string): boolean
 
 export function isAllowedContentType(contentType: string): boolean
 
 export function resolveMediaProxyTargetUrl(rawUrl: string): string | null
 
 export function isBlockedMediaProxyAddress(address: string): boolean
+
+export function appendMediaProxySignature(
+  proxyUrl: string,
+  options?: { ttlSec?: number; nowSec?: number; secret?: string },
+): string
+
+export function verifyMediaProxyRequestSignature(
+  rawUrl: string,
+  options?: { ttlSec?: number; nowSec?: number; secret?: string },
+): { ok: true; targetUrl: string; exp: number } | { ok: false; statusCode: number; message: string }
 
 export function proxyMediaTargetUrl(
   targetUrl: string,

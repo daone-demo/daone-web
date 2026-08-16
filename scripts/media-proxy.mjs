@@ -1,10 +1,23 @@
 import dns from 'node:dns/promises'
 import net from 'node:net'
+import {
+  MEDIA_PROXY_MAX_BYTES,
+  MEDIA_PROXY_MAX_REDIRECTS,
+  MEDIA_PROXY_TIMEOUT_MS,
+  appendMediaProxySignature,
+  createMediaProxyRateLimiter,
+  isAllowedMediaProxyHostname,
+  resolveMediaProxyClientKey,
+  verifyMediaProxyRequestSignature,
+} from './media-proxy-policy.mjs'
 
-const MEDIA_PROXY_HOST_RE = /(^|\.)(aliyuncs\.com|myqcloud\.com)$/i
-const MEDIA_PROXY_TIMEOUT_MS = 15_000
-const MEDIA_PROXY_MAX_BYTES = 50 * 1024 * 1024
-const MEDIA_PROXY_MAX_REDIRECTS = 3
+export {
+  MEDIA_PROXY_MAX_BYTES,
+  MEDIA_PROXY_TIMEOUT_MS,
+  appendMediaProxySignature,
+  isAllowedMediaProxyHostname,
+  verifyMediaProxyRequestSignature,
+} from './media-proxy-policy.mjs'
 
 /** 允许代理的被动媒体类型；主动可执行文档（SVG/HTML/XML/JS/PDF）一律拒绝 */
 const MEDIA_PROXY_ALLOWED_CONTENT_TYPES = [
@@ -43,6 +56,8 @@ export const MEDIA_PROXY_SECURITY_HEADERS = Object.freeze({
   'Cache-Control': 'public, max-age=3600',
 })
 
+const mediaProxyRateLimiter = createMediaProxyRateLimiter()
+
 function normalizeContentType(contentType) {
   return String(contentType || '').split(';', 1)[0].trim().toLowerCase()
 }
@@ -51,11 +66,13 @@ export function isAllowedMediaProxyUrl(rawUrl) {
   try {
     const parsed = new URL(rawUrl)
     const isStandardPort = !parsed.port || parsed.port === '443'
-    return parsed.protocol === 'https:' &&
+    return (
+      parsed.protocol === 'https:' &&
       !parsed.username &&
       !parsed.password &&
       isStandardPort &&
-      MEDIA_PROXY_HOST_RE.test(parsed.hostname)
+      isAllowedMediaProxyHostname(parsed.hostname)
+    )
   } catch {
     return false
   }
@@ -67,7 +84,8 @@ function isBlockedIpv4(address) {
     return true
   }
   const [a, b, c] = octets
-  return a === 0 ||
+  return (
+    a === 0 ||
     a === 10 ||
     a === 127 ||
     (a === 100 && b >= 64 && b <= 127) ||
@@ -80,6 +98,7 @@ function isBlockedIpv4(address) {
     (a === 198 && b === 51 && c === 100) ||
     (a === 203 && b === 0 && c === 113) ||
     a >= 224
+  )
 }
 
 export function isBlockedMediaProxyAddress(address) {
@@ -91,13 +110,15 @@ export function isBlockedMediaProxyAddress(address) {
   const mappedIpv4 = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
   if (mappedIpv4) return isBlockedIpv4(mappedIpv4[1])
 
-  return normalized === '::' ||
+  return (
+    normalized === '::' ||
     normalized === '::1' ||
     normalized.startsWith('fc') ||
     normalized.startsWith('fd') ||
     /^fe[89ab]/.test(normalized) ||
     normalized.startsWith('ff') ||
     normalized.startsWith('2001:db8:')
+  )
 }
 
 /**
@@ -105,7 +126,6 @@ export function isBlockedMediaProxyAddress(address) {
  * fake-IP 模式的本地 DNS 代理（Clash / Surge 等）会把公网域名解析到 198.18.0.0/15、
  * fdfe:dcba:9876::/48 等保留段，使合法对象存储域名被判为私网地址而返回 403。
  * 因此开发服务器可显式关闭预检；生产入口（server.mjs、api/*）默认保持开启。
- * 关闭后仍受 MEDIA_PROXY_HOST_RE 域名白名单约束，目标不可由外部任意指定。
  */
 function shouldEnforceDnsGuard(override) {
   if (process.env.MEDIA_PROXY_ENFORCE_DNS_GUARD === '0') return false
@@ -149,7 +169,11 @@ export function resolveMediaProxyTargetUrl(rawUrl) {
   if (!targetUrl) {
     const pathMatch = incoming.pathname.match(/^\/(?:api\/)?media-proxy\/([^/]+)\/(.+)$/)
     if (pathMatch) {
-      targetUrl = `https://${pathMatch[1]}/${pathMatch[2]}${incoming.search || ''}`
+      const params = new URLSearchParams(incoming.search)
+      params.delete('mp_exp')
+      params.delete('mp_sig')
+      const query = params.toString()
+      targetUrl = `https://${pathMatch[1]}/${pathMatch[2]}${query ? `?${query}` : ''}`
     }
   }
 
@@ -157,6 +181,8 @@ export function resolveMediaProxyTargetUrl(rawUrl) {
 
   try {
     const parsed = new URL(targetUrl)
+    parsed.searchParams.delete('mp_exp')
+    parsed.searchParams.delete('mp_sig')
     if (!isAllowedMediaProxyUrl(parsed.toString())) {
       return null
     }
@@ -216,8 +242,12 @@ export async function proxyMediaTargetUrl(targetUrl, options = {}) {
     error.statusCode = 415
     throw error
   }
-  const contentLength = Number(upstream.headers.get('content-length') || 0)
-  if (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > MEDIA_PROXY_MAX_BYTES) {
+  const contentLengthHeader = upstream.headers.get('content-length')
+  const contentLength = contentLengthHeader == null ? 0 : Number(contentLengthHeader)
+  if (
+    contentLengthHeader != null &&
+    (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > MEDIA_PROXY_MAX_BYTES)
+  ) {
     const error = new Error('Upstream response too large')
     error.statusCode = 413
     throw error
@@ -259,10 +289,24 @@ export async function handleMediaProxyNodeRequest(req, res, requestUrl, options 
     return true
   }
 
+  const signature = verifyMediaProxyRequestSignature(requestUrl)
+  if (!signature.ok) {
+    res.statusCode = signature.statusCode
+    res.end(signature.message)
+    return true
+  }
+
   const targetUrl = resolveMediaProxyTargetUrl(requestUrl)
   if (!targetUrl) {
     res.statusCode = 400
     res.end('Missing or invalid url')
+    return true
+  }
+
+  const rate = mediaProxyRateLimiter.tryAcquire(resolveMediaProxyClientKey(req))
+  if (!rate.ok) {
+    res.statusCode = rate.statusCode
+    res.end(rate.message)
     return true
   }
 
@@ -282,6 +326,8 @@ export async function handleMediaProxyNodeRequest(req, res, requestUrl, options 
     }
     res.statusCode = error?.statusCode || 502
     res.end(error instanceof Error ? error.message : 'Proxy failed')
+  } finally {
+    rate.release()
   }
 
   return true
