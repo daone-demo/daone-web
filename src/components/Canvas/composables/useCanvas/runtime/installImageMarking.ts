@@ -767,7 +767,8 @@ export function installImageMarking(ctx: CoreRuntimeContext) {
               name: currentRoute.name ?? undefined,
               params: { ...currentRoute.params, id: projectId },
           });
-          ctx.activeProjectId.value = projectId;
+          // 不在此提前绑定 activeProjectId；等 applyProjectCanvasPayload 成功后再绑定，
+          // 避免「B 路由 + A 画布」窗口内保存落到新项目
           ctx.closeProjectMenu();
       }
       catch (error) {

@@ -6,6 +6,15 @@
     </div>
 
     <template v-else>
+      <div
+        v-if="projectSwitchLoading"
+        class="create-or-edit__loading create-or-edit__loading--switch"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="create-or-edit__loading-spinner" aria-hidden="true" />
+        <p class="create-or-edit__loading-text">项目切换中...</p>
+      </div>
       <Canvas
         ref="canvasRef"
         :projects-list="projectsList"
@@ -118,6 +127,8 @@ type CanvasExpose = {
   loadProjectCanvas: (payload: ProjectCanvasResponse) => boolean
   createNodeFromChatTask: (payload: ChatTaskCreatedPayload) => Node | null
   updateChatTaskNodeTitleFromPayload?: (payload: ChatTaskUpdatedPayload) => void
+  beginProjectCanvasSwitch?: () => void
+  getCanvasBoundProjectId?: () => string
 }
 
 type CanvasProjectItem = {
@@ -143,11 +154,15 @@ const currentProjectId = computed(() => {
 const canvasRef = ref<(Omit<InstanceType<typeof Canvas>, keyof CanvasExpose> & CanvasExpose) | null>(null)
 const chatPanelRef = ref<InstanceType<typeof ChatSidePanel> | null>(null)
 const pageLoading = ref(true)
+/** 路由切项目期间遮罩：冻结编辑，直至新画布绑定成功 */
+const projectSwitchLoading = ref(false)
 /** 带 epoch/projectId 归属的 pending，避免无归属单槽被旧响应覆盖 */
 const pendingCanvasPayload = ref<PendingCanvasSlot<ProjectCanvasResponse> | null>(null)
 const aiSkills = ref<any[]>([]);
 /** 画布加载代数：每次发起/作废请求递增，用于丢弃乱序旧响应 */
 let canvasLoadEpoch = 0
+/** 项目切换请求代数，避免失败回退与并发切换互相清掉 loading */
+let projectSwitchEpoch = 0
 /** 用户已确认离开时跳过二次弹窗 */
 let leaveConfirmed = false
 /** 避免同时弹出多个离开确认框 */
@@ -227,10 +242,16 @@ function onChatSend(payload: ChatSendPayload) {
 }
 
 function onChatTaskCreated(payload: ChatTaskCreatedPayload) {
+  const payloadProjectId = String(payload.projectId ?? '').trim()
+  const currentId = currentProjectId.value
+  if (payloadProjectId && currentId && payloadProjectId !== currentId) return
   canvasRef.value?.createNodeFromChatTask?.(payload)
 }
 
 function onChatTaskUpdated(payload: ChatTaskUpdatedPayload) {
+  const payloadProjectId = String(payload.projectId ?? '').trim()
+  const currentId = currentProjectId.value
+  if (payloadProjectId && currentId && payloadProjectId !== currentId) return
   canvasRef.value?.updateChatTaskNodeTitleFromPayload?.(payload)
 }
 
@@ -568,6 +589,7 @@ async function initializePage() {
 
 function needsLeaveConfirm() {
   if (pageLoading.value) return false
+  if (projectSwitchLoading.value) return false
   if (leaveConfirmed) return false
   if (isLeaveConfirmSuppressed()) return false
   // 离开创作页 / 切换项目前均提示保存
@@ -671,14 +693,58 @@ watch(
     const nextId = normalizeRouteProjectId(newId)
     const prevId = normalizeRouteProjectId(oldId)
     if (!nextId || nextId === prevId) return
+
     // 初始化期间也接受切路由：用 epoch 作废旧请求，避免 pageLoading 直接忽略导致串项目
+    const switching = !pageLoading.value
+    const switchEpoch = ++projectSwitchEpoch
+    if (switching) {
+      projectSwitchLoading.value = true
+      canvasRef.value?.beginProjectCanvasSwitch?.()
+    }
+
     try {
       await onLoadProjectCanvas(nextId)
+      if (switchEpoch !== projectSwitchEpoch) return
+
+      if (switching) {
+        await flushPendingCanvasWhenReady()
+        const boundId = canvasRef.value?.getCanvasBoundProjectId?.() ?? ''
+        if (boundId !== nextId) {
+          throw new Error('project canvas not applied to route target')
+        }
+      }
+
       if (!pageLoading.value) {
         await reloadChatForCurrentProject()
       }
     } catch (error) {
+      if (switchEpoch !== projectSwitchEpoch) return
       console.error('[CreateOrEdit] load project failed', error)
+      if (switching && prevId && currentRouteProjectId() === nextId) {
+        message.error('项目加载失败，已返回原项目')
+        leaveConfirmed = true
+        try {
+          await router.replace({
+            name: route.name ?? 'projectDetail',
+            params: { ...route.params, id: prevId },
+          })
+          // 回退导航会再次进入本 watch，由新一轮负责收尾 loading
+          return
+        } catch (navError) {
+          console.error('[CreateOrEdit] revert project route failed', navError)
+        }
+      } else {
+        message.error('项目加载失败')
+      }
+    } finally {
+      // 已回退到旧路由时，由新一轮 switchEpoch 收尾，避免过早揭开遮罩
+      if (
+        switching &&
+        switchEpoch === projectSwitchEpoch &&
+        currentRouteProjectId() === nextId
+      ) {
+        projectSwitchLoading.value = false
+      }
     }
   },
 )

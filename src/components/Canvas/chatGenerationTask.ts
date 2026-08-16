@@ -24,12 +24,16 @@ export type ChatTaskCreatedPayload = {
   nodeId?: string
   /** 画布上游节点 ID，用于自动连线 */
   parentNodeId?: string
+  /** 发起流式请求时的项目，用于切项目后丢弃迟到事件 */
+  projectId?: string
 }
 
 /** 对话 SSE task_status / task_progress 携带的任务名更新 */
 export type ChatTaskUpdatedPayload = {
   taskId: string | number
   taskName: string
+  /** 发起流式请求时的项目，用于切项目后丢弃迟到事件 */
+  projectId?: string
 }
 
 const CHAT_TASK_CAPABILITY_TITLES: Record<string, string> = {

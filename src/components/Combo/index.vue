@@ -491,6 +491,24 @@ function close() {
   emit('close')
 }
 
+/** 清空订单/二维码/幂等键，避免换套餐时复用旧单 */
+function resetPaymentState() {
+  stopOrderPolling()
+  orderNo.value = ''
+  payUrl.value = ''
+  payExpireAt.value = ''
+  currentIdempotencyKey.value = null
+}
+
+function closeConfirm(force = false) {
+  if (confirmLoading.value && !force) return
+  resetPaymentState()
+  confirmLoading.value = false
+  confirmVisible.value = false
+  selectedPlan.value = null
+  selectedPayMethod.value = 'WECHAT'
+}
+
 function formatYuan(fen: number): string {
   return Number(tools.div(fen, 100)).toFixed(2)
 }
@@ -600,14 +618,6 @@ const confirmPayLabel = computed(() => {
   return `确认支付 ¥${confirmPreview.value.payDiffYuan}`
 })
 
-function closeConfirm() {
-  if (confirmLoading.value) return
-  stopOrderPolling()
-  confirmVisible.value = false
-  selectedPlan.value = null
-  selectedPayMethod.value = 'WECHAT'
-}
-
 async function loadUserProfile() {
   if (!userInfoStore.isLoggedIn) {
     userProfile.value = null
@@ -640,6 +650,9 @@ async function onActivate(plan: PlanItem) {
     return
   };
   await loadUserProfile()
+  // 打开确认前清掉上一单，避免新套餐标题配旧二维码/旧幂等键
+  resetPaymentState()
+  selectedPayMethod.value = 'WECHAT'
   selectedPlan.value = plan
   confirmVisible.value = true;
 }
@@ -783,10 +796,7 @@ watch(open, (visible) => {
     void preloadSlideVerifyImages()
     onloadPlans()
   } else {
-    stopOrderPolling()
-    orderNo.value = '';
-    selectedPayMethod.value = 'WECHAT';
-    closeConfirm()
+    closeConfirm(true)
     memberTab.value = 'enterprise'
     billing.value = 'YEAR'
     resetTrialForm()

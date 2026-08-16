@@ -41,6 +41,8 @@ export function installPersistenceState(ctx: CoreRuntimeContext) {
   ctx.autoSaveDebounceTimer = null;
   ctx.autoSaveEnabled = true;
   ctx.canvasContentReady = false;
+  /** 当前 graph 已成功应用的项目；切路由但未应用新画布前为空，禁止跨项目保存 */
+  ctx.canvasBoundProjectId = '';
   ctx.saveInFlight = false;
   ctx.pendingRemoteSaveType = null;
   ctx.pendingSaveJobs = [];
@@ -84,6 +86,7 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       const canvasData = payload.canvasData ?? payload.canvas ?? { graph: { cells: [] } };
       const boundProjectId = projectId || routeId;
       ctx.activeProjectId.value = boundProjectId;
+      ctx.canvasBoundProjectId = boundProjectId;
       ctx.localDirty = false;
       ctx.canvasRevision.value = payload.revision;
       ctx.lastCanvasDescription.value = payload.description?.trim() || '';
@@ -176,9 +179,45 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       ctx.canvasContentReady = false;
   };
 
-  /** 图已挂载且已绑定项目时，自愈就绪标记（覆盖加载竞态 / pagehide 后未恢复） */
+  /**
+   * 路由切项目开始：冻结旧画布、停自动保存、清空 graph，
+   * 避免「B 路由 + A 画布」窗口内编辑/保存落到新项目。
+   */
+  ctx.beginProjectCanvasSwitch = function beginProjectCanvasSwitch() {
+      ctx.stopAutoSave();
+      ctx.canvasBoundProjectId = '';
+      ctx.localDirty = false;
+      const jobs = Array.isArray(ctx.pendingSaveJobs) ? ctx.pendingSaveJobs : [];
+      for (const job of jobs) {
+          job.resolve(false);
+      }
+      ctx.pendingSaveJobs = [];
+      ctx.pendingRemoteSaveType = null;
+      ctx.pendingProjectCanvas = null;
+      if (typeof ctx.resetCanvasInteractionState === 'function') {
+          ctx.resetCanvasInteractionState();
+      }
+      const g = ctx.graph.value;
+      if (g && typeof g.clearCells === 'function') {
+          g.clearCells();
+      }
+      ctx.syncNodeCount?.();
+      ctx.bumpToolbarRevision?.();
+      ctx.updateNodeToolbar?.();
+  };
+
+  ctx.getCanvasBoundProjectId = function getCanvasBoundProjectId(): string {
+      return normalizeProjectId(ctx.canvasBoundProjectId);
+  };
+
+  /** 图已挂载且已绑定到当前路由项目时，自愈就绪标记（覆盖加载竞态 / pagehide 后未恢复） */
   ctx.ensureCanvasReadyForAutoSave = function ensureCanvasReadyForAutoSave(): boolean {
       if (!ctx.autoSaveEnabled)
+          return false;
+      const routeId = readRouteProjectId(ctx);
+      const bound = normalizeProjectId(ctx.canvasBoundProjectId);
+      // 路由已切走但画布尚未绑定到新项目：禁止自愈就绪，杜绝跨项目自动保存
+      if (routeId && (!bound || bound !== routeId))
           return false;
       if (ctx.canvasContentReady)
           return true;
@@ -318,13 +357,18 @@ export function installPersistence(ctx: CoreRuntimeContext) {
   };
   
   ctx.resolveActiveProjectId = function resolveActiveProjectId(): string {
-      // 路由项目页以当前路由为权威约束，禁止过期响应把保存目标改回旧项目
+      // 路由项目页：只有画布已绑定到当前路由项目时，才允许以该 ID 作为保存目标
       const fromRoute = readRouteProjectId(ctx);
+      const bound = normalizeProjectId(ctx.canvasBoundProjectId);
       if (fromRoute) {
-          if (normalizeProjectId(ctx.activeProjectId.value) !== fromRoute) {
-              ctx.activeProjectId.value = fromRoute;
+          if (bound && bound === fromRoute) {
+              if (normalizeProjectId(ctx.activeProjectId.value) !== fromRoute) {
+                  ctx.activeProjectId.value = fromRoute;
+              }
+              return fromRoute;
           }
-          return fromRoute;
+          // 路由已切换、旧画布未卸绑完成：返回空以阻断保存
+          return '';
       }
       const current = normalizeProjectId(ctx.activeProjectId.value);
       if (current) {
@@ -371,12 +415,16 @@ export function installPersistence(ctx: CoreRuntimeContext) {
               jobs.forEach((job) => job.resolve(false));
               continue;
           }
-          // 取队列末次快照（含点击离开时的最新编辑）；项目以路由约束后的 ID 为准
-          const latest = jobs[jobs.length - 1];
+          // 取队列末次快照；仅当画布已绑定到当前路由项目时才允许落库
           const routeId = readRouteProjectId(ctx);
-          const projectId = routeId || latest.projectId;
-          const matchingJobs = jobs.filter((job) => !routeId || job.projectId === projectId);
-          const dropped = jobs.filter((job) => routeId && job.projectId !== projectId);
+          const bound = normalizeProjectId(ctx.canvasBoundProjectId);
+          const projectId = (routeId && bound === routeId) ? routeId : '';
+          if (!projectId) {
+              jobs.forEach((job) => job.resolve(false));
+              continue;
+          }
+          const matchingJobs = jobs.filter((job) => job.projectId === projectId);
+          const dropped = jobs.filter((job) => job.projectId !== projectId);
           dropped.forEach((job) => job.resolve(false));
           if (!matchingJobs.length) {
               continue;
@@ -400,6 +448,10 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       if (!projectId)
           return false;
       const routeId = readRouteProjectId(ctx);
+      const bound = normalizeProjectId(ctx.canvasBoundProjectId);
+      // 快照必须属于当前已绑定画布，且与路由一致，防止 A 内容写入 B
+      if (!bound || projectId !== bound)
+          return false;
       if (routeId && projectId !== routeId)
           return false;
       const project = ctx.findCanvasProject(projectId);
@@ -423,16 +475,21 @@ export function installPersistence(ctx: CoreRuntimeContext) {
 
   ctx.flushRemoteCanvasSave = async function flushRemoteCanvasSave(saveType: 'MANUAL' | 'AUTO', reusedSnapshot?: CanvasSnapshot | null): Promise<boolean> {
       const type = normalizeSaveType(saveType);
+      const routeId = readRouteProjectId(ctx);
+      const bound = normalizeProjectId(ctx.canvasBoundProjectId);
       // 手动保存不受 pauseAutoSave（pagehide/beforeunload）影响；顺带恢复自动保存
       if (type === 'MANUAL') {
           ctx.autoSaveEnabled = true;
-          if (!ctx.canvasContentReady && ctx.graph.value) {
+          // 切项目窗口内禁止“强制就绪”，避免旧画布被标成可保存
+          if (!ctx.canvasContentReady && ctx.graph.value && bound && (!routeId || bound === routeId)) {
               ctx.markCanvasContentReady();
           }
       }
       else if (!ctx.ensureCanvasReadyForAutoSave()) {
           return false;
       }
+      if (routeId && (!bound || bound !== routeId))
+          return false;
       const projectId = ctx.resolveActiveProjectId();
       if (!projectId)
           return false;
@@ -456,7 +513,13 @@ export function installPersistence(ctx: CoreRuntimeContext) {
               return;
       }
       else {
-          // 顶部工具栏 / 快捷键：始终允许手动保存
+          const routeId = readRouteProjectId(ctx);
+          const bound = normalizeProjectId(ctx.canvasBoundProjectId);
+          if (routeId && (!bound || bound !== routeId)) {
+              message.warning('项目切换中，请稍后再保存');
+              return;
+          }
+          // 顶部工具栏 / 快捷键：始终允许手动保存（已绑定当前项目时）
           ctx.autoSaveEnabled = true;
           if (!ctx.canvasContentReady && ctx.graph.value) {
               ctx.markCanvasContentReady();

@@ -176,6 +176,8 @@ export function createCoreRuntime(bind: CanvasBindings, ports: CanvasCorePorts) 
     setCanvasDescription: ctx.setCanvasDescription,
     loadProjectCanvas: ctx.loadProjectCanvas,
     loadProjectCanvasFromVersion: ctx.loadProjectCanvasFromVersion,
+    beginProjectCanvasSwitch: ctx.beginProjectCanvasSwitch,
+    getCanvasBoundProjectId: ctx.getCanvasBoundProjectId,
     handleTextPickerAction: ctx.handleTextPickerAction,
     handleTidyCanvas: ctx.handleTidyCanvas,
     handleUndo: ctx.handleUndo,

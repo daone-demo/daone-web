@@ -85,11 +85,36 @@ export interface UseChatStreamOptions {
   emitSetCurrentSessionId: (sessionId: string) => void
   emitLoadHistorySessions: () => void
   emitTaskCreated: (payload: ChatTaskCreatedPayload) => void
-  emitTaskUpdated: (payload: { taskId: string | number; taskName: string }) => void
+  emitTaskUpdated: (payload: { taskId: string | number; taskName: string; projectId?: string }) => void
 }
 
 export function useChatStream(options: UseChatStreamOptions) {
-  function emitTaskUpdatesFromPayload(payload: StreamEvent) {
+  /** 每次切项目 / 主动作废时递增，用于丢弃 in-flight 创建会话与 SSE 回调 */
+  let chatRequestEpoch = 0
+
+  function invalidatePendingChatRequests() {
+    chatRequestEpoch += 1
+    options.close()
+  }
+
+  function currentProjectId() {
+    return String(toValue(options.projectId) ?? '').trim()
+  }
+
+  /** 发送上下文是否仍归属当前项目与面板会话（切项目 reset 后旧 session 会失效） */
+  function isChatSendContextValid(session: ChatSession, requestProjectId: string, epoch: number) {
+    if (epoch !== chatRequestEpoch) return false
+    const liveProjectId = currentProjectId()
+    if (requestProjectId && liveProjectId !== requestProjectId) return false
+    return options.sessions.value.some(
+      (item) =>
+        item === session
+        || item.id === session.id
+        || (Boolean(session.chatId) && item.chatId === session.chatId),
+    )
+  }
+
+  function emitTaskUpdatesFromPayload(payload: StreamEvent, projectId?: string) {
     const taskName = resolveStreamTaskName(payload)
     if (!taskName) return
 
@@ -99,7 +124,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     collectGenerationTaskIds(payload).forEach((id) => taskIds.add(id))
 
     taskIds.forEach((taskId) => {
-      options.emitTaskUpdated({ taskId, taskName })
+      options.emitTaskUpdated({ taskId, taskName, projectId })
     })
   }
 
@@ -137,9 +162,17 @@ export function useChatStream(options: UseChatStreamOptions) {
     text: string,
     assetIds: string[] = [],
     streamOptions: { nodeId?: string; skillName?: string } = {},
+    streamMeta: { projectId: string; epoch: number } = {
+      projectId: currentProjectId(),
+      epoch: chatRequestEpoch,
+    },
   ) {
     const chatId = session.chatId || toValue(options.currentSessionId)
     if (!chatId) return
+
+    const boundProjectId = streamMeta.projectId
+    const streamEpoch = streamMeta.epoch
+    const isStreamStale = () => !isChatSendContextValid(session, boundProjectId, streamEpoch)
 
     // 绑定当前会话引用，流式过程中始终写回同一份 messages
     const targetSessionId = session.id
@@ -193,6 +226,10 @@ export function useChatStream(options: UseChatStreamOptions) {
         ...(nodeId ? { nodeId } : {}),
       },
       onMessage(data, sseEvent) {
+        if (isStreamStale()) {
+          options.close()
+          return
+        }
         const payload = parseStreamEvent(data)
         if (!payload) return
 
@@ -220,6 +257,7 @@ export function useChatStream(options: UseChatStreamOptions) {
             capabilityCode: payload.capabilityCode,
             nodeId: payload.nodeId,
             parentNodeId: payload.parentNodeId,
+            projectId: boundProjectId || undefined,
           })
           options.scrollMessagesToBottom()
           return
@@ -257,6 +295,7 @@ export function useChatStream(options: UseChatStreamOptions) {
             options.emitTaskUpdated({
               taskId: payload.taskId as string | number,
               taskName,
+              projectId: boundProjectId || undefined,
             })
           }
 
@@ -321,7 +360,7 @@ export function useChatStream(options: UseChatStreamOptions) {
           }
 
           applyStreamAgentPayload(assistant, payload)
-          emitTaskUpdatesFromPayload(payload)
+          emitTaskUpdatesFromPayload(payload, boundProjectId || undefined)
           if (assistant.generationTaskIds?.length) {
             awaitingRunningTask = true
           }
@@ -351,6 +390,7 @@ export function useChatStream(options: UseChatStreamOptions) {
         }
       },
       onDone() {
+        if (isStreamStale()) return
         options.cancelTypewriter(assistantId)
         const assistant = resolveAssistant()
         // event=done / 流结束：隐藏 thinking 与处理中 tip（后台任务进度由任务事件单独驱动）
@@ -368,6 +408,7 @@ export function useChatStream(options: UseChatStreamOptions) {
         options.scrollMessagesToBottom()
       },
       onError(err) {
+        if (isStreamStale()) return
         options.cancelTypewriter(assistantId)
         const assistant = resolveAssistant()
         if (!assistant) return
@@ -399,10 +440,17 @@ export function useChatStream(options: UseChatStreamOptions) {
     })
   }
 
-  async function ensureChatSession(session: ChatSession, title: string) {
+  async function ensureChatSession(
+    session: ChatSession,
+    title: string,
+    requestMeta: { projectId: string; epoch: number },
+  ) {
     // 已有服务端会话 ID：同步到本地后直接复用
     const existingId = session.chatId || toValue(options.currentSessionId)
     if (existingId) {
+      if (!isChatSendContextValid(session, requestMeta.projectId, requestMeta.epoch)) {
+        return ''
+      }
       session.chatId = existingId
       if (session.id !== existingId) {
         const oldId = session.id
@@ -415,9 +463,13 @@ export function useChatStream(options: UseChatStreamOptions) {
     }
 
     const created = await api.createChatSession({
-      projectId: toValue(options.projectId),
+      projectId: requestMeta.projectId || toValue(options.projectId),
       title,
     })
+    // 切项目后迟到的创建结果不得回写面板或启动 SSE
+    if (!isChatSendContextValid(session, requestMeta.projectId, requestMeta.epoch)) {
+      return ''
+    }
     const oldId = session.id
     session.chatId = created.id
     session.id = created.id
@@ -491,18 +543,23 @@ export function useChatStream(options: UseChatStreamOptions) {
       ? (text || payloadAttachments[0]?.fileName || '新建对话')
       : session.title
 
+    const requestProjectId = currentProjectId()
+    const requestEpoch = chatRequestEpoch
+
     options.isSending.value = true
     try {
-      await ensureChatSession(session, title)
+      const chatId = await ensureChatSession(session, title, {
+        projectId: requestProjectId,
+        epoch: requestEpoch,
+      })
+      if (!chatId) return
+      if (!isChatSendContextValid(session, requestProjectId, requestEpoch)) return
 
       // 作废进行中的历史消息拉取，防止回写覆盖本地对话
-      const chatId = session.chatId || session.id
-      if (chatId) {
-        options.messageLoadSeqByChatId.set(
-          chatId,
-          (options.messageLoadSeqByChatId.get(chatId) ?? 0) + 1,
-        )
-      }
+      options.messageLoadSeqByChatId.set(
+        chatId,
+        (options.messageLoadSeqByChatId.get(chatId) ?? 0) + 1,
+      )
 
       if (session.title === '新建对话') {
         session.title = title
@@ -526,7 +583,10 @@ export function useChatStream(options: UseChatStreamOptions) {
       options.scrollMessagesToBottom()
       if (text) {
         options.emitSend({ text, attachments: payloadAttachments })
-        startChatStream(session, text, assetIds, streamOptions)
+        startChatStream(session, text, assetIds, streamOptions, {
+          projectId: requestProjectId,
+          epoch: requestEpoch,
+        })
       }
     } catch {
       // ensureChatSession 失败时由请求层提示
@@ -617,7 +677,7 @@ export function useChatStream(options: UseChatStreamOptions) {
   }
 
   function stopProcessing() {
-    options.close()
+    invalidatePendingChatRequests()
     options.isProcessing.value = false
     options.cancelAllTypewriters()
   }
@@ -646,5 +706,6 @@ export function useChatStream(options: UseChatStreamOptions) {
     stopProcessing,
     beginProcessing,
     endProcessing,
+    invalidatePendingChatRequests,
   }
 }

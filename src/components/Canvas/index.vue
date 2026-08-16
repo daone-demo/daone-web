@@ -886,6 +886,18 @@ defineExpose({
     }).loadProjectCanvasFromVersion
     return load?.(detail) ?? false
   },
+  beginProjectCanvasSwitch() {
+    const fn = (canvasRuntime as {
+      beginProjectCanvasSwitch?: () => void
+    }).beginProjectCanvasSwitch
+    fn?.()
+  },
+  getCanvasBoundProjectId(): string {
+    const fn = (canvasRuntime as {
+      getCanvasBoundProjectId?: () => string
+    }).getCanvasBoundProjectId
+    return fn?.() ?? ''
+  },
   reloadProjectBrowser() {
     projectBrowserRef.value?.reload()
   },

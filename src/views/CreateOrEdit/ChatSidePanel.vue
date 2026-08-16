@@ -253,7 +253,7 @@ const {
   closeTab,
   toggleHistoryMenu,
   startNewChat,
-  resetForProject,
+  resetForProject: resetSessionsForProject,
   createSession,
 } = useChatSessions({
   attachments,
@@ -359,6 +359,7 @@ const {
   stopProcessing,
   beginProcessing,
   endProcessing,
+  invalidatePendingChatRequests,
 } = useChatStream({
   projectId: () => props.projectId,
   currentSessionId: () => props.currentSessionId,
@@ -393,6 +394,12 @@ const {
   emitTaskCreated: (payload) => emit('task-created', payload),
   emitTaskUpdated: (payload) => emit('task-updated', payload),
 })
+
+/** 切项目：先作废 in-flight 创建会话/SSE，再重置面板，避免迟到回调写入新画布 */
+function resetForProject() {
+  invalidatePendingChatRequests()
+  resetSessionsForProject()
+}
 
 function unwrapRef<T>(value: Ref<T> | T | null | undefined): T | null {
   if (value == null) return null
