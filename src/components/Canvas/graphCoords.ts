@@ -47,11 +47,7 @@ export function getViewportCenterLocal(graph: Graph): { x: number; y: number } {
   }
 
   const rect = graph.container.getBoundingClientRect()
-  return clientPointToGraphLocal(
-    graph,
-    rect.left + rect.width / 2,
-    rect.top + rect.height / 2,
-  )
+  return clientPointToGraphLocal(graph, rect.left + rect.width / 2, rect.top + rect.height / 2)
 }
 
 /**
@@ -87,11 +83,7 @@ export function getEdgeMidpointLocal(graph: Graph, edge: Edge) {
 }
 
 /** 连线删除按钮在 .canvas 容器内的定位 */
-export function getEdgeDeleteButtonPosition(
-  graph: Graph,
-  edge: Edge,
-  container: HTMLElement,
-) {
+export function getEdgeDeleteButtonPosition(graph: Graph, edge: Edge, container: HTMLElement) {
   const mid = getEdgeMidpointLocal(graph, edge)
   return graphLocalToContainerOffset(graph, mid.x, mid.y, container)
 }

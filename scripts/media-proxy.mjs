@@ -4,9 +4,11 @@ import {
   MEDIA_PROXY_MAX_BYTES,
   MEDIA_PROXY_MAX_REDIRECTS,
   MEDIA_PROXY_TIMEOUT_MS,
-  appendMediaProxySignature,
   createMediaProxyRateLimiter,
+  ensureMediaProxyHmacSecretConfigured,
   isAllowedMediaProxyHostname,
+  issueMediaProxySignedUrls,
+  resolveMediaProxyAuthApiBase,
   resolveMediaProxyClientKey,
   verifyMediaProxyRequestSignature,
 } from './media-proxy-policy.mjs'
@@ -14,8 +16,10 @@ import {
 export {
   MEDIA_PROXY_MAX_BYTES,
   MEDIA_PROXY_TIMEOUT_MS,
-  appendMediaProxySignature,
+  ensureMediaProxyHmacSecretConfigured,
   isAllowedMediaProxyHostname,
+  issueMediaProxySignedUrls,
+  resolveMediaProxyClientKey,
   verifyMediaProxyRequestSignature,
 } from './media-proxy-policy.mjs'
 
@@ -276,7 +280,141 @@ async function pipeMediaProxyBody(body, res) {
   res.end()
 }
 
+function readRequestBody(req, limit = 64 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    let size = 0
+    req.on('data', (chunk) => {
+      size += chunk.length
+      if (size > limit) {
+        reject(Object.assign(new Error('Request body too large'), { statusCode: 413 }))
+        req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    req.on('error', reject)
+  })
+}
+
+function extractBearerToken(req) {
+  const header = req?.headers?.authorization
+  const value = Array.isArray(header) ? header[0] : header
+  if (!value || typeof value !== 'string') return ''
+  const matched = /^Bearer\s+(\S+)$/i.exec(value.trim())
+  return matched?.[1] || ''
+}
+
+async function assertMediaProxyCallerAuthorized(req, options = {}) {
+  if (options.skipAuth === true) return { ok: true }
+  const token = extractBearerToken(req)
+  if (!token || token.length < 16) {
+    return { ok: false, statusCode: 401, message: 'Unauthorized' }
+  }
+
+  const apiBase = resolveMediaProxyAuthApiBase()
+  if (!apiBase) {
+    // 未配置鉴权 API 时：开发/测试可 skipAuth；生产应配置 MEDIA_PROXY_AUTH_API_BASE
+    if (options.allowBearerOnly === true || process.env.MEDIA_PROXY_ALLOW_BEARER_ONLY === '1') {
+      return { ok: true, token }
+    }
+    return {
+      ok: false,
+      statusCode: 503,
+      message: 'Media proxy auth API is not configured',
+    }
+  }
+
+  try {
+    const response = await fetch(`${apiBase}/users/me`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(MEDIA_PROXY_TIMEOUT_MS),
+    })
+    if (!response.ok) {
+      return { ok: false, statusCode: 401, message: 'Unauthorized' }
+    }
+    return { ok: true, token }
+  } catch {
+    return { ok: false, statusCode: 503, message: 'Media proxy auth validation failed' }
+  }
+}
+
+export async function handleMediaProxySignRequest(req, res, options = {}) {
+  if (req.method !== 'POST') {
+    res.statusCode = 405
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.end(JSON.stringify({ message: 'Method Not Allowed' }))
+    return true
+  }
+
+  if (req.headers?.['sec-fetch-site'] === 'cross-site') {
+    res.statusCode = 403
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.end(JSON.stringify({ message: 'Cross-site request not allowed' }))
+    return true
+  }
+
+  const auth = await assertMediaProxyCallerAuthorized(req, options)
+  if (!auth.ok) {
+    res.statusCode = auth.statusCode
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.end(JSON.stringify({ message: auth.message }))
+    return true
+  }
+
+  const rate = mediaProxyRateLimiter.tryAcquire(resolveMediaProxyClientKey(req))
+  if (!rate.ok) {
+    res.statusCode = rate.statusCode
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.end(JSON.stringify({ message: rate.message }))
+    return true
+  }
+
+  try {
+    const raw = await readRequestBody(req)
+    let payload
+    try {
+      payload = raw ? JSON.parse(raw) : {}
+    } catch {
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.end(JSON.stringify({ message: 'Invalid JSON body' }))
+      return true
+    }
+    const targetUrl = String(payload.url || payload.targetUrl || '').trim()
+    if (!targetUrl) {
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.end(JSON.stringify({ message: 'Missing url' }))
+      return true
+    }
+    const issued = issueMediaProxySignedUrls(targetUrl)
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-store')
+    res.end(JSON.stringify(issued))
+  } catch (error) {
+    res.statusCode = error?.statusCode || 500
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.end(JSON.stringify({ message: error instanceof Error ? error.message : 'Sign failed' }))
+  } finally {
+    rate.release()
+  }
+
+  return true
+}
+
 export async function handleMediaProxyNodeRequest(req, res, requestUrl, options = {}) {
+  const pathname = new URL(requestUrl, 'http://localhost').pathname
+  if (pathname === '/media-proxy/sign' || pathname === '/api/media-proxy/sign') {
+    return handleMediaProxySignRequest(req, res, options)
+  }
+
   if (req.method !== 'GET') {
     res.statusCode = 405
     res.end('Method Not Allowed')
@@ -331,4 +469,9 @@ export async function handleMediaProxyNodeRequest(req, res, requestUrl, options 
   }
 
   return true
+}
+
+// 加载模块时：测试允许临时密钥；其它环境由 server / vite 显式 ensure
+if (process.env.NODE_ENV === 'test' || process.env.MEDIA_PROXY_ALLOW_EPHEMERAL_SECRET === '1') {
+  ensureMediaProxyHmacSecretConfigured({ allowEphemeral: true, silent: true })
 }

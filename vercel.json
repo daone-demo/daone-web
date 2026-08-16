@@ -5,6 +5,10 @@
       "destination": "https://43.161.199.75/api/api/v1/:path*"
     },
     {
+      "source": "/media-proxy/sign",
+      "destination": "/api/media-proxy/sign"
+    },
+    {
       "source": "/media-proxy/:host/:path*",
       "destination": "/api/media-proxy/:host/:path*"
     },

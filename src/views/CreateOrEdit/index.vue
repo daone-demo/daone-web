@@ -55,12 +55,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, createVNode, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, createVNode, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Node } from '@antv/x6'
 import { Modal, message } from 'ant-design-vue'
 import { ExclamationCircleFilled } from '@ant-design/icons-vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
-import Canvas from '@/components/Canvas/index.vue'
 import ChatSidePanel from './ChatSidePanel.vue'
 import type { ChatSendPayload, ChatTaskCreatedPayload } from './chatTypes'
 import type { ChatTaskUpdatedPayload } from '@/components/Canvas/chatGenerationTask'
@@ -76,6 +75,9 @@ import {
   type WorkflowCategoryGroup,
   type WorkflowRecord,
 } from '@/components/Canvas/constants'
+
+/** 画布（含 X6）延迟加载，避免 CreateOrEdit 主包同步打入 vendor-x6 */
+const Canvas = defineAsyncComponent(() => import('@/components/Canvas/index.vue'))
 
 const userInfoStore = useUserInfo();
 const ImageCapabilities = ref<ImageCapability[]>([])

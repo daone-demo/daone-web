@@ -1,4 +1,4 @@
-import { buildMediaProxyCandidates } from './mediaProxy'
+import { mintMediaProxyCandidates } from './mediaProxy'
 
 function loadImageElement(url: string, crossOrigin?: boolean): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -60,7 +60,7 @@ export async function loadDrawableImage(url: string): Promise<{
     return { img: await loadImageElement(url) }
   }
 
-  const candidates: string[] = [...buildMediaProxyCandidates(url)]
+  const candidates: string[] = [...(await mintMediaProxyCandidates(url))]
   const crossOrigin = isCrossOriginUrl(url)
   if (!crossOrigin) {
     candidates.push(url)

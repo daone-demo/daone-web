@@ -7,7 +7,11 @@ import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { handleMediaProxyNodeRequest } from './scripts/media-proxy.mjs'
+import { handleMediaProxyNodeRequest, ensureMediaProxyHmacSecretConfigured } from './scripts/media-proxy.mjs'
+
+ensureMediaProxyHmacSecretConfigured({
+  allowEphemeral: process.env.MEDIA_PROXY_ALLOW_EPHEMERAL_SECRET === '1',
+})
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.join(__dirname, 'dist')

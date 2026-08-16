@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.daone-strict.tsbuildinfo"
+  },
+  "include": [
+    "src/utils/request.ts",
+    "src/utils/leaveGuard.ts",
+    "src/hooks/sseParser.ts",
+    "src/components/Canvas/lib/**/*.ts",
+    "src/components/Canvas/mediaProxy.ts",
+    "src/components/Canvas/mediaProxyAllowlist.ts",
+    "src/components/Canvas/groupExecute/**/*.ts",
+    "src/components/Canvas/generationTaskState.ts",
+    "src/components/Canvas/generationTaskApply.ts",
+    "src/components/Canvas/graphNodeSizing.ts",
+    "src/components/Canvas/graphCoords.ts"
+  ],
+  "exclude": ["dist", "node_modules"]
+}

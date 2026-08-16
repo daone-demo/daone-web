@@ -8,20 +8,15 @@ import type {
   GenerationTaskType,
   ImageGenerationOnNodeResult,
 } from './generationTaskTypes'
-import {
-  isGenerationProgressTitle,
-} from './generationTaskTitles'
+import { isGenerationProgressTitle } from './generationTaskTitles'
 import {
   isGenerationTaskTerminal,
   normalizeGenerationTaskDetail,
   pickImageGenerationResults,
 } from './generationTaskNormalize'
-import {
-  setNodeData,
-  isNodeOnGraph,
-} from './generationTaskApply'
+import { setNodeData, isNodeOnGraph } from './generationTaskApply'
 
-const userInfoStore = useUserInfo();
+const userInfoStore = useUserInfo()
 export let generationPollEpoch = 0
 let lastPointAccountQueryAt = 0
 export const activePollingTaskIds = new Set<string>()
@@ -33,7 +28,9 @@ export function cancelAllGenerationTaskPolling() {
   activePollingTaskIds.clear()
 }
 
-export async function getGenerationTaskDetail<T = GenerationTaskDetail>(taskId: string): Promise<T> {
+export async function getGenerationTaskDetail<T = GenerationTaskDetail>(
+  taskId: string,
+): Promise<T> {
   const result = await api.getGenerationTask<T>(taskId)
   const task = normalizeGenerationTaskDetail(result)
   if (isGenerationTaskTerminal(task.status)) {
@@ -45,7 +42,9 @@ export async function getGenerationTaskDetail<T = GenerationTaskDetail>(taskId: 
   }
   return result
 }
-function buildImageGenerationSuccessResult(task: GenerationTaskDetail): ImageGenerationOnNodeResult {
+function buildImageGenerationSuccessResult(
+  task: GenerationTaskDetail,
+): ImageGenerationOnNodeResult {
   const allResults = pickImageGenerationResults(task)
   return {
     success: true,
@@ -115,10 +114,10 @@ export function updateGenerationTaskNodeTitleByTaskId(
   data.generationTaskName = normalized
 
   const shouldUpdateTitle =
-    data.imageGenState === 'loading'
-    || data.textGenState === 'loading'
-    || data.uploadState === 'uploading'
-    || isGenerationProgressTitle(data.title)
+    data.imageGenState === 'loading' ||
+    data.textGenState === 'loading' ||
+    data.uploadState === 'uploading' ||
+    isGenerationProgressTitle(data.title)
 
   if (shouldUpdateTitle) {
     data.title = normalized

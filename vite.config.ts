@@ -6,9 +6,29 @@ import Components from 'unplugin-vue-components/vite'
 import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers'
 import { loadEnv, type Plugin } from 'vite'
 import type { IncomingMessage, ServerResponse } from 'http'
-import { handleMediaProxyNodeRequest } from './scripts/media-proxy.mjs'
+import {
+  ensureMediaProxyHmacSecretConfigured,
+  handleMediaProxyNodeRequest,
+} from './scripts/media-proxy.mjs'
 
-function createMediaProxyPlugin(): Plugin {
+function createMediaProxyPlugin(env: Record<string, string>): Plugin {
+  // 开发进程内密钥：不进入前端产物；生产须显式配置 MEDIA_PROXY_HMAC_SECRET
+  if (!process.env.MEDIA_PROXY_HMAC_SECRET && env.MEDIA_PROXY_HMAC_SECRET) {
+    process.env.MEDIA_PROXY_HMAC_SECRET = env.MEDIA_PROXY_HMAC_SECRET
+  }
+  if (!process.env.MEDIA_PROXY_ALLOWED_HOSTS && env.MEDIA_PROXY_ALLOWED_HOSTS) {
+    process.env.MEDIA_PROXY_ALLOWED_HOSTS = env.MEDIA_PROXY_ALLOWED_HOSTS
+  }
+  if (!process.env.MEDIA_PROXY_AUTH_API_BASE && env.MEDIA_PROXY_AUTH_API_BASE) {
+    process.env.MEDIA_PROXY_AUTH_API_BASE = env.MEDIA_PROXY_AUTH_API_BASE
+  }
+  if (!process.env.VITE_API_BASE_HOST && env.VITE_API_BASE_HOST) {
+    process.env.VITE_API_BASE_HOST = env.VITE_API_BASE_HOST
+  }
+  ensureMediaProxyHmacSecretConfigured({
+    allowEphemeral: process.env.NODE_ENV !== 'production',
+  })
+
   const handle = async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const rawUrl = req.url || ''
     if (!rawUrl.startsWith('/media-proxy')) {
@@ -18,7 +38,12 @@ function createMediaProxyPlugin(): Plugin {
 
     // 本机常挂 fake-IP DNS 代理，会把对象存储域名解析到保留段；
     // 开发/预览服务器跳过 DNS 预检，域名白名单仍然生效
-    await handleMediaProxyNodeRequest(req, res, rawUrl, { enforceDnsGuard: false })
+    await handleMediaProxyNodeRequest(req, res, rawUrl, {
+      enforceDnsGuard: false,
+      // 本地未配置鉴权 API 时，允许持有登录 Bearer 即可签发（仍无浏览器侧密钥）
+      allowBearerOnly: !process.env.MEDIA_PROXY_AUTH_API_BASE,
+      skipAuth: false,
+    })
   }
 
   return {
@@ -55,7 +80,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
-      createMediaProxyPlugin(),
+      createMediaProxyPlugin(env),
       vue(),
       AutoImport({
         resolvers: [AntDesignVueResolver({ importStyle: false })],

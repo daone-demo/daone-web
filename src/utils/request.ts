@@ -3,9 +3,8 @@ import axios, {
   type AxiosRequestConfig,
   type AxiosResponse,
   type InternalAxiosRequestConfig,
-} from 'axios';
-import { message } from 'ant-design-vue';
-
+} from 'axios'
+import { message } from 'ant-design-vue'
 
 const TOKEN_KEY = 'daone_token'
 
@@ -144,7 +143,7 @@ function createRequestError(
       pickMessage(payload) ||
       options?.fallbackMessage ||
       (unauthorized ? '登录已失效，请重新登录' : '操作失败'),
-    status: unauthorized ? (status || 401) : status,
+    status: unauthorized ? status || 401 : status,
     code: res?.code ?? (unauthorized ? 'UNAUTHORIZED' : 'REQUEST_FAILED'),
     data: res?.data ?? payload,
     traceId: res?.traceId,
@@ -163,11 +162,7 @@ function handleUnauthorized(): void {
   onUnauthorized?.()
 }
 
-function rejectUnauthorized(
-  payload: unknown,
-  status: number,
-  url?: string,
-): Promise<never> {
+function rejectUnauthorized(payload: unknown, status: number, url?: string): Promise<never> {
   const error = createRequestError(payload, status, { unauthorized: true })
   if (!isPublicApi(url)) {
     handleUnauthorized()
@@ -234,7 +229,9 @@ instance.interceptors.response.use(
 
     if (res == null || typeof res.code !== 'string') {
       if (!config.silent) showRequestError('接口返回格式异常', 'request:format')
-      return Promise.reject(createRequestError(payload, httpStatus, { fallbackMessage: '接口返回格式异常' }))
+      return Promise.reject(
+        createRequestError(payload, httpStatus, { fallbackMessage: '接口返回格式异常' }),
+      )
     }
 
     if (!isApiSuccess(res)) {

@@ -430,25 +430,29 @@
 </template>
 
 <script setup lang="ts">
-import VideoGenPromptPanel from '../VideoGenPromptPanel.vue'
-import ImageDialoguePanel from '../ImageDialoguePanel.vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import ImageDialogueFooter from '../ImageDialogueFooter.vue'
 import type { ImageDialogueFooterParams } from '../ImageDialogueFooter.vue'
 import CanvasImageResizeOverlay, {
   type ImageResizeOverlayBox,
 } from './CanvasImageResizeOverlay.vue'
-import ImageCropOverlay from '../ImageCropOverlay.vue'
-import ImageGridSplitOverlay from '../ImageGridSplitOverlay.vue'
-import ImageEraseOverlay from '../ImageEraseOverlay.vue'
-import ImageInpaintOverlay from '../ImageInpaintOverlay.vue'
-import ImageExpandOverlay from '../ImageExpandOverlay.vue'
 import type { ImageExpandOverlayLayout } from '../graph'
-import ImageEditTextPanel from '../ImageEditTextPanel.vue'
-import VideoDialoguePanel from '../VideoDialoguePanel.vue'
 import VideoDialogueFooter from '../VideoDialogueFooter.vue'
 import type { VideoDialogueFooterParams } from '../VideoDialogueFooter.vue'
-import VideoHdPanel from '../VideoHdPanel.vue'
-import VideoFramesPanel from '../VideoFramesPanel.vue'
+
+// 重型编辑面板按需加载，减小 Canvas 主 chunk（v-if 打开时再拉取）
+const VideoGenPromptPanel = defineAsyncComponent(() => import('../VideoGenPromptPanel.vue'))
+const ImageDialoguePanel = defineAsyncComponent(() => import('../ImageDialoguePanel.vue'))
+const ImageCropOverlay = defineAsyncComponent(() => import('../ImageCropOverlay.vue'))
+const ImageGridSplitOverlay = defineAsyncComponent(() => import('../ImageGridSplitOverlay.vue'))
+const ImageEraseOverlay = defineAsyncComponent(() => import('../ImageEraseOverlay.vue'))
+const ImageInpaintOverlay = defineAsyncComponent(() => import('../ImageInpaintOverlay.vue'))
+const ImageExpandOverlay = defineAsyncComponent(() => import('../ImageExpandOverlay.vue'))
+const ImageEditTextPanel = defineAsyncComponent(() => import('../ImageEditTextPanel.vue'))
+const VideoDialoguePanel = defineAsyncComponent(() => import('../VideoDialoguePanel.vue'))
+const VideoHdPanel = defineAsyncComponent(() => import('../VideoHdPanel.vue'))
+const VideoFramesPanel = defineAsyncComponent(() => import('../VideoFramesPanel.vue'))
+
 import {
   CANVAS_IMAGE_NODE_DRAG_TYPE,
   PROMPT_PLACEHOLDER,
@@ -470,7 +474,6 @@ import {
 } from '../constants'
 import type { CanvasBgTheme } from '../canvasTheme'
 import { createPromptMentionApi, isInputComposing } from '../promptMention'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import api, { type PromptTranslationData } from '@/services/api'
 import { isRequestError } from '@/utils/request'

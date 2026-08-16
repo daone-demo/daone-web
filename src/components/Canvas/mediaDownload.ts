@@ -1,5 +1,5 @@
 import { resolveOriginalMediaDownloadUrl } from './cloudImageProcess'
-import { buildMediaProxyCandidates } from './mediaProxy'
+import { mintMediaProxyCandidates } from './mediaProxy'
 import { runWithoutLeaveConfirm } from '@/utils/leaveGuard'
 import type { CanvasNodeData, NodeKind } from './constants'
 
@@ -80,9 +80,9 @@ function uniqueDownloadFileName(name: string, used: Set<string>): string {
  * 对象存储已返回 Access-Control-Allow-Origin，直连即可拿到 blob；
  * 只有直连被跨域或网络策略拦截时才需要走代理，避免每次下载都先打两个必然失败的代理请求。
  */
-function buildDownloadFetchCandidates(sourceUrl: string): string[] {
+async function buildDownloadFetchCandidates(sourceUrl: string): Promise<string[]> {
   const downloadUrl = resolveOriginalMediaDownloadUrl(sourceUrl)
-  const proxies = buildMediaProxyCandidates(downloadUrl)
+  const proxies = await mintMediaProxyCandidates(downloadUrl)
   return [...new Set([downloadUrl, ...proxies].filter(Boolean))]
 }
 
@@ -185,7 +185,7 @@ async function fetchMediaBlob(sourceUrl: string): Promise<Blob> {
     return readResponseBlob(response)
   }
 
-  const candidates = buildDownloadFetchCandidates(trimmed)
+  const candidates = await buildDownloadFetchCandidates(trimmed)
 
   let lastError: unknown
   for (const candidate of candidates) {

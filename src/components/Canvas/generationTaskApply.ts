@@ -134,9 +134,7 @@ export async function applyVideoGenerationResultToNode(
         data.durationSeconds = meta.durationSeconds
       }
     } catch {
-      const ratio =
-        data.videoGenAspectRatio ||
-        data.videoDialogueSettings?.aspectRatio
+      const ratio = data.videoGenAspectRatio || data.videoDialogueSettings?.aspectRatio
       const aspect = parseVideoAspectRatioValue(ratio)
       if (aspect) {
         const baseWidth = 350
@@ -190,7 +188,8 @@ export function applyModelGenerationResultToNode(
     options.fileName ||
     result.fileName ||
     data.fileName ||
-    (previewUrl.split('/').pop()?.split('?')[0] || 'model.glb')
+    previewUrl.split('/').pop()?.split('?')[0] ||
+    'model.glb'
   data.mediaWidth = data.mediaWidth || 320
   data.mediaHeight = data.mediaHeight || 360
 
@@ -234,11 +233,7 @@ export async function applyGenerationResultToNode(
   data.uploadProgress = 100
   data.previewUrl = previewUrl
   data.assetId = result.assetId
-  data.title = resolveGenerationResultTitle(
-    options.title,
-    data.generationTaskName,
-    data.title,
-  )
+  data.title = resolveGenerationResultTitle(options.title, data.generationTaskName, data.title)
   if (!isGenerationProgressTitle(data.title)) {
     data.generationTaskName = data.title
   }

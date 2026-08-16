@@ -1,4 +1,4 @@
-import { buildMediaProxyCandidates, buildMediaProxyPathUrl } from './mediaProxy'
+import { mintMediaProxyCandidates } from './mediaProxy'
 
 const OSS_HOST_RE = /\.aliyuncs\.com$/i
 const DEFAULT_CANVAS_IMAGE_MAX_EDGE = 960
@@ -23,7 +23,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   })
 }
 
-function buildNaturalSizeCandidates(previewUrl: string): string[] {
+async function buildNaturalSizeCandidates(previewUrl: string): Promise<string[]> {
   const source = previewUrl.trim()
   if (!source) return []
 
@@ -42,7 +42,7 @@ function buildNaturalSizeCandidates(previewUrl: string): string[] {
       // ignore invalid proxy url
     }
   } else {
-    const proxyCandidates = buildMediaProxyCandidates(source)
+    const proxyCandidates = await mintMediaProxyCandidates(source)
     if (proxyCandidates.length) candidates.push(...proxyCandidates)
     candidates.push(source)
   }
@@ -93,7 +93,8 @@ export function getCanvasImageDisplayUrl(
       if (!inner) return source
       const processed = appendOssResizeProcess(inner, maxEdge)
       if (processed === inner) return source
-      return buildMediaProxyPathUrl(processed) ?? source
+      // 展示层优先回退到处理后的直连 OSS；签名代理由异步 mint 路径处理
+      return processed
     } catch {
       return source
     }
@@ -119,7 +120,7 @@ function loadImageNaturalSizeFromUrl(url: string): Promise<{ width: number; heig
 }
 
 async function loadImageNaturalSizeUncached(previewUrl: string): Promise<{ width: number; height: number }> {
-  const candidates = buildNaturalSizeCandidates(previewUrl)
+  const candidates = await buildNaturalSizeCandidates(previewUrl)
   if (!candidates.length) {
     throw new Error('missing preview url')
   }

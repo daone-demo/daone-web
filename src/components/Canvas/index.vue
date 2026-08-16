@@ -475,13 +475,10 @@ import CanvasShortcutsBackdrop from './panels/CanvasShortcutsBackdrop.vue'
 import CanvasProjectBrowser from './panels/CanvasProjectBrowser.vue'
 import CanvasHiddenFileInput from './panels/CanvasHiddenFileInput.vue'
 import { useCanvas } from './composables/useCanvas'
-import { ref, watch } from 'vue'
-import { message } from 'ant-design-vue'
-import api from '@/services/api'
-import type { ProjectCanvasResponse, ProjectVersionDetailResponse, ProjectVersionRecord } from '@/services/api'
-import { type ProjectTabKey } from '@/views/Project/projectData'
-import type { ElementGroupRecord, AssetCenterTabKey } from './assetCenterData'
-import type { ImageCapability, WorkflowCategoryGroup, CanvasAssetDragPayload } from './constants'
+import { useCanvasShellProjectPanels } from './composables/useCanvasShellProjectPanels'
+import { ref } from 'vue'
+import type { ProjectCanvasResponse, ProjectVersionDetailResponse } from '@/services/api'
+import type { ImageCapability, WorkflowCategoryGroup } from './constants'
 
 const emit = defineEmits<{
   'focus-chat': []
@@ -509,14 +506,6 @@ defineProps<{
   chatTools: any
   workflows: WorkflowCategoryGroup[]
 }>()
-
-const skillList = ref<ElementGroupRecord[]>([])
-const HISTORY_PAGE_SIZE = 50
-const historyList = ref<ProjectVersionRecord[]>([])
-const historyPage = ref(1)
-const historyLoading = ref(false)
-const historyHasMore = ref(true)
-const historyRestoring = ref(false)
 
 const canvasRef = ref<HTMLElement | null>(null)
 const graphRef = ref<HTMLElement | null>(null)
@@ -815,6 +804,37 @@ const {
   getNodeCount,
 } = canvasRuntime
 
+const {
+  skillList,
+  historyList,
+  historyLoading,
+  historyHasMore,
+  historyRestoring,
+  onChangeAssetsTab,
+  onChangeAssetsType,
+  onChangeAssetsDate,
+  onBatchInsertAssets,
+  onChangeAssetCenterTab,
+  onSelectAssetCenterItem,
+  onAddAssetCenterToChat,
+  onDeleteAssetCenterItem,
+  onLoadMoreHistory,
+  onSelectHistoryVersion,
+} = useCanvasShellProjectPanels({
+  emit,
+  canvasRuntime,
+  activeProjectId,
+  assetsTab,
+  assetsDate,
+  assetsType,
+  assetCenterTab,
+  assetCenterLoading,
+  showAssetCenterPanel,
+  showHistoryPanel,
+  addElementGroupFromRecord,
+  closeHistoryPanel,
+})
+
 function onMentionInserted() {
   if (showImageDialogue.value) {
     persistImageDialogueFields()
@@ -880,136 +900,6 @@ export type CanvasProjectItem = {
   createdAt: string
   updatedAt: string
 }
-
-const onChangeAssetsTab = (tab: ProjectTabKey) => {
-  assetsTab.value = tab
-}
-
-const onChangeAssetsType = (type: 'all' | 'image' | 'video') => {
-  assetsType.value = type
-}
-
-const onChangeAssetsDate = (date: any) => {
-  assetsDate.value = date
-}
-
-const onBatchInsertAssets = (assets: CanvasAssetDragPayload[]) => {
-  const fn = (canvasRuntime as {
-    batchInsertAssetsFromLibrary?: (assets: CanvasAssetDragPayload[]) => number
-  }).batchInsertAssetsFromLibrary
-  fn?.(assets)
-}
-
-const onChangeAssetCenterTab = (tab: AssetCenterTabKey) => {
-  assetCenterTab.value = tab
-}
-
-const onSelectAssetCenterItem = (item: ElementGroupRecord) => {
-  addElementGroupFromRecord(item)
-}
-
-const onAddAssetCenterToChat = (payload: { id: string; role: string; name: string }) => {
-  emit('add-asset-to-chat', payload)
-}
-
-const onLoadSkill = () => {
-  if (!activeProjectId.value) return
-  assetCenterLoading.value = true
-  api.queryElementGroups(activeProjectId.value, { pageSize: 50, page: 1 })
-    .then((res: any) => {
-      skillList.value = res.records ?? []
-    })
-    .finally(() => {
-      assetCenterLoading.value = false
-    })
-}
-
-const onDeleteAssetCenterItem = async (item: ElementGroupRecord) => {
-  const groupId = item.id
-  if (!activeProjectId.value || !groupId) return
-
-  try {
-    await api.deleteProjectElementGroup(activeProjectId.value, String(groupId))
-    message.success('删除成功')
-    onLoadSkill()
-  } catch (error) {
-    console.error('[Canvas] delete element group failed', error)
-    message.error('删除失败，请稍后重试')
-  }
-}
-
-const onLoadHistory = async (reset = false) => {
-  if (!activeProjectId.value || historyLoading.value) return
-  if (!reset && !historyHasMore.value) return
-
-  if (reset) {
-    historyPage.value = 1
-    historyHasMore.value = true
-  }
-
-  historyLoading.value = true
-  try {
-    const res = await api.getProjectVersions<ProjectVersionRecord>(activeProjectId.value, {
-      pageSize: HISTORY_PAGE_SIZE,
-      page: historyPage.value,
-    })
-    const records = res.records ?? []
-    if (reset) {
-      historyList.value = records
-    } else {
-      const existingIds = new Set(historyList.value.map((item) => String(item.id)))
-      historyList.value.push(
-        ...records.filter((item) => !existingIds.has(String(item.id))),
-      )
-    }
-    historyHasMore.value = records.length >= HISTORY_PAGE_SIZE
-  } finally {
-    historyLoading.value = false
-  }
-}
-
-const onLoadMoreHistory = () => {
-  if (!historyHasMore.value || historyLoading.value) return
-  historyPage.value += 1
-  void onLoadHistory()
-}
-
-const onSelectHistoryVersion = async (versionId: string) => {
-  if (!activeProjectId.value || historyRestoring.value || !versionId) return
-
-  historyRestoring.value = true
-  try {
-    const detail = await api.getProjectVersion<ProjectVersionDetailResponse>(
-      activeProjectId.value,
-      versionId,
-    )
-    const loaded = (canvasRuntime as {
-      loadProjectCanvasFromVersion?: (detail: ProjectVersionDetailResponse) => boolean
-    }).loadProjectCanvasFromVersion?.(detail)
-    if (!loaded) {
-      message.error('恢复历史版本失败')
-      return
-    }
-    closeHistoryPanel()
-  } catch (error) {
-    console.error('[Canvas] restore history version failed', error)
-    message.error('加载历史版本失败')
-  } finally {
-    historyRestoring.value = false
-  }
-}
-
-watch(showAssetCenterPanel, (open) => {
-  if (open && activeProjectId.value) {
-    onLoadSkill()
-  }
-})
-
-watch(showHistoryPanel, (open) => {
-  if (open && activeProjectId.value) {
-    void onLoadHistory(true)
-  }
-})
 </script>
 
 <style lang="scss">

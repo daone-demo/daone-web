@@ -511,7 +511,7 @@ onBeforeUnmount(() => {
 .image-grid-split-overlay__line {
   position: absolute;
   z-index: 2;
-  background: rgbg(37 99 235, 0.9);
+  background: rgba(37, 99, 235, 0.9);
 
   &--col {
     top: 0;
