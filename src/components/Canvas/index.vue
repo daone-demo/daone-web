@@ -34,7 +34,7 @@
       @select-project="selectProject"
       @undo="handleUndo"
       @redo="handleRedo"
-      @save="handleSaveCanvas"
+      @save="() => handleSaveCanvas('MANUAL')"
       @export="handleExportCanvas"
       @toggle-user-menu="toggleUserMenu"
       @go-user-center="goUserCenter"

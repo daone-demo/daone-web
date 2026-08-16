@@ -33,7 +33,8 @@ export function getBaseNodeSize(
       (data?.generationTaskType === 'VIDEO' || Boolean(data?.generationTaskId))
     const ratio = data?.videoGenAspectRatio
 
-    if (ratio && ratio !== 'auto' && (!hasPreview || isGenerating || data.videoGenAspectRatio)) {
+    // 已有预览且非生成中：按真实媒体比例自适应，避免打开对话框写入 videoGenAspectRatio 后底边锚定 resize 上跳
+    if (ratio && ratio !== 'auto' && (!hasPreview || isGenerating)) {
       return computeVideoNodeSizeByAspectRatio(ratio)
     }
     if (data && shouldAdaptVideoNodeHeight(data)) {

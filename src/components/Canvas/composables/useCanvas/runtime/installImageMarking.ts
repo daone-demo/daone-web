@@ -791,7 +791,10 @@ export function installImageMarking(ctx: CoreRuntimeContext) {
   };
   
   ctx.upsertCanvasProject = function upsertCanvasProject(id: string, title: string, saved = true) {
-      const item = ctx.canvasProjects.value.find((project) => project.id === id);
+      const normalizedId = String(id ?? '').trim();
+      if (!normalizedId)
+          return;
+      const item = ctx.canvasProjects.value.find((project) => String(project.id) === normalizedId);
       if (item) {
           item.title = title;
           item.saved = saved;
@@ -799,7 +802,7 @@ export function installImageMarking(ctx: CoreRuntimeContext) {
       }
       const now = new Date().toISOString();
       ctx.canvasProjects.value.unshift({
-          id,
+          id: normalizedId,
           title,
           saved,
           createdAt: now,

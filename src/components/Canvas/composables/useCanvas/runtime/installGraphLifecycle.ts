@@ -90,8 +90,30 @@ export function installGraphLifecycle(ctx: CoreRuntimeContext) {
   onMounted(() => {
       ctx.autoSaveEnabled = true;
       ctx.canvasContentReady = false;
+      const resumeAutoSaveIfAlive = () => {
+          // pagehide/beforeunload 只 pause；回到前台恢复自动保存，并自愈 contentReady
+          if (!ctx.graph.value)
+              return;
+          ctx.autoSaveEnabled = true;
+          if (typeof ctx.ensureCanvasReadyForAutoSave === 'function') {
+              ctx.ensureCanvasReadyForAutoSave();
+          }
+          else if (ctx.activeProjectId.value) {
+              ctx.canvasContentReady = true;
+          }
+      };
+      ctx.onPageShow = function onPageShow() {
+          resumeAutoSaveIfAlive();
+      };
+      ctx.onVisibilityChange = function onVisibilityChange() {
+          if (document.visibilityState === 'visible') {
+              resumeAutoSaveIfAlive();
+          }
+      };
       window.addEventListener('beforeunload', ctx.onPageUnload);
       window.addEventListener('pagehide', ctx.onPageUnload);
+      window.addEventListener('pageshow', ctx.onPageShow);
+      document.addEventListener('visibilitychange', ctx.onVisibilityChange);
       setCanvasUploadProjectId(() => ctx.activeProjectId.value || undefined);
       setCanvasNodeMutationCompleteHandler(() => {
           ctx.scheduleHistoryPush();
@@ -107,8 +129,13 @@ export function installGraphLifecycle(ctx: CoreRuntimeContext) {
       });
       void ctx.onLoadProjects();
       const routeProjectId = ctx.router.currentRoute.value.params.id;
-      if (typeof routeProjectId === 'string' && routeProjectId.trim()) {
-          ctx.activeProjectId.value = routeProjectId;
+      const normalizedRouteId = typeof routeProjectId === 'string'
+          ? routeProjectId.trim()
+          : Array.isArray(routeProjectId)
+              ? String(routeProjectId[0] ?? '').trim()
+              : '';
+      if (normalizedRouteId) {
+          ctx.activeProjectId.value = normalizedRouteId;
       }
       if (!ctx.graphRef.value)
           return;
@@ -357,9 +384,20 @@ export function installGraphLifecycle(ctx: CoreRuntimeContext) {
           ensureInfiniteCanvasArea(instance, { recenter: true });
           ctx.syncViewportNodeVisibility();
           if (ctx.pendingProjectCanvas) {
-              const loaded = ctx.applyProjectCanvasPayload(ctx.pendingProjectCanvas);
+              const pending = ctx.pendingProjectCanvas;
+              const loaded = ctx.applyProjectCanvasPayload(pending);
               ctx.pendingProjectCanvas = null;
               if (loaded) {
+                  ctx.markCanvasContentReady();
+              }
+              else {
+                  // 快照为空/无效时仍绑定项目并放开自动保存，避免操作后无法落库
+                  if (pending.projectId) {
+                      ctx.activeProjectId.value = String(pending.projectId).trim();
+                  }
+                  if (typeof pending.revision === 'number') {
+                      ctx.canvasRevision.value = pending.revision;
+                  }
                   ctx.markCanvasContentReady();
               }
           }
@@ -740,6 +778,10 @@ export function installGraphLifecycle(ctx: CoreRuntimeContext) {
       }
       window.removeEventListener('beforeunload', ctx.onPageUnload);
       window.removeEventListener('pagehide', ctx.onPageUnload);
+      if (ctx.onPageShow)
+          window.removeEventListener('pageshow', ctx.onPageShow);
+      if (ctx.onVisibilityChange)
+          document.removeEventListener('visibilitychange', ctx.onVisibilityChange);
       ctx.stopAutoSave();
       setCanvasNodeMutationCompleteHandler(null);
       setCanvasUploadCompleteHandler(null);

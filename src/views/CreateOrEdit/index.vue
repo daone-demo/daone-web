@@ -75,6 +75,7 @@ import {
   type WorkflowCategoryGroup,
   type WorkflowRecord,
 } from '@/components/Canvas/constants'
+import { flushPendingCanvasPayload } from './waitForCanvasRef'
 
 /** 画布（含 X6）延迟加载，避免 CreateOrEdit 主包同步打入 vendor-x6 */
 const Canvas = defineAsyncComponent(() => import('@/components/Canvas/index.vue'))
@@ -225,20 +226,49 @@ function onNewChat() {
 }
 
 /**
- * Load project canvas
+ * 投递画布快照：已有 Canvas 则立即注入，否则写入 pending。
+ * 注意：初始化阶段 pageLoading=true 时 Canvas 未挂载，绝不能在此阻塞等待，
+ * 否则会与「loading 结束后才渲染 Canvas」形成死锁（最长约 wait 超时）。
  */
+const queueOrApplyCanvasPayload = (payload: ProjectCanvasResponse) => {
+  if (flushPendingCanvasPayload(canvasRef.value, payload)) {
+    pendingCanvasPayload.value = null
+    return true
+  }
+  pendingCanvasPayload.value = payload
+  return false
+}
+
+/** 页面已展示后，短等异步 Canvas（含内部 graph 就绪）再冲刷 pending */
+const flushPendingCanvasWhenReady = async () => {
+  if (!pendingCanvasPayload.value) return
+  if (flushPendingCanvasPayload(canvasRef.value, pendingCanvasPayload.value)) {
+    pendingCanvasPayload.value = null
+    return
+  }
+  // ref 可能先于 graph 就绪：在超时内重试 load，直到真正注入成功
+  const started = Date.now()
+  while (Date.now() - started < 8_000 && pendingCanvasPayload.value) {
+    await nextTick()
+    const canvas = canvasRef.value
+    if (canvas && flushPendingCanvasPayload(canvas, pendingCanvasPayload.value)) {
+      pendingCanvasPayload.value = null
+      return
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 16))
+  }
+}
+
 const onLoadProjectCanvas = async (id?: string) => {
   const targetId = (id ?? route.params.id) as string
   if (!targetId?.trim()) return
 
   const res = await api.getProjectCanvas(targetId)
-  if (canvasRef.value) {
-    await nextTick()
-    canvasRef.value.loadProjectCanvas(res)
-    pendingCanvasPayload.value = null
-    return
+  queueOrApplyCanvasPayload(res)
+  // 切换项目时页面已展示，可短等 Canvas；初始化时由 initializePage finally 冲刷
+  if (!pageLoading.value) {
+    await flushPendingCanvasWhenReady()
   }
-  pendingCanvasPayload.value = res
 }
 
 const onLoadProjects = async () => {
@@ -438,12 +468,10 @@ async function initializePage() {
   } catch (error) {
     console.error('[CreateOrEdit] page init failed', error)
   } finally {
+    // 先结束「项目加载中」，再等异步 Canvas chunk 注入快照，避免死锁拖慢首屏
     pageLoading.value = false
     await nextTick()
-    if (pendingCanvasPayload.value && canvasRef.value) {
-      canvasRef.value.loadProjectCanvas(pendingCanvasPayload.value)
-      pendingCanvasPayload.value = null
-    }
+    await flushPendingCanvasWhenReady()
   }
 
   void Promise.all([
@@ -573,6 +601,14 @@ watch(
     }
   },
 )
+
+// Canvas 异步 chunk 就绪后，补投递初始化期间缓存的快照
+watch(canvasRef, (canvas) => {
+  if (!canvas || !pendingCanvasPayload.value) return
+  if (flushPendingCanvasPayload(canvas, pendingCanvasPayload.value)) {
+    pendingCanvasPayload.value = null
+  }
+})
 
 onMounted(() => {
   const navigation = getBrowserNavigation()

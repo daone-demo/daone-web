@@ -169,10 +169,8 @@ export function installDialoguePromptFieldState(ctx: CoreRuntimeContext) {
       if (liveRefs.length && !(data.videoSourceRefs?.length)) {
           ctx.syncVideoSourceRefsSnapshot(nodeId);
       }
-      const ratio = ctx.videoDialogueSettings.value.aspectRatio;
-      if (ratio && ratio !== 'auto') {
-          ctx.syncVideoNodeAspectRatio(nodeId, ratio as VideoGenAspectRatio);
-      }
+      // 仅加载面板字段，不在此处按比例改节点尺寸。
+      // 否则双击打开对话框会触发底边锚定 resize，表现为视频节点向上抖动。
   };
   
   ctx.persistVideoDialogueFields = function persistVideoDialogueFields(nodeId?: string) {
@@ -187,6 +185,8 @@ export function installDialoguePromptFieldState(ctx: CoreRuntimeContext) {
       const data = { ...(cell.getData() as CanvasNodeData) };
       if (data.kind !== 'video')
           return;
+      const prevRatio = data.videoGenAspectRatio
+      const prevSettingsRatio = data.videoDialogueSettings?.aspectRatio ?? prevRatio
       data.videoDialogueText = ctx.videoDialogueText.value;
       data.videoDialogueSettings = { ...ctx.videoDialogueSettings.value };
       // 同步 genPrompt，便于与底部生成面板共用溯源
@@ -196,7 +196,8 @@ export function installDialoguePromptFieldState(ctx: CoreRuntimeContext) {
       cell.setData(data, { overwrite: true });
       ctx.syncVideoSourceRefsSnapshot(id);
       const ratio = ctx.videoDialogueSettings.value.aspectRatio;
-      if (ratio && ratio !== 'auto') {
+      // 仅在对话框比例相对上次持久化结果发生变化时 resize（用户改比例）
+      if (ratio && ratio !== 'auto' && ratio !== prevSettingsRatio) {
           ctx.syncVideoNodeAspectRatio(id, ratio as VideoGenAspectRatio);
       }
   };
@@ -238,12 +239,21 @@ export function installDialoguePromptFieldState(ctx: CoreRuntimeContext) {
       const node = cell as Node;
       const pos = node.position();
       const oldSize = node.getSize();
-      const anchorBottomY = pos.y + oldSize.height;
-      const anchorCenterX = pos.x + oldSize.width / 2;
       data.videoGenAspectRatio = ratio;
+      const size = getNodeSize(data.kind, data.mode, data);
+      const sizeUnchanged =
+          Math.abs(oldSize.width - size.width) <= 1 &&
+          Math.abs(oldSize.height - size.height) <= 1;
       cell.setData(data);
       syncNodeShapeFromData(node);
-      const size = getNodeSize(data.kind, data.mode, data);
+      if (sizeUnchanged) {
+          ctx.updateVideoGenPromptBarPosition();
+          ctx.bumpToolbarRevision();
+          ctx.updateNodeToolbar();
+          return;
+      }
+      const anchorBottomY = pos.y + oldSize.height;
+      const anchorCenterX = pos.x + oldSize.width / 2;
       node.resize(size.width, size.height);
       node.position(anchorCenterX - size.width / 2, anchorBottomY - size.height);
       ctx.updateVideoGenPromptBarPosition();
