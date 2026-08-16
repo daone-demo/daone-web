@@ -1,4 +1,3 @@
-// @ts-nocheck -- 动态共享上下文保持原闭包的运行时类型；公开契约仍由 CanvasBindings 校验。
 /**
  * 职责：安装 Groups 整组布局 / 确认执行 / groupExecuting 到 ctx。
  */

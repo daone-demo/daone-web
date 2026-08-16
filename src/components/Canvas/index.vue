@@ -900,6 +900,7 @@ defineExpose({
     }).getCanvasBoundProjectId
     return fn?.() ?? ''
   },
+  closeProjectBrowser,
   reloadProjectBrowser() {
     projectBrowserRef.value?.reload()
   },

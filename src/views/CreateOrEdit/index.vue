@@ -130,6 +130,8 @@ type CanvasExpose = {
   updateChatTaskNodeTitleFromPayload?: (payload: ChatTaskUpdatedPayload) => void
   beginProjectCanvasSwitch?: () => void
   getCanvasBoundProjectId?: () => string
+  closeProjectBrowser?: () => void
+  reloadProjectBrowser?: () => void
 }
 
 type CanvasProjectItem = {
@@ -426,9 +428,47 @@ const onRenameProject = (projectId: string, name: string) => {
   modalStore.openModal('updateProjectName');
 }
 
-/** 删除已由 Header/浏览器完成确认与接口调用，此处仅刷新列表 */
-const onDeleteProject = async (_projectId: string) => {
+/**
+ * 删除已由 Header/浏览器完成确认与接口调用。
+ * 若删的是当前打开项目：导航到列表中其他有效项目；无则回项目首页并清空画布绑定。
+ * 非当前项目：仅刷新列表。
+ */
+const onDeleteProject = async (projectId: string) => {
   await onRefreshProjects()
+
+  const routeId = currentRouteProjectId()
+  const boundId = canvasRef.value?.getCanvasBoundProjectId?.() ?? ''
+  const deletedIsCurrent = Boolean(projectId) && (projectId === routeId || projectId === boundId)
+  if (!deletedIsCurrent) return
+
+  canvasRef.value?.closeProjectBrowser?.()
+  // 项目已删除，跳过离开确认，避免仍弹「未保存」
+  leaveConfirmed = true
+
+  const nextProject = projectsList.value.find((item) => item.id && item.id !== projectId)
+  if (nextProject?.id) {
+    try {
+      await router.replace({
+        name: route.name ?? 'projectDetail',
+        params: { ...route.params, id: nextProject.id },
+      })
+    } catch (error) {
+      leaveConfirmed = false
+      console.error('[CreateOrEdit] navigate after delete failed', error)
+      message.error('项目已删除，但跳转失败，请手动选择其他项目')
+    }
+    return
+  }
+
+  // 无其他项目：冻结当前画布绑定后回项目列表页
+  canvasRef.value?.beginProjectCanvasSwitch?.()
+  try {
+    await router.replace({ name: 'project' })
+  } catch (error) {
+    leaveConfirmed = false
+    console.error('[CreateOrEdit] navigate to project home after delete failed', error)
+    message.error('项目已删除，但跳转失败，请返回项目列表')
+  }
 }
 
 const onCloseChat = () => {

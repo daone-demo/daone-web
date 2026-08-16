@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import type { Ref } from 'vue'
+import { message as antMessage } from 'ant-design-vue'
 import api from '@/services/api'
 import type { ChatAttachment, ChatSession } from '../chatTypes'
 import type { StreamEvent } from './chatStreamParse'
@@ -153,8 +154,10 @@ export function useChatSessions(options: UseChatSessionsOptions) {
         }
       })
       options.scrollMessagesToBottom()
-    } catch {
-      // 拉取失败时保留本地消息，不打断面板
+    } catch (error) {
+      // 拉取失败时保留本地消息，不打断面板；给出可观测反馈
+      console.error('[useChatSessions] load chat messages failed', error)
+      antMessage.error('聊天记录加载失败，请稍后重试')
     }
   }
 

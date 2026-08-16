@@ -524,7 +524,7 @@
               </button>
             </div>
               <div class="combo-confirm__pay-options" role="radiogroup" aria-label="支付方式">
-                {{ payType === 'WECHAT' ? '微信支付' : '支付宝支付' }}
+                {{ selectedPayMethod === 'WECHAT' ? '微信支付' : '支付宝支付' }}
               </div>
               <a-flex align="center" justify="center">
                 <img
