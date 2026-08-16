@@ -440,15 +440,16 @@ import type { ImageExpandOverlayLayout } from '../graph'
 import VideoDialogueFooter from '../VideoDialogueFooter.vue'
 import type { VideoDialogueFooterParams } from '../VideoDialogueFooter.vue'
 
-// 重型编辑面板按需加载，减小 Canvas 主 chunk（v-if 打开时再拉取）
+import ImageCropOverlay from '../ImageCropOverlay.vue'
+import ImageGridSplitOverlay from '../ImageGridSplitOverlay.vue'
+import ImageEraseOverlay from '../ImageEraseOverlay.vue'
+import ImageInpaintOverlay from '../ImageInpaintOverlay.vue'
+import ImageExpandOverlay from '../ImageExpandOverlay.vue'
+import ImageEditTextPanel from '../ImageEditTextPanel.vue'
+
+// 其余重型面板按需加载；图片编辑 overlay 同步引入（样式已进 Canvas 主包，避免 async CSS 丢样式）
 const VideoGenPromptPanel = defineAsyncComponent(() => import('../VideoGenPromptPanel.vue'))
 const ImageDialoguePanel = defineAsyncComponent(() => import('../ImageDialoguePanel.vue'))
-const ImageCropOverlay = defineAsyncComponent(() => import('../ImageCropOverlay.vue'))
-const ImageGridSplitOverlay = defineAsyncComponent(() => import('../ImageGridSplitOverlay.vue'))
-const ImageEraseOverlay = defineAsyncComponent(() => import('../ImageEraseOverlay.vue'))
-const ImageInpaintOverlay = defineAsyncComponent(() => import('../ImageInpaintOverlay.vue'))
-const ImageExpandOverlay = defineAsyncComponent(() => import('../ImageExpandOverlay.vue'))
-const ImageEditTextPanel = defineAsyncComponent(() => import('../ImageEditTextPanel.vue'))
 const VideoDialoguePanel = defineAsyncComponent(() => import('../VideoDialoguePanel.vue'))
 const VideoHdPanel = defineAsyncComponent(() => import('../VideoHdPanel.vue'))
 const VideoFramesPanel = defineAsyncComponent(() => import('../VideoFramesPanel.vue'))

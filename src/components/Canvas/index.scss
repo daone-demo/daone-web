@@ -5,6 +5,12 @@
 @use './styles/canvas-base';
 @use './styles/canvas-header';
 @use './styles/canvas-graph-dialogues';
+@use './styles/canvas-image-crop';
+@use './styles/canvas-image-expand';
+@use './styles/canvas-image-edit-text';
+@use './styles/canvas-image-inpaint';
+@use './styles/canvas-image-erase';
+@use './styles/canvas-image-grid-split';
 @use './styles/canvas-prompts-text';
 @use './styles/canvas-navigation-controls';
 @use './styles/canvas-menus';

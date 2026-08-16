@@ -252,6 +252,7 @@
   z-index: 20;
   pointer-events: auto;
   overflow: visible;
+  box-sizing: border-box;
 }
 
 .canvas__image-grid-split {
