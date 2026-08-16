@@ -95,7 +95,7 @@
             </div>
 
             <div class="user-info__field">
-              <label class="user-info__label">微信</label>
+              <label class="user-info__label">邮箱</label>
               <div class="user-info__input user-info__input--with-link">
                 {{ profileState.email || '未绑定' }}
               </div>
@@ -330,10 +330,24 @@
             <div class="user-info__invoice-field">
               <label class="user-info__invoice-label">邮箱</label>
               <input
-                v-model="invoiceForm.contact"
+                v-model="invoiceForm.email"
                 class="user-info__invoice-input"
-                type="text"
+                type="email"
                 placeholder="请输入邮箱"
+                autocomplete="email"
+              />
+            </div>
+          </div>
+
+          <div class="user-info__invoice-row">
+            <div class="user-info__invoice-field">
+              <label class="user-info__invoice-label">联系电话</label>
+              <input
+                v-model="invoiceForm.phone"
+                class="user-info__invoice-input"
+                type="tel"
+                placeholder="选填，企业抬头可自动回填"
+                autocomplete="tel"
               />
             </div>
           </div>
@@ -568,6 +582,7 @@ type InvoiceTitleSearchItem = {
   bankAccount?: string
   name: string
   phone?: string
+  email?: string
   taxNo?: string
 }
 
@@ -603,7 +618,8 @@ const invoiceType = ref<InvoiceHeaderType>('COMPANY')
 const invoiceForm = ref({
   invoiceTitle: '',
   taxNo: '',
-  contact: '',
+  email: '',
+  phone: '',
   bankName: '',
   bankAccount: '',
   address: '',
@@ -678,7 +694,8 @@ function resetInvoiceForm() {
   invoiceForm.value = {
     invoiceTitle: '',
     taxNo: '',
-    contact: '',
+    email: '',
+    phone: '',
     bankName: '',
     bankAccount: '',
     address: '',
@@ -966,28 +983,42 @@ const onChangePointsPage = (key: number) => {
 }
 
 const applyInvoice = () => {
+  const email = invoiceForm.value.email.trim()
+  const phone = invoiceForm.value.phone.trim()
   const params: {
     invoiceTitle: string
     orderNo: string
     email: string
     buyerType: InvoiceHeaderType
     taxNo?: string
+    phone?: string
   } = {
-    invoiceTitle: invoiceForm.value.invoiceTitle,
+    invoiceTitle: invoiceForm.value.invoiceTitle.trim(),
     orderNo: invoiceOrderNo.value,
-    email: invoiceForm.value.contact,
+    email,
     buyerType: invoiceType.value,
   }
   if (!params.invoiceTitle) {
     message.error('请输入发票抬头')
     return
   }
-  if (!params.email) {
-    message.error('请输入联系方式')
+  if (!email) {
+    message.error('请输入邮箱')
     return
   }
+  if (!tools.isEmail(email)) {
+    message.error('请输入正确的邮箱格式')
+    return
+  }
+  if (phone) {
+    if (!tools.isPhoneNumber(phone)) {
+      message.error('请输入正确的手机号')
+      return
+    }
+    params.phone = phone
+  }
   if (invoiceType.value === 'COMPANY') {
-    params.taxNo = invoiceForm.value.taxNo
+    params.taxNo = invoiceForm.value.taxNo.trim()
     if (!params.taxNo) {
       message.error('请输入纳税人识别号')
       return
@@ -1023,7 +1054,18 @@ function normalizeInvoiceTitleResults(data: unknown): InvoiceTitleSearchItem[] {
 function applyInvoiceTitleRecord(record: InvoiceTitleSearchItem) {
   invoiceForm.value.invoiceTitle = record.name
   if (record.taxNo) invoiceForm.value.taxNo = record.taxNo
-  if (record.phone) invoiceForm.value.contact = record.phone
+  // 邮箱 / 电话按字段回填，禁止把 phone 写入 email
+  if (record.email && tools.isEmail(record.email)) {
+    invoiceForm.value.email = record.email
+  }
+  if (record.phone) {
+    if (tools.isPhoneNumber(record.phone)) {
+      invoiceForm.value.phone = record.phone
+    } else if (!invoiceForm.value.email && tools.isEmail(record.phone)) {
+      // 兼容少数抬头源把邮箱误放在 phone 字段的脏数据
+      invoiceForm.value.email = record.phone
+    }
+  }
   if (record.bank) invoiceForm.value.bankName = record.bank
   if (record.bankAccount) invoiceForm.value.bankAccount = record.bankAccount
   if (record.addr) invoiceForm.value.address = record.addr

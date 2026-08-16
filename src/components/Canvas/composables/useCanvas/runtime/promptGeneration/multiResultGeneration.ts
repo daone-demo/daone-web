@@ -6,7 +6,7 @@ import { isRequestError } from '@/utils/request';
 import type { Graph,Node } from '@antv/x6';
 import { message } from 'ant-design-vue';
 import { nextTick } from 'vue';
-import { canOpenImageDialogueOnNode,createDefaultImageDialogueSettings,isPendingImageGenDialogueTarget,isVideoNodeGenerating,resolveGenerationTaskWorkflowId,resolveImageAssetId,type CanvasGenerationParams,type ImageDialogueSettings,type ImageMarkItem,type ImageToolbarClickEvent } from '../../../../constants';
+import { canOpenImageDialogueOnNode,createDefaultImageDialogueSettings,IMAGE_GENERAL_CAPABILITY_CODE,isPendingImageGenDialogueTarget,isVideoNodeGenerating,resolveGenerationTaskWorkflowId,resolveImageAssetId,resolveSubmittableCapabilityCode,type CanvasGenerationParams,type ImageDialogueSettings,type ImageMarkItem,type ImageToolbarClickEvent } from '../../../../constants';
 import { buildImageGenerationParams,cloneNodeGenerationSnapshot,persistNodeGenerationSnapshot } from '../../../../generationParams';
 import { applyGenerationResultToNode,bindGenerationTaskId,bindSharedGenerationTaskId,markGenerationNodeFailed,pickImageGenerationResults,readGenerationResultIndex,resolveGenerationResultPreview,startImageGenerationOnNode,type GenerationTaskDetail,type GenerationTaskResult } from '../../../../generationTask';
 import { syncNodeImageMarkLists } from '../../../../imageMarkUtils';
@@ -250,6 +250,10 @@ export function installPromptMultiResultGeneration(ctx: CoreRuntimeContext) {
       // }
       ctx.resetImageDialogue();
       const sourceFileName = sourceData.fileName || sourceData.title || '';
+      const capabilityCode = resolveSubmittableCapabilityCode(
+          config.capabilityCode,
+          IMAGE_GENERAL_CAPABILITY_CODE,
+      );
       const taskParameters = config.buildParameters(event);
       const requestedCount = Math.max(1, Math.floor(Number(taskParameters.count)) || 1);
       const singleTaskParameters = { ...taskParameters, count: 1 };
@@ -268,7 +272,7 @@ export function installPromptMultiResultGeneration(ctx: CoreRuntimeContext) {
       ctx.recordCanvasDescription(config.title, '');
       resultNodes.forEach((resultNode) => {
           ctx.applyToolbarImageGenerationSnapshot(resultNode, sourceNode, sourceData, {
-              capabilityCode: config.capabilityCode,
+              capabilityCode,
               prompt: config.prompt ?? '',
               parameters: singleTaskParameters,
               referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
@@ -300,7 +304,7 @@ export function installPromptMultiResultGeneration(ctx: CoreRuntimeContext) {
                       : `gen-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`;
                   const created = await api.createGenerationTask<GenerationTaskDetail>({
                       taskType: 'IMAGE',
-                      capabilityCode: config.capabilityCode,
+                      capabilityCode,
                       prompt: config.prompt?.trim() ?? '',
                       parameters: singleTaskParameters,
                       projectId: ctx.activeProjectId.value,

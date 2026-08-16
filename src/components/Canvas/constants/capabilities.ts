@@ -494,16 +494,17 @@ export const IMAGE_NODE_TOOLBAR_MORE = {
 
 export const IMAGE_NODE_CREATIVE_TOOLBAR = {
   actions: [
-    { key: 'panorama', label: '全景', badge: 'NEW' },
-    { key: 'multi-angle', label: '多角度' },
-    { key: 'lighting', label: '打光' },
-    { key: 'grid', label: '九宫格' },
-    { key: 'hd', label: '高清' },
+    // 未联调能力：隐藏，避免 UI key 被当作 capabilityCode 提交
+    // { key: 'panorama', label: '全景', badge: 'NEW' },
+    // { key: 'multi-angle', label: '多角度' },
+    // { key: 'lighting', label: '打光' },
+    // { key: 'grid', label: '九宫格' },
+    // { key: 'hd', label: '高清' },
     { key: 'grid-split', label: '宫格切分' },
   ],
   icons: [
-    { key: 'rotate', label: '旋转', icon: 'rotate' },
-    { key: 'flip', label: '翻转', icon: 'flip' },
+    // { key: 'rotate', label: '旋转', icon: 'rotate' },
+    // { key: 'flip', label: '翻转', icon: 'flip' },
     { key: 'download', label: '下载', icon: 'download' },
     { key: 'expand', label: '展开', icon: 'expand' },
   ] satisfies ImageToolbarAction[],

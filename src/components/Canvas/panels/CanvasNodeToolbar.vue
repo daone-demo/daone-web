@@ -265,6 +265,9 @@ const CREATIVE_TOOLBAR_ACTION_KEY_MAP: Record<string, string> = {
   expand: 'IMAGE_EXPAND',
 }
 
+/** 创作工具栏本地动作（不走 AI 能力码） */
+const CREATIVE_TOOLBAR_LOCAL_ACTION_KEYS = new Set(['download'])
+
 function emitImageAction(key: string, option?: string, label?: string) {
   const payload: ImageToolbarClickPayload = { key }
   if (option) payload.option = option
@@ -273,7 +276,17 @@ function emitImageAction(key: string, option?: string, label?: string) {
 }
 
 function emitCreativeToolbarAction(key: string, label?: string) {
-  emitImageAction(CREATIVE_TOOLBAR_ACTION_KEY_MAP[key] ?? key, undefined, label)
+  const mapped = CREATIVE_TOOLBAR_ACTION_KEY_MAP[key]
+  if (mapped) {
+    emitImageAction(mapped, undefined, label)
+    return
+  }
+  if (CREATIVE_TOOLBAR_LOCAL_ACTION_KEYS.has(key)) {
+    emitImageAction(key, undefined, label)
+    return
+  }
+  // 未映射的 UI key 不得作为 capabilityCode 提交
+  console.warn(`[creative-toolbar] unsupported action ignored: ${key}`)
 }
 
 function emitVideoAction(item: { key: string; label?: string; option?: string }) {

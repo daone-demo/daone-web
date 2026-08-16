@@ -7,7 +7,7 @@ import type { Graph,Node } from '@antv/x6';
 import { message } from 'ant-design-vue';
 import { nextTick } from 'vue';
 import { resolveVideoTaskTypeLabel } from '../../../../canvasDescription';
-import { buildImageActionResultTitle,buildVideoActionResultTitle,IMAGE_GENERAL_CAPABILITY_CODE,resolveGenerationTaskWorkflowId,resolveImageAssetId,resolveVideoAssetId,resolveVideoToolbarUiKey,toVideoApiClarity,VIDEO_GENERAL_CAPABILITY_CODE,type ImageDialogueSubmitPayload,type ImageToolbarClickEvent,type ImageToolbarClickPayload,type VideoDialogueSubmitPayload,type VideoGenAspectRatio,type VideoGenPromptSubmitPayload,type VideoToolbarClickEvent,type VideoToolbarClickPayload } from '../../../../constants';
+import { buildImageActionResultTitle,buildVideoActionResultTitle,IMAGE_GENERAL_CAPABILITY_CODE,resolveGenerationTaskWorkflowId,resolveImageAssetId,resolveSubmittableCapabilityCode,resolveVideoAssetId,resolveVideoToolbarUiKey,toVideoApiClarity,VIDEO_GENERAL_CAPABILITY_CODE,type ImageDialogueSubmitPayload,type ImageToolbarClickEvent,type ImageToolbarClickPayload,type VideoDialogueSubmitPayload,type VideoGenAspectRatio,type VideoGenPromptSubmitPayload,type VideoToolbarClickEvent,type VideoToolbarClickPayload } from '../../../../constants';
 import { normalizeOcrRecognizeResult,type ImageEditTextChange,} from '../../../../editTextUtils';
 import { buildImageGenerationParams,buildModelGenerationParams,buildTextGenerationParams,persistNodeGenerationSnapshot } from '../../../../generationParams';
 import { bindGenerationTaskId,bindSharedGenerationTaskId,followModelGenerationTaskOnNode,followTextGenerationTaskOnNode,markGenerationNodeFailed,markTextGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail } from '../../../../generationTask';
@@ -302,10 +302,16 @@ export function installMediaToolbarActions(ctx: CoreRuntimeContext) {
   };
   
   ctx.handleImageCapabilityAction = function handleImageCapabilityAction(event: ImageToolbarClickEvent) {
+      // 禁止把 panorama / hd 等前端 UI key 原样当作 capabilityCode 提交
+      const capabilityCode = resolveSubmittableCapabilityCode(event.key, '');
+      if (!capabilityCode) {
+          message.warning('该能力暂未开放');
+          return;
+      }
       const title = buildImageActionResultTitle(event.label);
       const namePrefix = event.label?.trim() || '生成';
       void ctx.runImageGenerationTask(event, {
-          capabilityCode: event.key,
+          capabilityCode,
           title,
           buildFileName: (sourceFileName) => sourceFileName ? `${namePrefix}-${sourceFileName}` : `${title}.png`,
           buildParameters: (ctx) => {
