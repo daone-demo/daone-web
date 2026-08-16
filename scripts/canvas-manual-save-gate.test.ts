@@ -127,3 +127,81 @@ test('pagehide 软暂停不应清掉 contentReady（恢复后可继续自动保�
   })
   assert.equal(healed.allowed, true)
 })
+
+/**
+ * 与 beginProjectCanvasSwitch / applyProjectCanvasPayload 行为对齐：
+ * 切项目时关闭自动保存；仅在目标画布绑定成功后恢复。
+ */
+function simulateProjectSwitchAutosave(opts: {
+  routeId: string
+  applyProjectId: string | null
+}): {
+  autoSaveEnabled: boolean
+  canvasBoundProjectId: string
+  autoSaveAllowed: boolean
+} {
+  let autoSaveEnabled = true
+  let canvasContentReady = true
+  let canvasBoundProjectId = 'project-A'
+
+  // beginProjectCanvasSwitch
+  autoSaveEnabled = false
+  canvasContentReady = false
+  canvasBoundProjectId = ''
+
+  assert.equal(
+    shouldAllowSave({
+      saveType: 'AUTO',
+      autoSaveEnabled,
+      canvasContentReady,
+      hasGraph: true,
+      projectId: opts.routeId,
+    }),
+    false,
+    '应用前不得发送 AUTO 保存',
+  )
+
+  if (opts.applyProjectId && opts.applyProjectId === opts.routeId) {
+    // applyProjectCanvasPayload 成功
+    canvasBoundProjectId = opts.applyProjectId
+    autoSaveEnabled = true
+    canvasContentReady = true
+  }
+
+  const autoSaveAllowed = shouldAllowSave({
+    saveType: 'AUTO',
+    autoSaveEnabled,
+    canvasContentReady,
+    hasGraph: true,
+    projectId: opts.routeId,
+  })
+
+  return { autoSaveEnabled, canvasBoundProjectId, autoSaveAllowed }
+}
+
+test('切项目：应用成功后恢复自动保存，应用前不发送 AUTO', () => {
+  const beforeApply = simulateProjectSwitchAutosave({
+    routeId: 'project-B',
+    applyProjectId: null,
+  })
+  assert.equal(beforeApply.autoSaveEnabled, false)
+  assert.equal(beforeApply.canvasBoundProjectId, '')
+  assert.equal(beforeApply.autoSaveAllowed, false)
+
+  const afterApply = simulateProjectSwitchAutosave({
+    routeId: 'project-B',
+    applyProjectId: 'project-B',
+  })
+  assert.equal(afterApply.autoSaveEnabled, true)
+  assert.equal(afterApply.canvasBoundProjectId, 'project-B')
+  assert.equal(afterApply.autoSaveAllowed, true)
+})
+
+test('切项目：应用失败时保持自动保存关闭', () => {
+  const failed = simulateProjectSwitchAutosave({
+    routeId: 'project-B',
+    applyProjectId: null,
+  })
+  assert.equal(failed.autoSaveEnabled, false)
+  assert.equal(failed.autoSaveAllowed, false)
+})

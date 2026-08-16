@@ -260,14 +260,14 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="combo-confirm-title"
-        @mousedown.self="closeConfirm"
+        @mousedown.self="closeConfirm()"
       >
         <div class="combo-confirm__dialog" @mousedown.stop>
           <button
             type="button"
             class="combo-confirm__close"
             aria-label="关闭"
-            @click="closeConfirm"
+            @click="closeConfirm()"
           >
             ×
           </button>
@@ -507,6 +507,11 @@ function closeConfirm(force = false) {
   confirmVisible.value = false
   selectedPlan.value = null
   selectedPayMethod.value = 'WECHAT'
+}
+
+/** 主弹窗关闭时强制清理确认态（不经 DOM 事件参数） */
+function forceCloseConfirm() {
+  closeConfirm(true)
 }
 
 function formatYuan(fen: number): string {
@@ -796,7 +801,7 @@ watch(open, (visible) => {
     void preloadSlideVerifyImages()
     onloadPlans()
   } else {
-    closeConfirm(true)
+    forceCloseConfirm()
     memberTab.value = 'enterprise'
     billing.value = 'YEAR'
     resetTrialForm()

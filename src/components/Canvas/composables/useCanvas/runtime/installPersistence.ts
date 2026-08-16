@@ -87,6 +87,8 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       const boundProjectId = projectId || routeId;
       ctx.activeProjectId.value = boundProjectId;
       ctx.canvasBoundProjectId = boundProjectId;
+      // 目标画布已成功绑定：恢复自动保存（beginProjectCanvasSwitch 会先关掉）
+      ctx.autoSaveEnabled = true;
       ctx.localDirty = false;
       ctx.canvasRevision.value = payload.revision;
       ctx.lastCanvasDescription.value = payload.description?.trim() || '';
