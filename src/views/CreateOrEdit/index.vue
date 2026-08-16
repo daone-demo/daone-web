@@ -369,15 +369,28 @@ function getNextUntitledProjectTitle() {
 }
 
 const onNewProject = async () => {
-  const res = await api.createProject({ title: getNextUntitledProjectTitle() })
-  await onRefreshProjects()
-  const newProjectId = (res as CanvasProjectItem).id
-  if (!newProjectId) return
-  leaveConfirmed = true
-  await router.push({
-    name: route.name ?? 'projectDetail',
-    params: { id: newProjectId },
-  })
+  // 先复用统一离开保护：保存成功才允许切走；取消或保存失败则不创建、不跳转
+  const canLeave = await confirmLeaveBeforeRouteChange()
+  if (!canLeave) return
+
+  try {
+    const res = await api.createProject({ title: getNextUntitledProjectTitle() })
+    await onRefreshProjects()
+    const newProjectId = (res as CanvasProjectItem).id
+    if (!newProjectId) {
+      leaveConfirmed = false
+      return
+    }
+    // leaveConfirmed 已在确认保存成功时置位，供路由守卫跳过二次弹窗
+    await router.push({
+      name: route.name ?? 'projectDetail',
+      params: { id: newProjectId },
+    })
+  } catch (error) {
+    leaveConfirmed = false
+    console.error('[CreateOrEdit] create project failed', error)
+    message.error('创建项目失败，请重试')
+  }
 }
 
 const onRenameProject = (projectId: string, name: string) => {
