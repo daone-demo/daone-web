@@ -1,4 +1,3 @@
-// @ts-nocheck -- 动态共享上下文保持原闭包的运行时类型；公开契约仍由 CanvasBindings 校验。
 /**
  * 职责：安装框选/平移/整理/小地图/主题/网格/缩放及删除选中节点相关动作到 ctx。
  */
@@ -109,7 +108,7 @@ export function installAssetViewportChrome(ctx: CoreRuntimeContext) {
           return;
       ctx.clearEdgeSelection();
       g.cleanSelection();
-      ids.forEach((id) => {
+      ids.forEach((id: string) => {
           if (ctx.activePickerNodeId.value === id)
               ctx.activePickerNodeId.value = '';
           if (ctx.activeImageGenPromptNodeId.value === id)

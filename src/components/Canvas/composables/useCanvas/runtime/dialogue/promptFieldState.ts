@@ -1,21 +1,28 @@
-// @ts-nocheck -- 动态共享上下文保持原闭包的运行时类型；公开契约仍由 CanvasBindings 校验。
 /**
  * 职责：安装 Dialogue 提示词字段 load/persist/normalize 到 ctx。
  */
-import { isRequestError } from '@/utils/request';
-import type { Node } from '@antv/x6';
-import { message } from 'ant-design-vue';
-import { nextTick,provide } from 'vue';
-import { createDefaultVideoDialogueSettings,IMAGE_GENERAL_CAPABILITY_CODE,isNodeFileUploading,normalizeImageDialogueSettingsForModel,pickImageDialogueSettingsInput,resolveGenerationTaskWorkflowId,resolveImageAssetId,toVideoApiClarity,VIDEO_GENERAL_CAPABILITY_CODE,type ImageDialogueSubmitPayload,type ImageMarkItem,type VideoDialogueSubmitPayload,type VideoGenAspectRatio } from '../../../../constants';
-import { buildImageGenerationParams,buildTextGenerationParams,imageDialogueSettingsFromPayload,persistNodeGenerationSnapshot } from '../../../../generationParams';
-import { bindGenerationTaskId,followTextGenerationTaskOnNode,isGenerationTaskTerminal,markTextGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,pollGenerationTask,runImageGenerationOnNode,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail } from '../../../../generationTask';
-import { createIdempotencyKey } from '../../../../idempotency';
-import { appendElementMarkToNode,appendImageMarkToNode,buildImageMarkItem,clientPointToImageNaturalCoords,isImageMarkAnalyzing,parseImageMarkRecognizeResult,removeImageMarkFromGraph,replaceImageMarkOnGraph,setImageMarkAnalyzing,syncNodeImageMarkLists,updateImageMarkLabelOnNode } from '../../../../imageMarkUtils';
-import { toVideoApiPrompt } from '../../../../promptMention';
-import { getBoundingBoxCenter } from '../../../../viewport';
-import type { CanvasNodeData,ImageSourceRef } from '../../sharedImports';
-import { api,ensureImageTextEdge,findIncomingTextNodes,getImageMarkHintPosition,getNodeSize,getScroller,getVideoSourceRefs,IMG2PROMPT_DEFAULT_INSTRUCTION,isImageGenerationFailedNode,isVideoGenerationFailedNode,plainTextFromNodeContent,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resolveText2ImageGenerationTargetNode,resolveVideoSourceRefsForNode,runUploadSimulation,spawnGenerationResultNode,spawnVideoGenerationResultNode,syncNodeShapeFromData,syncTextNodeImageSource,toPersistedVideoSourceRefs,uploadAssetFile } from '../../sharedImports';
-import type { CoreRuntimeContext } from '../context';
+import type { Node } from '@antv/x6'
+import {
+  createDefaultVideoDialogueSettings,
+  normalizeImageDialogueSettingsForModel,
+  pickImageDialogueSettingsInput,
+  resolveImageAssetId,
+  type VideoGenAspectRatio,
+} from '../../../../constants'
+import type { CanvasNodeData, ImageSourceRef } from '../../sharedImports'
+import {
+  ensureImageTextEdge,
+  findIncomingTextNodes,
+  getNodeSize,
+  getVideoSourceRefs,
+  IMG2PROMPT_DEFAULT_INSTRUCTION,
+  plainTextFromNodeContent,
+  syncNodeShapeFromData,
+  syncTextNodeImageSource,
+  toPersistedVideoSourceRefs,
+  uploadAssetFile,
+} from '../../sharedImports'
+import type { CoreRuntimeContext } from '../context'
 
 export function installDialoguePromptFieldState(ctx: CoreRuntimeContext) {
   ctx.resolveImageGenTextSourcePreview = function resolveImageGenTextSourcePreview(nodeId: string): string {
@@ -347,7 +354,7 @@ export function installDialoguePromptFieldState(ctx: CoreRuntimeContext) {
       if (!g)
           return [];
       return ctx.seedPromptImageRefs(data)
-          .map((item) => {
+          .map((item: ImageSourceRef) => {
           if (item.assetId)
               return item.assetId;
           if (item.nodeId) {
@@ -358,14 +365,14 @@ export function installDialoguePromptFieldState(ctx: CoreRuntimeContext) {
           }
           return '';
       })
-          .filter((id): id is string => Boolean(id));
+          .filter((id: string): id is string => Boolean(id));
   };
   
   ctx.refreshPromptSourcePreviews = function refreshPromptSourcePreviews(data: CanvasNodeData) {
       ctx.promptSourcePreviewUrl.value = data.sourcePreviewUrl ?? '';
       ctx.promptSourceFileName.value = data.sourceFileName ?? '';
       ctx.promptSourcePreviews.value = Array.isArray(data.imageSourceRefs)
-          ? data.imageSourceRefs.filter((item) => item.previewUrl)
+          ? data.imageSourceRefs.filter((item: ImageSourceRef) => item.previewUrl)
           : [];
   };
   
@@ -393,12 +400,12 @@ export function installDialoguePromptFieldState(ctx: CoreRuntimeContext) {
       };
       let refs = ctx.seedPromptImageRefs(data);
       const existingIdx = payload.nodeId
-          ? refs.findIndex((item) => item.nodeId === payload.nodeId)
-          : refs.findIndex((item) => item.previewUrl === payload.previewUrl);
+          ? refs.findIndex((item: ImageSourceRef) => item.nodeId === payload.nodeId)
+          : refs.findIndex((item: ImageSourceRef) => item.previewUrl === payload.previewUrl);
       if (existingIdx >= 0) {
           refs.splice(existingIdx, 1, ref);
       }
-      else if (!refs.some((item) => item.previewUrl === payload.previewUrl)) {
+      else if (!refs.some((item: ImageSourceRef) => item.previewUrl === payload.previewUrl)) {
           refs.push(ref);
       }
       else {
@@ -465,19 +472,19 @@ export function installDialoguePromptFieldState(ctx: CoreRuntimeContext) {
       const data = { ...(cell.getData() as CanvasNodeData) };
       let refs = ctx.seedPromptImageRefs(data);
       if (!sourceNodeId) {
-          refs.forEach((item) => {
+          refs.forEach((item: ImageSourceRef) => {
               if (item.previewUrl.startsWith('blob:'))
                   URL.revokeObjectURL(item.previewUrl);
           });
           refs = [];
       }
       else {
-          const removed = refs.filter((item) => item.nodeId === sourceNodeId);
-          removed.forEach((item) => {
+          const removed = refs.filter((item: ImageSourceRef) => item.nodeId === sourceNodeId);
+          removed.forEach((item: ImageSourceRef) => {
               if (item.previewUrl.startsWith('blob:'))
                   URL.revokeObjectURL(item.previewUrl);
           });
-          refs = refs.filter((item) => item.nodeId !== sourceNodeId);
+          refs = refs.filter((item: ImageSourceRef) => item.nodeId !== sourceNodeId);
           g.getEdges().forEach((edge) => {
               const s = edge.getSourceCellId();
               const t = edge.getTargetCellId();
