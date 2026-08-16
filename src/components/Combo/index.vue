@@ -492,7 +492,12 @@ function close() {
 }
 
 /** 清空订单/二维码/幂等键，避免换套餐时复用旧单 */
+let paymentSessionId = 0
+let payLoadSeq = 0
+
 function resetPaymentState() {
+  paymentSessionId += 1
+  payLoadSeq += 1
   stopOrderPolling()
   orderNo.value = ''
   payUrl.value = ''
@@ -672,6 +677,8 @@ async function confirmPay() {
     currentIdempotencyKey.value = uuidv4();
   }
 
+  const sessionId = paymentSessionId
+  const productAtRequest = productCode
   confirmLoading.value = true
   try {
     const order = await api.createOrder<{
@@ -684,19 +691,29 @@ async function confirmPay() {
       },
       currentIdempotencyKey.value
     )
+    // 关闭/换套餐后迟到的创建订单响应不得回写
+    if (sessionId !== paymentSessionId) return
+    if (confirmPreview.value.productCode !== productAtRequest) return
     orderNo.value = order.orderNo;
     startOrderPolling();
   } catch (error) {
+    if (sessionId !== paymentSessionId) return
     console.error('confirmPay', error)
     message.error('支付失败，请稍后重试')
   } finally {
-    confirmLoading.value = false
+    if (sessionId === paymentSessionId) {
+      confirmLoading.value = false
+    }
   }
 }
 
 const queryOrder = () => {
-  if (!orderNo.value) return
-  api.getOrder(orderNo.value).then((res:any)=>{
+  const polledOrderNo = orderNo.value
+  const sessionId = paymentSessionId
+  if (!polledOrderNo) return
+  api.getOrder(polledOrderNo).then((res:any)=>{
+    if (sessionId !== paymentSessionId) return
+    if (orderNo.value !== polledOrderNo) return
     const status = res?.status
     if (status === 'PAID') {
       stopOrderPolling()
@@ -708,7 +725,7 @@ const queryOrder = () => {
         points: confirmPreview.value.actualGrantPoints,
         pointsStatus: '已发放',
         expireDate: plan ? getPlanExpireDate(plan) : '',
-        orderNo: orderNo.value,
+        orderNo: polledOrderNo,
       })
       loadUserProfile()
       close()
@@ -716,6 +733,7 @@ const queryOrder = () => {
       stopOrderPolling()
     }
   }).catch((error) => {
+    if (sessionId !== paymentSessionId) return
     console.error('queryOrder', error)
   });
 }
@@ -816,26 +834,31 @@ interface PaymentResponse {
 }
 
 const onLoadPayUrl = async () => {
+  const seq = ++payLoadSeq
+  const sessionId = paymentSessionId
+  const currentOrderNo = orderNo.value
+  const currentMethod = selectedPayMethod.value
   try {
-    const res:any = await api.createPayment<PaymentResponse>(orderNo.value, {
-      payType: selectedPayMethod.value,
+    const res:any = await api.createPayment<PaymentResponse>(currentOrderNo, {
+      payType: currentMethod,
     })
+    if (seq !== payLoadSeq || sessionId !== paymentSessionId) return
+    if (orderNo.value !== currentOrderNo || selectedPayMethod.value !== currentMethod) return
     if (!res) return
 
-    if (selectedPayMethod.value === 'WECHAT') {
-      payUrl.value = await QRCode.toDataURL(res.redirectUrl, {
+    if (currentMethod === 'WECHAT') {
+      const dataUrl = await QRCode.toDataURL(res.redirectUrl, {
         width: 260,
         margin: 2,
       })
+      if (seq !== payLoadSeq || sessionId !== paymentSessionId) return
+      payUrl.value = dataUrl
     } else {
-      // payUrl.value = await QRCode.toDataURL(res.qrCodeContent, {
-      //   width: 260,
-      //   margin: 2,
-      // }
       payUrl.value = res.qrCodeContent
     }
     payExpireAt.value = res.expireAt ?? ''
   } catch (error) {
+    if (seq !== payLoadSeq || sessionId !== paymentSessionId) return
     console.error('onLoadPayUrl', error)
     payUrl.value = ''
   }

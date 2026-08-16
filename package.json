@@ -24,6 +24,7 @@
     "check:bundle-budget": "node scripts/check-bundle-budget.mjs"
   },
   "dependencies": {
+    "@ant-design/icons-vue": "^7.0.1",
     "@antv/x6": "^2.19.2",
     "@antv/x6-plugin-minimap": "^2.0.7",
     "@antv/x6-plugin-scroller": "^2.0.10",
@@ -47,20 +48,20 @@
     "x6-html-shape": "^0.4.9"
   },
   "devDependencies": {
+    "@eslint/js": "^9.36.0",
     "@types/node": "^24.12.3",
     "@types/qrcode": "^1.5.6",
     "@types/three": "^0.185.1",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/tsconfig": "^0.9.1",
-    "@eslint/js": "^9.36.0",
     "eslint": "^9.36.0",
     "eslint-plugin-vue": "^10.4.0",
+    "postcss-html": "^1.8.0",
+    "postcss-scss": "^4.0.9",
     "prettier": "^3.6.2",
     "stylelint": "^16.23.1",
     "stylelint-config-recommended-vue": "^1.6.1",
     "stylelint-config-standard": "^39.0.0",
-    "postcss-html": "^1.8.0",
-    "postcss-scss": "^4.0.9",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.44.0",
     "unplugin-auto-import": "^21.0.0",

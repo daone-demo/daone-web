@@ -25,6 +25,7 @@
       :projects="projectsList"
       :projects-loading="projectsLoading"
       :projects-has-more="projectsHasMore"
+      :creating-project="creatingProject"
       :active-project-id="activeProjectId"
       :user-name="userMenuName"
       :user-role="userMenuRole"
@@ -500,6 +501,7 @@ defineProps<{
   projectsList: CanvasProjectItem[]
   projectsLoading?: boolean
   projectsHasMore?: boolean
+  creatingProject?: boolean
   imageCapabilities: ImageCapability[]
   videoCapabilities: ImageCapability[]
   textCapabilities: any[]

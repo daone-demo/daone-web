@@ -109,7 +109,7 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="points-confirm-title"
-        @mousedown.self="closeConfirm"
+        @mousedown.self="closeConfirm()"
       >
         <div
           class="combo-confirm__dialog"
@@ -119,7 +119,7 @@
             type="button"
             class="combo-confirm__close"
             aria-label="关闭"
-            @click="closeConfirm"
+            @click="closeConfirm()"
           >
             ×
           </button>
@@ -264,6 +264,8 @@ const payUrl = ref('')
 const payExpireAt = ref('')
 
 let orderPollingTimer: ReturnType<typeof setInterval> | null = null
+let paymentSessionId = 0
+let payLoadSeq = 0
 
 const selectedPackage = computed(
   () => pointRechargePackages.value.find((item) => item.packageCode === selectedPackageId.value) ?? null,
@@ -315,14 +317,19 @@ function close() {
   emit('close')
 }
 
-function closeConfirm() {
-  if (confirmLoading.value) return
+function closeConfirm(force = false) {
+  if (confirmLoading.value && !force) return
+  paymentSessionId += 1
+  payLoadSeq += 1
   stopOrderPolling()
+  confirmLoading.value = false
   confirmVisible.value = false
   selectedPayMethod.value = 'WECHAT'
   orderNo.value = ''
   payUrl.value = ''
   payExpireAt.value = ''
+  currentIdempotencyKey.value = null
+  submitting.value = false
 }
 
 function lockBodyScroll(locked: boolean) {
@@ -373,7 +380,7 @@ function resetForm() {
   agreedToTerms.value = false
   submitting.value = false
   currentIdempotencyKey.value = null
-  closeConfirm()
+  closeConfirm(true)
 }
 
 function openCombo() {
@@ -394,12 +401,25 @@ async function handleSubmit() {
     modalStore.openModal('login')
     return
   }
-  const res:any = await api.createPointRechargeOrder({
-    packageCode: selectedPackage.value.packageCode,
-  }, uuidv4())
-  orderNo.value = res.orderNo;
-  startOrderPolling();
-  confirmVisible.value = true;
+  const sessionId = paymentSessionId
+  submitting.value = true
+  try {
+    const res:any = await api.createPointRechargeOrder({
+      packageCode: selectedPackage.value.packageCode,
+    }, uuidv4())
+    if (sessionId !== paymentSessionId) return
+    orderNo.value = res.orderNo;
+    startOrderPolling();
+    confirmVisible.value = true;
+  } catch (error) {
+    if (sessionId !== paymentSessionId) return
+    console.error('handleSubmit', error)
+    message.error('创建订单失败，请稍后重试')
+  } finally {
+    if (sessionId === paymentSessionId) {
+      submitting.value = false
+    }
+  }
 }
 
 async function confirmPay() {
@@ -412,6 +432,8 @@ async function confirmPay() {
     currentIdempotencyKey.value = uuidv4()
   }
 
+  const sessionId = paymentSessionId
+  const productAtRequest = productCode
   confirmLoading.value = true
   try {
     const order = await api.createOrder<{
@@ -424,19 +446,28 @@ async function confirmPay() {
       },
       currentIdempotencyKey.value,
     )
+    if (sessionId !== paymentSessionId) return
+    if (confirmPreview.value.productCode !== productAtRequest) return
     orderNo.value = order.orderNo
     startOrderPolling()
   } catch (error) {
+    if (sessionId !== paymentSessionId) return
     console.error('confirmPay', error)
     message.error('支付失败，请稍后重试')
   } finally {
-    confirmLoading.value = false
+    if (sessionId === paymentSessionId) {
+      confirmLoading.value = false
+    }
   }
 }
 
 function queryOrder() {
-  if (!orderNo.value) return
-  api.getOrder(orderNo.value).then((res: any) => {
+  const polledOrderNo = orderNo.value
+  const sessionId = paymentSessionId
+  if (!polledOrderNo) return
+  api.getOrder(polledOrderNo).then((res: any) => {
+    if (sessionId !== paymentSessionId) return
+    if (orderNo.value !== polledOrderNo) return
     const status = res?.status
     if (status === 'PAID') {
       stopOrderPolling()
@@ -446,7 +477,7 @@ function queryOrder() {
         productName: pkg ? `${pkg.grantPoints} 积分` : confirmPreview.value.title,
         points: pkg?.grantPoints ?? confirmPreview.value.grantPoints,
         pointsStatus: '已发放',
-        orderNo: orderNo.value,
+        orderNo: polledOrderNo,
       })
       emit('recharge', selectedPackageId.value)
       loadUserProfile()
@@ -457,6 +488,7 @@ function queryOrder() {
       stopOrderPolling()
     }
   }).catch((error) => {
+    if (sessionId !== paymentSessionId) return
     console.error('queryOrder', error)
   })
 }
@@ -475,22 +507,31 @@ function stopOrderPolling() {
 }
 
 async function onLoadPayUrl() {
+  const seq = ++payLoadSeq
+  const sessionId = paymentSessionId
+  const currentOrderNo = orderNo.value
+  const currentMethod = selectedPayMethod.value
   try {
-    const res = await api.createPayment<PaymentResponse>(orderNo.value, {
-      payType: selectedPayMethod.value,
+    const res = await api.createPayment<PaymentResponse>(currentOrderNo, {
+      payType: currentMethod,
     })
+    if (seq !== payLoadSeq || sessionId !== paymentSessionId) return
+    if (orderNo.value !== currentOrderNo || selectedPayMethod.value !== currentMethod) return
     if (!res) return
 
-    if (selectedPayMethod.value === 'WECHAT') {
-      payUrl.value = await QRCode.toDataURL(res.redirectUrl ?? '', {
+    if (currentMethod === 'WECHAT') {
+      const dataUrl = await QRCode.toDataURL(res.redirectUrl ?? '', {
         width: 260,
         margin: 2,
       })
+      if (seq !== payLoadSeq || sessionId !== paymentSessionId) return
+      payUrl.value = dataUrl
     } else {
       payUrl.value = res.qrCodeContent ?? ''
     }
     payExpireAt.value = res.expireAt ?? ''
   } catch (error) {
+    if (seq !== payLoadSeq || sessionId !== paymentSessionId) return
     console.error('onLoadPayUrl', error)
     payUrl.value = ''
   }
@@ -510,7 +551,7 @@ watch(open, (visible) => {
     loadPointRechargePackages()
     loadUserProfile()
   } else {
-    stopOrderPolling()
+    closeConfirm(true)
     resetForm()
   }
 })

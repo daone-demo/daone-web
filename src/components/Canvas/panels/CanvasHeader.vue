@@ -65,7 +65,7 @@
               <i
                 class="iconfont icon-shanchu"
                 v-if="project.id !== activeProjectId"
-                @click.stop="emit('delete-project', project.id)"
+                @click.stop="onDeleteProject(project.id)"
               />
               <span
                 v-if="project.id === activeProjectId"
@@ -84,6 +84,7 @@
         <button
           type="button"
           class="canvas__brand-add"
+          :disabled="creatingProject"
           @click="emit('new-project')"
         >
           <i class="iconfont icon-black" style="font-size: 18px;"></i>
@@ -230,7 +231,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, createVNode } from 'vue'
+import { Modal } from 'ant-design-vue'
+import { ExclamationCircleFilled } from '@ant-design/icons-vue'
 import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
 import type { CanvasBgTheme } from '../canvasTheme';
@@ -239,9 +242,6 @@ import { useRouter } from 'vue-router';
 import api from '@/services/api';
 import { useProject } from '@stores/useProject';
 const router = useRouter();
-// import { useRouter } from 'vue-router';
-
-// const router = useRouter();
 const userInfoStore = useUserInfo();
 
 const projectStore = useProject();
@@ -275,11 +275,14 @@ const props = defineProps<{
   projects: CanvasProjectItem[]
   projectsLoading?: boolean
   projectsHasMore?: boolean
+  creatingProject?: boolean
   activeProjectId: string
   userName: string
   userRole: string
   userPoints: number
 }>()
+
+const creatingProject = computed(() => Boolean(props.creatingProject))
 
 const displayProjectName = computed(
   () => props.projects.find((project) => project.id === props.activeProjectId)?.title
@@ -288,10 +291,30 @@ const displayProjectName = computed(
 )
 
 const onLogout = async () => {
-  await api.logout();
-  router.replace('/');
-  userInfoStore.logout();
-  projectStore.clearProjects();
+  try {
+    await api.logout()
+  } catch (error) {
+    console.error('logout', error)
+  } finally {
+    router.replace('/')
+    userInfoStore.logout()
+    projectStore.clearProjects()
+  }
+}
+
+function onDeleteProject(projectId: string) {
+  Modal.confirm({
+    title: '确定要删除此项目吗？',
+    icon: createVNode(ExclamationCircleFilled),
+    content: '删除后将无法恢复，请谨慎操作。',
+    okText: '确定',
+    cancelText: '取消',
+    onOk() {
+      return api.deleteProject(projectId).then(() => {
+        emit('delete-project', projectId)
+      })
+    },
+  })
 }
 
 const emit = defineEmits<{

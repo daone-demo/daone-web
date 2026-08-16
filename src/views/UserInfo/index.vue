@@ -753,8 +753,10 @@ const onLoadPayUrl = async () => {
 }
 
 const queryOrder = () => {
-  if (!orderNo.value) return
-  api.getOrder(orderNo.value).then((res:any)=>{
+  const polledOrderNo = orderNo.value
+  if (!polledOrderNo) return
+  api.getOrder(polledOrderNo).then((res:any)=>{
+    if (orderNo.value !== polledOrderNo) return
     const status = res?.status
     if (status === 'PAID') {
       stopOrderPolling()
@@ -773,7 +775,7 @@ const queryOrder = () => {
         points: payingPoints.value ?? res?.grantPoints,
         pointsStatus: '已发放',
         expireDate: payingBillKind.value === 'plan' ? expireDate : undefined,
-        orderNo: orderNo.value,
+        orderNo: polledOrderNo,
       })
       onLoadOrderList();
       close()
@@ -781,6 +783,7 @@ const queryOrder = () => {
       stopOrderPolling()
     }
   }).catch((error) => {
+    if (orderNo.value !== polledOrderNo) return
     console.error('queryOrder', error)
   });
 }
@@ -954,10 +957,15 @@ const onLoadPoints = async () => {
 }
 
 const onLogout = async () => {
-  await api.logout();
-  userInfoStore.logout();
-  projectStore.clearProjects();
-  router.replace('/');
+  try {
+    await api.logout()
+  } catch (error) {
+    console.error('logout', error)
+  } finally {
+    userInfoStore.logout()
+    projectStore.clearProjects()
+    router.replace('/')
+  }
 }
 
 const onLoadOrderList = async () => {

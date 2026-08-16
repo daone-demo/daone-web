@@ -20,6 +20,7 @@
         :projects-list="projectsList"
         :projects-loading="projectsLoading"
         :projects-has-more="projectsHasMore"
+        :creating-project="creatingProject"
         :image-capabilities="ImageCapabilities"
         :video-capabilities="VideoCapabilities"
         :text-capabilities="TextCapabilities"
@@ -146,6 +147,7 @@ const router = useRouter();
 const projectsList = ref<CanvasProjectItem[]>([]);
 const projectsLoading = ref(false)
 const projectsHasMore = ref(true)
+const creatingProject = ref(false)
 const chatPanelCollapsed = ref(true)
 const currentProjectId = computed(() => {
   const id = route.params.id
@@ -390,11 +392,13 @@ function getNextUntitledProjectTitle() {
 }
 
 const onNewProject = async () => {
-  // 先复用统一离开保护：保存成功才允许切走；取消或保存失败则不创建、不跳转
-  const canLeave = await confirmLeaveBeforeRouteChange()
-  if (!canLeave) return
-
+  if (creatingProject.value) return
+  creatingProject.value = true
   try {
+    // 先复用统一离开保护：保存成功才允许切走；取消或保存失败则不创建、不跳转
+    const canLeave = await confirmLeaveBeforeRouteChange()
+    if (!canLeave) return
+
     const res = await api.createProject({ title: getNextUntitledProjectTitle() })
     await onRefreshProjects()
     const newProjectId = (res as CanvasProjectItem).id
@@ -411,6 +415,8 @@ const onNewProject = async () => {
     leaveConfirmed = false
     console.error('[CreateOrEdit] create project failed', error)
     message.error('创建项目失败，请重试')
+  } finally {
+    creatingProject.value = false
   }
 }
 
@@ -420,17 +426,9 @@ const onRenameProject = (projectId: string, name: string) => {
   modalStore.openModal('updateProjectName');
 }
 
-const onDeleteProject = async (projectId: string) => {
-  Modal.confirm({
-    title: '删除项目',
-    content: '确定删除该项目吗？',
-    cancelText: '取消',
-    okText: '确定',
-    onOk: async () => {
-      await api.deleteProject(projectId)
-      await onRefreshProjects()
-    },
-  })
+/** 删除已由 Header/浏览器完成确认与接口调用，此处仅刷新列表 */
+const onDeleteProject = async (_projectId: string) => {
+  await onRefreshProjects()
 }
 
 const onCloseChat = () => {
