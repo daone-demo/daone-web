@@ -11,8 +11,11 @@ import {
   handleMediaProxyNodeRequest,
 } from './scripts/media-proxy.mjs'
 
-function createMediaProxyPlugin(env: Record<string, string>): Plugin {
-  // 开发进程内密钥：不进入前端产物；生产须显式配置 MEDIA_PROXY_HMAC_SECRET
+function createMediaProxyPlugin(
+  env: Record<string, string>,
+  options: { command: 'build' | 'serve' },
+): Plugin {
+  // 开发进程内密钥：不进入前端产物；生产运行（dev/preview/server）须显式配置
   if (!process.env.MEDIA_PROXY_HMAC_SECRET && env.MEDIA_PROXY_HMAC_SECRET) {
     process.env.MEDIA_PROXY_HMAC_SECRET = env.MEDIA_PROXY_HMAC_SECRET
   }
@@ -25,9 +28,13 @@ function createMediaProxyPlugin(env: Record<string, string>): Plugin {
   if (!process.env.VITE_API_BASE_HOST && env.VITE_API_BASE_HOST) {
     process.env.VITE_API_BASE_HOST = env.VITE_API_BASE_HOST
   }
-  ensureMediaProxyHmacSecretConfigured({
-    allowEphemeral: process.env.NODE_ENV !== 'production',
-  })
+  // vite build 固定 NODE_ENV=production，但静态打包不挂 media-proxy 中间件，
+  // 密钥只在运行时（server.mjs / configureServer / preview）需要。
+  if (options.command !== 'build') {
+    ensureMediaProxyHmacSecretConfigured({
+      allowEphemeral: process.env.NODE_ENV !== 'production',
+    })
+  }
 
   const handle = async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const rawUrl = req.url || ''
@@ -58,7 +65,7 @@ function createMediaProxyPlugin(env: Record<string, string>): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
@@ -80,7 +87,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
-      createMediaProxyPlugin(env),
+      createMediaProxyPlugin(env, { command }),
       vue(),
       AutoImport({
         resolvers: [AntDesignVueResolver({ importStyle: false })],
