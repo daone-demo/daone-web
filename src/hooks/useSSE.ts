@@ -1,4 +1,4 @@
-import { onBeforeUnmount, ref } from 'vue'
+import { getCurrentInstance, onBeforeUnmount, ref } from 'vue'
 import { createSSEParser } from './sseParser.ts'
 
 type SSEOptions = {
@@ -133,9 +133,12 @@ export function useSSE() {
     }
   }
 
-  onBeforeUnmount(() => {
-    close()
-  })
+  // 仅在组件 setup 中注册；单测等无组件上下文调用时由调用方自行 close()
+  if (getCurrentInstance()) {
+    onBeforeUnmount(() => {
+      close()
+    })
+  }
 
   return {
     loading,
