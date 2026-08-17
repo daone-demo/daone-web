@@ -345,10 +345,10 @@
                 <span>原会员已消耗积分</span>
                 <span>{{ confirmPreview.consumedPoints }}</span>
               </div> -->
-              <div class="combo-confirm__row">
+              <!-- <div class="combo-confirm__row">
                 <span>实际到账积分</span>
                 <span>{{ confirmPreview.actualGrantPoints }}</span>
-              </div>
+              </div> -->
             </section>
             <!-- <ul class="combo-confirm__notes">
               <li>应付差价按目标会员标价与原会员实付金额计算</li>
