@@ -359,9 +359,9 @@ import { useCanvasBgTheme } from './useCanvasBgTheme'
 import { useCanvasImageDropUpload } from './composables/useCanvasImageDropUpload'
 import { usePromptTranslate } from './composables/usePromptTranslate'
 import {
+  buildPromptWithMentionInsert,
   createPromptMentionApi,
   isInputComposing,
-  needsSpaceBeforeMention,
 } from './promptMention'
 import { resolveMarkMentionMeta } from './composables/usePromptMarkMentions'
 import VideoGenSettingsPopover from './VideoGenSettingsPopover.vue'
@@ -698,6 +698,9 @@ const { translating, onTranslatePrompt } = usePromptTranslate({
 })
 /** 点击缩略图插入前缓存光标，避免 mousedown 抢焦点导致插入到末尾 */
 let savedPromptCaret = { start: 0, end: 0 }
+let hasSavedPromptCaret = false
+/** 程序化 focus/重绘期间禁止覆盖已缓存的插入光标 */
+let suppressCaretCapture = false
 
 function getRefDisplayName(ref: VideoSourceRef) {
   if (ref.kind === 'text') {
@@ -707,16 +710,27 @@ function getRefDisplayName(ref: VideoSourceRef) {
 }
 
 function capturePromptCaret() {
+  if (suppressCaretCapture) return
   const el = promptInputRef.value
   if (!el) return
   const offsets = mentionApi.getSelectionPlainOffsets(el)
   if (!offsets) return
   savedPromptCaret = offsets
+  hasSavedPromptCaret = true
 }
 
 function onRefMouseDown() {
-  // 先记下当前光标，再 preventDefault 保住输入框焦点
+  // 先记下当前光标；模板上 mousedown.prevent 保住输入框焦点
   capturePromptCaret()
+}
+
+function resolveInsertCaret(textLen: number): { start: number; end: number } {
+  if (hasSavedPromptCaret) {
+    const start = Math.max(0, Math.min(savedPromptCaret.start, textLen))
+    const end = Math.max(start, Math.min(savedPromptCaret.end, textLen))
+    return { start, end }
+  }
+  return { start: textLen, end: textLen }
 }
 
 function emitPrompt(text: string) {
@@ -772,76 +786,49 @@ function syncPromptView(text = props.prompt) {
   if (!el) return
 
   const offsets = mentionApi.getSelectionPlainOffsets(el)
-  const start = offsets?.start ?? text.length
-  const end = offsets?.end ?? start
+  const start = offsets?.start ?? (hasSavedPromptCaret ? savedPromptCaret.start : text.length)
+  const end = offsets?.end ?? (hasSavedPromptCaret ? savedPromptCaret.end : start)
 
   mentionApi.renderPromptToEl(el, text)
   mentionApi.setPlainTextSelection(el, start, end)
   savedPromptCaret = { start, end }
-}
-
-function needsSpaceBefore(range: Range, root: HTMLElement): boolean {
-  return needsSpaceBeforeMention(range, root, mentionApi.isMentionEl)
+  hasSavedPromptCaret = true
 }
 
 function insertMentionToken(token: string) {
   if (!token) return
+
   const el = promptInputRef.value
+  const current = el ? mentionApi.serializePromptEl(el) : props.prompt
+  const caret = resolveInsertCaret(current.length)
+  const { nextText, nextCaret } = buildPromptWithMentionInsert({
+    text: current,
+    token,
+    start: caret.start,
+    end: caret.end,
+  })
+
   if (!el) {
-    const current = props.prompt
-    const needsSpace = current.length > 0 && !/[\s]$/.test(current)
-    emitPrompt(`${current}${needsSpace ? ' ' : ''}${token} `)
+    emitPrompt(nextText)
+    savedPromptCaret = { start: nextCaret, end: nextCaret }
+    hasSavedPromptCaret = true
     return
   }
 
-  el.focus()
-  const sel = window.getSelection()
-  if (!sel) {
-    emitPrompt(`${props.prompt}${props.prompt && !/[\s]$/.test(props.prompt) ? ' ' : ''}${token} `)
-    nextTick(() => syncPromptView())
-    return
+  // 始终按缓存偏移拼接，不信任 focus 后的 live selection（易跳到开头/末尾）
+  suppressCaretCapture = true
+  try {
+    mentionApi.renderPromptToEl(el, nextText)
+    el.focus({ preventScroll: true })
+    mentionApi.setPlainTextSelection(el, nextCaret, nextCaret)
+    savedPromptCaret = { start: nextCaret, end: nextCaret }
+    hasSavedPromptCaret = true
+    emitPrompt(nextText)
+  } finally {
+    requestAnimationFrame(() => {
+      suppressCaretCapture = false
+    })
   }
-
-  // 选区不在输入框内（点缩略图丢焦点）时，恢复到点击前光标位置
-  const live = mentionApi.getSelectionPlainOffsets(el)
-  if (!live) {
-    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
-  }
-
-  if (!sel.rangeCount) {
-    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
-  }
-
-  const range = sel.getRangeAt(0)
-  if (!el.contains(range.commonAncestorContainer)) {
-    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
-  }
-
-  const insertRange = sel.getRangeAt(0)
-  insertRange.deleteContents()
-
-  if (needsSpaceBefore(insertRange, el)) {
-    insertRange.insertNode(document.createTextNode(' '))
-    insertRange.collapse(false)
-  }
-
-  const mention = mentionApi.createMentionSpan(token)
-  insertRange.insertNode(mention)
-  const space = document.createTextNode(' ')
-  mention.after(space)
-
-  const nextRange = document.createRange()
-  nextRange.setStartAfter(space)
-  nextRange.collapse(true)
-  sel.removeAllRanges()
-  sel.addRange(nextRange)
-
-  const nextText = mentionApi.serializePromptEl(el)
-  const nextOffsets = mentionApi.getSelectionPlainOffsets(el)
-  if (nextOffsets) savedPromptCaret = nextOffsets
-
-  emitPrompt(nextText)
-  // 已手工插入 mention 节点，无需整段重绘以免光标跳动
 }
 
 function insertRefMention(ref: VideoSourceRef) {

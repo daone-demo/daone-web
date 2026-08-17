@@ -184,12 +184,32 @@ export function createPromptMentionApi(
     let offset = 0
     let found = false
 
+    const measureNode = (node: Node): number => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.textContent?.length ?? 0
+      }
+      if (isMentionEl(node)) {
+        return (node.dataset.mention ?? node.textContent ?? '').length
+      }
+      let total = 0
+      node.childNodes.forEach((child) => {
+        total += measureNode(child)
+      })
+      return total
+    }
+
     const walk = (node: Node): void => {
       if (found) return
 
       if (node === target) {
         if (node.nodeType === Node.TEXT_NODE) {
-          offset += targetOffset
+          offset += Math.max(0, Math.min(targetOffset, node.textContent?.length ?? 0))
+        } else {
+          // 元素级选区：offset 是 childNodes 下标（光标夹在 mention/文本节点之间时很常见）
+          const limit = Math.max(0, Math.min(targetOffset, node.childNodes.length))
+          for (let i = 0; i < limit; i++) {
+            offset += measureNode(node.childNodes[i]!)
+          }
         }
         found = true
         return
@@ -201,6 +221,12 @@ export function createPromptMentionApi(
       }
 
       if (isMentionEl(node)) {
+        // contenteditable=false 的 mention：内部选区一律视为整段 token
+        if (node.contains(target)) {
+          offset += (node.dataset.mention ?? node.textContent ?? '').length
+          found = true
+          return
+        }
         offset += (node.dataset.mention ?? node.textContent ?? '').length
         return
       }
@@ -208,7 +234,7 @@ export function createPromptMentionApi(
       node.childNodes.forEach(walk)
     }
 
-    root.childNodes.forEach(walk)
+    walk(root)
     return offset
   }
 
@@ -406,4 +432,28 @@ export function needsSpaceBeforeMention(
     return text.length > 0 && !/\s$/.test(text)
   }
   return false
+}
+
+/**
+ * 在纯文本偏移处插入 mention（含前后空格规则）。
+ * 用字符串拼接代替 DOM Range，避免 contenteditable 失焦/focus 后选区乱跳。
+ */
+export function buildPromptWithMentionInsert(options: {
+  text: string
+  token: string
+  start: number
+  end?: number
+}): { nextText: string; nextCaret: number } {
+  const text = options.text ?? ''
+  const token = options.token ?? ''
+  const start = Math.max(0, Math.min(options.start, text.length))
+  const end = Math.max(start, Math.min(options.end ?? start, text.length))
+  const before = text.slice(0, start)
+  const after = text.slice(end)
+  const padBefore = before.length > 0 && !/[\s]$/.test(before) ? ' ' : ''
+  const inserted = `${padBefore}${token} `
+  return {
+    nextText: `${before}${inserted}${after}`,
+    nextCaret: before.length + inserted.length,
+  }
 }

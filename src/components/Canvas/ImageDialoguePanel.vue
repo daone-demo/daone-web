@@ -309,9 +309,9 @@ import MarkTagsEcho from './MarkTagsEcho.vue';
 import { useImageMarkLabelMenu } from './useImageMarkLabelMenu';
 import { canSubmitImageDialogueTask, hasCompletedImageMarks } from './imageMarkUtils';
 import {
+  buildPromptWithMentionInsert,
   createPromptMentionApi,
   isInputComposing,
-  needsSpaceBeforeMention,
 } from './promptMention';
 import { resolveMarkMentionMeta } from './composables/usePromptMarkMentions';
 import {
@@ -377,17 +377,31 @@ let skipPromptWatch = false
 const isPromptComposing = ref(false)
 /** 点击缩略图插入前缓存光标，避免抢焦点导致插入到末尾 */
 let savedPromptCaret = { start: 0, end: 0 }
+let hasSavedPromptCaret = false
+/** 程序化 focus/重绘期间禁止覆盖已缓存的插入光标 */
+let suppressCaretCapture = false
 
 function capturePromptCaret() {
+  if (suppressCaretCapture) return
   const el = promptInputRef.value
   if (!el) return
   const offsets = mentionApi.getSelectionPlainOffsets(el)
   if (!offsets) return
   savedPromptCaret = offsets
+  hasSavedPromptCaret = true
 }
 
 function onRefMouseDown() {
   capturePromptCaret()
+}
+
+function resolveInsertCaret(textLen: number): { start: number; end: number } {
+  if (hasSavedPromptCaret) {
+    const start = Math.max(0, Math.min(savedPromptCaret.start, textLen))
+    const end = Math.max(start, Math.min(savedPromptCaret.end, textLen))
+    return { start, end }
+  }
+  return { start: textLen, end: textLen }
 }
 
 const previewList = computed(() => {
@@ -684,70 +698,49 @@ function syncPromptView(text = props.modelValue) {
   if (!el) return
 
   const offsets = mentionApi.getSelectionPlainOffsets(el)
-  const start = offsets?.start ?? text.length
-  const end = offsets?.end ?? start
+  const start = offsets?.start ?? (hasSavedPromptCaret ? savedPromptCaret.start : text.length)
+  const end = offsets?.end ?? (hasSavedPromptCaret ? savedPromptCaret.end : start)
 
   mentionApi.renderPromptToEl(el, text)
   mentionApi.setPlainTextSelection(el, start, end)
   savedPromptCaret = { start, end }
+  hasSavedPromptCaret = true
 }
 
 function insertMentionToken(token: string) {
   if (!token) return
+
   const el = promptInputRef.value
+  const current = el ? mentionApi.serializePromptEl(el) : props.modelValue
+  const caret = resolveInsertCaret(current.length)
+  const { nextText, nextCaret } = buildPromptWithMentionInsert({
+    text: current,
+    token,
+    start: caret.start,
+    end: caret.end,
+  })
+
   if (!el) {
-    const current = props.modelValue
-    const needsSpace = current.length > 0 && !/[\s]$/.test(current)
-    emitPrompt(`${current}${needsSpace ? ' ' : ''}${token} `)
+    emitPrompt(nextText)
+    savedPromptCaret = { start: nextCaret, end: nextCaret }
+    hasSavedPromptCaret = true
     return
   }
 
-  el.focus()
-  const sel = window.getSelection()
-  if (!sel) {
-    emitPrompt(`${props.modelValue}${props.modelValue && !/[\s]$/.test(props.modelValue) ? ' ' : ''}${token} `)
-    nextTick(() => syncPromptView())
-    return
+  // 始终按缓存偏移拼接，不信任 focus 后的 live selection（易跳到开头/末尾）
+  suppressCaretCapture = true
+  try {
+    mentionApi.renderPromptToEl(el, nextText)
+    el.focus({ preventScroll: true })
+    mentionApi.setPlainTextSelection(el, nextCaret, nextCaret)
+    savedPromptCaret = { start: nextCaret, end: nextCaret }
+    hasSavedPromptCaret = true
+    emitPrompt(nextText)
+  } finally {
+    requestAnimationFrame(() => {
+      suppressCaretCapture = false
+    })
   }
-
-  const live = mentionApi.getSelectionPlainOffsets(el)
-  if (!live) {
-    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
-  }
-
-  if (!sel.rangeCount) {
-    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
-  }
-
-  const range = sel.getRangeAt(0)
-  if (!el.contains(range.commonAncestorContainer)) {
-    mentionApi.setPlainTextSelection(el, savedPromptCaret.start, savedPromptCaret.end)
-  }
-
-  const insertRange = sel.getRangeAt(0)
-  insertRange.deleteContents()
-
-  if (needsSpaceBeforeMention(insertRange, el, mentionApi.isMentionEl)) {
-    insertRange.insertNode(document.createTextNode(' '))
-    insertRange.collapse(false)
-  }
-
-  const mention = mentionApi.createMentionSpan(token)
-  insertRange.insertNode(mention)
-  const space = document.createTextNode(' ')
-  mention.after(space)
-
-  const nextRange = document.createRange()
-  nextRange.setStartAfter(space)
-  nextRange.collapse(true)
-  sel.removeAllRanges()
-  sel.addRange(nextRange)
-
-  const nextText = mentionApi.serializePromptEl(el)
-  const nextOffsets = mentionApi.getSelectionPlainOffsets(el)
-  if (nextOffsets) savedPromptCaret = nextOffsets
-
-  emitPrompt(nextText)
 }
 
 function insertRefMention(index: number) {

@@ -235,7 +235,7 @@
                   class="combo-modal__trial-submit"
                   :disabled="!canSubmitTrial"
                 >
-                  立即购买
+                  立即申请
                 </button>
               </form>
             </template>
