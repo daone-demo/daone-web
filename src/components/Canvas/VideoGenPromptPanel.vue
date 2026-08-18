@@ -336,7 +336,7 @@
         </a-select-option>
       </a-select>
       <span class="video-gen-prompt-panel__credits">
-        <!-- ⚡ 22 -->
+        ⚡ {{ estimatedCreditsLabel }}
       </span>
       <button
         type="button"
@@ -358,6 +358,7 @@ import { message } from 'ant-design-vue'
 import { useCanvasBgTheme } from './useCanvasBgTheme'
 import { useCanvasImageDropUpload } from './composables/useCanvasImageDropUpload'
 import { usePromptTranslate } from './composables/usePromptTranslate'
+import { useVideoGenPointEstimate } from './composables/useVideoGenPointEstimate'
 import {
   buildPromptWithMentionInsert,
   createPromptMentionApi,
@@ -453,6 +454,17 @@ const videoAspectRatio = computed({
 })
 const videoResolution = ref<VideoGenResolution>('480P')
 const generateAudio = ref(true)
+const { estimatedCreditsLabel } = useVideoGenPointEstimate({
+  modelKey: () => selectedModelKey.value,
+  ratio: () => videoAspectRatio.value,
+  resolution: () => videoResolution.value,
+  duration: () => videoDuration.value,
+  generateAudio: () => generateAudio.value,
+  videoCount: () => props.videoNum,
+  tab: () => props.activeTab,
+  sourceRefs: () => props.sourceRefs,
+  chatTools: () => props.chatTools,
+})
 
 const modelMenu = computed(() =>
   buildVideoDialogueModelsFromCapabilities(props.chatTools),

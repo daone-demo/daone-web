@@ -385,6 +385,11 @@ export interface PointEstimateRequest {
   parameters?: { count?: number } & JsonObject
 }
 
+export interface PointEstimateResponse {
+  /** 预估消耗积分 */
+  estimatedPoints?: number
+}
+
 export interface PromptTranslateRequest {
   text: string
   targetLanguage: string
@@ -717,8 +722,11 @@ const api = {
     return http.get<T>('/ai/skills')
   },
   /** 根据能力和参数预估本次生成所需积分。 */
-  estimateAiPoints<T = unknown>(data: PointEstimateRequest) {
-    return http.post<T>('/ai/point-estimates', data)
+  estimateAiPoints<T = PointEstimateResponse>(
+    data: PointEstimateRequest,
+    config?: RequestConfig,
+  ) {
+    return http.post<T>('/ai/point-estimates', data, config)
   },
   /** 将提示词翻译成指定语言。 */
   translatePrompt<T = PromptTranslationData>(data: PromptTranslateRequest) {
