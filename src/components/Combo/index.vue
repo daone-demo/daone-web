@@ -169,8 +169,19 @@
                 </article>
               </div>
 
-              <form class="combo-modal__trial-form" @submit.prevent="submitTrial">
-                <label class="combo-modal__field">
+              <form class="combo-modal__trial-form" @submit.prevent="onTrialPrimaryAction">
+                <p
+                  v-if="trialStatusHint"
+                  class="combo-modal__trial-status"
+                  :class="`combo-modal__trial-status--${trialStatusKey}`"
+                >
+                  {{ trialStatusHint }}
+                </p>
+                <p v-if="trialRejectReason" class="combo-modal__trial-reject">
+                  拒绝原因：{{ trialRejectReason }}
+                </p>
+
+                <label v-if="trialStatus === 'NONE'" class="combo-modal__field">
                   <span class="combo-modal__label">
                     <span class="combo-modal__required">*</span>手机号码
                   </span>
@@ -188,7 +199,7 @@
                   </span>
                 </label>
 
-                <label class="combo-modal__field">
+                <label v-if="trialStatus === 'NONE'" class="combo-modal__field">
                   <span class="combo-modal__label">
                     <span class="combo-modal__required">*</span>手机验证码
                   </span>
@@ -223,6 +234,7 @@
                     class="combo-modal__input combo-modal__input--solo"
                     placeholder="请问怎么称呼您"
                     maxlength="32"
+                    :disabled="trialFormLocked"
                   />
                 </label>
 
@@ -236,15 +248,17 @@
                     class="combo-modal__input combo-modal__input--solo"
                     placeholder="请输入职位"
                     maxlength="64"
+                    :disabled="trialFormLocked"
                   />
                 </label>
 
                 <button
-                  type="submit"
+                  type="button"
                   class="combo-modal__trial-submit"
-                  :disabled="!canSubmitTrial"
+                  :disabled="trialSubmitDisabled"
+                  @click="onTrialPrimaryAction"
                 >
-                  立即申请
+                  {{ trialSubmitLabel }}
                 </button>
               </form>
             </template>
@@ -391,7 +405,7 @@ import {
   TRIAL_FEATURE_CARDS,
   type BillingCycle,
 } from './comboData'
-import api from '@/services/api';
+import api, { type TrialApplicationStatus, type TrialApplicationStatusData } from '@/services/api';
 import tools from '@/utils/tools';
 import { message } from 'ant-design-vue';
 import { useUserInfo } from '@/stores/useUserInfo';
@@ -471,6 +485,8 @@ const trialName = ref('')
 const trialPosition = ref('')
 const trialCodeCountdown = ref(0)
 const trialCodeSending = ref(false)
+const trialStatus = ref<TrialApplicationStatus>('NONE')
+const trialRejectReason = ref('')
 const slideVerifyOpen = ref(false)
 const orderNo = ref('');
 const payUrl = ref('');
@@ -502,13 +518,56 @@ const trialBenefitText = computed(() => {
 
 const trialPhoneValid = computed(() => /^1\d{10}$/.test(trialPhone.value.trim()))
 
+const trialFormLocked = computed(() =>
+  ['PENDING', 'APPROVED', 'REJECTED', 'PURCHASED'].includes(trialStatus.value),
+)
+
+const trialStatusKey = computed(() => trialStatus.value.toLowerCase())
+
+const trialStatusHint = computed(() => {
+  switch (trialStatus.value) {
+    case 'PENDING':
+      return '申请已提交，正在审核中'
+    case 'APPROVED':
+      return '审核已通过，可购买体验套餐'
+    case 'REJECTED':
+      return '申请未通过'
+    case 'PURCHASED':
+      return '已购买体验套餐'
+    default:
+      return ''
+  }
+})
+
+const trialSubmitLabel = computed(() => {
+  switch (trialStatus.value) {
+    case 'PENDING':
+      return '审核中'
+    case 'APPROVED':
+      return '立即支付'
+    case 'REJECTED':
+      return '已拒绝'
+    case 'PURCHASED':
+      return '已购买体验'
+    default:
+      return '立即申请'
+  }
+})
+
 const canSubmitTrial = computed(
   () =>
+    trialStatus.value === 'NONE' &&
     trialPhoneValid.value &&
     /^\d{4,6}$/.test(trialCode.value.trim()) &&
     trialName.value.trim().length > 0 &&
     trialPosition.value.trim().length > 0,
 )
+
+const trialSubmitDisabled = computed(() => {
+  if (trialStatus.value === 'APPROVED') return !trialPlan.value
+  if (trialStatus.value === 'NONE') return !canSubmitTrial.value
+  return true
+})
 
 const trialCodeBtnText = computed(() => {
   if (trialCodeCountdown.value > 0) return `${trialCodeCountdown.value}s`
@@ -802,7 +861,7 @@ async function onSlideVerifySuccess() {
   trialCodeSending.value = true
   emit('send-trial-code', trialPhone.value.trim())
   try {
-    await api.queryTrialSmsCode({ phone: trialPhone.value.trim() })
+    await api.querySmsCode({ phone: trialPhone.value.trim(), scene: 'TRIAL' })
     startTrialCountdown()
   } finally {
     trialCodeSending.value = false
@@ -825,16 +884,59 @@ function submitTrial() {
   })
 }
 
+function onTrialPrimaryAction() {
+  if (trialStatus.value === 'APPROVED') {
+    if (!trialPlan.value) {
+      message.warning('暂无可用试用套餐')
+      return
+    }
+    void onActivate(trialPlan.value)
+    return
+  }
+  submitTrial()
+}
+
 function resetTrialForm() {
   trialPhone.value = ''
   trialCode.value = ''
   trialName.value = ''
   trialPosition.value = ''
+  trialStatus.value = 'NONE'
+  trialRejectReason.value = ''
   slideVerifyOpen.value = false
   trialCodeCountdown.value = 0
   if (trialCountdownTimer) {
     clearInterval(trialCountdownTimer)
     trialCountdownTimer = null
+  }
+}
+
+function applyTrialStatusData(data?: TrialApplicationStatusData | null) {
+  const status = String(data?.status || 'NONE').toUpperCase() as TrialApplicationStatus
+  trialStatus.value = ['NONE', 'PENDING', 'APPROVED', 'REJECTED', 'PURCHASED'].includes(status)
+    ? status
+    : 'NONE'
+  trialRejectReason.value = trialStatus.value === 'REJECTED'
+    ? String(data?.rejectReason || '').trim()
+    : ''
+  const contactName = String(data?.contactName || '').trim()
+  const position = String(data?.position || '').trim()
+  if (contactName) trialName.value = contactName
+  if (position) trialPosition.value = position
+  const phone = String(userInfoStore.userInfo?.phone || '').trim()
+  if (phone && !trialPhone.value) trialPhone.value = phone
+}
+
+async function loadTrialStatus() {
+  if (!userInfoStore.isLoggedIn) {
+    applyTrialStatusData({ status: 'NONE' })
+    return
+  }
+  try {
+    const data = await api.getTrialApplicationStatus({ silent: true })
+    applyTrialStatusData(data)
+  } catch {
+    applyTrialStatusData({ status: 'NONE' })
   }
 }
 
@@ -854,6 +956,15 @@ watch(open, (visible) => {
     resetTrialForm()
   }
 });
+
+watch(
+  [open, memberTab],
+  ([visible, tab]) => {
+    if (visible && tab === 'trial') {
+      void loadTrialStatus()
+    }
+  },
+)
 
 interface PaymentResponse {
   payType?: string

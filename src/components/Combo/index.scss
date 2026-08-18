@@ -434,6 +434,43 @@
   padding-bottom: 8px;
 }
 
+.combo-modal__trial-status {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #334155;
+  background: #f8fafc;
+}
+
+.combo-modal__trial-status--pending {
+  color: #92400e;
+  background: #fffbeb;
+}
+
+.combo-modal__trial-status--approved {
+  color: #166534;
+  background: #f0fdf4;
+}
+
+.combo-modal__trial-status--rejected {
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+.combo-modal__trial-status--purchased {
+  color: #1e3a8a;
+  background: #eff6ff;
+}
+
+.combo-modal__trial-reject {
+  margin: -8px 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #b91c1c;
+}
+
 .combo-modal__field {
   display: block;
   margin-bottom: 16px;
@@ -502,6 +539,12 @@
       border-color: #93c5fd;
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
     }
+  }
+
+  &:disabled {
+    color: #64748b;
+    background: #f8fafc;
+    cursor: not-allowed;
   }
 }
 

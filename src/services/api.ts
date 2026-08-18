@@ -460,6 +460,21 @@ export interface TrialApplicationRequest {
   position: string
 }
 
+export type TrialApplicationStatus =
+  | 'NONE'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'PURCHASED'
+
+export interface TrialApplicationStatusData {
+  contactName?: string
+  createdAt?: string
+  position?: string
+  rejectReason?: string
+  status?: TrialApplicationStatus
+}
+
 export interface OrderCreateRequest {
   orderType: string
   productCode: string
@@ -814,6 +829,10 @@ const api = {
   /** 提交试用申请并创建对应试用订单。 */
   createTrialApplication<T = unknown>(data: TrialApplicationRequest) {
     return http.post<T>('/trial-applications', data)
+  },
+  /** 查询当前用户试用申请状态，用于表单回显。 */
+  getTrialApplicationStatus<T = TrialApplicationStatusData>(config?: RequestConfig) {
+    return http.get<T>('/trial-applications/status', config)
   },
   /** 分页查询当前用户的订单，可按状态筛选。 */
   getOrders<T = unknown>(params?: OrderListQuery) {
