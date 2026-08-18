@@ -106,6 +106,7 @@
                   <div class="combo-modal__card-head">
                     <h3 class="combo-modal__card-name">{{ plan.name }}</h3>
                     <span class="combo-modal__discount">{{ plan.discountLabel }}</span>
+                    <!-- <i class="iconfont icon-huiyuanjifen" style="font-size: 18px;color: rgb(255, 198, 0);"></i> -->
                   </div>
 
                   <div class="combo-modal__price-row">
@@ -150,6 +151,14 @@
               <h2 id="combo-modal-title" class="combo-modal__trial-title">申请试用</h2>
 
               <div class="combo-modal__trial-cards">
+                <article
+                  class="combo-modal__trial-card"
+                >
+                  <h3 class="combo-modal__trial-card-title">试用权限体验</h3>
+                  <p class="combo-modal__trial-card-desc">
+                    {{ trialBenefitText }}
+                  </p>
+                </article>
                 <article
                   v-for="card in TRIAL_FEATURE_CARDS"
                   :key="card.title"
@@ -470,6 +479,26 @@ const payExpireAt = ref('');
 let trialCountdownTimer: ReturnType<typeof setInterval> | null = null
 let orderPollingTimer: ReturnType<typeof setInterval> | null = null
 const ORDER_POLLING_INTERVAL = 3000
+
+const trialPlan = computed(() =>
+  plansList.value.find((plan) => plan.code === 'TRIAL_5D')
+    ?? plansList.value.find((plan) => plan.cycleUnit === 'DAY')
+    ?? plansList.value.find((plan) => String(plan.code || '').toUpperCase().includes('TRIAL')),
+)
+
+const trialBenefitText = computed(() => {
+  const plan = trialPlan.value
+  if (!plan) return ''
+  const parts: string[] = []
+  if (typeof plan.priceFen === 'number') {
+    parts.push(`${tools.div(plan.priceFen, 100)}元全功能试用`)
+  }
+  const benefits = (plan.benefits || []).map((item) => String(item).trim()).filter(Boolean)
+  if (benefits.length) {
+    parts.push(...benefits)
+  }
+  return parts.length ? `${parts.join('，')}。` : ''
+})
 
 const trialPhoneValid = computed(() => /^1\d{10}$/.test(trialPhone.value.trim()))
 

@@ -7,10 +7,10 @@ export interface TrialFeatureCard {
 }
 
 export const TRIAL_FEATURE_CARDS: TrialFeatureCard[] = [
-  {
-    title: '试用权限体验',
-    description: '99元全功能试用，5天试用时间，赠送3000积分。',
-  },
+  // {
+  //   title: '试用权限体验',
+  //   description: '99元全功能试用，5天试用时间，赠送3000积分。',
+  // },
   {
     title: '专属指导服务',
     description: '协助完成账号开通、功能熟悉和试用流程配置。',
