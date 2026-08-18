@@ -713,7 +713,7 @@ const confirmPayLabel = computed(() => {
   if (selectedPayMethod.value === 'BANK_TRANSFER') {
     return '提交对公转账申请'
   }
-  return `确认支付 ¥${confirmPreview.value.payDiffYuan}`
+  return `确认支付 ¥${confirmPreview.value.targetPriceYuan}`
 })
 
 async function loadUserProfile() {
