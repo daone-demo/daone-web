@@ -177,6 +177,7 @@
             v-model:resolution="videoResolution"
             v-model:generate-audio="generateAudio"
             :model-key="selectedModelKey"
+            :mode="settings.mode"
             :chat-tools="chatTools"
             @close="showVideoSettings = false"
           />

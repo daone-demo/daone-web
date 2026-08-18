@@ -22,6 +22,7 @@
           type="button"
           class="video-gen-settings__ratio"
           :class="{ 'video-gen-settings__ratio--active': aspectRatio === ratio.key }"
+          :disabled="ratioDisabled"
           @click="aspectRatio = ratio.key"
         >
           <span
@@ -128,7 +129,9 @@ import {
   buildVideoDialogueGenerateAudioOptions,
   buildVideoDialogueResolutionOptionsFromCapabilities,
   formatVideoGenSettings,
+  isVideoDialogueRatioDisabled,
   type ChatTools,
+  type VideoDialogueMode,
   type VideoGenAspectRatio,
   type VideoGenDuration,
   type VideoGenResolution,
@@ -141,6 +144,7 @@ const props = withDefaults(
     resolution?: string
     generateAudio?: boolean
     modelKey?: string
+    mode?: VideoDialogueMode | string
     chatTools?: ChatTools | null
   }>(),
   {
@@ -149,6 +153,7 @@ const props = withDefaults(
     resolution: '480P',
     generateAudio: true,
     modelKey: '',
+    mode: '',
     chatTools: null,
   },
 )
@@ -163,6 +168,10 @@ const emit = defineEmits<{
 
 const aspectRatioOptions = computed(() =>
   buildVideoDialogueAspectRatiosFromCapabilities(props.chatTools, props.modelKey),
+)
+
+const ratioDisabled = computed(() =>
+  isVideoDialogueRatioDisabled(props.chatTools, props.modelKey, props.mode),
 )
 
 const resolutionOptions = computed(() => {
@@ -201,7 +210,10 @@ const duration = computed({
 
 const aspectRatio = computed({
   get: () => props.aspectRatio,
-  set: (value: string) => emit('update:aspectRatio', value),
+  set: (value: string) => {
+    if (ratioDisabled.value) return
+    emit('update:aspectRatio', value)
+  },
 })
 
 const resolution = computed({
@@ -322,7 +334,7 @@ const settingsSummary = computed(() =>
   color: #374151;
   cursor: pointer;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: #f9fafb;
   }
 
@@ -330,6 +342,13 @@ const settingsSummary = computed(() =>
     border-color: #111827;
     color: #111827;
     background: #f9fafb;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+    background: #f3f4f6;
+    color: #9ca3af;
   }
 }
 

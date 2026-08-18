@@ -266,6 +266,7 @@
             v-model:resolution="videoResolution"
             v-model:generate-audio="generateAudio"
             :model-key="selectedModelKey"
+            :mode="activeTab"
             :chat-tools="chatTools"
             @close="showVideoSettings = false"
           />
@@ -336,7 +337,8 @@
         </a-select-option>
       </a-select>
       <span class="video-gen-prompt-panel__credits">
-        ⚡ {{ estimatedCreditsLabel }}
+        <i class="iconfont icon-huiyuanjifen" style="font-size: 14px;color: rgb(255, 198, 0);"></i>
+        &nbsp;{{ estimatedCreditsLabel }}
       </span>
       <button
         type="button"

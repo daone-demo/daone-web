@@ -167,6 +167,8 @@ export type VideoDialogueModelMode = {
   label: string
   value: VideoDialogueMode
   enable: boolean
+  /** 当前模式是否禁止修改比例；未下发时视为 false，不影响现有可选逻辑 */
+  disableRatio?: boolean
 }
 
 export type VideoDialogueModelEntry = {
@@ -256,6 +258,7 @@ function parseVideoModelModes(value: unknown): VideoDialogueModelMode[] {
       label,
       value: modeValue as VideoDialogueMode,
       enable,
+      ...(row.disableRatio === true ? { disableRatio: true } : {}),
     })
   }
   return result
@@ -284,6 +287,29 @@ export function listEnabledVideoDialogueModesForModel(
   const entry = findVideoDialogueModelEntry(source ?? undefined, modelKey)
   const modes = entry?.modes ?? []
   return modes.filter((mode) => mode.enable)
+}
+
+/**
+ * 当前选中 mode 是否禁止修改比例。
+ * 无 modes 配置、或未下发 disableRatio 时返回 false，保持原可选行为。
+ */
+export function isVideoDialogueRatioDisabled(
+  source: VideoDialogueSource | undefined | null,
+  modelKey?: string | null,
+  modeOrTab?: string | null,
+): boolean {
+  if (!modeOrTab) return false
+  const entry = findVideoDialogueModelEntry(source ?? undefined, modelKey)
+  const modes = entry?.modes ?? []
+  if (!modes.length) return false
+  const apiMode =
+    modeOrTab === 'text-to-video' ||
+    modeOrTab === 'image-to-video' ||
+    modeOrTab === 'reference' ||
+    modeOrTab === 'first-last-frame'
+      ? modeOrTab
+      : resolveVideoGenApiMode(modeOrTab)
+  return modes.some((item) => item.value === apiMode && item.disableRatio === true)
 }
 
 /**
