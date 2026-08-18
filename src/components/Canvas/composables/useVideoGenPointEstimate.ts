@@ -1,3 +1,4 @@
+import { computed } from 'vue'
 import {
   resolveVideoDialogueModelApiValue,
   resolveVideoGenApiMode,
@@ -45,8 +46,13 @@ export function buildVideoGenEstimateParameters(input: {
   return applyVideoFirstLastFrameParameters(parameters, input.mode, imageAssetIds)
 }
 
+function resolveVideoCount(value: number) {
+  return Math.max(1, Math.floor(Number(value)) || 1)
+}
+
 /**
  * 按模型 / 比例 / 清晰度 / 时长 / 条数 / 模式与参考内容动态预估积分。
+ * 接口按单条任务计价（与创建任务 videoCount=1 一致），展示时再乘以数量。
  */
 export function useVideoGenPointEstimate(input: {
   modelKey: () => string
@@ -60,7 +66,7 @@ export function useVideoGenPointEstimate(input: {
   tab?: () => string
   sourceRefs?: () => VideoSourceRef[] | undefined
 }) {
-  return useAiPointEstimate({
+  const estimate = useAiPointEstimate({
     fallbackLabel: VIDEO_DIALOGUE_CREDITS,
     getRequest: () => ({
       capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
@@ -70,11 +76,26 @@ export function useVideoGenPointEstimate(input: {
         resolution: input.resolution(),
         duration: input.duration(),
         generateAudio: input.generateAudio(),
-        videoCount: input.videoCount(),
+        videoCount: 1,
         mode: input.mode?.() ?? resolveVideoGenApiMode(input.tab?.() ?? 'text2video'),
         sourceRefs: input.sourceRefs?.(),
         chatTools: input.chatTools(),
       }),
     }),
   })
+
+  const estimatedCreditsLabel = computed(() => {
+    const count = resolveVideoCount(input.videoCount())
+    const base = estimate.estimatedPoints.value
+    if (base != null && Number.isFinite(base)) {
+      return String(base * count)
+    }
+    const fallback = Number.parseInt(VIDEO_DIALOGUE_CREDITS, 10)
+    return Number.isFinite(fallback) ? String(fallback * count) : VIDEO_DIALOGUE_CREDITS
+  })
+
+  return {
+    ...estimate,
+    estimatedCreditsLabel,
+  }
 }
