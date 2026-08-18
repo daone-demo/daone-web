@@ -21,49 +21,72 @@ export type ImageExpandDirection = 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL'
 export interface ImageExpandRequestMetrics {
   expandDirection: ImageExpandDirection
   expandRatio: number
+  /** 上扩比例 = 原图上边到外框上边距离 / 原图高度，范围 0~2 */
+  expandTop: number
+  /** 右扩比例 = 原图右边到外框右边距离 / 原图宽度，范围 0~2 */
+  expandRight: number
+  /** 下扩比例 = 原图下边到外框下边距离 / 原图高度，范围 0~2 */
+  expandBottom: number
+  /** 左扩比例 = 原图左边到外框左边距离 / 原图宽度，范围 0~2 */
+  expandLeft: number
 }
 
 const EXPAND_RATIO_EPS = 0.001
+const EXPAND_SIDE_RATIO_MAX = 2
 
 function roundExpandRatio(value: number) {
   return Math.max(0, Math.round(value * 1000) / 1000)
+}
+
+function clampExpandSideRatio(value: number) {
+  return roundExpandRatio(Math.min(EXPAND_SIDE_RATIO_MAX, Math.max(0, value)))
+}
+
+function buildExpandSideRatios(
+  expandFrame: ExpandRect,
+  imageBounds: ExpandRect,
+) {
+  const leftPad = imageBounds.x - expandFrame.x
+  const topPad = imageBounds.y - expandFrame.y
+  const rightPad = expandFrame.x + expandFrame.width - (imageBounds.x + imageBounds.width)
+  const bottomPad = expandFrame.y + expandFrame.height - (imageBounds.y + imageBounds.height)
+
+  return {
+    expandLeft: clampExpandSideRatio(imageBounds.width > 0 ? leftPad / imageBounds.width : 0),
+    expandRight: clampExpandSideRatio(imageBounds.width > 0 ? rightPad / imageBounds.width : 0),
+    expandTop: clampExpandSideRatio(imageBounds.height > 0 ? topPad / imageBounds.height : 0),
+    expandBottom: clampExpandSideRatio(imageBounds.height > 0 ? bottomPad / imageBounds.height : 0),
+  }
 }
 
 export function computeExpandRequestMetrics(
   expandFrame: ExpandRect,
   imageBounds: ExpandRect,
 ): ImageExpandRequestMetrics {
-  const leftPad = imageBounds.x - expandFrame.x
-  const topPad = imageBounds.y - expandFrame.y
-  const rightPad = expandFrame.x + expandFrame.width - (imageBounds.x + imageBounds.width)
-  const bottomPad = expandFrame.y + expandFrame.height - (imageBounds.y + imageBounds.height)
-
-  const leftRatio = imageBounds.width > 0 ? leftPad / imageBounds.width : 0
-  const rightRatio = imageBounds.width > 0 ? rightPad / imageBounds.width : 0
-  const topRatio = imageBounds.height > 0 ? topPad / imageBounds.height : 0
-  const bottomRatio = imageBounds.height > 0 ? bottomPad / imageBounds.height : 0
-
+  const sideRatios = buildExpandSideRatios(expandFrame, imageBounds)
   const expandedSides = [
-    { direction: 'LEFT' as const, ratio: leftRatio },
-    { direction: 'RIGHT' as const, ratio: rightRatio },
-    { direction: 'TOP' as const, ratio: topRatio },
-    { direction: 'BOTTOM' as const, ratio: bottomRatio },
+    { direction: 'LEFT' as const, ratio: sideRatios.expandLeft },
+    { direction: 'RIGHT' as const, ratio: sideRatios.expandRight },
+    { direction: 'TOP' as const, ratio: sideRatios.expandTop },
+    { direction: 'BOTTOM' as const, ratio: sideRatios.expandBottom },
   ].filter((side) => side.ratio > EXPAND_RATIO_EPS)
 
   if (!expandedSides.length) {
-    return { expandDirection: 'ALL', expandRatio: 0 }
+    return { expandDirection: 'ALL', expandRatio: 0, ...sideRatios }
   }
 
   if (expandedSides.length === 1) {
     return {
       expandDirection: expandedSides[0].direction,
       expandRatio: roundExpandRatio(expandedSides[0].ratio),
+      ...sideRatios,
     }
   }
 
   return {
     expandDirection: 'ALL',
     expandRatio: roundExpandRatio(Math.max(...expandedSides.map((side) => side.ratio))),
+    ...sideRatios,
   }
 }
 

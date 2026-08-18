@@ -643,10 +643,7 @@ const emit = defineEmits<{
     settle?: () => void
   }]
   'close-image-expand': []
-  'image-expand-complete': [payload: {
-    expandDirection: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL'
-    expandRatio: number
-  }]
+  'image-expand-complete': [payload: import('../expandUtils').ImageExpandRequestMetrics]
   'close-image-edit-text': []
   'image-edit-text-apply': [changes: import('../editTextUtils').ImageEditTextChange[]]
   'reset-video-hd-panel': []

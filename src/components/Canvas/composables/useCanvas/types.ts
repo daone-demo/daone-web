@@ -127,10 +127,7 @@ export type CanvasBindings = CanvasState & {
     settle?: () => void
   }) => Promise<void>
   onImageResizePointerDown: (event: MouseEvent, corner: import('../../graph').ImageResizeCorner) => void
-  onImageExpandComplete: (payload: {
-    expandDirection: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL'
-    expandRatio: number
-  }) => void
+  onImageExpandComplete: (payload: import('../../expandUtils').ImageExpandRequestMetrics) => void
   onImageEditTextApply: (changes: import('../../editTextUtils').ImageEditTextChange[]) => void
   closeImageEditText: () => void
   closeImageToolbarCustomize: () => void

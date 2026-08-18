@@ -176,6 +176,10 @@ export function installMediaImageEditOps(ctx: CoreRuntimeContext) {
   ctx.onImageExpandComplete = function onImageExpandComplete(payload: {
       expandDirection: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL';
       expandRatio: number;
+      expandTop: number;
+      expandRight: number;
+      expandBottom: number;
+      expandLeft: number;
   }) {
       const g = ctx.graph.value;
       const sourceNodeId = ctx.expandSourceNodeId.value || ctx.selectedNodeId.value;
@@ -215,6 +219,10 @@ export function installMediaImageEditOps(ctx: CoreRuntimeContext) {
               assetId,
               expandDirection: payload.expandDirection,
               expandRatio: payload.expandRatio,
+              expandTop: payload.expandTop,
+              expandRight: payload.expandRight,
+              expandBottom: payload.expandBottom,
+              expandLeft: payload.expandLeft,
           }),
       });
   };

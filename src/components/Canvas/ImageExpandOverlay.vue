@@ -155,6 +155,7 @@ import {
   createExpandFrameFromImageCenter,
   createInitialExpandFrame,
   type ExpandRect,
+  type ImageExpandRequestMetrics,
 } from './expandUtils'
 
 const LONG_PRESS_MS = 320
@@ -172,12 +173,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   cancel: []
-  complete: [
-    payload: {
-      expandDirection: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | 'ALL'
-      expandRatio: number
-    },
-  ]
+  complete: [payload: ImageExpandRequestMetrics]
 }>()
 
 const workspaceSize = ref({ width: 100, height: 100 })
