@@ -106,7 +106,7 @@ function showRequestError(content: string, key?: string) {
 
 function isPublicApi(url: string | undefined): boolean {
   if (!url) return false
-  return /^\/auth\/(sms-codes|sms-login|wechat\/qr-sessions)/.test(url)
+  return /^\/auth\/(sms-code|sms-codes|sms-login|wechat\/qr-sessions)/.test(url)
 }
 
 function pickMessage(payload: unknown): string {

@@ -449,10 +449,6 @@ export interface CanvasElementGroupSaveRequest {
   }
 }
 
-export interface TrialSmsCodeRequest {
-  phone: string
-}
-
 export interface TrialApplicationRequest {
   phone: string
   code: string
@@ -593,7 +589,10 @@ const pathId = (value: string) => encodeURIComponent(value)
 
 const api = {
   // Auth
-  /** 发送登录短信验证码。 */
+  /**
+   * 发送短信验证码（POST /auth/sms-code）。
+   * 登录：scene=login；试用申请与后端约定：scene=TRIAL（不要改走 /trial-applications/sms-code）。
+   */
   querySmsCode(data: QuerySmsCodeRequest) {
     return http.post('/auth/sms-code', data)
   },
@@ -822,11 +821,7 @@ const api = {
   getPlans<T = unknown>() {
     return http.get<T>('/plans')
   },
-  /** 发送试用申请短信验证码。 */
-  queryTrialSmsCode(data: TrialSmsCodeRequest) {
-    return http.post('/trial-applications/sms-code', data)
-  },
-  /** 提交试用申请并创建对应试用订单。 */
+  /** 提交试用申请并创建对应试用订单。验证码须先通过 querySmsCode({ scene: 'TRIAL' }) 获取。 */
   createTrialApplication<T = unknown>(data: TrialApplicationRequest) {
     return http.post<T>('/trial-applications', data)
   },

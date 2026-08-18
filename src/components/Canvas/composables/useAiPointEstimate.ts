@@ -1,5 +1,13 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import api, { type PointEstimateResponse } from '@/services/api'
+import {
+  applyAiPointEstimateFailure,
+  applyAiPointEstimateSuccess,
+  beginAiPointEstimateRequest,
+  createAiPointEstimateState,
+  invalidateAiPointEstimate,
+  type AiPointEstimateState,
+} from './aiPointEstimateState'
 
 export type AiPointEstimateRequest = {
   capabilityCode: string
@@ -14,7 +22,8 @@ export function useAiPointEstimate(options: {
   fallbackLabel: string
   getRequest: () => AiPointEstimateRequest | null
 }) {
-  const estimatedPoints = ref<number | null>(null)
+  let state = createAiPointEstimateState()
+  const estimatedPoints = ref<number | null>(state.estimatedPoints)
   const estimatedCreditsLabel = computed(() => {
     if (estimatedPoints.value != null && Number.isFinite(estimatedPoints.value)) {
       return String(estimatedPoints.value)
@@ -22,8 +31,12 @@ export function useAiPointEstimate(options: {
     return options.fallbackLabel
   })
 
-  let estimateSeq = 0
   let estimateTimer: ReturnType<typeof setTimeout> | undefined
+
+  function commit(next: AiPointEstimateState) {
+    state = next
+    estimatedPoints.value = state.estimatedPoints
+  }
 
   const estimateSignature = computed(() => {
     const request = options.getRequest()
@@ -32,15 +45,24 @@ export function useAiPointEstimate(options: {
   })
 
   async function refreshPointEstimate() {
-    const seq = ++estimateSeq
-    if (!estimateSignature.value) return
+    const started = beginAiPointEstimateRequest(state)
+    commit(started.state)
+    const seq = started.seq
+    if (!estimateSignature.value) {
+      commit(applyAiPointEstimateFailure(state, seq))
+      return
+    }
     let payload: AiPointEstimateRequest
     try {
       payload = JSON.parse(estimateSignature.value) as AiPointEstimateRequest
     } catch {
+      commit(applyAiPointEstimateFailure(state, seq))
       return
     }
-    if (!payload.capabilityCode || !payload.parameters?.model) return
+    if (!payload.capabilityCode || !payload.parameters?.model) {
+      commit(applyAiPointEstimateFailure(state, seq))
+      return
+    }
 
     try {
       const data = await api.estimateAiPoints(
@@ -50,11 +72,15 @@ export function useAiPointEstimate(options: {
         },
         { silent: true },
       )
-      if (seq !== estimateSeq) return
-      const points = Number((data as PointEstimateResponse | null | undefined)?.estimatedPoints)
-      estimatedPoints.value = Number.isFinite(points) ? points : null
+      commit(
+        applyAiPointEstimateSuccess(
+          state,
+          seq,
+          data as PointEstimateResponse | null | undefined,
+        ),
+      )
     } catch {
-      if (seq !== estimateSeq) return
+      commit(applyAiPointEstimateFailure(state, seq))
     }
   }
 
@@ -68,6 +94,7 @@ export function useAiPointEstimate(options: {
   watch(
     estimateSignature,
     () => {
+      commit(invalidateAiPointEstimate(state))
       schedulePointEstimate()
     },
     { immediate: true },
@@ -75,7 +102,7 @@ export function useAiPointEstimate(options: {
 
   onBeforeUnmount(() => {
     if (estimateTimer) clearTimeout(estimateTimer)
-    estimateSeq += 1
+    commit(invalidateAiPointEstimate(state))
   })
 
   return {

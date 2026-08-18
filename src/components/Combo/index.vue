@@ -861,8 +861,11 @@ async function onSlideVerifySuccess() {
   trialCodeSending.value = true
   emit('send-trial-code', trialPhone.value.trim())
   try {
+    // 与后端约定：试用验证码走通用 /auth/sms-code，scene=TRIAL
     await api.querySmsCode({ phone: trialPhone.value.trim(), scene: 'TRIAL' })
     startTrialCountdown()
+  } catch {
+    // request.ts 已弹出错误；失败不得进入倒计时
   } finally {
     trialCodeSending.value = false
   }
