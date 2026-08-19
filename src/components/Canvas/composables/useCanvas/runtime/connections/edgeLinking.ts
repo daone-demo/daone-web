@@ -1,13 +1,12 @@
-// @ts-nocheck -- 动态共享上下文保持原闭包的运行时类型；公开契约仍由 CanvasBindings 校验。
 /**
  * 职责：安装 Connections 域的边连线 / 来源关联 / 删除节点 / 文本展开格式化 / picker / handleNodeEdgeLinked。
  */
-import { sanitizeRichTextHtml } from '@/utils/sanitizeHtml';
-import type { Edge,Graph,Node } from '@antv/x6';
-import { computed,nextTick,provide } from 'vue';
-import type { CanvasGraph,CanvasNodeData,ImageResizeCorner,ImageSourceRef,NodeKind,TextFormatCommand } from '../../sharedImports';
-import { addCanvasNode,canImageNodeAcceptIncoming,centerGraphContent,connectGenEdge,detachEdgeRelation,disconnectImageFromVideo,findImageToVideoEdge,findIncomingTextNodes,formatDimensions,getEdgeDeleteButtonPosition,getGroupBoxNodeIds,getGroupDisplayMemberCount,getGroupScreenBoxFromGraphBox,getImageExpandOverlayLayout,getImageNodeMediaScreenBox,getMultiSelectionToolbarPosition,getNodeCropOverlayPosition,getNodeDialoguePosition,getNodeImageGenPromptPosition,getNodePromptPosition,getNodeSidePanelPosition,getNodeTextDownloadPosition,getNodeTextFormatToolbarPosition,getNodeToolbarPosition,getNodeVideoGenPromptPosition,getVideoSourceRefs,getViewportCenterLocal,graphLocalToContainerOffset,hasVisibleNodesInViewport,IMG2PROMPT_DEFAULT_INSTRUCTION,isPersistedEdge,listCanvasGroups,normalizeGroupMembership,resolveGroupDisplayTitle,resolveGroupGraphBBox,shouldOpenImageGenPromptBar,startImageNodeCornerResize,syncEdgeSelectionHighlight,syncImageNodeSizeToMediaAspect,syncPendingImageTargetFromSources,syncTextNodeImageSource,toPersistedVideoSourceRefs,VIDEO_GEN_TAB_IMAGE_RULES } from '../../sharedImports';
-import type { CoreRuntimeContext } from '../context';
+import {sanitizeRichTextHtml} from '@/utils/sanitizeHtml';
+import type {Edge,Graph,Node} from '@antv/x6';
+import {nextTick,provide} from 'vue';
+import type {CanvasNodeData,ImageSourceRef,TextFormatCommand} from '../../sharedImports';
+import {canImageNodeAcceptIncoming,connectGenEdge,disconnectImageFromVideo,findImageToVideoEdge,findIncomingTextNodes,getVideoSourceRefs,IMG2PROMPT_DEFAULT_INSTRUCTION,normalizeGroupMembership,shouldOpenImageGenPromptBar,syncPendingImageTargetFromSources,syncTextNodeImageSource,toPersistedVideoSourceRefs,VIDEO_GEN_TAB_IMAGE_RULES} from '../../sharedImports';
+import type {CoreRuntimeContext} from '../context';
 
 export function installConnectionEdgeLinking(ctx: CoreRuntimeContext) {
   ctx.applyIncomingImageSource = function applyIncomingImageSource(target: Node, source: Node) {

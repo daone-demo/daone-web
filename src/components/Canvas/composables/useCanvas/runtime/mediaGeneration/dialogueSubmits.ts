@@ -1,27 +1,22 @@
-// @ts-nocheck -- 动态共享上下文保持原闭包的运行时类型；公开契约仍由 CanvasBindings 校验。
 /**
  * 职责：安装图片/视频对话框与视频提示词提交处理到 ctx。
  */
-import { isRequestError } from '@/utils/request';
-import type { Graph,Node } from '@antv/x6';
-import { message } from 'ant-design-vue';
-import { nextTick } from 'vue';
-import { resolveVideoTaskTypeLabel } from '../../../../canvasDescription';
-import { buildImageActionResultTitle,buildVideoActionResultTitle,IMAGE_GENERAL_CAPABILITY_CODE,resolveGenerationTaskWorkflowId,resolveImageAssetId,resolveVideoAssetId,resolveVideoToolbarUiKey,toVideoApiClarity,VIDEO_GENERAL_CAPABILITY_CODE,type ImageDialogueSubmitPayload,type ImageToolbarClickEvent,type ImageToolbarClickPayload,type VideoDialogueSubmitPayload,type VideoGenAspectRatio,type VideoGenPromptSubmitPayload,type VideoToolbarClickEvent,type VideoToolbarClickPayload } from '../../../../constants';
-import { normalizeOcrRecognizeResult,type ImageEditTextChange,} from '../../../../editTextUtils';
-import { buildImageGenerationParams,buildModelGenerationParams,buildTextGenerationParams,persistNodeGenerationSnapshot } from '../../../../generationParams';
-import { bindGenerationTaskId,bindSharedGenerationTaskId,followModelGenerationTaskOnNode,followTextGenerationTaskOnNode,markGenerationNodeFailed,markTextGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail } from '../../../../generationTask';
-import { splitImageIntoGrid } from '../../../../gridSplitUtils';
-import { createIdempotencyKey } from '../../../../idempotency';
-import { applyImageMarkTaskParameters,canSubmitImageDialogueTask } from '../../../../imageMarkUtils';
-import { loadImageToolbarCustomizeSettings,saveImageToolbarCustomizeSettings,type ImageToolbarCustomizeSettings,} from '../../../../imageToolbarCustomize';
-import { downloadCanvasMedia } from '../../../../mediaDownload';
-import { toVideoApiPrompt } from '../../../../promptMention';
-import { getBoundingBoxCenter } from '../../../../viewport';
-import type { CanvasNodeData } from '../../sharedImports';
-import { normalizeCutoutMode } from '../../coreHelpers';
-import { api,applyVideoFirstLastFrameParameters,connectGenEdge,findImageToVideoEdge,findReusableImageGenerationNode,findReusableVideoGenerationNode,getImageGenerationPlaceholderSize,getNodeSize,getScroller,getVideoSourceRefs,isImageGenerationFailedNode,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,previewUrlToUploadFile,resetImageGenerationNodeForRetry,resetVideoGenerationNodeForRetry,resolveVideoGenerationSubmitContext,shouldGenerateImageInPlaceOnNode,spawnErasedImageNode,spawnGenerationResultNode,spawnGridSplitResultNodes,spawnModel3DResultNode,spawnTextPromptResultNode,spawnVideoGenerationResultNode,syncNodeShapeFromData,toPersistedVideoSourceRefs,uploadAssetFile } from '../../sharedImports';
-import type { CoreRuntimeContext } from '../context';
+import {isRequestError} from '@/utils/request';
+import type {Node} from '@antv/x6';
+import {message} from 'ant-design-vue';
+import {nextTick} from 'vue';
+import {resolveVideoTaskTypeLabel} from '../../../../canvasDescription';
+import {buildImageActionResultTitle,buildVideoActionResultTitle,IMAGE_GENERAL_CAPABILITY_CODE,resolveGenerationTaskWorkflowId,resolveImageAssetId,toVideoApiClarity,VIDEO_GENERAL_CAPABILITY_CODE,type ImageDialogueSubmitPayload,type VideoDialogueSubmitPayload,type VideoGenAspectRatio,type VideoGenPromptSubmitPayload,type VideoToolbarClickEvent} from '../../../../constants';
+import {buildImageGenerationParams} from '../../../../generationParams';
+import {bindGenerationTaskId,bindSharedGenerationTaskId,markGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail} from '../../../../generationTask';
+import {createIdempotencyKey} from '../../../../idempotency';
+import {applyImageMarkTaskParameters,canSubmitImageDialogueTask} from '../../../../imageMarkUtils';
+import {toVideoApiPrompt} from '../../../../promptMention';
+import {getBoundingBoxCenter} from '../../../../viewport';
+import type {CanvasNodeData} from '../../sharedImports';
+import {api,applyVideoFirstLastFrameParameters,connectGenEdge,findImageToVideoEdge,findReusableImageGenerationNode,findReusableVideoGenerationNode,getImageGenerationPlaceholderSize,getScroller,isImageGenerationFailedNode,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resetVideoGenerationNodeForRetry,resolveVideoGenerationSubmitContext,shouldGenerateImageInPlaceOnNode,spawnGenerationResultNode,spawnVideoGenerationResultNode} from '../../sharedImports';
+import type {CoreRuntimeContext} from '../context';
+
 export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
   ctx.handleImageDialogueSubmit = async function handleImageDialogueSubmit(payload: ImageDialogueSubmitPayload) {
       const g = ctx.graph.value;

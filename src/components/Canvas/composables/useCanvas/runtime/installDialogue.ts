@@ -1,25 +1,23 @@
-// @ts-nocheck -- 动态共享上下文保持原闭包的运行时类型；公开契约仍由 CanvasBindings 校验。
 /**
  * 职责：安装 Dialogue 域的真实画布业务实现。
  * 依赖：共享 ctx（bind 状态与跨域惰性函数）；不导入其他安装器。
  * 副作用：向 ctx 注册方法/派生状态，部分域会绑定监听或更新画布状态。
  */
-import { isRequestError } from '@/utils/request';
-import type { Node } from '@antv/x6';
-import { message } from 'ant-design-vue';
-import { nextTick,provide } from 'vue';
-import { createDefaultVideoDialogueSettings,IMAGE_GENERAL_CAPABILITY_CODE,isNodeFileUploading,normalizeImageDialogueSettingsForModel,pickImageDialogueSettingsInput,resolveGenerationTaskWorkflowId,resolveImageAssetId,toVideoApiClarity,VIDEO_GENERAL_CAPABILITY_CODE,type ImageDialogueSubmitPayload,type ImageMarkItem,type VideoDialogueSubmitPayload,type VideoGenAspectRatio } from '../../../constants';
-import { buildImageGenerationParams,buildTextGenerationParams,imageDialogueSettingsFromPayload,persistNodeGenerationSnapshot } from '../../../generationParams';
-import { bindGenerationTaskId,followTextGenerationTaskOnNode,isGenerationTaskTerminal,markTextGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,pollGenerationTask,runImageGenerationOnNode,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail } from '../../../generationTask';
-import { createIdempotencyKey } from '../../../idempotency';
-import { appendElementMarkToNode,appendImageMarkToNode,buildImageMarkItem,clientPointToImageNaturalCoords,isImageMarkAnalyzing,parseImageMarkRecognizeResult,removeImageMarkFromGraph,replaceImageMarkOnGraph,setImageMarkAnalyzing,syncNodeImageMarkLists,updateImageMarkLabelOnNode } from '../../../imageMarkUtils';
-import { toVideoApiPrompt } from '../../../promptMention';
-import { getBoundingBoxCenter } from '../../../viewport';
-import type { CanvasNodeData,ImageSourceRef } from '.././sharedImports';
-import { api,ensureImageTextEdge,findIncomingTextNodes,getImageMarkHintPosition,getNodeSize,getScroller,getVideoSourceRefs,IMG2PROMPT_DEFAULT_INSTRUCTION,isImageGenerationFailedNode,isVideoGenerationFailedNode,plainTextFromNodeContent,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resolveText2ImageGenerationTargetNode,resolveVideoSourceRefsForNode,runUploadSimulation,spawnGenerationResultNode,spawnVideoGenerationResultNode,syncNodeShapeFromData,syncTextNodeImageSource,toPersistedVideoSourceRefs,uploadAssetFile } from '.././sharedImports';
-import type { CoreRuntimeContext } from './context';
-import { installDialoguePromptFieldState } from './dialogue/promptFieldState';
-import { installDialogueElementMarkMode } from './dialogue/elementMarkMode';
+import {isRequestError} from '@/utils/request';
+import type {Node} from '@antv/x6';
+import {message} from 'ant-design-vue';
+import {nextTick,provide} from 'vue';
+import {createDefaultVideoDialogueSettings,IMAGE_GENERAL_CAPABILITY_CODE,isNodeFileUploading,resolveGenerationTaskWorkflowId,resolveImageAssetId,toVideoApiClarity,VIDEO_GENERAL_CAPABILITY_CODE,type ImageDialogueSubmitPayload,type VideoDialogueSubmitPayload} from '../../../constants';
+import {buildImageGenerationParams,buildTextGenerationParams,imageDialogueSettingsFromPayload,persistNodeGenerationSnapshot} from '../../../generationParams';
+import {bindGenerationTaskId,followTextGenerationTaskOnNode,markTextGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,runImageGenerationOnNode,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail} from '../../../generationTask';
+import {createIdempotencyKey} from '../../../idempotency';
+import {toVideoApiPrompt} from '../../../promptMention';
+import {getBoundingBoxCenter} from '../../../viewport';
+import type {CanvasNodeData} from '.././sharedImports';
+import {api,getNodeSize,getScroller,isImageGenerationFailedNode,isVideoGenerationFailedNode,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resolveText2ImageGenerationTargetNode,runUploadSimulation,spawnGenerationResultNode,spawnVideoGenerationResultNode,syncTextNodeImageSource} from '.././sharedImports';
+import type {CoreRuntimeContext} from './context';
+import {installDialoguePromptFieldState} from './dialogue/promptFieldState';
+import {installDialogueElementMarkMode} from './dialogue/elementMarkMode';
 
 export function installDialogue(ctx: CoreRuntimeContext) {
   installDialoguePromptFieldState(ctx);

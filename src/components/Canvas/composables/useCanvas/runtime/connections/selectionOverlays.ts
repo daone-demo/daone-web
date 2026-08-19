@@ -1,13 +1,11 @@
-// @ts-nocheck -- 动态共享上下文保持原闭包的运行时类型；公开契约仍由 CanvasBindings 校验。
 /**
  * 职责：安装 Connections 域的选中同步 / 缩放居中 / 边 hover 删除 / 工具栏与 prompt/group 浮层定位 / RAF / resize overlay / addNode。
  */
-import { sanitizeRichTextHtml } from '@/utils/sanitizeHtml';
-import type { Edge,Graph,Node } from '@antv/x6';
-import { computed,nextTick,provide } from 'vue';
-import type { CanvasGraph,CanvasNodeData,ImageResizeCorner,ImageSourceRef,NodeKind,TextFormatCommand } from '../../sharedImports';
-import { addCanvasNode,canImageNodeAcceptIncoming,centerGraphContent,connectGenEdge,detachEdgeRelation,disconnectImageFromVideo,findImageToVideoEdge,findIncomingTextNodes,formatDimensions,getEdgeDeleteButtonPosition,getGroupBoxNodeIds,getGroupDisplayMemberCount,getGroupScreenBoxFromGraphBox,getImageExpandOverlayLayout,getImageNodeMediaScreenBox,getMultiSelectionToolbarPosition,getNodeCropOverlayPosition,getNodeDialoguePosition,getNodeImageGenPromptPosition,getNodePromptPosition,getNodeSidePanelPosition,getNodeTextDownloadPosition,getNodeTextFormatToolbarPosition,getNodeToolbarPosition,getNodeVideoGenPromptPosition,getVideoSourceRefs,getViewportCenterLocal,graphLocalToContainerOffset,hasVisibleNodesInViewport,IMG2PROMPT_DEFAULT_INSTRUCTION,isPersistedEdge,listCanvasGroups,normalizeGroupMembership,resolveGroupDisplayTitle,resolveGroupGraphBBox,shouldOpenImageGenPromptBar,startImageNodeCornerResize,syncEdgeSelectionHighlight,syncImageNodeSizeToMediaAspect,syncPendingImageTargetFromSources,syncTextNodeImageSource,toPersistedVideoSourceRefs,VIDEO_GEN_TAB_IMAGE_RULES } from '../../sharedImports';
-import type { CoreRuntimeContext } from '../context';
+import type {Edge,Node} from '@antv/x6';
+import {computed} from 'vue';
+import type {CanvasGraph,CanvasNodeData,ImageResizeCorner,NodeKind} from '../../sharedImports';
+import {addCanvasNode,centerGraphContent,detachEdgeRelation,formatDimensions,getEdgeDeleteButtonPosition,getGroupBoxNodeIds,getGroupDisplayMemberCount,getGroupScreenBoxFromGraphBox,getImageExpandOverlayLayout,getImageNodeMediaScreenBox,getMultiSelectionToolbarPosition,getNodeCropOverlayPosition,getNodeDialoguePosition,getNodeImageGenPromptPosition,getNodePromptPosition,getNodeSidePanelPosition,getNodeTextDownloadPosition,getNodeTextFormatToolbarPosition,getNodeToolbarPosition,getNodeVideoGenPromptPosition,getViewportCenterLocal,graphLocalToContainerOffset,hasVisibleNodesInViewport,isPersistedEdge,listCanvasGroups,resolveGroupDisplayTitle,resolveGroupGraphBBox,startImageNodeCornerResize,syncEdgeSelectionHighlight,syncImageNodeSizeToMediaAspect} from '../../sharedImports';
+import type {CoreRuntimeContext} from '../context';
 
 export function installConnectionSelectionOverlays(ctx: CoreRuntimeContext) {
   ctx.syncNodeCount = function syncNodeCount() {

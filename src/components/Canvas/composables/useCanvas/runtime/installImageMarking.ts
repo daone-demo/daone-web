@@ -1,4 +1,3 @@
-// @ts-nocheck -- 动态共享上下文保持原闭包的运行时类型；公开契约仍由 CanvasBindings 校验。
 /**
  * 职责：安装 ImageMarking 域的真实画布业务实现。
  * 依赖：共享 ctx（bind 状态与跨域惰性函数）；不导入其他安装器。

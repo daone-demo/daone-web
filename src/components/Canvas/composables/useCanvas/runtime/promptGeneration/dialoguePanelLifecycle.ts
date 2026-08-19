@@ -1,20 +1,13 @@
-// @ts-nocheck -- 动态共享上下文保持原闭包的运行时类型；公开契约仍由 CanvasBindings 校验。
 /**
  * 职责：安装图片/视频对话框 open/toggle/dblclick、HD/frames 面板与 resets/close 到 ctx。
  */
-import { isRequestError } from '@/utils/request';
-import type { Graph,Node } from '@antv/x6';
-import { message } from 'ant-design-vue';
-import { nextTick } from 'vue';
-import { canOpenImageDialogueOnNode,createDefaultImageDialogueSettings,isPendingImageGenDialogueTarget,isVideoNodeGenerating,resolveGenerationTaskWorkflowId,resolveImageAssetId,type CanvasGenerationParams,type ImageDialogueSettings,type ImageMarkItem,type ImageToolbarClickEvent } from '../../../../constants';
-import { buildImageGenerationParams,cloneNodeGenerationSnapshot,persistNodeGenerationSnapshot } from '../../../../generationParams';
-import { applyGenerationResultToNode,bindGenerationTaskId,bindSharedGenerationTaskId,markGenerationNodeFailed,pickImageGenerationResults,readGenerationResultIndex,resolveGenerationResultPreview,startImageGenerationOnNode,type GenerationTaskDetail,type GenerationTaskResult } from '../../../../generationTask';
-import { syncNodeImageMarkLists } from '../../../../imageMarkUtils';
-import { downloadCanvasMedia } from '../../../../mediaDownload';
-import type { CanvasNodeData,ImageSourceRef } from '../../sharedImports';
-import { api,connectGenEdge,getImageGenerationPlaceholderSize,getNodeDialoguePosition,getScroller,isVideoGenerationFailedNode,planOutgoingResultPoints,spawnCompletedImageResultNode,spawnCroppedImageNode,spawnGenerationResultNode,syncPendingImageTargetFromSources } from '../../sharedImports';
-import type { UploadFilter } from '../../state';
-import type { CoreRuntimeContext } from '../context';
+import type {Node} from '@antv/x6';
+import {canOpenImageDialogueOnNode,createDefaultImageDialogueSettings,isPendingImageGenDialogueTarget,isVideoNodeGenerating,resolveImageAssetId} from '../../../../constants';
+import {syncNodeImageMarkLists} from '../../../../imageMarkUtils';
+import type {CanvasNodeData} from '../../sharedImports';
+import {getNodeDialoguePosition,isVideoGenerationFailedNode,syncPendingImageTargetFromSources} from '../../sharedImports';
+import type {CoreRuntimeContext} from '../context';
+
 export function installPromptDialoguePanelLifecycle(ctx: CoreRuntimeContext) {
   ctx.resetImageToolbarMore = function resetImageToolbarMore() {
       ctx.showImageToolbarMore.value = false;
