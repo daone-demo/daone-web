@@ -277,9 +277,17 @@ const availablePoints = computed(
     ?? 0,
 )
 
-const hasActiveMembership = computed(
-  () => userProfile.value?.subscription?.status === 'ACTIVE',
-)
+const hasActiveMembership = computed(() => {
+  const info = userInfoStore.userInfo
+  if (!info) return false
+  // 与个人中心 / 首页一致：有 vipName 即视为已开通会员
+  if (typeof info.vipName === 'string' && info.vipName.trim()) return true
+  if (info.isVip === true) return true
+  const storeSubscription = info.subscription as UserSubscription | null | undefined
+  const status =
+    storeSubscription?.status ?? userProfile.value?.subscription?.status
+  return status === 'ACTIVE'
+})
 
 const canSubmit = computed(
   () => hasActiveMembership.value && agreedToTerms.value && Boolean(selectedPackage.value),
