@@ -4,6 +4,7 @@ import {
   applyAiPointEstimateFailure,
   applyAiPointEstimateSuccess,
   beginAiPointEstimateRequest,
+  clearAiPointEstimate,
   createAiPointEstimateState,
   invalidateAiPointEstimate,
   type AiPointEstimateState,
@@ -16,7 +17,8 @@ export type AiPointEstimateRequest = {
 
 /**
  * 按能力码 + parameters 动态预估积分。
- * 失败时静默回退到静态占位值，不影响现有发送流程。
+ * 参数变化时保留上一次有效积分直至新请求返回，避免数字跳动；
+ * 从未成功预估过时仍使用静态占位，不影响现有发送流程。
  */
 export function useAiPointEstimate(options: {
   fallbackLabel: string
@@ -49,18 +51,18 @@ export function useAiPointEstimate(options: {
     commit(started.state)
     const seq = started.seq
     if (!estimateSignature.value) {
-      commit(applyAiPointEstimateFailure(state, seq))
+      commit(clearAiPointEstimate(state))
       return
     }
     let payload: AiPointEstimateRequest
     try {
       payload = JSON.parse(estimateSignature.value) as AiPointEstimateRequest
     } catch {
-      commit(applyAiPointEstimateFailure(state, seq))
+      commit(clearAiPointEstimate(state))
       return
     }
     if (!payload.capabilityCode || !payload.parameters?.model) {
-      commit(applyAiPointEstimateFailure(state, seq))
+      commit(clearAiPointEstimate(state))
       return
     }
 
