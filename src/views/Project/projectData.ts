@@ -1,5 +1,5 @@
 export const PROJECT_TABS = [
-  { key: 'CACHE', label: '素材中心' },
+  { key: 'CENTER', label: '素材中心' },
   { key: 'FAVORITE', label: '我的收藏' },
   { key: 'FILES', label: '我的文件' },
   { key: 'DIGITAL_HUMAN', label: '我的数字人' },
