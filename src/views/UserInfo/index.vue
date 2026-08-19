@@ -33,7 +33,7 @@
             <span class="user-info__edit-icon" aria-hidden="true" />
             编辑资料
           </button>
-          <button type="button" class="user-info__edit-btn" @click="onLogout" style="background: #ff4d4f;">
+          <button type="button" class="user-info__edit-btn" @click="onLogout" style="background: rgb(233,78,45);">
             退出登录
           </button>
         </a-flex>

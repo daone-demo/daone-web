@@ -294,3 +294,9 @@ code {
     border-right-color: var(--border);
   }
 }
+:where(.css-dev-only-do-not-override-1p3hq3p).ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item.ant-dropdown-menu-item-danger:not(.ant-dropdown-menu-item-disabled):hover, :where(.css-dev-only-do-not-override-1p3hq3p).ant-dropdown-menu-submenu .ant-dropdown-menu .ant-dropdown-menu-item.ant-dropdown-menu-item-danger:not(.ant-dropdown-menu-item-disabled):hover {
+  background: rgb(233,78,45);
+}
+:where(.css-dev-only-do-not-override-1p3hq3p).ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item.ant-dropdown-menu-item-danger:not(.ant-dropdown-menu-item-disabled), :where(.css-dev-only-do-not-override-1p3hq3p).ant-dropdown-menu-submenu .ant-dropdown-menu .ant-dropdown-menu-item.ant-dropdown-menu-item-danger:not(.ant-dropdown-menu-item-disabled) {
+  color: rgb(233,78,45);
+}

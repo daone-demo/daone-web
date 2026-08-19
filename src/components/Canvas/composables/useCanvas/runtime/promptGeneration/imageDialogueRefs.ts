@@ -173,6 +173,8 @@ export function installPromptImageDialogueRefs(ctx: CoreRuntimeContext) {
           previewUrl: sourceData.previewUrl,
           fileName: sourceData.fileName || sourceData.title || '',
       }, targetNodeId);
+      // 与手动连线一致：多图源时清空待生成宿主上的单图继承预览，提交才能原地生成
+      syncPendingImageTargetFromSources(g, target);
       ctx.bumpToolbarRevision();
       ctx.scheduleHistoryPush();
       return true;
@@ -335,6 +337,8 @@ export function installPromptImageDialogueRefs(ctx: CoreRuntimeContext) {
       data.inputUpdated = refs.some((item) => Boolean(item.previewUrl));
       // overwrite: true —— X6 默认深合并数组不会缩短，删除元素必须整体替换
       cell.setData(data, { overwrite: true });
+      // 删除参考图后按上游数量回同步（多→单重新继承预览，多→0 清空）
+      syncPendingImageTargetFromSources(g, cell as Node);
       ctx.toolbarRevision.value += 1;
       ctx.scheduleHistoryPush();
   };

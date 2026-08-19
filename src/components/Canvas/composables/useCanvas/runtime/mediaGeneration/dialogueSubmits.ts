@@ -14,7 +14,7 @@ import {applyImageMarkTaskParameters,canSubmitImageDialogueTask} from '../../../
 import {toVideoApiPrompt} from '../../../../promptMention';
 import {getBoundingBoxCenter} from '../../../../viewport';
 import type {CanvasNodeData} from '../../sharedImports';
-import {api,applyVideoFirstLastFrameParameters,connectGenEdge,findImageToVideoEdge,findReusableImageGenerationNode,findReusableVideoGenerationNode,getImageGenerationPlaceholderSize,getScroller,isImageGenerationFailedNode,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resetVideoGenerationNodeForRetry,resolveVideoGenerationSubmitContext,shouldGenerateImageInPlaceOnNode,spawnGenerationResultNode,spawnVideoGenerationResultNode} from '../../sharedImports';
+import {api,applyVideoFirstLastFrameParameters,connectGenEdge,findImageToVideoEdge,findReusableImageGenerationNode,findReusableVideoGenerationNode,getImageGenerationPlaceholderSize,getScroller,isImageGenerationFailedNode,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resetVideoGenerationNodeForRetry,resolveVideoGenerationSubmitContext,shouldGenerateImageInPlaceOnNode,spawnGenerationResultNode,spawnVideoGenerationResultNode,syncPendingImageTargetFromSources} from '../../sharedImports';
 import type {CoreRuntimeContext} from '../context';
 
 export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
@@ -28,6 +28,8 @@ export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
       if (!cell?.isNode())
           return;
       const sourceNode = cell as Node;
+      // 画布选图若未及时 sync，待生成宿主可能残留单图继承预览；提交前再同步一次，保证多源图生图原地生成
+      syncPendingImageTargetFromSources(g, sourceNode);
       const sourceData = sourceNode.getData() as CanvasNodeData;
       if (sourceData.kind === 'image' &&
           (sourceData.uploadState === 'uploading' || sourceData.imageGenState === 'loading')) {
