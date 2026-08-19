@@ -449,7 +449,7 @@
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #94a3b8;
+  color: #31B7F4;
   line-height: 1;
 }
 
@@ -465,7 +465,7 @@
   font-size: 9px;
   font-weight: 700;
   font-style: normal;
-  color: #64748b;
+  color: #31B7F4;
   letter-spacing: 0.02em;
 }
 
@@ -511,16 +511,12 @@
   padding: 6px 16px;
   border: none;
   border-radius: 999px;
-  background: #111827;
+  background: rgb(233,78,45);
   font-size: 12px;
   font-weight: 600;
   color: #fff;
   cursor: pointer;
   transition: background 0.15s ease;
-
-  &:hover {
-    background: #1f2937;
-  }
 }
 
 .canvas__user-menu-nav {
