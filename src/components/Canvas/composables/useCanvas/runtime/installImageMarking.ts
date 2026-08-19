@@ -790,7 +790,7 @@ export function installImageMarking(ctx: CoreRuntimeContext) {
       }
   };
   
-  ctx.upsertCanvasProject = function upsertCanvasProject(id: string, title: string, saved = true) {
+  ctx.upsertCanvasProject = function upsertCanvasProject(id: string, title: string, saved: boolean = true) {
       const normalizedId = String(id ?? '').trim();
       if (!normalizedId)
           return;

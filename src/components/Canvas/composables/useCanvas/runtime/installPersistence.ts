@@ -8,13 +8,18 @@ import { isRequestError } from '@/utils/request';
 import type { Edge,Node } from '@antv/x6';
 import { message } from 'ant-design-vue';
 import { nextTick,provide } from 'vue';
-import { decideCanvasSaveDirty } from '../../../canvasSaveDirty';
+import {
+  decideCanvasSaveDirty,
+  decideManualSaveLeaveNext,
+  MANUAL_SAVE_LEAVE_MAX_ATTEMPTS,
+  MANUAL_SAVE_LEAVE_MAX_WAIT_MS,
+} from '../../../canvasSaveDirty';
 import { formatCanvasDescription,formatUploadCanvasDescription,resolveCanvasSaveDescription,resolveCanvasSaveType,resolveVideoTaskTypeLabel,} from '../../../canvasDescription';
 import { buildProjectCanvasPayloadFromVersionDetail } from '../../../canvasHistoryRecords';
 import { resetResumedGenerationTaskCache } from '../../../generationTask';
 import type { CanvasGraph,CanvasNodeData,CanvasSnapshot,ConnectMenuKey } from '.././sharedImports';
 import { api,applyCanvasBgTheme,applyCanvasSnapshot,applyFlowEdgeStyle,canImageNodeAcceptIncoming,canOpenConnectMenu,CONNECT_GENERATE_MENU,createNodeFromConnectMenu,ensureInfiniteCanvasArea,getCanvasSnapshot,getConnectMenuPosition,getFlowEdgeAttrs,getPreviewEdgeAttrs,getScroller,graphLocalToContainerOffset,hydrateMissingImageNodeDimensions,normalizeCanvasSnapshot,refreshCanvasNodeViews,resolveConnectSpawnPoint,saveCanvasSnapshotToStorage,shouldOpenImageGenPromptBar,syncAllNodeSizes,syncPendingImageTargetFromSources } from '.././sharedImports';
-import type { CoreRuntimeContext } from './context';
+import type { CoreRuntimeContext, CoreRuntimePendingSaveJob } from './context';
 
 function normalizeProjectId(id: unknown): string {
   if (id == null) return '';
@@ -30,13 +35,7 @@ function readRouteProjectId(ctx: CoreRuntimeContext): string {
   return normalizeProjectId(Array.isArray(routeId) ? routeId[0] : routeId);
 }
 
-type PendingSaveJob = {
-  projectId: string
-  snapshot: CanvasSnapshot
-  type: 'MANUAL' | 'AUTO'
-  changeEpoch: number
-  resolve: (ok: boolean) => void
-};
+type PendingSaveJob = CoreRuntimePendingSaveJob;
 
 export function installPersistenceState(ctx: CoreRuntimeContext) {
   ctx.autoSaveDebounceTimer = null;
@@ -67,7 +66,7 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       }
   };
   
-  ctx.setCanvasDescription = function setCanvasDescription(description: string, taskType = '对话') {
+  ctx.setCanvasDescription = function setCanvasDescription(description: string, taskType: string = '对话') {
       const formatted = formatCanvasDescription(taskType, description);
       if (formatted) {
           ctx.lastCanvasDescription.value = formatted;
@@ -586,7 +585,7 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       return project?.saved === false;
   };
   
-  ctx.waitForSaveSettled = function waitForSaveSettled(maxWaitMs = 30000): Promise<void> {
+  ctx.waitForSaveSettled = function waitForSaveSettled(maxWaitMs: number = 30000): Promise<void> {
       return new Promise((resolve, reject) => {
           const start = Date.now();
           const tick = () => {
@@ -609,25 +608,48 @@ export function installPersistence(ctx: CoreRuntimeContext) {
   /** 触发保存并等待远端落库完成 */
   async function saveCanvasAndWait(saveType: 'MANUAL' | 'AUTO' = 'MANUAL'): Promise<boolean> {
       const type = normalizeSaveType(saveType);
-      // MANUAL（保存并离开）：必须构建当前快照并等待该次结果，不得凭旧 saved 提前成功
+      // MANUAL（保存并离开）：必须构建当前快照并等待该次结果，不得凭旧 saved 提前成功。
+      // 保存期间 epoch 若变化（生成回填等），旧 flush 的 true 不能放行离开，需跟刷最新快照。
       if (type === 'MANUAL') {
           try {
               ctx.autoSaveEnabled = true;
               if (!ctx.canvasContentReady && ctx.graph.value) {
                   ctx.markCanvasContentReady();
               }
-              const snapshot = ctx.buildCanvasSnapshot();
-              if (!snapshot)
-                  return false;
-              saveCanvasSnapshotToStorage(snapshot);
-              const projectId = ctx.resolveActiveProjectId();
-              if (!projectId)
-                  return false;
-              const project = ctx.findCanvasProject(projectId);
-              if (project)
-                  project.saved = false;
-              ctx.localDirty = true;
-              return await ctx.flushRemoteCanvasSave('MANUAL', snapshot);
+              const startedAt = Date.now();
+              for (let attempt = 1; attempt <= MANUAL_SAVE_LEAVE_MAX_ATTEMPTS; attempt++) {
+                  const snapshot = ctx.buildCanvasSnapshot();
+                  if (!snapshot)
+                      return false;
+                  saveCanvasSnapshotToStorage(snapshot);
+                  const projectId = ctx.resolveActiveProjectId();
+                  if (!projectId)
+                      return false;
+                  const project = ctx.findCanvasProject(projectId);
+                  if (project)
+                      project.saved = false;
+                  ctx.localDirty = true;
+                  const flushOk = await ctx.flushRemoteCanvasSave('MANUAL', snapshot);
+                  if (flushOk) {
+                      const remainingMs = MANUAL_SAVE_LEAVE_MAX_WAIT_MS - (Date.now() - startedAt);
+                      if (remainingMs > 0) {
+                          await ctx.waitForSaveSettled(remainingMs);
+                      }
+                  }
+                  const next = decideManualSaveLeaveNext({
+                      flushOk,
+                      stillDirty: ctx.hasUnsavedChanges(),
+                      attempt,
+                      maxAttempts: MANUAL_SAVE_LEAVE_MAX_ATTEMPTS,
+                      elapsedMs: Date.now() - startedAt,
+                      maxWaitMs: MANUAL_SAVE_LEAVE_MAX_WAIT_MS,
+                  });
+                  if (next === 'success')
+                      return true;
+                  if (next === 'fail')
+                      return false;
+              }
+              return !ctx.hasUnsavedChanges();
           }
           catch (error) {
               console.error('[Canvas] saveCanvasAndWait failed', error);

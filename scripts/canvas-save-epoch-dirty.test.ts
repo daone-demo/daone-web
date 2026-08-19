@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { decideCanvasSaveDirty } from '../src/components/Canvas/canvasSaveDirty.ts'
+import { decideCanvasSaveDirty, decideManualSaveLeaveNext } from '../src/components/Canvas/canvasSaveDirty.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -30,7 +30,8 @@ test('installPersistence：成功路径用 epoch 决定 dirty，冲突覆盖策�
     'src/components/Canvas/composables/useCanvas/runtime/installPersistence.ts',
   )
 
-  assert.match(persistSrc, /import \{ decideCanvasSaveDirty \} from '\.\.\/\.\.\/\.\.\/canvasSaveDirty'/)
+  assert.match(persistSrc, /from '\.\.\/\.\.\/\.\.\/canvasSaveDirty'/)
+  assert.match(persistSrc, /decideCanvasSaveDirty/)
   assert.match(persistSrc, /const epochAtStart = saveEpoch \?\? \(ctx\.localChangeEpoch \|\| 0\)/)
   assert.match(persistSrc, /applySuccessfulPersist\(epochAtStart\)/)
   assert.match(
@@ -42,4 +43,70 @@ test('installPersistence：成功路径用 epoch 决定 dirty，冲突覆盖策�
   assert.match(persistSrc, /applySuccessfulPersist\(retryEpoch\)/)
   assert.equal(persistSrc.includes('ctx.localDirty = false'), true, '加载/切项目仍可直接清 dirty')
   assert.match(persistSrc, /decideCanvasSaveDirty\(epochCaptured, ctx\.localChangeEpoch \|\| 0\)/)
+})
+
+test('保存并离开：epoch 仍 dirty 时继续保存，清空后才允许离开', () => {
+  assert.equal(
+    decideManualSaveLeaveNext({
+      flushOk: true,
+      stillDirty: false,
+      attempt: 1,
+      maxAttempts: 8,
+      elapsedMs: 10,
+      maxWaitMs: 30_000,
+    }),
+    'success',
+  )
+  assert.equal(
+    decideManualSaveLeaveNext({
+      flushOk: true,
+      stillDirty: true,
+      attempt: 1,
+      maxAttempts: 8,
+      elapsedMs: 10,
+      maxWaitMs: 30_000,
+    }),
+    'continue',
+  )
+  assert.equal(
+    decideManualSaveLeaveNext({
+      flushOk: false,
+      stillDirty: true,
+      attempt: 1,
+      maxAttempts: 8,
+      elapsedMs: 10,
+      maxWaitMs: 30_000,
+    }),
+    'fail',
+  )
+  assert.equal(
+    decideManualSaveLeaveNext({
+      flushOk: true,
+      stillDirty: true,
+      attempt: 8,
+      maxAttempts: 8,
+      elapsedMs: 10,
+      maxWaitMs: 30_000,
+    }),
+    'fail',
+  )
+})
+
+test('installPersistence：手动保存离开路径会重查 dirty 并跟刷最新快照', () => {
+  const persistSrc = readSrc(
+    'src/components/Canvas/composables/useCanvas/runtime/installPersistence.ts',
+  )
+  assert.match(persistSrc, /import \{\s*decideCanvasSaveDirty,\s*decideManualSaveLeaveNext/)
+  assert.match(persistSrc, /decideManualSaveLeaveNext\(/)
+  assert.match(persistSrc, /stillDirty: ctx\.hasUnsavedChanges\(\)/)
+  assert.match(persistSrc, /for \(let attempt = 1; attempt <= MANUAL_SAVE_LEAVE_MAX_ATTEMPTS/)
+})
+
+test('runtime context 不再用 any 动态袋', () => {
+  const contextSrc = readSrc(
+    'src/components/Canvas/composables/useCanvas/runtime/context.ts',
+  )
+  assert.equal(/\bRecord<string,\s*any>/.test(contextSrc), false)
+  assert.match(contextSrc, /asCoreRuntimeContext/)
+  assert.match(contextSrc, /CoreRuntimeInstallSlots/)
 })

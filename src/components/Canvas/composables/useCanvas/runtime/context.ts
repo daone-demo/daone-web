@@ -4,11 +4,14 @@
  * 副作用：无；上下文属性由各域安装器按顺序填充。
  *
  * 公开契约以 CanvasBindings / CanvasCorePorts 为准。
- * 领域切片组合进 CoreRuntimeSharedFns，再与 CanvasBindings 及动态袋合成 CoreRuntimeContext。
- * 动态挂载字段仍用 Record 兼容历史闭包；已声明的共享方法按真实函数类型收紧。
- * quality-gate 锁定 runtime 目录不得再增加 @ts-nocheck（当前基线为 0）。
+ * 领域切片组合进 CoreRuntimeSharedFns，再与 CanvasBindings、安装状态和动态方法槽合成 CoreRuntimeContext。
+ * 动态袋不再使用 any 索引签名；安装空壳通过 asCoreRuntimeContext 断言。
+ * quality-gate 锁定 runtime 目录不得再增加文件级 nocheck，并扫描显式 any（当前基线为 0）。
  */
 import type { Graph, Node } from '@antv/x6'
+import type { Ref } from 'vue'
+import type { ProjectCanvasResponse, ProjectVersionDetailResponse } from '@/services/api'
+import type { createCanvasHistory } from '../../../canvasHistory'
 import type { CanvasSnapshot } from '../../../canvasSnapshot'
 import type {
   CanvasNodeData,
@@ -20,6 +23,7 @@ import type { GenerationTaskResult } from '../../../generationTaskTypes'
 import type { ResultPlacement } from '../../../imageGen'
 import type { CanvasCorePorts } from '../corePorts'
 import type { CanvasBindings } from '../types'
+import type { CoreRuntimeInstallSlots } from './installedSlots'
 
 /** 持久化 / 切项目 */
 export type CoreRuntimePersistenceFns = {
@@ -32,6 +36,41 @@ export type CoreRuntimePersistenceFns = {
     saveType: 'MANUAL' | 'AUTO',
     reusedSnapshot?: CanvasSnapshot | null,
   ) => Promise<boolean>
+  waitForSaveSettled: (maxWaitMs?: number) => Promise<void>
+  setCanvasDescription: (description: string, taskType?: string) => void
+  buildCanvasSnapshot: () => CanvasSnapshot | null
+  markLocalCanvasChange: () => void
+  triggerAutoSaveIfReady: () => void
+  loadProjectCanvas: (payload: ProjectCanvasResponse) => boolean
+  loadProjectCanvasFromVersion: (detail: ProjectVersionDetailResponse) => boolean
+}
+
+export type CoreRuntimePendingSaveJob = {
+  projectId: string
+  snapshot: CanvasSnapshot
+  type: 'MANUAL' | 'AUTO'
+  changeEpoch: number
+  resolve: (ok: boolean) => void
+}
+
+/** 安装器写入的持久化队列 / dirty 标记（非 bind 响应式字段） */
+export type CoreRuntimePersistenceState = {
+  autoSaveDebounceTimer: ReturnType<typeof setTimeout> | null
+  autoSaveEnabled: boolean
+  canvasContentReady: boolean
+  canvasBoundProjectId: string
+  saveInFlight: boolean
+  pendingRemoteSaveType: 'MANUAL' | 'AUTO' | null
+  pendingSaveJobs: CoreRuntimePendingSaveJob[]
+  pendingProjectCanvas: ProjectCanvasResponse | null
+  localDirty: boolean
+  localChangeEpoch: number
+}
+
+/** 历史栈运行时句柄 */
+export type CoreRuntimeHistoryState = {
+  canvasHistory: ReturnType<typeof createCanvasHistory> | null
+  historyPushTimer: ReturnType<typeof setTimeout> | null
 }
 
 export type NodeToolbarUpdateOptions = {
@@ -137,6 +176,35 @@ export type CoreRuntimeGenerationFns = {
   ) => Promise<Node | null>
 }
 
+/** 安装器写入、尚未进入 CanvasBindings 的派生 computed */
+export type CoreRuntimeDerivedExtras = {
+  showEdgeDeleteButton: import('vue').ComputedRef<boolean>
+  imageGenSourceRefs: import('vue').ComputedRef<import('../../../videoGen').VideoSourceRef[]>
+}
+
+/** 安装器写入的非方法状态：ref / 定时器 / 商店 / 选中对话节点 id */
+export type CoreRuntimeInstallData = {
+  graphDropEl: HTMLElement | null
+  scrollerScrollTarget: HTMLElement | null
+  edgeHoverLeaveTimer: number
+  imageMarkHintTimer: ReturnType<typeof setTimeout> | number | null
+  videoToolbarDeferTimer: ReturnType<typeof setTimeout> | number | null
+  videoToolbarClickDeferred: Ref<boolean>
+  imageMarkCoordinateOnly: Ref<boolean>
+  imageMarkRecognizing: Ref<boolean>
+  selectedElementMarkId: Ref<string>
+  altVoiceTimer: Ref<ReturnType<typeof setTimeout> | number | null>
+  userInfoStore: ReturnType<typeof import('@stores/useUserInfo').useUserInfo>
+  lastCanvasFileInputClickAt: number
+  CANVAS_FILE_INPUT_CLICK_DEBOUNCE_MS: number
+  groupOverlayDragCleanup: (() => void) | null
+  toolbarUpdateRaf: number
+  viewportVisibilityRaf: number
+  pendingToolbarUpdateOptions: NodeToolbarUpdateOptions | undefined
+  activeImageDialogueNodeId: string
+  activeVideoDialogueNodeId: string
+}
+
 /** 跨域共享方法：按领域切片组合后并入 CoreRuntimeContext */
 export type CoreRuntimeSharedFns = CoreRuntimePersistenceFns &
   CoreRuntimeToolbarFns &
@@ -145,13 +213,25 @@ export type CoreRuntimeSharedFns = CoreRuntimePersistenceFns &
   CoreRuntimeGenerationFns
 
 /**
- * 运行时上下文：绑定态 + 领域共享方法 + 动态袋（尚未收紧的历史字段）。
- * 创建早期用断言填充；各 install* 按顺序写入真实实现。
+ * 运行时上下文：绑定态 + 领域共享方法 + 按域声明的安装状态 + 动态方法槽。
+ * 创建早期用 asCoreRuntimeContext 填充空壳；各 install* 按顺序写入真实实现。
+ * 动态袋不再使用 any 索引签名，未声明字段走 CanvasBindings 的 unknown 索引。
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type CoreRuntimeContext = CanvasBindings &
   CoreRuntimeSharedFns &
-  Record<string, any> & {
+  CoreRuntimePersistenceState &
+  CoreRuntimeHistoryState &
+  CoreRuntimeDerivedExtras &
+  CoreRuntimeInstallData &
+  CoreRuntimeInstallSlots & {
     bind: CanvasBindings
     ports: CanvasCorePorts
   }
+
+/** 安装阶段明确断言：把 bind/ports 空壳收窄为完整运行时上下文 */
+export function asCoreRuntimeContext(shell: {
+  bind: CanvasBindings
+  ports: CanvasCorePorts
+}): CoreRuntimeContext {
+  return shell as CoreRuntimeContext
+}

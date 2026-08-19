@@ -217,7 +217,7 @@ export function installMediaImageEditOps(ctx: CoreRuntimeContext) {
       });
   };
   
-  ctx.openImageGridSplit = async function openImageGridSplit(rows = 2, cols = 2) {
+  ctx.openImageGridSplit = async function openImageGridSplit(rows: number = 2, cols: number = 2) {
       const ready = await ctx.ensureImageEditorReady('拆分');
       if (!ready)
           return;

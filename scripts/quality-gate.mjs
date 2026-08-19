@@ -8,7 +8,8 @@
  * - 裸 `: any` / `as any` / `<any>`
  * - `@ts-nocheck` / `@ts-ignore` / 无说明的 `@ts-expect-error`
  *
- * 另：画布 runtime 目录的 `@ts-nocheck` 文件数不得超过基线（只减不增）。
+ * 另：画布 runtime 目录的 `@ts-nocheck` 文件数不得超过基线（只减不增），
+ * 且 runtime 与 context.ts 纳入显式 any 扫描（禁止 Record<string, any> 等裸 any）。
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -57,7 +58,7 @@ function hasJustification(line) {
 }
 
 const violations = []
-for (const entry of ISLAND_GLOBS) {
+for (const entry of [...ISLAND_GLOBS, RUNTIME_DIR]) {
   for (const file of listFiles(entry)) {
     const text = fs.readFileSync(file, 'utf8')
     const lines = text.split(/\r?\n/)
@@ -95,5 +96,5 @@ if (violations.length) {
 }
 
 console.log(
-  `[quality-gate] ok: strict island clean; runtime @ts-nocheck ${nocheckFiles.length}/${RUNTIME_NOCHECK_BASELINE}`,
+  `[quality-gate] ok: strict island + runtime any clean; runtime @ts-nocheck ${nocheckFiles.length}/${RUNTIME_NOCHECK_BASELINE}`,
 )

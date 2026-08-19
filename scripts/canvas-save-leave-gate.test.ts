@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { decideCanvasSaveDirty } from '../src/components/Canvas/canvasSaveDirty.ts'
+import {
+  decideCanvasSaveDirty,
+  decideManualSaveLeaveNext,
+  MANUAL_SAVE_LEAVE_MAX_ATTEMPTS,
+} from '../src/components/Canvas/canvasSaveDirty.ts'
 
 type SaveType = 'MANUAL' | 'AUTO'
 
@@ -27,10 +31,7 @@ function createSaveGateModel(options?: {
   let pendingSaveJobs: PendingSaveJob[] = []
   let projectSaved = true
   const serverSnapshots: { rev: number; type: SaveType }[] = []
-  const persist = options?.persist ?? (async (snapshot, type) => {
-    serverSnapshots.push({ rev: snapshot.rev, type })
-    return true
-  })
+  const persist = options?.persist ?? (async () => true)
 
   function markLocalCanvasChange() {
     localChangeEpoch += 1
@@ -64,6 +65,7 @@ function createSaveGateModel(options?: {
     try {
       const ok = await persist(job.snapshot, job.type)
       if (ok) {
+        serverSnapshots.push({ rev: job.snapshot.rev, type: job.type })
         const decision = decideCanvasSaveDirty(job.changeEpoch, localChangeEpoch)
         projectSaved = decision.projectSaved
         localDirty = decision.localDirty
@@ -107,15 +109,33 @@ function createSaveGateModel(options?: {
     return ok
   }
 
-  async function saveCanvasAndWait(type: SaveType, snapshot: { rev: number }): Promise<boolean> {
-    // MANUAL 始终构建并等待当前快照，不得凭旧 saved 提前成功
+  async function saveCanvasAndWait(
+    type: SaveType,
+    snapshot: { rev: number } | (() => { rev: number }),
+  ): Promise<boolean> {
+    const readSnapshot = typeof snapshot === 'function' ? snapshot : () => snapshot
+    // MANUAL 始终构建并等待当前快照，不得凭旧 saved 提前成功；
+    // 保存期间若仍 dirty（epoch 变化），继续刷最新快照。
     if (type === 'MANUAL') {
-      localDirty = true
-      projectSaved = false
-      return flush('MANUAL', snapshot)
+      for (let attempt = 1; attempt <= MANUAL_SAVE_LEAVE_MAX_ATTEMPTS; attempt++) {
+        localDirty = true
+        projectSaved = false
+        const flushOk = await flush('MANUAL', readSnapshot())
+        const next = decideManualSaveLeaveNext({
+          flushOk,
+          stillDirty: hasUnsavedChanges(),
+          attempt,
+          maxAttempts: MANUAL_SAVE_LEAVE_MAX_ATTEMPTS,
+          elapsedMs: 0,
+          maxWaitMs: 30_000,
+        })
+        if (next === 'success') return true
+        if (next === 'fail') return false
+      }
+      return !hasUnsavedChanges()
     }
     if (!hasUnsavedChanges()) return true
-    return flush(type, snapshot)
+    return flush(type, readSnapshot())
   }
 
   return {
@@ -272,4 +292,38 @@ test('保存进行中继续编辑：旧快照成功不得清 dirty', async () =>
   assert.equal(gate.localDirty, true)
   assert.equal(gate.projectSaved, false)
   assert.equal(gate.hasUnsavedChanges(), true)
+})
+
+test('保存并离开：保存期间 epoch 变化则继续刷最新快照，不得因旧 flush 的 true 离开', async () => {
+  let releaseFirst!: () => void
+  const firstHold = new Promise<void>((resolve) => {
+    releaseFirst = resolve
+  })
+  let persistCount = 0
+  let snapshotRev = 1
+  const gate = createSaveGateModel({
+    persist: async () => {
+      persistCount += 1
+      if (persistCount === 1) await firstHold
+      return true
+    },
+  })
+
+  gate.markLocalCanvasChange()
+  const leavePromise = gate.saveCanvasAndWait('MANUAL', () => ({ rev: snapshotRev }))
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.equal(gate.saveInFlight, true)
+
+  gate.markLocalCanvasChange()
+  snapshotRev = 2
+  releaseFirst()
+
+  assert.equal(await leavePromise, true)
+  assert.equal(gate.localDirty, false)
+  assert.equal(gate.hasUnsavedChanges(), false)
+  assert.deepEqual(gate.serverSnapshots, [
+    { rev: 1, type: 'MANUAL' },
+    { rev: 2, type: 'MANUAL' },
+  ])
 })

@@ -566,7 +566,7 @@ export function installDialogue(ctx: CoreRuntimeContext) {
       }
   };
   
-  ctx.openVideoGenPromptBar = function openVideoGenPromptBar(nodeId: string, tab = 'text2video') {
+  ctx.openVideoGenPromptBar = function openVideoGenPromptBar(nodeId: string, tab: string = 'text2video') {
       ctx.closeTextPromptBar();
       if (ctx.activeImageGenPromptNodeId.value) {
           ctx.persistImageGenPrompt();

@@ -7,7 +7,7 @@ import { cancelActiveRubberband } from '../../sharedImports';
 import type { CoreRuntimeContext } from '../context';
 
 export function installGroupMiscInteractions(ctx: CoreRuntimeContext) {
-  ctx.pasteNodePayload = function pasteNodePayload(payload: Record<string, unknown>, offsetIndex = 0, options?: {
+  ctx.pasteNodePayload = function pasteNodePayload(payload: Record<string, unknown>, offsetIndex: number = 0, options?: {
       newId?: string;
       idMap?: Map<string, string>;
   }) {

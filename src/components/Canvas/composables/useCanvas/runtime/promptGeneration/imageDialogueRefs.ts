@@ -339,7 +339,7 @@ export function installPromptImageDialogueRefs(ctx: CoreRuntimeContext) {
       ctx.scheduleHistoryPush();
   };
 
-  ctx.triggerFileInputClick = function triggerFileInputClick(accept: string, filter: UploadFilter, multiple: boolean, nodeId = '') {
+  ctx.triggerFileInputClick = function triggerFileInputClick(accept: string, filter: UploadFilter, multiple: boolean, nodeId: string = '') {
       const now = Date.now();
       if (now - ctx.lastCanvasFileInputClickAt < ctx.CANVAS_FILE_INPUT_CLICK_DEBOUNCE_MS)
           return;

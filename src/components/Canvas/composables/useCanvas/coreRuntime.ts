@@ -8,7 +8,7 @@
 import type { CanvasBindings } from './types'
 import type { CanvasCorePorts } from './corePorts'
 import { unpackBind } from './bindContext'
-import type { CoreRuntimeContext } from './runtime/context'
+import { asCoreRuntimeContext } from './runtime/context'
 import { registerDerivedState } from './registerDerivedState'
 import { registerMediaGeneration } from './registerMediaGeneration'
 import { registerPromptGeneration } from './registerPromptGeneration'
@@ -24,7 +24,7 @@ import { installPersistenceState } from './runtime/installPersistence'
 import { installHistoryState } from './runtime/installHistoryClipboard'
 
 export function createCoreRuntime(bind: CanvasBindings, ports: CanvasCorePorts) {
-  const ctx = { bind, ports } as CoreRuntimeContext
+  const ctx = asCoreRuntimeContext({ bind, ports })
   Object.assign(ctx, unpackBind(bind))
 
   // 保存队列与历史栈状态先初始化，实现仍由各自业务域安装。
