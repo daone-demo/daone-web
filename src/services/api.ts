@@ -822,8 +822,10 @@ const api = {
     return http.get<T>('/plans')
   },
   /** 提交试用申请并创建对应试用订单。验证码须先通过 querySmsCode({ scene: 'TRIAL' }) 获取。 */
-  createTrialApplication<T = unknown>(data: TrialApplicationRequest) {
-    return http.post<T>('/trial-applications', data)
+  createTrialApplication<T = unknown>(data: TrialApplicationRequest, idempotencyKey?: string) {
+    return http.post<T>('/trial-applications', data, {
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+    })
   },
   /** 查询当前用户试用申请状态，用于表单回显。 */
   getTrialApplicationStatus<T = TrialApplicationStatusData>(config?: RequestConfig) {

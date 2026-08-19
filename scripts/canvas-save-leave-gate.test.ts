@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { decideCanvasSaveDirty } from '../src/components/Canvas/canvasSaveDirty.ts'
 
 type SaveType = 'MANUAL' | 'AUTO'
 
@@ -7,6 +8,7 @@ type PendingSaveJob = {
   projectId: string
   snapshot: { rev: number }
   type: SaveType
+  changeEpoch: number
   resolve: (ok: boolean) => void
 }
 
@@ -18,6 +20,7 @@ function createSaveGateModel(options?: {
   persist?: (snapshot: { rev: number }, type: SaveType) => Promise<boolean>
 }) {
   let localDirty = false
+  let localChangeEpoch = 0
   let saveInFlight = false
   let autoSaveEnabled = true
   let pendingRemoteSaveType: SaveType | null = null
@@ -30,6 +33,7 @@ function createSaveGateModel(options?: {
   })
 
   function markLocalCanvasChange() {
+    localChangeEpoch += 1
     localDirty = true
     projectSaved = false
   }
@@ -55,13 +59,14 @@ function createSaveGateModel(options?: {
     syncPendingFlag()
   }
 
-  async function runJob(job: { snapshot: { rev: number }; type: SaveType }): Promise<boolean> {
+  async function runJob(job: { snapshot: { rev: number }; type: SaveType; changeEpoch: number }): Promise<boolean> {
     saveInFlight = true
     try {
       const ok = await persist(job.snapshot, job.type)
       if (ok) {
-        projectSaved = true
-        localDirty = false
+        const decision = decideCanvasSaveDirty(job.changeEpoch, localChangeEpoch)
+        projectSaved = decision.projectSaved
+        localDirty = decision.localDirty
       }
       else {
         projectSaved = false
@@ -82,7 +87,7 @@ function createSaveGateModel(options?: {
         continue
       }
       const latest = jobs[jobs.length - 1]
-      const ok = await runJob({ snapshot: latest.snapshot, type })
+      const ok = await runJob({ snapshot: latest.snapshot, type, changeEpoch: latest.changeEpoch })
       jobs.forEach((j) => j.resolve(ok))
     }
   }
@@ -90,13 +95,14 @@ function createSaveGateModel(options?: {
   async function flush(type: SaveType, snapshot: { rev: number }): Promise<boolean> {
     if (type === 'MANUAL') autoSaveEnabled = true
     else if (!autoSaveEnabled) return false
+    const changeEpoch = localChangeEpoch
     if (saveInFlight) {
       return new Promise<boolean>((resolve) => {
-        pendingSaveJobs.push({ projectId: 'P', snapshot, type, resolve })
+        pendingSaveJobs.push({ projectId: 'P', snapshot, type, changeEpoch, resolve })
         syncPendingFlag()
       })
     }
-    const ok = await runJob({ snapshot, type })
+    const ok = await runJob({ snapshot, type, changeEpoch })
     await drain()
     return ok
   }
@@ -133,6 +139,9 @@ function createSaveGateModel(options?: {
     },
     get saveInFlight() {
       return saveInFlight
+    },
+    get localDirty() {
+      return localDirty
     },
   }
 }
@@ -235,4 +244,32 @@ test('MANUAL 不得仅凭旧 saved=true 提前成功', async () => {
   const ok = await gate.saveCanvasAndWait('MANUAL', { rev: 42 })
   assert.equal(ok, true)
   assert.deepEqual(gate.serverSnapshots, [{ rev: 42, type: 'MANUAL' }])
+})
+
+test('保存进行中继续编辑：旧快照成功不得清 dirty', async () => {
+  let releaseFirst!: () => void
+  const firstHold = new Promise<void>((resolve) => {
+    releaseFirst = resolve
+  })
+  const gate = createSaveGateModel({
+    persist: async () => {
+      await firstHold
+      return true
+    },
+  })
+
+  gate.markLocalCanvasChange()
+  const autoPromise = gate.flush('AUTO', { rev: 1 })
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.equal(gate.saveInFlight, true)
+
+  gate.markLocalCanvasChange()
+  assert.equal(gate.hasUnsavedChanges(), true)
+
+  releaseFirst()
+  assert.equal(await autoPromise, true)
+  assert.equal(gate.localDirty, true)
+  assert.equal(gate.projectSaved, false)
+  assert.equal(gate.hasUnsavedChanges(), true)
 })

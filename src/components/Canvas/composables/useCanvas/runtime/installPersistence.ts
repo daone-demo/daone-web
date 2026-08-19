@@ -9,6 +9,7 @@ import { isRequestError } from '@/utils/request';
 import type { Edge,Node } from '@antv/x6';
 import { message } from 'ant-design-vue';
 import { nextTick,provide } from 'vue';
+import { decideCanvasSaveDirty } from '../../../canvasSaveDirty';
 import { formatCanvasDescription,formatUploadCanvasDescription,resolveCanvasSaveDescription,resolveCanvasSaveType,resolveVideoTaskTypeLabel,} from '../../../canvasDescription';
 import { buildProjectCanvasPayloadFromVersionDetail } from '../../../canvasHistoryRecords';
 import { resetResumedGenerationTaskCache } from '../../../generationTask';
@@ -34,6 +35,7 @@ type PendingSaveJob = {
   projectId: string
   snapshot: CanvasSnapshot
   type: 'MANUAL' | 'AUTO'
+  changeEpoch: number
   resolve: (ok: boolean) => void
 };
 
@@ -318,7 +320,8 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       return typeof latestRevision === 'number' ? latestRevision : null;
   };
   
-  ctx.persistCanvasToServer = async function persistCanvasToServer(projectId: string, snapshot: CanvasSnapshot, saveType: 'MANUAL' | 'AUTO', project?: (typeof ctx.canvasProjects.value)[number]) {
+  ctx.persistCanvasToServer = async function persistCanvasToServer(projectId: string, snapshot: CanvasSnapshot, saveType: 'MANUAL' | 'AUTO', project?: (typeof ctx.canvasProjects.value)[number], saveEpoch?: number) {
+      const epochAtStart = saveEpoch ?? (ctx.localChangeEpoch || 0);
       const sendSave = (revision: number, canvasSnapshot: CanvasSnapshot) => {
           const description = resolveCanvasSaveDescription(ctx.graph.value) ||
               ctx.lastCanvasDescription.value ||
@@ -332,14 +335,21 @@ export function installPersistence(ctx: CoreRuntimeContext) {
               type,
           });
       };
+      const applySuccessfulPersist = (epochCaptured: number) => {
+          const decision = decideCanvasSaveDirty(epochCaptured, ctx.localChangeEpoch || 0);
+          if (project)
+              project.saved = decision.projectSaved;
+          ctx.localDirty = decision.localDirty;
+          if (decision.scheduleFollowUpSave) {
+              ctx.triggerAutoSaveIfReady();
+          }
+      };
       try {
           const res = await sendSave(ctx.canvasRevision.value, snapshot);
           if (typeof res.revision === 'number') {
               ctx.canvasRevision.value = res.revision;
           }
-          if (project)
-              project.saved = true;
-          ctx.localDirty = false;
+          applySuccessfulPersist(epochAtStart);
           return;
       }
       catch (error) {
@@ -348,13 +358,12 @@ export function installPersistence(ctx: CoreRuntimeContext) {
               throw error;
           ctx.canvasRevision.value = latestRevision;
           const freshSnapshot = ctx.buildCanvasSnapshot() ?? snapshot;
+          const retryEpoch = ctx.localChangeEpoch || 0;
           const res = await sendSave(ctx.canvasRevision.value, freshSnapshot);
           if (typeof res.revision === 'number') {
               ctx.canvasRevision.value = res.revision;
           }
-          if (project)
-              project.saved = true;
-          ctx.localDirty = false;
+          applySuccessfulPersist(retryEpoch);
       }
   };
   
@@ -431,11 +440,13 @@ export function installPersistence(ctx: CoreRuntimeContext) {
           if (!matchingJobs.length) {
               continue;
           }
-          const snapshot = matchingJobs[matchingJobs.length - 1].snapshot;
+          const latestJob = matchingJobs[matchingJobs.length - 1];
+          const snapshot = latestJob.snapshot;
           const ok = await ctx.runRemoteCanvasSaveJob({
               projectId,
               snapshot,
               type,
+              changeEpoch: latestJob.changeEpoch,
           });
           matchingJobs.forEach((job) => job.resolve(ok));
       }
@@ -445,6 +456,7 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       projectId: string
       snapshot: CanvasSnapshot
       type: 'MANUAL' | 'AUTO'
+      changeEpoch?: number
   }): Promise<boolean> {
       const projectId = normalizeProjectId(job.projectId);
       if (!projectId)
@@ -460,7 +472,7 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       ctx.saveInFlight = true;
       let ok = false;
       try {
-          await ctx.persistCanvasToServer(projectId, job.snapshot, job.type, project);
+          await ctx.persistCanvasToServer(projectId, job.snapshot, job.type, project, job.changeEpoch);
           ok = true;
       }
       catch (error) {
@@ -498,12 +510,13 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       const snapshot = reusedSnapshot ?? ctx.buildCanvasSnapshot();
       if (!snapshot)
           return false;
+      const changeEpoch = ctx.localChangeEpoch || 0;
 
       if (ctx.saveInFlight) {
-          return ctx.enqueuePendingSaveJob({ projectId, snapshot, type });
+          return ctx.enqueuePendingSaveJob({ projectId, snapshot, type, changeEpoch });
       }
 
-      const ok = await ctx.runRemoteCanvasSaveJob({ projectId, snapshot, type });
+      const ok = await ctx.runRemoteCanvasSaveJob({ projectId, snapshot, type, changeEpoch });
       await ctx.drainPendingSaveJobs();
       return ok;
   };

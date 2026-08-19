@@ -411,6 +411,7 @@ import { message } from 'ant-design-vue';
 import { useUserInfo } from '@/stores/useUserInfo';
 import { useModalStore } from '@stores/useModal';
 import { v4 as uuidv4 } from 'uuid';
+import { runWithSubmitLock } from '@/utils/submitLock'
 import QRCode from 'qrcode';
 import SlideVerifyModal from '@/components/SlideVerifyModal/index.vue';
 import { preloadSlideVerifyImages } from '@/utils/slideVerifyImages';
@@ -485,6 +486,7 @@ const trialName = ref('')
 const trialPosition = ref('')
 const trialCodeCountdown = ref(0)
 const trialCodeSending = ref(false)
+const trialSubmitting = ref(false)
 const trialStatus = ref<TrialApplicationStatus>('NONE')
 const trialRejectReason = ref('')
 const slideVerifyOpen = ref(false)
@@ -540,6 +542,7 @@ const trialStatusHint = computed(() => {
 })
 
 const trialSubmitLabel = computed(() => {
+  if (trialSubmitting.value && trialStatus.value === 'NONE') return '提交中...'
   switch (trialStatus.value) {
     case 'PENDING':
       return '审核中'
@@ -564,6 +567,7 @@ const canSubmitTrial = computed(
 )
 
 const trialSubmitDisabled = computed(() => {
+  if (trialSubmitting.value) return true
   if (trialStatus.value === 'APPROVED') return !trialPlan.value
   if (trialStatus.value === 'NONE') return !canSubmitTrial.value
   return true
@@ -871,19 +875,24 @@ async function onSlideVerifySuccess() {
   }
 }
 
-function submitTrial() {
+async function submitTrial() {
   if (!canSubmitTrial.value) return
-  api.createTrialApplication({
-    phone: trialPhone.value.trim(),
-    code: trialCode.value.trim(),
-    contactName: trialName.value.trim(),
-    position: trialPosition.value.trim(),
-  }).then(()=>{
-    message.success('操作成功');
-    close()
-  })
-  .catch((err:any)=>{
-    console.error('submitTrial', err)
+  await runWithSubmitLock(trialSubmitting, async () => {
+    try {
+      await api.createTrialApplication(
+        {
+          phone: trialPhone.value.trim(),
+          code: trialCode.value.trim(),
+          contactName: trialName.value.trim(),
+          position: trialPosition.value.trim(),
+        },
+        uuidv4(),
+      )
+      message.success('操作成功')
+      close()
+    } catch (err: unknown) {
+      console.error('submitTrial', err)
+    }
   })
 }
 
