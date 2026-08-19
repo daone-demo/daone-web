@@ -380,7 +380,7 @@
         </header>
         <div
           class="user-info__notification-modal-content"
-          v-html="activeNotification.content"
+          v-html="sanitizeNotificationHtml(activeNotification.content || '')"
         />
       </div>
     </div>
@@ -689,6 +689,8 @@ import {
 } from './userInfoData'
 import { useRoute, useRouter } from 'vue-router';
 import api, { type UnreadCountResponse, type UserNotificationResponse } from '@/services/api';
+import { sanitizeNotificationHtml } from '@/utils/sanitizeHtml';
+import { createLatestRequestTracker } from '@/utils/latestRequestTracker';
 import { useUserInfo } from '@/stores/useUserInfo';
 import tools from '@/utils/tools';
 import dayjs from 'dayjs';
@@ -800,6 +802,15 @@ const notificationsLoading = ref(false)
 const notificationActionId = ref<string | number | null>(null)
 const showNotificationModal = ref(false)
 const activeNotification = ref<UserNotificationResponse | null>(null)
+const notificationsLoadTracker = createLatestRequestTracker()
+const unreadCountTracker = createLatestRequestTracker()
+/** 首屏挂载期间跳过 tab watcher 里的未读数请求，避免与 onMounted 重复 */
+const userInfoBootstrapping = ref(true)
+
+function notificationIdentityKey() {
+  const info = userInfoStore.userInfo as { id?: string | number; userId?: string | number } | null
+  return String(info?.id || info?.userId || userInfoStore.token || '')
+}
 
 let orderPollingTimer: ReturnType<typeof setInterval> | null = null
 const ORDER_POLLING_INTERVAL = 3000;
@@ -1140,27 +1151,44 @@ function resolveUnreadCount(res: UnreadCountResponse | null | undefined) {
 }
 
 const onLoadUnreadCount = async () => {
+  const requestedIdentity = notificationIdentityKey()
+  const isCurrent = unreadCountTracker.begin()
   try {
     const res = await api.getNotificationUnreadCount<UnreadCountResponse>()
+    if (!isCurrent() || requestedIdentity !== notificationIdentityKey()) return
     unreadCount.value = resolveUnreadCount(res)
   } catch (error) {
+    if (!isCurrent()) return
     console.error('onLoadUnreadCount', error)
   }
 }
 
 const onLoadNotifications = async () => {
+  const requestedPage = notificationPage.value
+  const requestedIdentity = notificationIdentityKey()
+  const isCurrent = notificationsLoadTracker.begin()
+  const canCommit = () =>
+    isCurrent() &&
+    activeTab.value === 'notifications' &&
+    notificationPage.value === requestedPage &&
+    requestedIdentity === notificationIdentityKey()
+
   notificationsLoading.value = true
   try {
     const res = await api.getNotifications<UserNotificationResponse>({
-      page: notificationPage.value,
+      page: requestedPage,
       pageSize: 10,
     })
+    if (!canCommit()) return
     notificationList.value = res?.records || []
     notificationTotal.value = res?.total || 0
   } catch (error) {
+    if (!canCommit()) return
     console.error('onLoadNotifications', error)
   } finally {
-    notificationsLoading.value = false
+    if (isCurrent()) {
+      notificationsLoading.value = false
+    }
   }
 }
 
@@ -1387,11 +1415,18 @@ watch([orderNo, selectedPayMethod], ([no, method]) => {
 watch(activeTab, (tab) => {
   if (tab === 'notifications') {
     onLoadNotifications()
-    onLoadUnreadCount()
+    // 首屏 query.tab=notifications 时未读数由 onMounted 统一拉取，避免重复请求
+    if (!userInfoBootstrapping.value) {
+      onLoadUnreadCount()
+    }
+  } else {
+    notificationsLoadTracker.invalidate()
   }
 })
 
 onBeforeUnmount(() => {
+  notificationsLoadTracker.invalidate()
+  unreadCountTracker.invalidate()
   stopOrderPolling()
   revokeAvatarPreview()
   if (invoiceTitleSearchTimer) {
@@ -1409,6 +1444,7 @@ onMounted(() => {
   onLoadPoints();
   onLoadOrderList();
   onLoadUnreadCount();
+  userInfoBootstrapping.value = false
 });
 </script>
 

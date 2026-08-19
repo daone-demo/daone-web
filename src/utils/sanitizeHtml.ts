@@ -31,3 +31,55 @@ export function sanitizeRichTextHtml(html: string): string {
     ALLOWED_ATTR: ['style', 'data-canvas-italic'],
   })
 }
+
+const NOTIFICATION_TAGS = [
+  'p', 'br', 'hr', 'div', 'span',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'ul', 'ol', 'li', 'blockquote',
+  'strong', 'b', 'em', 'i', 'u', 's', 'sub', 'sup',
+  'a', 'img',
+  'table', 'thead', 'tbody', 'tr', 'th', 'td', 'colgroup', 'col',
+]
+
+const NOTIFICATION_ATTR = [
+  'href', 'src', 'alt', 'title', 'class',
+  'width', 'height', 'colspan', 'rowspan', 'align',
+  'target', 'rel',
+]
+
+const SAFE_URI =
+  /^(?:(?:https?):|\/(?!\/)|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+
+/** 清洗通知富文本（用户端展示 / 防御历史脏数据）。 */
+export function sanitizeNotificationHtml(html: string): string {
+  if (!html) return ''
+  const hookName = 'afterSanitizeAttributes' as const
+  const hook = (node: Element) => {
+    if (node.tagName === 'A') {
+      const href = node.getAttribute('href') || ''
+      if (href && !SAFE_URI.test(href)) {
+        node.removeAttribute('href')
+      }
+      node.setAttribute('target', '_blank')
+      node.setAttribute('rel', 'noopener noreferrer nofollow')
+    }
+    if (node.tagName === 'IMG') {
+      const src = node.getAttribute('src') || ''
+      if (!src || !/^https?:\/\//i.test(src)) {
+        node.removeAttribute('src')
+      }
+    }
+  }
+  DOMPurify.addHook(hookName, hook)
+  try {
+    return DOMPurify.sanitize(String(html), {
+      ALLOWED_TAGS: NOTIFICATION_TAGS,
+      ALLOWED_ATTR: [...NOTIFICATION_ATTR, 'style'],
+      ALLOW_DATA_ATTR: false,
+      ALLOWED_URI_REGEXP: SAFE_URI,
+      FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'svg', 'math'],
+    })
+  } finally {
+    DOMPurify.removeHook(hookName)
+  }
+}
