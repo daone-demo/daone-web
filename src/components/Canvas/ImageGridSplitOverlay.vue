@@ -91,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-/** 样式：styles/canvas-image-grid-split.scss（随 Canvas 主包加载） */
+/** 样式：styles/canvas-image-grid-split.scss（随 Canvas 主包加载，选择器挂在 .canvas 下） */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createEqualStops } from './gridSplitUtils'
 

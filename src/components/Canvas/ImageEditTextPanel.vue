@@ -65,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-/** 样式：styles/canvas-image-edit-text.scss（随 Canvas 主包加载） */
+/** 样式：styles/canvas-image-edit-text.scss（随 Canvas 主包加载，选择器挂在 .canvas 下） */
 import { computed, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {

@@ -412,6 +412,7 @@ import { useUserInfo } from '@/stores/useUserInfo';
 import { useModalStore } from '@stores/useModal';
 import { v4 as uuidv4 } from 'uuid';
 import { runWithSubmitLock } from '@/utils/submitLock'
+import { createLatestRequestTracker } from '@/utils/latestRequestTracker'
 import QRCode from 'qrcode';
 import SlideVerifyModal from '@/components/SlideVerifyModal/index.vue';
 import { preloadSlideVerifyImages } from '@/utils/slideVerifyImages';
@@ -497,6 +498,8 @@ const payExpireAt = ref('');
 let trialCountdownTimer: ReturnType<typeof setInterval> | null = null
 let orderPollingTimer: ReturnType<typeof setInterval> | null = null
 const ORDER_POLLING_INTERVAL = 3000
+const plansLoadTracker = createLatestRequestTracker()
+const trialStatusTracker = createLatestRequestTracker()
 
 const trialPlan = computed(() =>
   plansList.value.find((plan) => plan.code === 'TRIAL_5D')
@@ -742,8 +745,16 @@ async function loadUserProfile() {
 }
 
 const onloadPlans = async () => {
-  const res = await api.getPlans<{ items?: PlanItem[] }>()
-  plansList.value = res.items || []
+  const isCurrent = plansLoadTracker.begin()
+  try {
+    const res = await api.getPlans<{ items?: PlanItem[] }>()
+    if (!isCurrent()) return
+    plansList.value = res.items || []
+  } catch (error) {
+    if (!isCurrent()) return
+    console.error('onloadPlans', error)
+    // request.ts 已弹出错误；保留已有套餐，避免迟到失败把列表清空
+  }
 }
 
 async function onActivate(plan: PlanItem) {
@@ -939,15 +950,26 @@ function applyTrialStatusData(data?: TrialApplicationStatusData | null) {
   if (phone && !trialPhone.value) trialPhone.value = phone
 }
 
+function trialIdentityKey() {
+  if (!userInfoStore.isLoggedIn) return 'guest'
+  const info = userInfoStore.userInfo
+  return String(info?.id || info?.userId || info?.phone || 'logged-in')
+}
+
 async function loadTrialStatus() {
+  const isCurrent = trialStatusTracker.begin()
+  const identity = trialIdentityKey()
   if (!userInfoStore.isLoggedIn) {
+    if (!isCurrent() || identity !== trialIdentityKey()) return
     applyTrialStatusData({ status: 'NONE' })
     return
   }
   try {
     const data = await api.getTrialApplicationStatus({ silent: true })
+    if (!isCurrent() || identity !== trialIdentityKey()) return
     applyTrialStatusData(data)
   } catch {
+    if (!isCurrent() || identity !== trialIdentityKey()) return
     applyTrialStatusData({ status: 'NONE' })
   }
 }
@@ -960,8 +982,10 @@ watch(open, (visible) => {
   lockBodyScroll(visible)
   if (visible) {
     void preloadSlideVerifyImages()
-    onloadPlans()
+    void onloadPlans()
   } else {
+    plansLoadTracker.invalidate()
+    trialStatusTracker.invalidate()
     forceCloseConfirm()
     memberTab.value = 'enterprise'
     billing.value = 'YEAR'
@@ -970,7 +994,7 @@ watch(open, (visible) => {
 });
 
 watch(
-  [open, memberTab],
+  () => [open.value, memberTab.value, trialIdentityKey()] as const,
   ([visible, tab]) => {
     if (visible && tab === 'trial') {
       void loadTrialStatus()
@@ -1025,6 +1049,8 @@ watch([orderNo, selectedPayMethod], ([no, method]) => {
 });
 
 onBeforeUnmount(() => {
+  plansLoadTracker.invalidate()
+  trialStatusTracker.invalidate()
   lockBodyScroll(false)
   if (trialCountdownTimer) clearInterval(trialCountdownTimer)
   stopOrderPolling()

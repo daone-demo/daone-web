@@ -136,7 +136,7 @@ import {
   getTransformedSize,
   type CropRect,
 } from './cropUtils'
-/** 样式：styles/canvas-image-crop.scss（随 Canvas 主包加载，避免 async CSS 丢样式） */
+/** 样式：styles/canvas-image-crop.scss（随 Canvas 主包加载，选择器挂在 .canvas 下） */
 
 const props = defineProps<{
   imageUrl: string

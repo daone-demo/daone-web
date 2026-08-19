@@ -91,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-/** 样式：styles/canvas-image-erase.scss（随 Canvas 主包加载） */
+/** 样式：styles/canvas-image-erase.scss（随 Canvas 主包加载，选择器挂在 .canvas 下） */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { message } from 'ant-design-vue'
 import {
