@@ -557,6 +557,23 @@ export interface ChatSessionListQuery extends PageQuery {
   projectId?: Id
 }
 
+export type NotificationType = 'system' | 'update' | 'activity' | 'reminder'
+
+export interface UserNotificationResponse {
+  id: number | string
+  title: string
+  content: string
+  type: NotificationType | string
+  isRead: boolean
+  createdAt: string
+  readAt?: string | null
+}
+
+export interface UnreadCountResponse {
+  count?: number
+  unreadCount?: number
+}
+
 export interface OrderListQuery extends PageQuery {
   status?: string
 }
@@ -963,6 +980,28 @@ const api = {
   },
   queryInvoiceTitles<T = unknown>(params?: { keyword?: string }) {
     return http.get<T>('invoices/title/search', { params })
+  },
+
+  // Notifications
+  /** 分页查询当前用户收件箱通知列表。 */
+  getNotifications<T = UserNotificationResponse>(params?: PageQuery) {
+    return http.get<PageResult<T>>('/notifications', { params })
+  },
+  /** 获取未读通知数量。 */
+  getNotificationUnreadCount<T = UnreadCountResponse>() {
+    return http.get<T>('/notifications/unread-count')
+  },
+  /** 标记全部通知为已读。 */
+  markAllNotificationsRead<T = unknown>() {
+    return http.post<T>('/notifications/read-all')
+  },
+  /** 标记单条通知为已读。 */
+  markNotificationRead<T = unknown>(id: string | number) {
+    return http.post<T>(`/notifications/${pathId(String(id))}/read`)
+  },
+  /** 删除单条通知。 */
+  deleteNotification(id: string | number) {
+    return http.delete(`/notifications/${pathId(String(id))}`)
   },
 }
 export default api

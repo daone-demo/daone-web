@@ -49,6 +49,12 @@
             @click="activeTab = tab.key"
           >
             {{ tab.label }}
+            <span
+              v-if="tab.key === 'notifications' && unreadCount > 0"
+              class="user-info__tab-badge"
+            >
+              {{ unreadCount > 99 ? '99+' : unreadCount }}
+            </span>
           </button>
         </nav>
         <div v-if="activeTab === 'account'" class="user-info__account">
@@ -246,10 +252,137 @@
           </a-flex>
         </div>
 
+        <div v-else-if="activeTab === 'notifications'" class="user-info__notifications">
+          <div class="user-info__notifications-toolbar">
+            <span class="user-info__notifications-hint">
+              {{ unreadCount > 0 ? `${unreadCount} 条未读` : '全部已读' }}
+            </span>
+            <button
+              type="button"
+              class="user-info__notifications-read-all"
+              :disabled="unreadCount <= 0 || notificationsLoading"
+              @click="onMarkAllNotificationsRead"
+            >
+              全部标为已读
+            </button>
+          </div>
+
+          <div v-if="notificationsLoading && notificationList.length === 0" class="user-info__notifications-empty">
+            加载中...
+          </div>
+          <div v-else-if="notificationList.length === 0" class="user-info__notifications-empty">
+            暂无消息通知
+          </div>
+          <ul v-else class="user-info__notifications-list">
+            <li
+              v-for="item in notificationList"
+              :key="item.id"
+              class="user-info__notification-item"
+              :class="{ 'user-info__notification-item--unread': !item.isRead }"
+            >
+              <button
+                type="button"
+                class="user-info__notification-main"
+                @click="onOpenNotification(item)"
+              >
+                <span
+                  class="user-info__notification-dot"
+                  :class="{ 'user-info__notification-dot--unread': !item.isRead }"
+                  aria-hidden="true"
+                />
+                <div class="user-info__notification-body">
+                  <div class="user-info__notification-main-text">
+                    <span
+                      class="user-info__notification-type"
+                      :class="`user-info__notification-type--${item.type || 'system'}`"
+                    >
+                      {{ NOTIFICATION_TYPE_LABEL[item.type] || item.type || '通知' }}
+                    </span>
+                    <h4 class="user-info__notification-title">{{ item.title }}</h4>
+                  </div>
+                  <time class="user-info__notification-time">
+                    {{ dayjs(item.createdAt).format('YYYY-MM-DD HH:mm') }}
+                  </time>
+                </div>
+              </button>
+              <button
+                type="button"
+                class="user-info__notification-delete"
+                title="删除"
+                :disabled="notificationActionId === item.id"
+                @click.stop="onDeleteNotification(item)"
+              >
+                删除
+              </button>
+            </li>
+          </ul>
+
+          <a-flex
+            v-if="notificationTotal > 0"
+            align="center"
+            justify="center"
+            style="margin-top: 20px;"
+          >
+            <a-pagination
+              size="small"
+              :total="notificationTotal"
+              :current="notificationPage"
+              :page-size="10"
+              :show-total="(total) => `共 ${total} 条记录`"
+              @change="onChangeNotificationPage"
+              :locale="PAGINATION_LOCALE"
+            />
+          </a-flex>
+        </div>
+
         <div v-else class="user-info__placeholder">
           <p>{{ placeholderText }}</p>
         </div>
       </section>
+    </div>
+
+    <div
+      v-if="showNotificationModal && activeNotification"
+      class="user-info__notification-overlay"
+      @click.self="closeNotificationModal"
+    >
+      <div
+        class="user-info__notification-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="notification-modal-title"
+      >
+        <header class="user-info__notification-modal-header">
+          <div class="user-info__notification-modal-heading">
+            <div class="user-info__notification-modal-meta">
+              <span
+                class="user-info__notification-type"
+                :class="`user-info__notification-type--${activeNotification.type || 'system'}`"
+              >
+                {{ NOTIFICATION_TYPE_LABEL[activeNotification.type] || activeNotification.type || '通知' }}
+              </span>
+              <time class="user-info__notification-modal-time">
+                {{ dayjs(activeNotification.createdAt).format('YYYY-MM-DD HH:mm') }}
+              </time>
+            </div>
+            <h3 id="notification-modal-title" class="user-info__notification-modal-title">
+              {{ activeNotification.title }}
+            </h3>
+          </div>
+          <button
+            type="button"
+            class="user-info__notification-modal-close"
+            title="关闭"
+            @click="closeNotificationModal"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </header>
+        <div
+          class="user-info__notification-modal-content"
+          v-html="activeNotification.content"
+        />
+      </div>
     </div>
 
     <div v-if="showInvoiceModal" class="user-info__invoice-overlay" @click.self="closeInvoiceModal">
@@ -548,13 +681,14 @@ import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import QRCode from 'qrcode';
 import {
   BILL_STATUS_LABEL,
+  NOTIFICATION_TYPE_LABEL,
   USER_INFO_TABS,
   USER_MEMBERSHIP_NOTES,
   type PointsLogFilterKey,
   type UserInfoTabKey,
 } from './userInfoData'
 import { useRoute, useRouter } from 'vue-router';
-import api from '@/services/api';
+import api, { type UnreadCountResponse, type UserNotificationResponse } from '@/services/api';
 import { useUserInfo } from '@/stores/useUserInfo';
 import tools from '@/utils/tools';
 import dayjs from 'dayjs';
@@ -657,6 +791,15 @@ const payingPoints = ref<number | undefined>(undefined);
 const showPayModal = ref(false);
 const payType = ref('');
 const selectedPayMethod = ref<PayMethod>('WECHAT')
+
+const notificationList = ref<UserNotificationResponse[]>([])
+const notificationTotal = ref(0)
+const notificationPage = ref(1)
+const unreadCount = ref(0)
+const notificationsLoading = ref(false)
+const notificationActionId = ref<string | number | null>(null)
+const showNotificationModal = ref(false)
+const activeNotification = ref<UserNotificationResponse | null>(null)
 
 let orderPollingTimer: ReturnType<typeof setInterval> | null = null
 const ORDER_POLLING_INTERVAL = 3000;
@@ -990,6 +1133,107 @@ const onChangePointsPage = (key: number) => {
   onLoadPoints();
 }
 
+function resolveUnreadCount(res: UnreadCountResponse | null | undefined) {
+  if (!res || typeof res !== 'object') return 0
+  const value = res.count ?? res.unreadCount
+  return typeof value === 'number' && value > 0 ? value : 0
+}
+
+const onLoadUnreadCount = async () => {
+  try {
+    const res = await api.getNotificationUnreadCount<UnreadCountResponse>()
+    unreadCount.value = resolveUnreadCount(res)
+  } catch (error) {
+    console.error('onLoadUnreadCount', error)
+  }
+}
+
+const onLoadNotifications = async () => {
+  notificationsLoading.value = true
+  try {
+    const res = await api.getNotifications<UserNotificationResponse>({
+      page: notificationPage.value,
+      pageSize: 10,
+    })
+    notificationList.value = res?.records || []
+    notificationTotal.value = res?.total || 0
+  } catch (error) {
+    console.error('onLoadNotifications', error)
+  } finally {
+    notificationsLoading.value = false
+  }
+}
+
+const onChangeNotificationPage = (pageNum: number) => {
+  notificationPage.value = pageNum
+  onLoadNotifications()
+}
+
+const onOpenNotification = async (item: UserNotificationResponse) => {
+  activeNotification.value = item
+  showNotificationModal.value = true
+
+  if (item.isRead) return
+
+  try {
+    await api.markNotificationRead(item.id)
+    item.isRead = true
+    item.readAt = dayjs().toISOString()
+    if (unreadCount.value > 0) {
+      unreadCount.value -= 1
+    }
+  } catch (error) {
+    console.error('onOpenNotification', error)
+  }
+}
+
+function closeNotificationModal() {
+  showNotificationModal.value = false
+  activeNotification.value = null
+}
+
+const onMarkAllNotificationsRead = async () => {
+  if (unreadCount.value <= 0 || notificationsLoading.value) return
+  try {
+    await api.markAllNotificationsRead()
+    notificationList.value = notificationList.value.map((item) => ({
+      ...item,
+      isRead: true,
+      readAt: item.readAt || dayjs().toISOString(),
+    }))
+    unreadCount.value = 0
+    message.success('已全部标为已读')
+  } catch (error) {
+    console.error('onMarkAllNotificationsRead', error)
+  }
+}
+
+const onDeleteNotification = async (item: UserNotificationResponse) => {
+  if (notificationActionId.value === item.id) return
+  notificationActionId.value = item.id
+  try {
+    await api.deleteNotification(item.id)
+    const wasUnread = !item.isRead
+    notificationList.value = notificationList.value.filter((row) => row.id !== item.id)
+    notificationTotal.value = Math.max(0, notificationTotal.value - 1)
+    if (activeNotification.value?.id === item.id) {
+      closeNotificationModal()
+    }
+    if (wasUnread && unreadCount.value > 0) {
+      unreadCount.value -= 1
+    }
+    if (notificationList.value.length === 0 && notificationTotal.value > 0) {
+      notificationPage.value = Math.max(1, notificationPage.value - 1)
+      await onLoadNotifications()
+    }
+    message.success('已删除')
+  } catch (error) {
+    console.error('onDeleteNotification', error)
+  } finally {
+    notificationActionId.value = null
+  }
+}
+
 const applyInvoice = () => {
   const email = invoiceForm.value.email.trim()
   const phone = invoiceForm.value.phone.trim()
@@ -1140,6 +1384,13 @@ watch([orderNo, selectedPayMethod], ([no, method]) => {
   }
 });
 
+watch(activeTab, (tab) => {
+  if (tab === 'notifications') {
+    onLoadNotifications()
+    onLoadUnreadCount()
+  }
+})
+
 onBeforeUnmount(() => {
   stopOrderPolling()
   revokeAvatarPreview()
@@ -1151,12 +1402,13 @@ onBeforeUnmount(() => {
 
 onMounted(() => {
   const tab = route.query.tab
-  if (tab === 'points' || tab === 'bills' || tab === 'account') {
+  if (tab === 'points' || tab === 'bills' || tab === 'account' || tab === 'notifications') {
     activeTab.value = tab
   }
   onLoadUserInfo();
   onLoadPoints();
   onLoadOrderList();
+  onLoadUnreadCount();
 });
 </script>
 

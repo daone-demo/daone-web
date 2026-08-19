@@ -37,3 +37,10 @@ export const BILL_STATUS_LABEL: Record<BillItem['status'], string> = {
   REFUNDED: '已退款',
   CANCELLED: '已取消',
 }
+
+export const NOTIFICATION_TYPE_LABEL: Record<string, string> = {
+  system: '系统',
+  update: '更新',
+  activity: '活动',
+  reminder: '提醒',
+}
