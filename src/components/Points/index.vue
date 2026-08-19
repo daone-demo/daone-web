@@ -232,7 +232,7 @@ interface PaymentResponse {
 }
 
 const PAYMENT_METHODS: Array<{ key: PayMethod; label: string }> = [
-  { key: 'ALIPAY', label: '支付宝' },
+  // { key: 'ALIPAY', label: '支付宝' },
   { key: 'WECHAT', label: '微信' },
 ]
 

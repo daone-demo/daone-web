@@ -452,7 +452,7 @@ interface UserProfile {
 type PayMethod = 'ALIPAY' | 'WECHAT' | 'BANK_TRANSFER'
 
 const PAYMENT_METHODS: Array<{ key: PayMethod; label: string }> = [
-  { key: 'ALIPAY', label: '支付宝' },
+  // { key: 'ALIPAY', label: '支付宝' },
   { key: 'WECHAT', label: '微信' },
   // { key: 'BANK_TRANSFER', label: '对公转账' },
 ]
