@@ -8,13 +8,13 @@ import {nextTick} from 'vue';
 import {resolveVideoTaskTypeLabel} from '../../../../canvasDescription';
 import {buildImageActionResultTitle,buildVideoActionResultTitle,IMAGE_GENERAL_CAPABILITY_CODE,resolveGenerationTaskWorkflowId,resolveImageAssetId,toVideoApiClarity,VIDEO_GENERAL_CAPABILITY_CODE,type ImageDialogueSubmitPayload,type VideoDialogueSubmitPayload,type VideoGenAspectRatio,type VideoGenPromptSubmitPayload,type VideoToolbarClickEvent} from '../../../../constants';
 import {buildImageGenerationParams} from '../../../../generationParams';
-import {bindGenerationTaskId,bindSharedGenerationTaskId,markGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail} from '../../../../generationTask';
+import {bindGenerationTaskId,bindSharedGenerationTaskId,markGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,pickImageGenerationResults,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail} from '../../../../generationTask';
 import {createIdempotencyKey} from '../../../../idempotency';
 import {applyImageMarkTaskParameters,canSubmitImageDialogueTask} from '../../../../imageMarkUtils';
 import {toVideoApiPrompt} from '../../../../promptMention';
 import {getBoundingBoxCenter} from '../../../../viewport';
 import type {CanvasNodeData} from '../../sharedImports';
-import {api,applyVideoFirstLastFrameParameters,connectGenEdge,findImageToVideoEdge,findReusableImageGenerationNode,findReusableVideoGenerationNode,getImageGenerationPlaceholderSize,getScroller,isImageGenerationFailedNode,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resetVideoGenerationNodeForRetry,resolveVideoGenerationSubmitContext,shouldGenerateImageInPlaceOnNode,spawnGenerationResultNode,spawnVideoGenerationResultNode,syncPendingImageTargetFromSources} from '../../sharedImports';
+import {api,applyVideoFirstLastFrameParameters,connectGenEdge,findImageToVideoEdge,findReusableImageGenerationNode,findReusableVideoGenerationNode,getImageGenerationPlaceholderSize,getScroller,isImageGenerationFailedNode,isPendingImageGenerationTarget,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resetVideoGenerationNodeForRetry,resolveVideoGenerationSubmitContext,shouldGenerateImageInPlaceOnNode,spawnGenerationResultNode,spawnVideoGenerationResultNode,syncPendingImageTargetFromSources} from '../../sharedImports';
 import type {CoreRuntimeContext} from '../context';
 
 export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
@@ -77,7 +77,8 @@ export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
       const taskParameters: Record<string, unknown> = {
           model: payload.model,
           aspectRatio: payload.aspectRatio,
-          count: 1,
+          // 多张时把目标张数交给接口；完成后再按返回数量补节点
+          count: requestedCount,
       };
       if (payload.resolution) {
           taskParameters.resolution = payload.resolution;
@@ -107,12 +108,11 @@ export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
               g.removeEdge(edge.id);
       };
       /**
-       * 多源图生图时，对话框宿主若是空占位节点，复用为第一个生成结果，
-       * 避免中间残留「空上传过渡态」节点。
+       * 待生成宿主（含单源继承预览 / 空占位）：复用为第一个结果节点，
+       * 张数=1 时原地替换；张数>1 时其余节点按接口返回再补。
        */
-      const reuseEmptyHostAsFirstResult = hasReferenceImages &&
-          sourceData.kind === 'image' &&
-          !sourceData.previewUrl?.trim() &&
+      const canReusePendingHost = sourceData.kind === 'image' &&
+          isPendingImageGenerationTarget(sourceData) &&
           sourceData.uploadState !== 'uploading' &&
           sourceData.imageGenState !== 'loading';
       const resultNodes: Node[] = [];
@@ -123,71 +123,98 @@ export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
       const inPlaceTitle = inPlaceTarget && !hasReferenceImages && sourceData.kind === 'image'
           ? '文生图'
           : title;
+      const preparePrimaryNode = (node: Node, fileName: string, nodeTitle = title) => {
+          const current = node.getData() as CanvasNodeData;
+          if (isImageGenerationFailedNode(current)) {
+              resetImageGenerationNodeForRetry(node, {
+                  title: nodeTitle,
+                  fileName,
+                  prompt,
+              });
+              return;
+          }
+          // 待生成宿主上的单源继承预览清掉，进入生成中占位（避免看起来像又拉出一个子节点）
+          if (isPendingImageGenerationTarget(current) && current.previewUrl?.trim()) {
+              const cleared = { ...current, previewUrl: '', uploadState: 'idle' as const, uploadProgress: 0 };
+              delete cleared.assetId;
+              node.setData(cleared, { overwrite: true });
+          }
+          prepareImageNodeForInPlaceGeneration(node, {
+              title: nodeTitle,
+              fileName,
+              prompt,
+          });
+      };
       if (inPlaceTarget) {
-          if (isImageGenerationFailedNode(sourceData)) {
-              resetImageGenerationNodeForRetry(inPlaceTarget, {
-                  title: inPlaceTitle,
-                  fileName: buildIndexedFileName(0),
-                  prompt,
-              });
-          }
-          else {
-              prepareImageNodeForInPlaceGeneration(inPlaceTarget, {
-                  title: inPlaceTitle,
-                  fileName: buildIndexedFileName(0),
-                  prompt,
-              });
-          }
+          preparePrimaryNode(inPlaceTarget, buildIndexedFileName(0), inPlaceTitle);
           resultNodes.push(inPlaceTarget);
       }
-      else {
-          const reusableNode = requestedCount === 1 ? findReusableImageGenerationNode(g, sourceNode) : null;
+      else if (canReusePendingHost) {
+          preparePrimaryNode(sourceNode, buildIndexedFileName(0));
+          resultNodes.push(sourceNode);
+      }
+      else if (requestedCount === 1) {
+          const reusableNode = findReusableImageGenerationNode(g, sourceNode);
           if (reusableNode) {
-              resetImageGenerationNodeForRetry(reusableNode, {
-                  title,
-                  fileName: buildIndexedFileName(0),
-                  prompt,
-              });
+              preparePrimaryNode(reusableNode, buildIndexedFileName(0));
               resultNodes.push(reusableNode);
-          }
-          else if (reuseEmptyHostAsFirstResult) {
-              prepareImageNodeForInPlaceGeneration(sourceNode, {
-                  title,
-                  fileName: buildIndexedFileName(0),
-                  prompt,
-              });
-              resultNodes.push(sourceNode);
-              if (requestedCount > 1) {
-                  const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode);
-                  const plannedPoints = planOutgoingResultPoints(g, sourceNode, batchPreviewSize, requestedCount, 'above');
-                  for (let index = 1; index < requestedCount; index += 1) {
-                      const node = spawnGenerationResultNode(g, sourceNode, {
-                          title,
-                          fileName: buildIndexedFileName(index),
-                          centerPoint: plannedPoints[index],
-                          layoutSlot: index,
-                          layoutTotal: requestedCount,
-                      });
-                      // 去掉结果之间的宿主连线，最终由各源图分别连到结果（多对多）
-                      disconnectDirectEdge(sourceNode.id, node.id);
-                      resultNodes.push(node);
-                  }
-              }
           }
           else {
               const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode);
-              const plannedPoints = planOutgoingResultPoints(g, sourceNode, batchPreviewSize, requestedCount, 'above');
-              for (let index = 0; index < requestedCount; index += 1) {
-                  resultNodes.push(spawnGenerationResultNode(g, sourceNode, {
-                      title,
-                      fileName: buildIndexedFileName(index),
-                      centerPoint: plannedPoints[index],
-                      layoutSlot: index,
-                      layoutTotal: requestedCount,
-                  }));
-              }
+              const plannedPoints = planOutgoingResultPoints(g, sourceNode, batchPreviewSize, 1, 'above');
+              resultNodes.push(spawnGenerationResultNode(g, sourceNode, {
+                  title,
+                  fileName: buildIndexedFileName(0),
+                  centerPoint: plannedPoints[0],
+                  layoutSlot: 0,
+                  layoutTotal: 1,
+              }));
           }
       }
+      else {
+          // 多张：先只建/复用第一个节点，其余按 AI 返回数量补齐
+          const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode);
+          const plannedPoints = planOutgoingResultPoints(g, sourceNode, batchPreviewSize, 1, 'above');
+          resultNodes.push(spawnGenerationResultNode(g, sourceNode, {
+              title,
+              fileName: buildIndexedFileName(0),
+              centerPoint: plannedPoints[0],
+              layoutSlot: 0,
+              layoutTotal: requestedCount,
+          }));
+      }
+      const reusePendingHostAsFirstResult = canReusePendingHost && resultNodes[0]?.id === sourceNode.id;
+      const distributionConfig = {
+          title,
+          sourceFileName,
+          buildFileName,
+          placement: 'above' as const,
+      };
+      const wireExtraResultNodes = (nodes: Node[]) => {
+          nodes.forEach((node) => {
+              ctx.applyImageDialogueProvenance(node, {
+                  prompt,
+                  settings: provenanceSettings,
+                  sourceRefs: provenanceRefs,
+                  elementMarks: dialogueElementMarks.length ? dialogueElementMarks : undefined,
+                  generationParams: buildImageGenerationParams({
+                      prompt,
+                      capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+                      parameters: taskParameters,
+                      workflowId: resolveGenerationTaskWorkflowId(payload.workflowId, payload.workflow) ?? undefined,
+                      referenceAssetIds: referenceAssetIds.length > 0
+                          ? referenceAssetIds
+                          : assetId
+                              ? [assetId]
+                              : undefined,
+                  }),
+              });
+              if (reusePendingHostAsFirstResult) {
+                  disconnectDirectEdge(sourceNode.id, node.id);
+              }
+              connectImageRefsToResultNode(node);
+          });
+      };
       resultNodes.forEach((resultNode) => {
           ctx.applyImageDialogueProvenance(resultNode, {
               prompt,
@@ -217,20 +244,19 @@ export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
       ctx.updateNodeToolbar();
       ctx.scheduleHistoryPush();
       // 图生图新节点下方对话框默认隐藏，用户点击节点后再打开
-      const runners = resultNodes.map((resultNode, index) => {
-          const fileName = ctx.resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount);
-          return startImageGenerationOnNode(resultNode, {
+      try {
+          const started = await startImageGenerationOnNode(primaryNode, {
               title,
-              fileName,
+              fileName: buildIndexedFileName(0),
               createTask: async () => {
-                  const idempotencyKey = createIdempotencyKey('img-dialogue', index);
+                  const idempotencyKey = createIdempotencyKey('img-dialogue', 0);
                   const created = await api.createGenerationTask<GenerationTaskDetail>({
                       taskType: 'IMAGE',
                       capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
                       prompt,
                       parameters: taskParameters,
                       projectId: ctx.activeProjectId.value,
-                      nodeId: resultNode.id,
+                      nodeId: primaryNode.id,
                       referenceAssetIds: referenceAssetIds.length > 0
                           ? referenceAssetIds
                           : assetId
@@ -241,65 +267,60 @@ export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
                   ctx.userInfoStore.queryPointAccount();
                   return created;
               },
-              onTaskBound: () => ctx.persistGenerationTaskBinding(resultNode, {
+              onTaskCreated: (created) => {
+                  if (requestedCount <= 1)
+                      return;
+                  const apiResultCount = pickImageGenerationResults(created).length;
+                  const totalCount = Math.max(requestedCount, apiResultCount);
+                  if (totalCount <= 1)
+                      return;
+                  const beforeLen = resultNodes.length;
+                  ctx.ensureGenerationResultLoadingNodes(g, sourceNode, resultNodes, totalCount, {
+                      ...distributionConfig,
+                      snapshotSourceNode: primaryNode,
+                  });
+                  const newlyAdded = resultNodes.slice(beforeLen);
+                  if (!newlyAdded.length)
+                      return;
+                  wireExtraResultNodes(newlyAdded);
+                  ctx.syncNodeCount();
+                  ctx.bumpToolbarRevision();
+                  ctx.updateNodeToolbar();
+              },
+              onTaskBound: () => ctx.persistGenerationTaskBinding(primaryNode, {
                   detail: prompt,
                   taskType: imageDialogueTaskType,
               }),
               onError: (reason) => message.error(reason),
               onComplete: async (result) => {
-                  // 空宿主已复用为结果节点时，禁止当「源」清空溯源（否则 sibling 完成会擦掉第一张结果的参考图）
-                  if (!reuseEmptyHostAsFirstResult) {
-                      ctx.resetSourceImageDialogueAfterSuccess(sourceNode, resultNode, result);
+                  // 空/待生成宿主已复用为结果节点时，禁止当「源」清空溯源
+                  if (!reusePendingHostAsFirstResult) {
+                      ctx.resetSourceImageDialogueAfterSuccess(sourceNode, primaryNode, result);
                   }
-                  if (!result.success || index !== 0)
+                  if (!result.success)
                       return;
-                  const extraResults = result.extraResults ?? [];
-                  if (!extraResults.length)
+                  const allResults = result.allResults ?? [];
+                  if (allResults.length <= 1)
                       return;
-                  const totalCount = 1 + extraResults.length;
-                  const extraNodes = await ctx.spawnNodesForExtraGenerationResults(g, sourceNode, extraResults, {
-                      title,
-                      sourceFileName,
-                      buildFileName,
-                      resultIndexOffset: 1,
-                      totalCount,
-                      placement: 'above',
-                      snapshotSourceNode: primaryNode,
-                  });
-                  if (!extraNodes.length)
+                  const beforeLen = resultNodes.length;
+                  const extraNodes = await ctx.distributeMultiImageGenerationResults(g, sourceNode, resultNodes, allResults, distributionConfig);
+                  const newlyAdded = resultNodes.slice(beforeLen);
+                  if (newlyAdded.length) {
+                      wireExtraResultNodes(newlyAdded);
+                  }
+                  else if (extraNodes.length && reusePendingHostAsFirstResult) {
+                      extraNodes.forEach((node) => disconnectDirectEdge(sourceNode.id, node.id));
+                      extraNodes.forEach(connectImageRefsToResultNode);
+                  }
+                  if (!extraNodes.length && !newlyAdded.length)
                       return;
                   const dialogueSharedTaskId = String((primaryNode.getData() as CanvasNodeData).generationTaskId ?? '').trim();
                   if (dialogueSharedTaskId) {
-                      bindSharedGenerationTaskId([
-                          { node: primaryNode, resultIndex: 0 },
-                          ...extraNodes.map((node, offset) => ({ node, resultIndex: 1 + offset })),
-                      ], dialogueSharedTaskId, 'IMAGE');
+                      bindSharedGenerationTaskId(resultNodes.map((node, index) => ({
+                          node,
+                          resultIndex: index,
+                      })), dialogueSharedTaskId, 'IMAGE');
                   }
-                  extraNodes.forEach((node) => {
-                      // 用提交时捕获的溯源显式回写，避免 primary 被清空后 clone 得到空 refs
-                      ctx.applyImageDialogueProvenance(node, {
-                          prompt,
-                          settings: provenanceSettings,
-                          sourceRefs: provenanceRefs,
-                          elementMarks: dialogueElementMarks.length ? dialogueElementMarks : undefined,
-                          generationParams: buildImageGenerationParams({
-                              prompt,
-                              capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
-                              parameters: taskParameters,
-                              workflowId: resolveGenerationTaskWorkflowId(payload.workflowId, payload.workflow) ?? undefined,
-                              referenceAssetIds: referenceAssetIds.length > 0
-                                  ? referenceAssetIds
-                                  : assetId
-                                      ? [assetId]
-                                      : undefined,
-                          }),
-                      });
-                      // 空宿主已复用为结果时，去掉结果间连线，改为各源图连到新结果
-                      if (reuseEmptyHostAsFirstResult) {
-                          disconnectDirectEdge(sourceNode.id, node.id);
-                      }
-                      connectImageRefsToResultNode(node);
-                  });
                   ctx.syncNodeCount();
                   ctx.bumpToolbarRevision();
                   ctx.updateNodeToolbar();
@@ -308,23 +329,17 @@ export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
                       const scroller = getScroller(g);
                       if (!scroller)
                           return;
-                      const center = getBoundingBoxCenter([sourceNode, ...extraNodes].map((node) => node.getBBox()));
+                      const center = getBoundingBoxCenter([sourceNode, ...resultNodes].map((node) => node.getBBox()));
                       scroller.transitionToPoint(center.x, center.y, {
                           duration: '280ms',
                       });
                   });
               },
           });
-      });
-      try {
-          const outcomes = await Promise.allSettled(runners);
-          const started = outcomes.some((outcome) => outcome.status === 'fulfilled' && outcome.value.started);
-          if (!started) {
-              resultNodes.forEach((node) => {
-                  if ((node.getData() as CanvasNodeData).imageGenState === 'loading') {
-                      markGenerationNodeFailed(node);
-                  }
-              });
+          if (!started.started) {
+              if ((primaryNode.getData() as CanvasNodeData).imageGenState === 'loading') {
+                  markGenerationNodeFailed(primaryNode);
+              }
               return;
           }
           ctx.scheduleHistoryPush();

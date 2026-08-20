@@ -70,12 +70,16 @@ export function isText2ImagePlaceholderNode(data: CanvasNodeData | undefined): b
   return data.title === '文生图'
 }
 
-/** 图生图对话提交：仅上传占位 / 失败重试节点原地生成；已有成片的节点新建子节点 */
+/** 图生图对话提交：待生成 / 上传占位 / 失败重试节点可原地生成；已成片节点新建子节点 */
 export function shouldGenerateImageInPlaceOnNode(
   data: CanvasNodeData,
   options: { requestedCount: number; hasReferenceImages: boolean },
 ): boolean {
   if (options.requestedCount !== 1 || data.kind !== 'image') return false
+
+  // 待生成目标（含单源继承预览）：在宿主上原地替换，避免再拉出子节点
+  if (isPendingImageGenerationTarget(data)) return true
+
   if (data.previewUrl?.trim() && !isImageGenerationFailedNode(data)) return false
 
   if (options.hasReferenceImages) {

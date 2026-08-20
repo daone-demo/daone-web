@@ -46,6 +46,7 @@ export {
   planOutgoingResultPoints,
   syncPendingImageTargetFromSources,
   collectUpstreamImageSourceRefs,
+  isPendingImageGenerationTarget,
 } from '../../imageGen'
 export {
   canImageNodeAcceptIncoming,

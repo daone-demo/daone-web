@@ -91,25 +91,29 @@ export function installDialogueElementMarkMode(ctx: CoreRuntimeContext) {
       const returnData = returnCell?.isNode() ? (returnCell.getData() as CanvasNodeData) : undefined;
       const ids = new Set<string>();
       if (ctx.elementSelectContext.value === 'image-dialogue') {
-          const previews = ctx.getImageDialoguePreviewsForNode(returnId);
-          for (const item of previews) {
-              if (item.nodeId)
-                  ids.add(item.nodeId);
-          }
-          if (!ids.size && returnData?.kind === 'image' && returnData.previewUrl?.trim()) {
+          // 工作流/对话框标记：优先当前节点图片（图生图宿主），避免落到参考「素材」上
+          if (returnData?.kind === 'image' && returnData.previewUrl?.trim()) {
               ids.add(returnId);
           }
-          if (!ids.size) {
+          else {
+              // 宿主尚无预览时，回退到参考图（待生成多源等场景）
+              const previews = ctx.getImageDialoguePreviewsForNode(returnId);
               for (const item of previews) {
-                  const previewUrl = item.previewUrl?.trim();
-                  if (!previewUrl)
-                      continue;
-                  g.getNodes().forEach((cell) => {
-                      const data = cell.getData() as CanvasNodeData;
-                      if (data.kind === 'image' && data.previewUrl === previewUrl) {
-                          ids.add(cell.id);
-                      }
-                  });
+                  if (item.nodeId)
+                      ids.add(item.nodeId);
+              }
+              if (!ids.size) {
+                  for (const item of previews) {
+                      const previewUrl = item.previewUrl?.trim();
+                      if (!previewUrl)
+                          continue;
+                      g.getNodes().forEach((cell) => {
+                          const data = cell.getData() as CanvasNodeData;
+                          if (data.kind === 'image' && data.previewUrl === previewUrl) {
+                              ids.add(cell.id);
+                          }
+                      });
+                  }
               }
           }
       }

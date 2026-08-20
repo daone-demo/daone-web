@@ -342,8 +342,6 @@ export async function startImageGenerationOnNode(
     return { started: false }
   }
 
-  options.onTaskCreated?.(created)
-
   const taskId = String(created.id ?? '').trim()
   if (!taskId) {
     markGenerationNodeFailed(node, '创建生成任务失败')
@@ -352,8 +350,10 @@ export async function startImageGenerationOnNode(
     return { started: false }
   }
 
+  // 先绑定 taskId，再触发 onTaskCreated，便于多张结果节点立刻共享同一任务并同步进度
   bindGenerationTaskId(node, taskId, 'IMAGE')
   options.onTaskBound?.(taskId)
+  options.onTaskCreated?.(created)
 
   startImageGenerationTaskFollow(node, taskId, {
     title: options.title,

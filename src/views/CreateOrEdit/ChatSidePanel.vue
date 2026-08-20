@@ -101,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, isRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import logoWhite from '@assets/images/logo_white.png'
 import logoBlack from '@assets/images/logo_black.png'
@@ -403,9 +403,7 @@ function resetForProject() {
 
 function unwrapRef<T>(value: Ref<T> | T | null | undefined): T | null {
   if (value == null) return null
-  return (typeof value === 'object' && value !== null && 'value' in (value as object)
-    ? (value as Ref<T>).value
-    : value) as T
+  return (isRef(value) ? value.value : value) as T
 }
 
 function focusInput() {

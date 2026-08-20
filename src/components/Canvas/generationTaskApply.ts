@@ -214,6 +214,21 @@ export function updateGenerationNodeProgress(
   const next = { ...data, imageGenProgress: rounded }
   setNodeData(node, next)
   refreshGenerationNodeView(node, options.forceRefreshView)
+
+  // 同一 generationTaskId 的多张结果节点进度保持同步
+  const taskId = String(data.generationTaskId ?? '').trim()
+  const graph = getNodeGraph(node)
+  if (!taskId || !graph) return
+
+  for (const cell of graph.getNodes()) {
+    if (!cell.isNode() || cell.id === node.id) continue
+    const sibling = cell.getData() as CanvasNodeData
+    if (String(sibling.generationTaskId ?? '').trim() !== taskId) continue
+    if (sibling.imageGenState !== 'loading') continue
+    if (sibling.imageGenProgress === rounded) continue
+    setNodeData(cell as Node, { ...sibling, imageGenProgress: rounded })
+    refreshGenerationNodeView(cell as Node, options.forceRefreshView)
+  }
 }
 
 export async function applyGenerationResultToNode(

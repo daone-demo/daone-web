@@ -38,6 +38,18 @@ export function installPromptMultiResultGeneration(ctx: CoreRuntimeContext) {
               const sharedTaskId = String((snapshotSource.getData() as CanvasNodeData).generationTaskId ?? '').trim();
               if (sharedTaskId) {
                   bindGenerationTaskId(node, sharedTaskId, 'IMAGE', index);
+                  // 继承主节点当前进度，避免多张里一张在跑、其余停在「准备中」
+                  const snapProgress = Math.max(
+                      0,
+                      Math.round(Number((snapshotSource.getData() as CanvasNodeData).imageGenProgress) || 0),
+                  );
+                  if (snapProgress > 0) {
+                      const data = { ...(node.getData() as CanvasNodeData) };
+                      if (data.imageGenState === 'loading' && data.imageGenProgress !== snapProgress) {
+                          data.imageGenProgress = snapProgress;
+                          node.setData(data, { overwrite: true });
+                      }
+                  }
               }
               else {
                   const data = { ...(node.getData() as CanvasNodeData), generationResultIndex: index };
