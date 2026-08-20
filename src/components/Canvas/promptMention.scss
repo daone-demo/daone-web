@@ -24,7 +24,8 @@
 }
 
 @mixin prompt-mark-mention-pill($mention-class) {
-  :deep(.#{$mention-class}--mark) {
+  :deep(.#{$mention-class}--mark),
+  :deep(.#{$mention-class}--image) {
     display: inline-flex;
     align-items: center;
     gap: 4px;

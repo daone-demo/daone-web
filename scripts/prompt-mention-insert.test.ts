@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildPromptWithMentionInsert } from '../src/components/Canvas/promptMention.ts'
+import {
+  buildPromptWithMentionInsert,
+  findActiveAtMentionQuery,
+} from '../src/components/Canvas/promptMention.ts'
 
 test('在光标后插入 @图片，并补前导空格', () => {
   const result = buildPromptWithMentionInsert({
@@ -52,4 +55,23 @@ test('空文本直接插入 token', () => {
   })
   assert.equal(result.nextText, '@图片1 ')
   assert.equal(result.nextCaret, '@图片1 '.length)
+})
+
+test('检测活跃 @ 查询', () => {
+  assert.deepEqual(findActiveAtMentionQuery('让@', 2), { start: 1, query: '' })
+  assert.deepEqual(findActiveAtMentionQuery('让@图', 3), { start: 1, query: '图' })
+  assert.equal(findActiveAtMentionQuery('让@图片1', 5), null)
+  assert.equal(findActiveAtMentionQuery('让 @图片1 ', 7), null)
+  assert.equal(findActiveAtMentionQuery('hello', 5), null)
+})
+
+test('用 @ 查询区间替换为 mention', () => {
+  const result = buildPromptWithMentionInsert({
+    text: '让@',
+    token: '@图片2',
+    start: 1,
+    end: 2,
+  })
+  assert.equal(result.nextText, '让 @图片2 ')
+  assert.equal(result.nextCaret, '让 @图片2 '.length)
 })

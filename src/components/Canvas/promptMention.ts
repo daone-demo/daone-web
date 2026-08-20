@@ -15,6 +15,16 @@ export function isImageMarkMentionToken(token: string) {
   return token.startsWith('@标记')
 }
 
+export function isImageRefMentionToken(token: string) {
+  return /^@图片\d+$/.test(token)
+}
+
+export function parseImageRefMentionToken(token: string) {
+  const match = token.match(/^@图片(\d+)$/)
+  if (!match) return null
+  return { index: Number(match[1]) }
+}
+
 export function parseImageMarkMentionToken(token: string) {
   const withId = token.match(/^@标记#([^：\s@]+)(?:：(.+))?$/)
   if (withId) return { markId: withId[1], label: withId[2] ?? '' }
@@ -23,6 +33,28 @@ export function parseImageMarkMentionToken(token: string) {
   if (legacy) return { markId: '', label: legacy[1] }
 
   return null
+}
+
+/**
+ * 检测光标前是否处于未完成的 `@` 提及输入（用于弹出选图菜单）。
+ * 已完整匹配的 `@图片N` / `@标记…` 不算活跃查询。
+ */
+export function findActiveAtMentionQuery(
+  text: string,
+  caret: number,
+): { start: number; query: string } | null {
+  if (caret <= 0) return null
+  const before = text.slice(0, Math.max(0, Math.min(caret, text.length)))
+  const match = before.match(/@([^\s@]*)$/)
+  if (!match || match.index === undefined) return null
+
+  const raw = match[0]
+  if (isImageRefMentionToken(raw) || isImageMarkMentionToken(raw)) return null
+
+  return {
+    start: match.index,
+    query: match[1] ?? '',
+  }
 }
 
 export interface PromptMarkMentionMeta {
@@ -95,46 +127,77 @@ export function createPromptMentionApi(
     Object.assign(el.style, style)
   }
 
-  function createMentionSpan(token: string) {
+  function createRichMentionSpan(
+    token: string,
+    options: {
+      variant: 'mark' | 'image'
+      label: string
+      switchable?: boolean
+      markId?: string
+      thumbStyle?: Record<string, string>
+    },
+  ) {
     const span = document.createElement('span')
     span.className = mentionClass
     span.contentEditable = 'false'
     span.dataset.mention = token
+    span.classList.add(`${mentionClass}--${options.variant}`)
+    if (options.variant === 'mark' && options.switchable) {
+      span.classList.add(`${mentionClass}--mark-switchable`)
+    }
+    if (options.markId) span.dataset.markId = options.markId
 
+    const thumb = document.createElement('span')
+    thumb.className = PROMPT_MARK_MENTION_THUMB_CLASS
+    thumb.setAttribute('aria-hidden', 'true')
+    applyThumbStyle(thumb, options.thumbStyle)
+
+    const labelEl = document.createElement('span')
+    labelEl.className = PROMPT_MARK_MENTION_LABEL_CLASS
+    labelEl.textContent = options.label
+
+    span.append(thumb, labelEl)
+
+    if (options.variant === 'mark' && options.switchable) {
+      const chevron = document.createElement('span')
+      chevron.className = PROMPT_MARK_MENTION_CHEVRON_CLASS
+      chevron.setAttribute('aria-hidden', 'true')
+      chevron.textContent = '›'
+      span.append(chevron)
+    }
+
+    return span
+  }
+
+  function createMentionSpan(token: string) {
     if (isImageMarkMentionToken(token)) {
       const parsed = parseImageMarkMentionToken(token)
       const meta = options?.resolveMention?.(token)
-      const label = meta?.label ?? parsed?.label ?? token
-      const switchable = Boolean(meta?.switchable)
-
-      span.classList.add(`${mentionClass}--mark`)
-      if (switchable) span.classList.add(`${mentionClass}--mark-switchable`)
-      if (parsed?.markId || meta?.markId) {
-        span.dataset.markId = parsed?.markId || meta?.markId
-      }
-
-      const thumb = document.createElement('span')
-      thumb.className = PROMPT_MARK_MENTION_THUMB_CLASS
-      thumb.setAttribute('aria-hidden', 'true')
-      applyThumbStyle(thumb, meta?.thumbStyle)
-
-      const labelEl = document.createElement('span')
-      labelEl.className = PROMPT_MARK_MENTION_LABEL_CLASS
-      labelEl.textContent = label
-
-      span.append(thumb, labelEl)
-
-      if (switchable) {
-        const chevron = document.createElement('span')
-        chevron.className = PROMPT_MARK_MENTION_CHEVRON_CLASS
-        chevron.setAttribute('aria-hidden', 'true')
-        chevron.textContent = '›'
-        span.append(chevron)
-      }
-
-      return span
+      return createRichMentionSpan(token, {
+        variant: 'mark',
+        label: meta?.label ?? parsed?.label ?? token,
+        switchable: Boolean(meta?.switchable),
+        markId: parsed?.markId || meta?.markId,
+        thumbStyle: meta?.thumbStyle,
+      })
     }
 
+    if (isImageRefMentionToken(token)) {
+      const parsed = parseImageRefMentionToken(token)
+      const meta = options?.resolveMention?.(token)
+      if (meta) {
+        return createRichMentionSpan(token, {
+          variant: 'image',
+          label: meta.label || (parsed ? `图片 ${parsed.index}` : token),
+          thumbStyle: meta.thumbStyle,
+        })
+      }
+    }
+
+    const span = document.createElement('span')
+    span.className = mentionClass
+    span.contentEditable = 'false'
+    span.dataset.mention = token
     span.textContent = token
     return span
   }

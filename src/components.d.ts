@@ -85,6 +85,7 @@ declare module 'vue' {
     Model3DNode: typeof import('./components/Canvas/nodes/Model3DNode.vue')['default']
     PaymentSuccess: typeof import('./components/PaymentSuccess/index.vue')['default']
     Points: typeof import('./components/Points/index.vue')['default']
+    PromptAtMentionMenu: typeof import('./components/Canvas/PromptAtMentionMenu.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SlideVerifyModal: typeof import('./components/SlideVerifyModal/index.vue')['default']

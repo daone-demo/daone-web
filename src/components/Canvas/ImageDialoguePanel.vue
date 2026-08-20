@@ -116,6 +116,18 @@
         @select="selectMarkLabelOption"
       />
     </div>
+    <Teleport to="body">
+      <PromptAtMentionMenu
+        v-if="atMentionMenuVisible"
+        ref="atMentionMenuRef"
+        :items="atMentionItems"
+        :query="atMentionQuery"
+        :left="atMentionMenuPos.left"
+        :top="atMentionMenuPos.top"
+        @select="onSelectAtMention"
+        @close="closeAtMentionMenu"
+      />
+    </Teleport>
 
     <div class="image-dialogue__footer">
       <div class="image-dialogue__footer-left">
@@ -306,13 +318,18 @@ import ImageStylePanel from './ImageStylePanel.vue';
 import DialogueWorkflowSelect from './DialogueWorkflowSelect.vue';
 import type { DigitalHumanPickerItem } from './DigitalHumanPickerPanel.vue';
 import MarkLabelOptionMenu from './MarkLabelOptionMenu.vue'
-import MarkTagsEcho from './MarkTagsEcho.vue';
+import MarkTagsEcho from './MarkTagsEcho.vue'
+import PromptAtMentionMenu from './PromptAtMentionMenu.vue'
+import type { PromptAtMentionItem } from './PromptAtMentionMenu.vue'
 import { useImageMarkLabelMenu } from './useImageMarkLabelMenu';
 import { canSubmitImageDialogueTask, hasCompletedImageMarks } from './imageMarkUtils';
 import {
+  buildMarkMentionThumbStyle,
   buildPromptWithMentionInsert,
   createPromptMentionApi,
+  findActiveAtMentionQuery,
   isInputComposing,
+  parseImageRefMentionToken,
 } from './promptMention';
 import { resolveMarkMentionMeta } from './composables/usePromptMarkMentions';
 import {
@@ -414,13 +431,48 @@ const previewList = computed(() => {
       key: item.nodeId || `src-${index}`,
       nodeId: item.nodeId,
       previewUrl: item.previewUrl,
+      fileName: item.fileName || '',
+      index: index + 1,
     }))
   }
   if (props.previewUrl) {
-    return [{ key: 'src-0', nodeId: '', previewUrl: props.previewUrl }]
+    return [{
+      key: 'src-0',
+      nodeId: '',
+      previewUrl: props.previewUrl,
+      fileName: '',
+      index: 1,
+    }]
   }
   return []
 })
+
+function resolveRefMenuLabel(item: { fileName?: string; index: number }) {
+  const name = String(item.fileName || '').trim()
+  if (name) return name
+  return `图片 ${item.index}`
+}
+
+const atMentionItems = computed<PromptAtMentionItem[]>(() =>
+  previewList.value.map((item) => ({
+    key: item.key,
+    index: item.index,
+    previewUrl: item.previewUrl,
+    label: resolveRefMenuLabel(item),
+    nodeId: item.nodeId,
+  })),
+)
+
+const canShowAtMentionMenu = computed(() => previewList.value.length > 1)
+
+const atMentionMenuVisible = ref(false)
+const atMentionQuery = ref('')
+const atMentionMenuPos = ref({ left: 0, top: 0 })
+const atMentionMenuRef = ref<{
+  moveActive: (delta: number) => void
+  confirmActive: () => void
+} | null>(null)
+let atMentionReplaceRange = { start: 0, end: 0 }
 
 const workflowDisabled = computed(() => props.workflowDisabled ?? previewList.value.length > 1)
 
@@ -438,10 +490,26 @@ function resolveMarkPreviewUrl(mark: ImageMarkItem) {
 }
 
 function resolveMarkMentionMetaForPrompt(token: string) {
-  return resolveMarkMentionMeta(token, {
+  const markMeta = resolveMarkMentionMeta(token, {
     marks: props.elementMarks ?? [],
     resolvePreviewUrl: resolveMarkPreviewUrl,
   })
+  if (markMeta) return markMeta
+
+  const parsed = parseImageRefMentionToken(token)
+  if (!parsed) return null
+  const item = previewList.value.find((ref) => ref.index === parsed.index)
+  if (!item) {
+    return { label: `图片 ${parsed.index}` }
+  }
+  return {
+    label: `图片 ${parsed.index}`,
+    thumbStyle: buildMarkMentionThumbStyle({
+      thumbUrl: item.previewUrl,
+      imageWidth: 1,
+      imageHeight: 1,
+    }),
+  }
 }
 
 const {
@@ -719,6 +787,7 @@ function syncPromptView(text = props.modelValue) {
 
 function insertMentionToken(token: string) {
   if (!token) return
+  closeAtMentionMenu()
 
   const el = promptInputRef.value
   const current = el ? mentionApi.serializePromptEl(el) : props.modelValue
@@ -755,6 +824,83 @@ function insertMentionToken(token: string) {
 
 function insertRefMention(index: number) {
   insertMentionToken(`@图片${index}`)
+}
+
+function closeAtMentionMenu() {
+  atMentionMenuVisible.value = false
+  atMentionQuery.value = ''
+}
+
+function updateAtMentionMenuPosition() {
+  const sel = window.getSelection()
+  if (!sel?.rangeCount) return
+  const range = sel.getRangeAt(0).cloneRange()
+  range.collapse(true)
+  let rect = range.getBoundingClientRect()
+  if ((!rect.width && !rect.height) || (rect.top === 0 && rect.left === 0)) {
+    const el = promptInputRef.value
+    if (!el) return
+    rect = el.getBoundingClientRect()
+  }
+  const menuWidth = 260
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8))
+  const top = Math.min(rect.bottom + 6, window.innerHeight - 8)
+  atMentionMenuPos.value = { left, top }
+}
+
+function refreshAtMentionMenu(text = props.modelValue, caret?: number) {
+  if (!canShowAtMentionMenu.value) {
+    closeAtMentionMenu()
+    return
+  }
+  const el = promptInputRef.value
+  const caretPos =
+    caret ??
+    (el ? mentionApi.getSelectionPlainOffsets(el)?.end : undefined) ??
+    text.length
+  const active = findActiveAtMentionQuery(text, caretPos)
+  if (!active) {
+    closeAtMentionMenu()
+    return
+  }
+  atMentionReplaceRange = { start: active.start, end: caretPos }
+  atMentionQuery.value = active.query
+  atMentionMenuVisible.value = true
+  nextTick(() => updateAtMentionMenuPosition())
+}
+
+function onSelectAtMention(item: PromptAtMentionItem) {
+  const el = promptInputRef.value
+  const current = el ? mentionApi.serializePromptEl(el) : props.modelValue
+  const token = `@图片${item.index}`
+  const { nextText, nextCaret } = buildPromptWithMentionInsert({
+    text: current,
+    token,
+    start: atMentionReplaceRange.start,
+    end: atMentionReplaceRange.end,
+  })
+  closeAtMentionMenu()
+
+  if (!el) {
+    emitPrompt(nextText)
+    savedPromptCaret = { start: nextCaret, end: nextCaret }
+    hasSavedPromptCaret = true
+    return
+  }
+
+  suppressCaretCapture = true
+  try {
+    mentionApi.renderPromptToEl(el, nextText)
+    el.focus({ preventScroll: true })
+    mentionApi.setPlainTextSelection(el, nextCaret, nextCaret)
+    savedPromptCaret = { start: nextCaret, end: nextCaret }
+    hasSavedPromptCaret = true
+    emitPrompt(nextText)
+  } finally {
+    requestAnimationFrame(() => {
+      suppressCaretCapture = false
+    })
+  }
 }
 
 function stripMarkMentionsFromPrompt() {
@@ -799,12 +945,36 @@ function onPromptInput(event?: Event) {
   capturePromptCaret()
   emitPrompt(text)
   if (isPromptComposing.value || isInputComposing(event)) return
+  refreshAtMentionMenu(text)
   if (!mentionApi.needsMentionRerender(el)) return
   nextTick(() => syncPromptView(text))
 }
 
 function onPromptKeydown(event: KeyboardEvent) {
   if (isPromptComposing.value || isInputComposing(event)) return
+
+  if (atMentionMenuVisible.value) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      atMentionMenuRef.value?.moveActive(1)
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      atMentionMenuRef.value?.moveActive(-1)
+      return
+    }
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      atMentionMenuRef.value?.confirmActive()
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeAtMentionMenu()
+      return
+    }
+  }
 
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
@@ -829,7 +999,10 @@ function onPromptKeydown(event: KeyboardEvent) {
     const offsets = mentionApi.getSelectionPlainOffsets(el)
     if (offsets) savedPromptCaret = offsets
     emitPrompt(text)
-    nextTick(() => syncPromptView(text))
+    nextTick(() => {
+      syncPromptView(text)
+      refreshAtMentionMenu(text)
+    })
     return
   }
 
@@ -844,7 +1017,10 @@ function onPromptKeydown(event: KeyboardEvent) {
   const text = mentionApi.serializePromptEl(el)
   capturePromptCaret()
   emitPrompt(text)
-  nextTick(() => syncPromptView(text))
+  nextTick(() => {
+    syncPromptView(text)
+    refreshAtMentionMenu(text)
+  })
 }
 
 function onPromptPaste(event: ClipboardEvent) {
@@ -869,6 +1045,14 @@ watch(
   () => props.elementMarks?.map((mark) => `${mark.id}:${mark.pending ? 1 : 0}:${mark.selectedLabelIndex ?? 0}:${mark.label}`).join('|') ?? '',
   () => {
     nextTick(() => stripMarkMentionsFromPrompt())
+  },
+)
+
+watch(
+  () => previewList.value.map((item) => `${item.key}:${item.previewUrl}`).join('|'),
+  () => {
+    if (!canShowAtMentionMenu.value) closeAtMentionMenu()
+    nextTick(() => syncPromptView())
   },
 )
 
@@ -935,6 +1119,9 @@ function onDocumentMouseDown(event: MouseEvent) {
   }
   if (showGenSettings.value && !target.closest('.image-dialogue__gen-settings-wrap')) {
     showGenSettings.value = false
+  }
+  if (atMentionMenuVisible.value && !target.closest('.prompt-at-mention-menu')) {
+    closeAtMentionMenu()
   }
 }
 
