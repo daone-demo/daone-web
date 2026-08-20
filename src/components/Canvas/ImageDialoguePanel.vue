@@ -456,10 +456,32 @@ function resolveRefMenuLabel(item: { fileName?: string; index: number }) {
 
 /** 删除缩略图时同步清掉提示词里对应的 @图片N，并前移更大编号 */
 function onRemovePreview(item: { nodeId: string; index: number }) {
-  const next = removeImageRefMentionFromPrompt(props.modelValue, item.index)
-  if (next !== props.modelValue) {
-    emit('update:modelValue', next)
+  const el = promptInputRef.value
+  // 以编辑器序列化为准，避免 props 与 chip DOM 短暂不一致
+  const current = el ? mentionApi.serializePromptEl(el) : props.modelValue
+  const next = removeImageRefMentionFromPrompt(current, item.index)
+
+  if (next !== current) {
+    if (el && !isPromptComposing.value) {
+      suppressCaretCapture = true
+      try {
+        mentionApi.renderPromptToEl(el, next)
+        const caret = Math.min(
+          hasSavedPromptCaret ? savedPromptCaret.start : next.length,
+          next.length,
+        )
+        mentionApi.setPlainTextSelection(el, caret, caret)
+        savedPromptCaret = { start: caret, end: caret }
+        hasSavedPromptCaret = true
+      } finally {
+        requestAnimationFrame(() => {
+          suppressCaretCapture = false
+        })
+      }
+    }
+    emitPrompt(next)
   }
+
   emit('remove', item.nodeId || undefined)
 }
 

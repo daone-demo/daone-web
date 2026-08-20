@@ -121,7 +121,7 @@
               type="button"
               class="absolute right-0.5 top-0.5 z-20 flex size-[15px] items-center justify-center rounded-full border opacity-0 transition-opacity group-hover:opacity-100 border-neutral-300/90 bg-white text-neutral-600 shadow-sm hover:bg-neutral-100"
               title="移除"
-              @click.stop="emit('remove-source-ref', ref.nodeId)"
+              @click.stop="onRemoveSourceRef(ref)"
             >
               <svg 
                 xmlns="http://www.w3.org/2000/svg"
@@ -144,7 +144,7 @@
           type="button"
           class="video-gen-prompt-panel__ref-remove"
           title="删除"
-          @click.stop="emit('remove-source-ref', ref.nodeId)"
+          @click.stop="onRemoveSourceRef(ref)"
         >
           ×
         </button>
@@ -365,6 +365,7 @@ import {
   buildPromptWithMentionInsert,
   createPromptMentionApi,
   isInputComposing,
+  removeImageRefMentionFromPrompt,
 } from './promptMention'
 import { resolveMarkMentionMeta } from './composables/usePromptMarkMentions'
 import VideoGenSettingsPopover from './VideoGenSettingsPopover.vue'
@@ -847,6 +848,29 @@ function insertMentionToken(token: string) {
 
 function insertRefMention(ref: VideoSourceRef) {
   insertMentionToken(`@${getRefDisplayName(ref)}`)
+}
+
+/** 删除参考图时同步移除提示词中的 @图片N（文本引用不改写） */
+function onRemoveSourceRef(ref: VideoSourceRef) {
+  if (ref.kind !== 'text') {
+    const el = promptInputRef.value
+    const current = el ? mentionApi.serializePromptEl(el) : props.prompt
+    const next = removeImageRefMentionFromPrompt(current, ref.index)
+    if (next !== current) {
+      if (el && !isPromptComposing.value) {
+        suppressCaretCapture = true
+        try {
+          mentionApi.renderPromptToEl(el, next)
+        } finally {
+          requestAnimationFrame(() => {
+            suppressCaretCapture = false
+          })
+        }
+      }
+      emitPrompt(next)
+    }
+  }
+  emit('remove-source-ref', ref.nodeId)
 }
 
 function stripMarkMentionsFromPrompt() {

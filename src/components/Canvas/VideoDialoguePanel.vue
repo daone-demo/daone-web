@@ -76,7 +76,7 @@
           type="button"
           class="video-dialogue__ref-remove"
           title="删除"
-          @click.stop="emit('remove-source-ref', ref.nodeId)"
+          @click.stop="onRemoveSourceRef(ref)"
         >
           ×
         </button>
@@ -244,7 +244,7 @@ import { message } from 'ant-design-vue'
 import api, { type PromptTranslationData } from '@/services/api'
 import { isRequestError } from '@/utils/request'
 import VideoGenSettingsPopover from './VideoGenSettingsPopover.vue'
-import { createPromptMentionApi, isInputComposing, needsSpaceBeforeMention } from './promptMention'
+import { createPromptMentionApi, isInputComposing, needsSpaceBeforeMention, removeImageRefMentionFromPrompt } from './promptMention'
 import {
   createMentionSpan,
   findMentionAfterCursor,
@@ -514,6 +514,20 @@ function insertRefMention(ref: VideoSourceRef) {
 
   emitPrompt(serializePromptEl(el))
   nextTick(() => syncPromptView())
+}
+
+/** 删除参考图时同步移除提示词中的 @图片N */
+function onRemoveSourceRef(ref: VideoSourceRef) {
+  const el = promptInputRef.value
+  const current = el ? serializePromptEl(el) : props.modelValue
+  const next = removeImageRefMentionFromPrompt(current, ref.index)
+  if (next !== current) {
+    if (el && !isPromptComposing.value) {
+      renderPromptToEl(el, next)
+    }
+    emitPrompt(next)
+  }
+  emit('remove-source-ref', ref.nodeId)
 }
 
 function onPromptCompositionStart() {
