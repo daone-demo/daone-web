@@ -1,6 +1,10 @@
 import { ref, toValue } from 'vue'
 import type { MaybeRefOrGetter } from 'vue'
 import { uploadAssetFile } from '@/components/Canvas/upload'
+import {
+  removeImageRefMentionFromPrompt,
+  stripAllImageRefMentionsFromPrompt,
+} from '@/components/Canvas/promptMention'
 import type { ChatAttachment } from '../chatTypes'
 import { findOwnedAttachmentTarget } from './chatAttachmentOwner'
 
@@ -21,6 +25,7 @@ export interface UseChatAttachmentsOptions {
   getSessionAttachments: (sessionId: string) => ChatAttachment[] | undefined
   focusInput: () => void
   saveActiveDraft: () => void
+  getMessage: () => string
   setMessage: (message: string) => void
 }
 
@@ -233,9 +238,17 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
   }
 
   function removeAttachment(id: string) {
-    const target = attachments.value.find((item) => item.id === id)
+    const index = attachments.value.findIndex((item) => item.id === id)
+    const target = index >= 0 ? attachments.value[index] : undefined
     if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl)
     attachments.value = attachments.value.filter((item) => item.id !== id)
+    if (index < 0) return
+    // 同步移除文本中的 @图片N，并前移后续编号
+    const prev = options.getMessage()
+    const nextMessage = removeImageRefMentionFromPrompt(prev, index + 1)
+    if (nextMessage !== prev) {
+      options.setMessage(nextMessage)
+    }
   }
 
   function clearAttachments() {
@@ -243,6 +256,11 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
     })
     attachments.value = []
+    const prev = options.getMessage()
+    const nextMessage = stripAllImageRefMentionsFromPrompt(prev)
+    if (nextMessage !== prev) {
+      options.setMessage(nextMessage)
+    }
   }
 
   function openFilePicker() {

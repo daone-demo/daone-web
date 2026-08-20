@@ -108,6 +108,32 @@ export function toVideoApiPrompt(prompt: string): string {
   return String(prompt || '').replace(/@图片(\d+)/g, '[Image $1]')
 }
 
+/**
+ * 删除第 removedIndex（1-based）张图后，从提示词中移除对应 `@图片N`，
+ * 并将更大编号整体前移一位。
+ */
+export function removeImageRefMentionFromPrompt(prompt: string, removedIndex: number): string {
+  const removed = Math.floor(Number(removedIndex))
+  if (!Number.isFinite(removed) || removed < 1) return String(prompt ?? '')
+
+  return String(prompt ?? '')
+    .replace(/@图片(\d+)/g, (token, numStr: string) => {
+      const n = Number(numStr)
+      if (!Number.isFinite(n)) return token
+      if (n === removed) return ''
+      if (n > removed) return `@图片${n - 1}`
+      return token
+    })
+    .replace(/ {2,}/g, ' ')
+}
+
+/** 清空全部 `@图片N` 引用 */
+export function stripAllImageRefMentionsFromPrompt(prompt: string): string {
+  return String(prompt ?? '')
+    .replace(/@图片\d+/g, '')
+    .replace(/ {2,}/g, ' ')
+}
+
 /** 中文等 IME 组合输入过程中应暂停重绘 contenteditable，否则会打断输入 */
 export function isInputComposing(event?: Event): boolean {
   return Boolean((event as InputEvent | KeyboardEvent | undefined)?.isComposing)

@@ -225,6 +225,7 @@ const {
     sessions.value.find((session) => session.id === sessionId)?.draft.attachments,
   focusInput: () => bridge.focusInput(),
   saveActiveDraft: () => bridge.saveActiveDraft(),
+  getMessage: () => bridge.message?.value ?? '',
   setMessage: (next) => {
     if (bridge.message) bridge.message.value = next
   },

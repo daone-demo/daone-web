@@ -50,7 +50,7 @@
             class="image-dialogue__thumb-remove"
             title="移除"
             @mousedown.stop
-            @click.stop="emit('remove', item.nodeId)"
+            @click.stop="onRemovePreview(item)"
           >
             <span class="image-dialogue__thumb-remove-icon" aria-hidden="true" />
           </button>
@@ -330,6 +330,7 @@ import {
   findActiveAtMentionQuery,
   isInputComposing,
   parseImageRefMentionToken,
+  removeImageRefMentionFromPrompt,
 } from './promptMention';
 import { resolveMarkMentionMeta } from './composables/usePromptMarkMentions';
 import {
@@ -451,6 +452,15 @@ function resolveRefMenuLabel(item: { fileName?: string; index: number }) {
   const name = String(item.fileName || '').trim()
   if (name) return name
   return `图片 ${item.index}`
+}
+
+/** 删除缩略图时同步清掉提示词里对应的 @图片N，并前移更大编号 */
+function onRemovePreview(item: { nodeId: string; index: number }) {
+  const next = removeImageRefMentionFromPrompt(props.modelValue, item.index)
+  if (next !== props.modelValue) {
+    emit('update:modelValue', next)
+  }
+  emit('remove', item.nodeId || undefined)
 }
 
 const atMentionItems = computed<PromptAtMentionItem[]>(() =>
