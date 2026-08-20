@@ -110,27 +110,8 @@ function confirmActive() {
   emit('select', item)
 }
 
-function onSearchKeydown(event: KeyboardEvent) {
-  if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    moveActive(1)
-    return
-  }
-  if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    moveActive(-1)
-    return
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    confirmActive()
-    return
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    emit('close')
-  }
-}
+// 搜索框恢复时再挂回：@keydown.stop="onSearchKeydown"
+// function onSearchKeydown(event: KeyboardEvent) { ... }
 
 defineExpose({
   moveActive,

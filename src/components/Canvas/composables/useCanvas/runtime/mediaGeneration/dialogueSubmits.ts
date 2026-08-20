@@ -309,8 +309,8 @@ export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
                       wireExtraResultNodes(newlyAdded);
                   }
                   else if (extraNodes.length && reusePendingHostAsFirstResult) {
-                      extraNodes.forEach((node) => disconnectDirectEdge(sourceNode.id, node.id));
-                      extraNodes.forEach(connectImageRefsToResultNode);
+                      (extraNodes as Node[]).forEach((node) => disconnectDirectEdge(sourceNode.id, node.id));
+                      (extraNodes as Node[]).forEach(connectImageRefsToResultNode);
                   }
                   if (!extraNodes.length && !newlyAdded.length)
                       return;

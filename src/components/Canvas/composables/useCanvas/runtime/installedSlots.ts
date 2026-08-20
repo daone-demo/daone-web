@@ -77,6 +77,7 @@ export interface CoreRuntimeInstallSlots {
   createPastedCanvasNodeId(...args: unknown[]): CoreRuntimeSlotReturn
   dataUrlToFile(...args: unknown[]): CoreRuntimeSlotReturn
   detachImageSourceFromDownstream(...args: unknown[]): CoreRuntimeSlotReturn
+  dismissCanvasNodeChromeForShellPanel(...args: unknown[]): CoreRuntimeSlotReturn
   dismissOneCanvasLayer(...args: unknown[]): CoreRuntimeSlotReturn
   dismissTextPickerPanels(...args: unknown[]): CoreRuntimeSlotReturn
   distributeMultiImageGenerationResults(...args: unknown[]): CoreRuntimeSlotReturn
