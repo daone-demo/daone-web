@@ -7,6 +7,42 @@ import { api } from '../../sharedImports';
 import type { CoreRuntimeContext } from '../context';
 
 export function installAssetShellPanels(ctx: CoreRuntimeContext) {
+  /** 打开左侧素材/工作流/历史时，收起图片上传相关操作栏与对话框，避免叠层 */
+  ctx.dismissCanvasNodeChromeForShellPanel = function dismissCanvasNodeChromeForShellPanel() {
+      if (ctx.showImageDialogue.value) {
+          ctx.resetImageDialogue();
+      }
+      if (ctx.activeImageGenPromptNodeId.value) {
+          ctx.closeImageGenPromptBar();
+      }
+      if (ctx.showVideoDialogue.value) {
+          ctx.resetVideoDialogue();
+      }
+      if (ctx.activeVideoGenPromptNodeId.value) {
+          ctx.closeVideoGenPromptBar();
+      }
+      if (ctx.showImageDialogueCanvasPickMode.value) {
+          ctx.exitImageDialogueCanvasPickMode();
+      }
+      if (ctx.showVideoGenCanvasPickMode.value) {
+          ctx.exitVideoGenCanvasPickMode();
+      }
+      if (ctx.showElementSelectMode.value) {
+          ctx.exitElementSelectMode({ force: true });
+      }
+      if (ctx.activePickerNodeId.value) {
+          ctx.activePickerNodeId.value = '';
+      }
+      if (ctx.showConnectMenu.value) {
+          ctx.closeConnectMenu();
+      }
+      if (ctx.showImageContextMenu.value) {
+          ctx.closeImageContextMenu();
+      }
+      ctx.bumpToolbarRevision();
+      ctx.updateNodeToolbar();
+  };
+
   ctx.toggleAddMenu = function toggleAddMenu() {
       if (ctx.showAddMenu.value) {
           ctx.closeAddMenu();
@@ -97,6 +133,7 @@ export function installAssetShellPanels(ctx: CoreRuntimeContext) {
   };
   
   ctx.openAssetCenterPanel = function openAssetCenterPanel() {
+      ctx.dismissCanvasNodeChromeForShellPanel();
       ctx.showAssetCenterPanel.value = true;
       ctx.closeAddMenu();
       ctx.closeHistoryPanel();
@@ -113,6 +150,7 @@ export function installAssetShellPanels(ctx: CoreRuntimeContext) {
   };
   
   ctx.openAssetsPanel = function openAssetsPanel() {
+      ctx.dismissCanvasNodeChromeForShellPanel();
       ctx.showAssetsPanel.value = true;
       ctx.closeAssetCenterPanel();
       ctx.closeAddMenu();
@@ -141,6 +179,7 @@ export function installAssetShellPanels(ctx: CoreRuntimeContext) {
           ctx.closeHistoryPanel();
           return;
       }
+      ctx.dismissCanvasNodeChromeForShellPanel();
       ctx.showHistoryPanel.value = true;
       ctx.showAssetsPanel.value = false;
       ctx.closeAssetCenterPanel();

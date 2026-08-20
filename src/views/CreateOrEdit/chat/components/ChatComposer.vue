@@ -96,9 +96,13 @@
 
       <div v-if="attachments.length" class="chat-panel__attachments">
         <div
-          v-for="attachment in attachments"
+          v-for="(attachment, index) in attachments"
           :key="attachment.id"
           class="chat-panel__attachment"
+          :class="{ 'chat-panel__attachment--mentionable': canAtMentionAttachments }"
+          :title="canAtMentionAttachments ? `点击插入 @图片${index + 1}` : undefined"
+          @mousedown="onAttachmentMouseDown($event)"
+          @click.stop="onAttachmentClick(index + 1)"
         >
           <img :src="attachment.previewUrl" :alt="attachment.fileName" class="chat-panel__attachment-img" />
           <span
@@ -112,26 +116,49 @@
             :title="attachment.uploadError"
             aria-label="上传失败"
           />
+          <span
+            v-if="canAtMentionAttachments"
+            class="chat-panel__attachment-badge"
+          >{{ index + 1 }}</span>
           <button
             type="button"
             class="chat-panel__attachment-remove"
             title="移除附件"
-            @click="emit('remove-attachment', attachment.id)"
+            @mousedown.stop
+            @click.stop="emit('remove-attachment', attachment.id)"
           >
             ×
           </button>
         </div>
       </div>
 
-      <textarea
-        ref="inputRef"
-        v-model="messageModel"
-        class="chat-panel__input"
-        :placeholder="inputPlaceholder"
-        rows="3"
-        @input="emit('message-input', $event)"
-        @keydown="emit('composer-keydown', $event)"
-      />
+      <div class="chat-panel__input-wrap">
+        <textarea
+          ref="inputRef"
+          v-model="messageModel"
+          class="chat-panel__input"
+          :placeholder="inputPlaceholder"
+          rows="3"
+          @input="onMessageInput"
+          @keydown="onTextareaKeydown"
+          @keyup="captureCaret"
+          @mouseup="captureCaret"
+          @focus="captureCaret"
+          @blur="captureCaret"
+        />
+        <Teleport to="body">
+          <PromptAtMentionMenu
+            v-if="atMentionMenuVisible"
+            ref="atMentionMenuRef"
+            :items="atMentionItems"
+            :query="atMentionQuery"
+            :left="atMentionMenuPos.left"
+            :top="atMentionMenuPos.top"
+            @select="onSelectAtMention"
+            @close="closeAtMentionMenu"
+          />
+        </Teleport>
+      </div>
 
       <div class="chat-panel__composer-bar">
         <input
@@ -275,11 +302,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, type CSSProperties } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue'
 import {
   isDialogueModelIconfont,
   normalizeDialogueModelIcon,
 } from '@/components/Canvas/constants'
+import PromptAtMentionMenu from '@/components/Canvas/PromptAtMentionMenu.vue'
+import type { PromptAtMentionItem } from '@/components/Canvas/PromptAtMentionMenu.vue'
+import {
+  buildPromptWithMentionInsert,
+  findActiveAtMentionQuery,
+} from '@/components/Canvas/promptMention'
 import type { ChatAttachment } from '../../chatTypes'
 
 interface SkillItem {
@@ -364,6 +397,190 @@ const messageModel = computed({
 
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+
+const canAtMentionAttachments = computed(() => props.attachments.length > 1)
+
+const atMentionItems = computed<PromptAtMentionItem[]>(() =>
+  props.attachments.map((item, index) => ({
+    key: item.id,
+    index: index + 1,
+    previewUrl: item.previewUrl,
+    label: item.fileName?.trim() || `图片 ${index + 1}`,
+    nodeId: item.nodeId,
+  })),
+)
+
+const atMentionMenuVisible = ref(false)
+const atMentionQuery = ref('')
+const atMentionMenuPos = ref({ left: 0, top: 0 })
+const atMentionMenuRef = ref<{
+  moveActive: (delta: number) => void
+  confirmActive: () => void
+} | null>(null)
+let atMentionReplaceRange = { start: 0, end: 0 }
+let savedCaret = { start: 0, end: 0 }
+let hasSavedCaret = false
+
+function captureCaret() {
+  const el = inputRef.value
+  if (!el) return
+  savedCaret = {
+    start: el.selectionStart ?? props.message.length,
+    end: el.selectionEnd ?? el.selectionStart ?? props.message.length,
+  }
+  hasSavedCaret = true
+}
+
+function onAttachmentMouseDown(event: MouseEvent) {
+  if (!canAtMentionAttachments.value) return
+  event.preventDefault()
+  captureCaret()
+}
+
+function onAttachmentClick(index: number) {
+  if (!canAtMentionAttachments.value) return
+  insertAttachmentMention(index)
+}
+
+function resolveInsertCaret(textLen: number): { start: number; end: number } {
+  if (hasSavedCaret) {
+    const start = Math.max(0, Math.min(savedCaret.start, textLen))
+    const end = Math.max(start, Math.min(savedCaret.end, textLen))
+    return { start, end }
+  }
+  return { start: textLen, end: textLen }
+}
+
+function applyMessageWithCaret(nextText: string, nextCaret: number) {
+  emit('update:message', nextText)
+  nextTick(() => {
+    const el = inputRef.value
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(nextCaret, nextCaret)
+    savedCaret = { start: nextCaret, end: nextCaret }
+    hasSavedCaret = true
+  })
+}
+
+function insertAttachmentMention(index: number) {
+  if (!canAtMentionAttachments.value) return
+  const text = props.message
+  const caret = resolveInsertCaret(text.length)
+  const { nextText, nextCaret } = buildPromptWithMentionInsert({
+    text,
+    token: `@图片${index}`,
+    start: caret.start,
+    end: caret.end,
+  })
+  closeAtMentionMenu()
+  applyMessageWithCaret(nextText, nextCaret)
+}
+
+function closeAtMentionMenu() {
+  atMentionMenuVisible.value = false
+  atMentionQuery.value = ''
+}
+
+function updateAtMentionMenuPosition() {
+  const el = inputRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  const menuWidth = 260
+  const left = Math.max(8, Math.min(rect.left + 12, window.innerWidth - menuWidth - 8))
+  const top = Math.min(rect.top + 28, window.innerHeight - 8)
+  atMentionMenuPos.value = { left, top }
+}
+
+function refreshAtMentionMenu(text = props.message, caret?: number) {
+  if (!canAtMentionAttachments.value) {
+    closeAtMentionMenu()
+    return
+  }
+  const el = inputRef.value
+  const caretPos = caret ?? el?.selectionStart ?? text.length
+  const active = findActiveAtMentionQuery(text, caretPos)
+  if (!active) {
+    closeAtMentionMenu()
+    return
+  }
+  atMentionReplaceRange = { start: active.start, end: caretPos }
+  atMentionQuery.value = active.query
+  atMentionMenuVisible.value = true
+  nextTick(() => updateAtMentionMenuPosition())
+}
+
+function onSelectAtMention(item: PromptAtMentionItem) {
+  const { nextText, nextCaret } = buildPromptWithMentionInsert({
+    text: props.message,
+    token: `@图片${item.index}`,
+    start: atMentionReplaceRange.start,
+    end: atMentionReplaceRange.end,
+  })
+  closeAtMentionMenu()
+  applyMessageWithCaret(nextText, nextCaret)
+}
+
+function onMessageInput(event: Event) {
+  const el = event.target as HTMLTextAreaElement | null
+  const text = el?.value ?? props.message
+  const caret = el?.selectionStart ?? text.length
+  if (el) {
+    savedCaret = { start: caret, end: el.selectionEnd ?? caret }
+    hasSavedCaret = true
+  }
+  emit('message-input', event)
+  refreshAtMentionMenu(text, caret)
+}
+
+function onTextareaKeydown(event: KeyboardEvent) {
+  if (atMentionMenuVisible.value) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      atMentionMenuRef.value?.moveActive(1)
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      atMentionMenuRef.value?.moveActive(-1)
+      return
+    }
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      atMentionMenuRef.value?.confirmActive()
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeAtMentionMenu()
+      return
+    }
+  }
+  emit('composer-keydown', event)
+}
+
+function onDocumentMouseDown(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  if (atMentionMenuVisible.value && !target.closest('.prompt-at-mention-menu')) {
+    closeAtMentionMenu()
+  }
+}
+
+watch(
+  () => props.attachments.length,
+  (length) => {
+    if (length <= 1) closeAtMentionMenu()
+  },
+)
+
+onMounted(() => {
+  document.addEventListener('mousedown', onDocumentMouseDown, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocumentMouseDown, true)
+})
 
 defineExpose({ inputRef, fileInputRef })
 </script>

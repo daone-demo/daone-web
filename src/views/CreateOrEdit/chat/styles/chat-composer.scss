@@ -74,6 +74,10 @@
   position: relative;
   width: 48px;
   height: 48px;
+
+  &--mentionable {
+    cursor: pointer;
+  }
 }
 
 .chat-panel__attachment-img {
@@ -82,6 +86,24 @@
   object-fit: cover;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
+}
+
+.chat-panel__attachment-badge {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  z-index: 1;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgb(17 24 39 / 82%);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
 }
 
 .chat-panel__attachment-uploading {
@@ -145,6 +167,7 @@
   position: absolute;
   top: -6px;
   right: -6px;
+  z-index: 2;
   width: 18px;
   height: 18px;
   padding: 0;
@@ -155,6 +178,10 @@
   font-size: 12px;
   line-height: 18px;
   cursor: pointer;
+}
+
+.chat-panel__input-wrap {
+  position: relative;
 }
 
 .chat-panel__file-input {

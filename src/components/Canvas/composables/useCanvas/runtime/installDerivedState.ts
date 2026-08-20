@@ -754,6 +754,9 @@ export function installDerivedState(ctx: CoreRuntimeContext) {
           return false;
       if (ctx.showVideoDialogue.value && ctx.selectedKind.value === 'video')
           return false;
+      // 左侧素材/工作流/历史打开时隐藏节点操作栏，避免与侧栏叠层
+      if (ctx.showAssetsPanel.value || ctx.showAssetCenterPanel.value || ctx.showHistoryPanel.value)
+          return false;
       return (Boolean(ctx.selectedNodeId.value) &&
           ctx.selectedNodeIds.value.length <= 1 &&
           !ctx.showGroupToolbar.value &&
