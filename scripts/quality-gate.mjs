@@ -37,6 +37,7 @@ const RUNTIME_DIR = 'src/components/Canvas/composables/useCanvas/runtime'
 
 const ANY_RE = /(?<![\w$])any(?![\w$])/
 const BARE_ANY_TYPE_RE = /(?::|\bas\b)\s*any\b|<\s*any\s*>/
+const TYPE_ALIAS_ANY_RE = /\btype\s+[A-Za-z_$][\w$]*\s*=\s*any\b/
 const SUPPRESS_RE = /@ts-(nocheck|ignore|expect-error)\b/
 const NOCHECK_RE = /^\s*\/\/\s*@ts-nocheck\b/
 
@@ -70,6 +71,13 @@ for (const entry of [...ISLAND_GLOBS, RUNTIME_DIR]) {
       if (BARE_ANY_TYPE_RE.test(line) && ANY_RE.test(line)) {
         if (!/\bunknown\b/.test(line)) {
           violations.push(`${path.relative(root, file)}:${index + 1}: bare any — ${trimmed.slice(0, 120)}`)
+        }
+      }
+      if (TYPE_ALIAS_ANY_RE.test(line)) {
+        if (!hasJustification(line)) {
+          violations.push(
+            `${path.relative(root, file)}:${index + 1}: type alias any — ${trimmed.slice(0, 120)}`,
+          )
         }
       }
       if (SUPPRESS_RE.test(line) && !hasJustification(line)) {

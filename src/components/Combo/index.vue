@@ -500,6 +500,8 @@ let orderPollingTimer: ReturnType<typeof setInterval> | null = null
 const ORDER_POLLING_INTERVAL = 3000
 const plansLoadTracker = createLatestRequestTracker()
 const trialStatusTracker = createLatestRequestTracker()
+/** 弹窗打开会话：关闭/重开递增，用于丢弃迟到的试用提交回写 */
+let trialUiSessionId = 0
 
 const trialPlan = computed(() =>
   plansList.value.find((plan) => plan.code === 'TRIAL_5D')
@@ -888,6 +890,15 @@ async function onSlideVerifySuccess() {
 
 async function submitTrial() {
   if (!canSubmitTrial.value) return
+  const sessionAtStart = trialUiSessionId
+  const identityAtStart = trialIdentityKey()
+  const formFingerprint = [
+    trialPhone.value.trim(),
+    trialCode.value.trim(),
+    trialName.value.trim(),
+    trialPosition.value.trim(),
+  ].join('|')
+
   await runWithSubmitLock(trialSubmitting, async () => {
     try {
       await api.createTrialApplication(
@@ -899,6 +910,17 @@ async function submitTrial() {
         },
         uuidv4(),
       )
+      // 弹窗已关/重开、用户切换或表单已变：丢弃迟到成功，避免关掉新弹窗
+      if (sessionAtStart !== trialUiSessionId) return
+      if (identityAtStart !== trialIdentityKey()) return
+      if (!open.value) return
+      const currentFingerprint = [
+        trialPhone.value.trim(),
+        trialCode.value.trim(),
+        trialName.value.trim(),
+        trialPosition.value.trim(),
+      ].join('|')
+      if (formFingerprint !== currentFingerprint) return
       message.success('操作成功')
       close()
     } catch (err: unknown) {
@@ -981,6 +1003,7 @@ function lockBodyScroll(locked: boolean) {
 watch(open, (visible) => {
   lockBodyScroll(visible)
   if (visible) {
+    trialUiSessionId += 1
     void preloadSlideVerifyImages()
     void onloadPlans()
   } else {

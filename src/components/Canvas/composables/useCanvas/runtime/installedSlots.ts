@@ -5,8 +5,7 @@
  */
 
 /** 动态方法返回值尚未按域收紧；与 unknown 参数配对，避免 any 索引污染整个 ctx。 */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 说明：槽位返回值短期保持宽松
-type CoreRuntimeSlotReturn = any // unknown-arg slots
+type CoreRuntimeSlotReturn = any // 说明：槽位返回值按域收紧前保持宽松，禁止无说明扩散
 
 export interface CoreRuntimeInstallSlots {
 

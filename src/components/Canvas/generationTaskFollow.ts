@@ -5,10 +5,7 @@ import type {
   GenerationTaskResult,
   ImageGenerationOnNodeResult,
 } from './generationTaskTypes'
-import {
-  pickGenerationTaskName,
-  resolveGenerationResultTitle,
-} from './generationTaskTitles'
+import { pickGenerationTaskName, resolveGenerationResultTitle } from './generationTaskTitles'
 import {
   isGenerationTaskTerminal,
   normalizeGenerationTaskDetail,
@@ -173,7 +170,12 @@ export async function pollAndApplyImageTaskOnNode(
   const current = resolvePrimary()
   if (!current) return { success: false }
 
-  bindGenerationTaskId(current, taskId, 'IMAGE', readGenerationResultIndex(current.getData() as CanvasNodeData))
+  bindGenerationTaskId(
+    current,
+    taskId,
+    'IMAGE',
+    readGenerationResultIndex(current.getData() as CanvasNodeData),
+  )
   options.onTaskBound?.(taskId)
 
   let appliedDuringPoll = false
@@ -198,7 +200,9 @@ export async function pollAndApplyImageTaskOnNode(
   }
 
   /** 按 generationResultIndex 把 results 写回同 taskId 的全部节点 */
-  const applySharedResults = async (task: GenerationTaskDetail): Promise<{
+  const applySharedResults = async (
+    task: GenerationTaskDetail,
+  ): Promise<{
     anyApplied: boolean
     allSettled: boolean
   }> => {
@@ -284,31 +288,31 @@ export async function pollAndApplyImageTaskOnNode(
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
-        shouldContinue: () => resolveMembers().some((member) => !isImageResultApplied(member)),
-        onProgress: (task) => {
-          const members = resolveMembers()
-          if (!members.length) return
-          if (members.every((member) => isImageResultApplied(member))) return
-          if (graph) {
-            const taskName = pickGenerationTaskName(task)
-            if (taskName) updateGenerationTaskNodeTitleByTaskId(graph, taskId, taskName)
-          }
-          if (isGenerationTaskTerminal(task.status)) {
+          shouldContinue: () => resolveMembers().some((member) => !isImageResultApplied(member)),
+          onProgress: (task) => {
+            const members = resolveMembers()
+            if (!members.length) return
+            if (members.every((member) => isImageResultApplied(member))) return
+            if (graph) {
+              const taskName = pickGenerationTaskName(task)
+              if (taskName) updateGenerationTaskNodeTitleByTaskId(graph, taskId, taskName)
+            }
+            if (isGenerationTaskTerminal(task.status)) {
+              tryApplyDuringPoll(task)
+              return
+            }
+
+            const target = members.find((member) => {
+              const data = member.getData() as CanvasNodeData
+              return data.imageGenState === 'loading'
+            })
+            if (!target) return
+
+            updateGenerationNodeProgress(target, task.progress ?? 0)
+            options.onProgress?.(task.progress ?? 0, task)
             tryApplyDuringPoll(task)
-            return
-          }
-
-          const target = members.find((member) => {
-            const data = member.getData() as CanvasNodeData
-            return data.imageGenState === 'loading'
-          })
-          if (!target) return
-
-          updateGenerationNodeProgress(target, task.progress ?? 0)
-          options.onProgress?.(task.progress ?? 0, task)
-          tryApplyDuringPoll(task)
-        },
-      })
+          },
+        })
 
     const finalMembers = resolveMembers()
     if (!finalMembers.length) {
@@ -340,7 +344,14 @@ export async function pollAndApplyImageTaskOnNode(
       return { success: false }
     }
 
-    if (!allSettled && !finalMembers.every((member) => isImageResultApplied(member) || (member.getData() as CanvasNodeData).imageGenState === 'failed')) {
+    if (
+      !allSettled &&
+      !finalMembers.every(
+        (member) =>
+          isImageResultApplied(member) ||
+          (member.getData() as CanvasNodeData).imageGenState === 'failed',
+      )
+    ) {
       // 仍有 loading：再扫一遍缺失结果并标失败
       for (const member of finalMembers) {
         if (isImageResultApplied(member)) continue
@@ -405,12 +416,12 @@ export async function followTextGenerationTaskOnNode(
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
-        shouldContinue: () => Boolean(resolveNode()),
-        onProgress: (task) => {
-          const target = resolveNode()
-          if (target) updateTextGenerationNodeProgress(target, task.progress ?? 0)
-        },
-      })
+          shouldContinue: () => Boolean(resolveNode()),
+          onProgress: (task) => {
+            const target = resolveNode()
+            if (target) updateTextGenerationNodeProgress(target, task.progress ?? 0)
+          },
+        })
 
     const finalTarget = resolveNode()
     if (!finalTarget) return false
@@ -478,12 +489,12 @@ export async function followModelGenerationTaskOnNode(
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
-        shouldContinue: () => Boolean(resolveNode()),
-        onProgress: (task) => {
-          const target = resolveNode()
-          if (target) updateGenerationNodeProgress(target, task.progress ?? 0)
-        },
-      })
+          shouldContinue: () => Boolean(resolveNode()),
+          onProgress: (task) => {
+            const target = resolveNode()
+            if (target) updateGenerationNodeProgress(target, task.progress ?? 0)
+          },
+        })
 
     const finalTarget = resolveNode()
     if (!finalTarget) return false
@@ -511,7 +522,8 @@ export async function followModelGenerationTaskOnNode(
 
     applyModelGenerationResultToNode(finalTarget, resolved, {
       title: options.title,
-      fileName: resolved.previewUrl.split('/').pop()?.split('?')[0] || `${options.title || '3D 模型'}.glb`,
+      fileName:
+        resolved.previewUrl.split('/').pop()?.split('?')[0] || `${options.title || '3D 模型'}.glb`,
     })
     notifyGenerationTaskSucceeded(finalTask)
     return true
@@ -553,12 +565,12 @@ export async function followVideoGenerationTaskOnNode(
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
-        shouldContinue: () => Boolean(resolveNode()),
-        onProgress: (task) => {
-          const target = resolveNode()
-          if (target) updateVideoGenerationNodeProgress(target, task.progress ?? 0)
-        },
-      })
+          shouldContinue: () => Boolean(resolveNode()),
+          onProgress: (task) => {
+            const target = resolveNode()
+            if (target) updateVideoGenerationNodeProgress(target, task.progress ?? 0)
+          },
+        })
 
     const finalTarget = resolveNode()
     if (!finalTarget) return false
@@ -595,4 +607,3 @@ export async function followVideoGenerationTaskOnNode(
     return false
   }
 }
-

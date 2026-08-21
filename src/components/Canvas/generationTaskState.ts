@@ -100,8 +100,8 @@ export function findNodesByGenerationTaskId(graph: Graph, taskId: string): Node[
 
   return nodes.sort(
     (a, b) =>
-      readGenerationResultIndex(a.getData() as CanvasNodeData)
-      - readGenerationResultIndex(b.getData() as CanvasNodeData),
+      readGenerationResultIndex(a.getData() as CanvasNodeData) -
+      readGenerationResultIndex(b.getData() as CanvasNodeData),
   )
 }
 

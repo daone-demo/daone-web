@@ -1150,12 +1150,20 @@ function resolveUnreadCount(res: UnreadCountResponse | null | undefined) {
   return typeof value === 'number' && value > 0 ? value : 0
 }
 
-const onLoadUnreadCount = async () => {
+const onLoadUnreadCount = async (options?: { isRetry?: boolean }) => {
   const requestedIdentity = notificationIdentityKey()
   const isCurrent = unreadCountTracker.begin()
   try {
     const res = await api.getNotificationUnreadCount<UnreadCountResponse>()
-    if (!isCurrent() || requestedIdentity !== notificationIdentityKey()) return
+    if (!isCurrent()) return
+    const currentIdentity = notificationIdentityKey()
+    if (requestedIdentity !== currentIdentity) {
+      // 身份键从 token 提升为 userId（或切换账号）时丢弃旧响应并重拉一次
+      if (!options?.isRetry) {
+        void onLoadUnreadCount({ isRetry: true })
+      }
+      return
+    }
     unreadCount.value = resolveUnreadCount(res)
   } catch (error) {
     if (!isCurrent()) return

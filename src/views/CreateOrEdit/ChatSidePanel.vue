@@ -1,7 +1,11 @@
 <template>
   <aside
     class="chat-panel"
-    :class="{ 'chat-panel--collapsed': collapsed, 'chat-panel--active': isActive, 'chat-panel--dark': isDarkTheme }"
+    :class="{
+      'chat-panel--collapsed': collapsed,
+      'chat-panel--active': isActive,
+      'chat-panel--dark': isDarkTheme,
+    }"
     aria-label="对话面板"
   >
     <ChatPanelHeader
@@ -20,11 +24,7 @@
     />
 
     <div v-show="!collapsed" class="chat-panel__body">
-      <ChatWelcome
-        v-if="!isActive"
-        :skills="skills"
-        @select-skill="selectWelcomeSkill"
-      />
+      <ChatWelcome v-if="!isActive" :skills="skills" @select-skill="selectWelcomeSkill" />
 
       <ChatMessageList
         v-else
@@ -43,11 +43,11 @@
       <ChatComposer
         ref="composerRef"
         :show-skill-menu="showSkillMenu"
-        :filtered-chat-skills="(filteredChatSkills as any)"
-        :hovered-skill="(hoveredSkill as any)"
+        :filtered-chat-skills="filteredChatSkills as any"
+        :hovered-skill="hoveredSkill as any"
         :skill-tooltip-text="skillTooltipText"
         :skill-tooltip-style="skillTooltipStyle"
-        :selected-skill="(selectedSkill as any)"
+        :selected-skill="selectedSkill as any"
         :skill-chip-selected="skillChipSelected"
         :asset-mentions="assetMentions"
         :attachments="attachments"
@@ -86,10 +86,7 @@
       />
     </div>
 
-    <ChatCollapsedFab
-      :collapsed="collapsed"
-      @expand="onTargetCollapse"
-    />
+    <ChatCollapsedFab :collapsed="collapsed" @expand="onTargetCollapse" />
   </aside>
 
   <ChatFloatingLogo
@@ -146,14 +143,16 @@ const emit = defineEmits<{
   'close-chat': []
   'task-created': [payload: ChatTaskCreatedPayload]
   'task-updated': [payload: { taskId: string | number; taskName: string }]
-  'insert-image-to-canvas': [payload: {
-    attachmentId: string
-    assetId?: string
-    previewUrl: string
-    fileName?: string
-    width?: number | null
-    height?: number | null
-  }]
+  'insert-image-to-canvas': [
+    payload: {
+      attachmentId: string
+      assetId?: string
+      previewUrl: string
+      fileName?: string
+      width?: number | null
+      height?: number | null
+    },
+  ]
 }>()
 
 const collapsed = defineModel<boolean>('collapsed', { required: true })
@@ -214,6 +213,7 @@ const {
   addSkillFile,
   removeAttachment,
   clearAttachments,
+  invalidateAttachmentFetches,
   onFileInputChange,
   onComposerDrop,
 } = useChatAttachments({
@@ -341,7 +341,10 @@ const inputPlaceholder = computed(() => {
 
 const canSend = computed(() => {
   const hasContent = Boolean(
-    message.value.trim() || attachments.value.length || assetMentions.value.length || selectedSkill.value,
+    message.value.trim() ||
+    attachments.value.length ||
+    assetMentions.value.length ||
+    selectedSkill.value,
   )
   const attachmentsReady = attachments.value.every((item) => {
     if (!item.file.type.startsWith('image/')) return true
@@ -398,9 +401,10 @@ const {
   emitTaskUpdated: (payload) => emit('task-updated', payload),
 })
 
-/** 切项目：先作废 in-flight 创建会话/SSE，再重置面板，避免迟到回调写入新画布 */
+/** 切项目：先作废 in-flight 创建会话/SSE/画布附件拉取，再重置面板，避免迟到回调写入新画布 */
 function resetForProject() {
   invalidatePendingChatRequests()
+  invalidateAttachmentFetches()
   resetSessionsForProject()
 }
 
@@ -432,11 +436,11 @@ function onComposerKeydown(event: KeyboardEvent) {
 
     const input = unwrapRef(composerRef.value?.inputRef)
     if (
-      selectedSkill.value
-      && input
-      && input.selectionStart === 0
-      && input.selectionEnd === 0
-      && !message.value.trim()
+      selectedSkill.value &&
+      input &&
+      input.selectionStart === 0 &&
+      input.selectionEnd === 0 &&
+      !message.value.trim()
     ) {
       event.preventDefault()
       clearSelectedSkill()
@@ -474,7 +478,10 @@ function onDocumentMouseDown(event: MouseEvent) {
   if (!target?.closest('.chat-panel__model-wrap')) {
     closeModelMenu()
   }
-  if (!target?.closest('.chat-panel__skill-picker') && !target?.closest('.chat-panel__skill-wrap')) {
+  if (
+    !target?.closest('.chat-panel__skill-picker') &&
+    !target?.closest('.chat-panel__skill-wrap')
+  ) {
     if (!detectSlashQuery(message.value) && message.value !== '/') {
       closeSkillMenu()
     }
@@ -513,10 +520,10 @@ watch(
         // 仅在当前会话没有进行中的本地消息时才切换
         const active = activeSession.value
         const activeBusy =
-          !!active
-          && (active.messages.length > 0 || isStreaming.value || isSending.value)
-          && active.id !== existing.id
-          && active.chatId !== existing.chatId
+          !!active &&
+          (active.messages.length > 0 || isStreaming.value || isSending.value) &&
+          active.id !== existing.id &&
+          active.chatId !== existing.chatId
         if (activeBusy) return
 
         activeSessionId.value = existing.id
@@ -527,10 +534,7 @@ watch(
 
     const active = activeSession.value
     const isEmptyPlaceholder =
-      !!active
-      && active.title === '新建对话'
-      && !active.messages.length
-      && !active.chatId
+      !!active && active.title === '新建对话' && !active.messages.length && !active.chatId
 
     // 进入画布默认展示「新建对话」，不自动用历史会话替换欢迎页
     if (isEmptyPlaceholder) return

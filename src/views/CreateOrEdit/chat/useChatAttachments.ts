@@ -30,10 +30,63 @@ export interface UseChatAttachmentsOptions {
   setMessage: (message: string) => void
 }
 
+function buildCanvasFetchDedupeKey(payload: {
+  previewUrl: string
+  assetId?: string
+  nodeId?: string
+}) {
+  return [
+    String(payload.assetId ?? '').trim(),
+    String(payload.nodeId ?? '').trim(),
+    String(payload.previewUrl ?? '').trim(),
+  ].join('|')
+}
+
 export function useChatAttachments(options: UseChatAttachmentsOptions) {
   const attachments = ref<ChatAttachment[]>([])
   const assetMentions = ref<Array<{ id: string; role: string; name: string }>>([])
   const fileInputRef = ref<HTMLInputElement | null>(null)
+
+  /** 项目/会话重置时递增，作废进行中的画布拉取 */
+  let attachmentFetchEpoch = 0
+  /** previewUrl/assetId/nodeId → 进行中的拉取，避免重复插入上传 */
+  const canvasFetchInflight = new Map<string, string>()
+  /** attachmentId → AbortController */
+  const canvasFetchAbortById = new Map<string, AbortController>()
+
+  function currentProjectId() {
+    return String(toValue(options.projectId) ?? '').trim()
+  }
+
+  function isFetchContextValid(owner: {
+    sessionId: string
+    projectId: string
+    epoch: number
+    attachmentId: string
+  }) {
+    if (owner.epoch !== attachmentFetchEpoch) return false
+    if (owner.projectId !== currentProjectId()) return false
+    return Boolean(findSessionAttachment(owner.sessionId, owner.attachmentId))
+  }
+
+  function abortCanvasFetch(attachmentId: string) {
+    const controller = canvasFetchAbortById.get(attachmentId)
+    if (controller) {
+      controller.abort()
+      canvasFetchAbortById.delete(attachmentId)
+    }
+    for (const [key, id] of canvasFetchInflight) {
+      if (id === attachmentId) canvasFetchInflight.delete(key)
+    }
+  }
+
+  /** 切项目 / 重置会话时调用：取消所有进行中的画布附件拉取 */
+  function invalidateAttachmentFetches() {
+    attachmentFetchEpoch += 1
+    canvasFetchAbortById.forEach((controller) => controller.abort())
+    canvasFetchAbortById.clear()
+    canvasFetchInflight.clear()
+  }
 
   function createAttachment(file: File, assetId?: string, nodeId?: string): ChatAttachment {
     const isImage = file.type.startsWith('image/')
@@ -50,7 +103,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
 
   function patchAttachment(id: string, patch: Partial<ChatAttachment>) {
     attachments.value = attachments.value.map((item) =>
-      (item.id === id ? { ...item, ...patch } : item),
+      item.id === id ? { ...item, ...patch } : item,
     )
   }
 
@@ -89,16 +142,29 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     return target.attachments[index]
   }
 
-  async function uploadAttachmentToOss(attachmentId: string) {
-    const ownerSessionId = options.ensureActiveSession().id
-    const attachment = attachments.value.find((item) => item.id === attachmentId)
+  async function uploadAttachmentToOss(
+    attachmentId: string,
+    bound?: { sessionId: string; projectId: string },
+  ) {
+    const ownerSessionId = bound?.sessionId || options.ensureActiveSession().id
+    const ownerProjectId = bound?.projectId ?? currentProjectId()
+    const attachment =
+      findSessionAttachment(ownerSessionId, attachmentId) ||
+      attachments.value.find((item) => item.id === attachmentId)
     if (!attachment) return
 
-    patchAttachment(attachmentId, { uploading: true, uploadError: undefined })
-    options.saveActiveDraft()
+    patchSessionAttachment(ownerSessionId, attachmentId, {
+      uploading: true,
+      uploadError: undefined,
+    })
+    if (options.getActiveSessionId() === ownerSessionId) {
+      options.saveActiveDraft()
+    }
 
     try {
-      const result = await uploadAssetFile(attachment.file, { projectId: toValue(options.projectId) })
+      const result = await uploadAssetFile(attachment.file, {
+        projectId: ownerProjectId || undefined,
+      })
       const nextPreviewUrl = result.url || attachment.previewUrl
       const current = findSessionAttachment(ownerSessionId, attachmentId)
       if (!current) return
@@ -117,7 +183,13 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       }
 
       // 上传成功后插入画布，便于 agent 通过 nodeId 交互；已有 nodeId（如从画布加入）则跳过
-      if (!updated.nodeId && nextPreviewUrl) {
+      // 仅当仍是当前活动会话时插画布，避免串到其他会话上下文
+      if (
+        !updated.nodeId &&
+        nextPreviewUrl &&
+        options.getActiveSessionId() === ownerSessionId &&
+        ownerProjectId === currentProjectId()
+      ) {
         options.emitInsertImageToCanvas({
           attachmentId,
           assetId: result.assetId || undefined,
@@ -142,7 +214,6 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     const target = attachments.value.find((item) => item.id === id)
     if (!target || target.nodeId === nextNodeId) return
     patchAttachment(id, { nodeId: nextNodeId })
-    options.saveActiveDraft()
   }
 
   function clearAssetMentions() {
@@ -154,19 +225,13 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
   }
 
   function insertAssetMention(payload: { id: string; role: string; name: string }) {
-    options.ensureActiveSession()
-    if (assetMentions.value.some((item) => item.id === payload.id)) {
-      options.focusInput()
-      return
-    }
-    assetMentions.value = [...assetMentions.value, payload]
-    options.focusInput()
+    if (assetMentions.value.some((item) => item.id === payload.id)) return
+    assetMentions.value.push(payload)
   }
 
   function addAttachments(files: File[], assetId?: string, nodeId?: string) {
     options.ensureActiveSession()
     files.forEach((file) => {
-      if (!file.type.startsWith('image/')) return
       const attachment = createAttachment(file, assetId, nodeId)
       attachments.value.push(attachment)
       if (!assetId) {
@@ -181,8 +246,12 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     assetId?: string
     nodeId?: string
   }) {
-    options.ensureActiveSession()
     if (!payload.previewUrl) return
+
+    const ownerSession = options.ensureActiveSession()
+    const ownerSessionId = ownerSession.id
+    const ownerProjectId = currentProjectId()
+    const ownerEpoch = attachmentFetchEpoch
 
     // 已存在相同资源时，仅聚焦输入框，避免重复添加；若缺少 nodeId 则补上
     const existing = attachments.value.find(
@@ -202,14 +271,47 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       return
     }
 
+    const dedupeKey = buildCanvasFetchDedupeKey(payload)
+    if (canvasFetchInflight.has(dedupeKey)) {
+      options.focusInput()
+      return
+    }
+
     const fileName = payload.fileName || 'canvas-image.jpg'
     const assetId = payload.assetId || undefined
     const nodeId = payload.nodeId?.trim() || undefined
+    const attachmentId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    // 立刻在所属草稿创建占位，后续 await 后按 owner 回写，避免串会话
+    const placeholder: ChatAttachment = {
+      id: attachmentId,
+      file: new File([], fileName, { type: 'image/jpeg' }),
+      previewUrl: payload.previewUrl,
+      fileName,
+      assetId,
+      nodeId,
+      uploading: true,
+    }
+    attachments.value.push(placeholder)
+    options.saveActiveDraft()
+    options.focusInput()
+
+    canvasFetchInflight.set(dedupeKey, attachmentId)
+    const abort = new AbortController()
+    canvasFetchAbortById.set(attachmentId, abort)
+
+    const owner = {
+      sessionId: ownerSessionId,
+      projectId: ownerProjectId,
+      epoch: ownerEpoch,
+      attachmentId,
+    }
 
     const fetchBlob = async (url: string) => {
       const response = await fetch(url, {
         mode: 'cors',
         credentials: url.startsWith('/') ? 'same-origin' : 'omit',
+        signal: abort.signal,
       })
       if (!response.ok) throw new Error(`fetch failed: ${response.status}`)
       return response.blob()
@@ -219,10 +321,13 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       let blob: Blob | null = null
       try {
         blob = await fetchBlob(payload.previewUrl)
-      } catch {
+      } catch (directError) {
+        if (abort.signal.aborted) return
         // 直连跨域失败时走同源 media-proxy 再拉一次
         const proxies = await mintMediaProxyCandidates(payload.previewUrl)
+        if (!isFetchContextValid(owner)) return
         for (const proxyUrl of proxies) {
+          if (abort.signal.aborted || !isFetchContextValid(owner)) return
           try {
             blob = await fetchBlob(proxyUrl)
             break
@@ -230,37 +335,55 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
             // try next candidate
           }
         }
+        if (!blob)
+          throw directError instanceof Error ? directError : new Error('fetch image blob failed')
       }
+
+      if (!isFetchContextValid(owner)) return
       if (!blob) throw new Error('fetch image blob failed')
 
       const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' })
-      addAttachments([file], assetId, nodeId)
+      const updated = patchSessionAttachment(ownerSessionId, attachmentId, {
+        file,
+        previewUrl: URL.createObjectURL(file),
+        uploading: !assetId,
+        uploadError: undefined,
+        assetId,
+        nodeId,
+      })
+      if (!updated) return
+
+      if (!assetId) {
+        await uploadAttachmentToOss(attachmentId, {
+          sessionId: ownerSessionId,
+          projectId: ownerProjectId,
+        })
+      } else {
+        patchSessionAttachment(ownerSessionId, attachmentId, { uploading: false })
+      }
     } catch (error) {
+      if (abort.signal.aborted || !isFetchContextValid(owner)) return
       console.warn('[ChatSidePanel] 拉取画布图片失败', error)
       if (assetId) {
         // 已有服务端 assetId，可直接随消息发送，无需本地文件内容
-        attachments.value.push({
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          file: new File([], fileName, { type: 'image/jpeg' }),
-          previewUrl: payload.previewUrl,
-          fileName,
+        patchSessionAttachment(ownerSessionId, attachmentId, {
+          uploading: false,
+          uploadError: undefined,
           assetId,
           nodeId,
         })
       } else {
-        // 无 assetId 且拉流失败：标记错误，禁止误发送空附件
-        attachments.value.push({
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          file: new File([], fileName, { type: 'image/jpeg' }),
-          previewUrl: payload.previewUrl,
-          fileName,
-          nodeId,
+        patchSessionAttachment(ownerSessionId, attachmentId, {
+          uploading: false,
           uploadError: '图片拉取失败，请删除后重试',
         })
       }
+    } finally {
+      canvasFetchAbortById.delete(attachmentId)
+      if (canvasFetchInflight.get(dedupeKey) === attachmentId) {
+        canvasFetchInflight.delete(dedupeKey)
+      }
     }
-
-    options.focusInput()
   }
 
   function addSkillFile(file: File, skillName?: string) {
@@ -274,9 +397,10 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
   }
 
   function removeAttachment(id: string) {
+    abortCanvasFetch(id)
     const index = attachments.value.findIndex((item) => item.id === id)
     const target = index >= 0 ? attachments.value[index] : undefined
-    if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl)
+    if (target?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(target.previewUrl)
     attachments.value = attachments.value.filter((item) => item.id !== id)
     if (index < 0) return
     // 同步移除文本中的 @图片N，并前移后续编号
@@ -289,7 +413,8 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
 
   function clearAttachments() {
     attachments.value.forEach((item) => {
-      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+      abortCanvasFetch(item.id)
+      if (item.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(item.previewUrl)
     })
     attachments.value = []
     const prev = options.getMessage()
@@ -329,6 +454,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     addSkillFile,
     removeAttachment,
     clearAttachments,
+    invalidateAttachmentFetches,
     openFilePicker,
     onFileInputChange,
     onComposerDrop,
