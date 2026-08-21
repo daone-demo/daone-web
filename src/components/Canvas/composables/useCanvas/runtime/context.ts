@@ -6,7 +6,8 @@
  * 公开契约以 CanvasBindings / CanvasCorePorts 为准。
  * 领域切片组合进 CoreRuntimeSharedFns，再与 CanvasBindings、安装状态和动态方法槽合成 CoreRuntimeContext。
  * 动态袋不再使用 any 索引签名；安装空壳通过 asCoreRuntimeContext 断言。
- * quality-gate 锁定 runtime 目录不得再增加文件级 nocheck，并扫描显式 any（当前基线为 0）。
+ * quality-gate 锁定 runtime 目录不得再增加文件级 nocheck；`type X = any` 必须登记
+ * ANY_TYPE_ALIAS_WHITELIST（含 owner/expire），禁止仅靠行尾说明绕过。
  */
 import type { Graph, Node } from '@antv/x6'
 import type { Ref } from 'vue'

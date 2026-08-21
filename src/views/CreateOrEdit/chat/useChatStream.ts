@@ -572,14 +572,20 @@ export function useChatStream(options: UseChatStreamOptions) {
 
     const session = options.ensureActiveSession()
     const text = buildMessageText()
-    // 未上传到 OSS 的附件预览仍是 blob URL，发送后会被 clearAttachments 撤销，
-    // 因此为已发送消息复制一份独立的 blob URL，保证缩略图不会失效
-    const payloadAttachments = options.attachments.value.map((item) => (
-      item.previewUrl.startsWith('blob:') && item.file.size
-        ? { ...item, previewUrl: URL.createObjectURL(item.file) }
-        : { ...item }
-    ))
-    if (!text && !payloadAttachments.length) return
+    // 二次门禁：仅发送已就绪图片附件，避免绕过 canSend 时带上未完成上传
+    const payloadAttachments = options.attachments.value
+      .filter((item) => {
+        if (item.uploading || item.uploadError) return false
+        return Boolean(String(item.assetId ?? '').trim())
+      })
+      .map((item) => (
+        item.previewUrl.startsWith('blob:') && item.file.size
+          ? { ...item, previewUrl: URL.createObjectURL(item.file) }
+          : { ...item }
+      ))
+    if (!text && !payloadAttachments.length && !options.assetMentions.value.length && !options.selectedSkill.value) {
+      return
+    }
 
     // 对话框中存在媒体资源时，收集其 assetId（画布附件 + @素材引用），随消息一起发送
     const assetIds = Array.from(

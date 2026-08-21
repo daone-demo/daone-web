@@ -35,9 +35,23 @@ const ISLAND_GLOBS = [
 const RUNTIME_NOCHECK_BASELINE = 0
 const RUNTIME_DIR = 'src/components/Canvas/composables/useCanvas/runtime'
 
+/**
+ * 临时 `type X = any` 白名单：仅登记项可通过；需含负责人与到期日。
+ * 到期后应删除别名或收紧为具体类型，禁止无限延期。
+ */
+const ANY_TYPE_ALIAS_WHITELIST = [
+  {
+    file: 'src/components/Canvas/composables/useCanvas/runtime/installedSlots.ts',
+    name: 'CoreRuntimeSlotReturn',
+    owner: 'canvas-runtime',
+    expire: '2026-09-30',
+    reason: '动态槽位按域拆分后逐步收紧返回类型',
+  },
+]
+
 const ANY_RE = /(?<![\w$])any(?![\w$])/
 const BARE_ANY_TYPE_RE = /(?::|\bas\b)\s*any\b|<\s*any\s*>/
-const TYPE_ALIAS_ANY_RE = /\btype\s+[A-Za-z_$][\w$]*\s*=\s*any\b/
+const TYPE_ALIAS_ANY_RE = /\btype\s+([A-Za-z_$][\w$]*)\s*=\s*any\b/
 const SUPPRESS_RE = /@ts-(nocheck|ignore|expect-error)\b/
 const NOCHECK_RE = /^\s*\/\/\s*@ts-nocheck\b/
 
@@ -55,12 +69,26 @@ function listFiles(target) {
 }
 
 function hasJustification(line) {
-  return /(?:reason|说明|因为|for |due to|TODO\(|FIXME\()/i.test(line)
+  return /(?:reason|说明|因为|for |due to|TODO\(|FIXME\(|ANY_WHITELIST|owner=)/i.test(line)
+}
+
+function findTypeAliasWhitelist(relFile, typeName) {
+  return ANY_TYPE_ALIAS_WHITELIST.find(
+    (entry) => entry.file === relFile && entry.name === typeName,
+  )
+}
+
+function isWhitelistExpired(entry) {
+  if (!entry?.expire) return true
+  const expireAt = Date.parse(`${entry.expire}T23:59:59Z`)
+  if (Number.isNaN(expireAt)) return true
+  return Date.now() > expireAt
 }
 
 const violations = []
 for (const entry of [...ISLAND_GLOBS, RUNTIME_DIR]) {
   for (const file of listFiles(entry)) {
+    const rel = path.relative(root, file)
     const text = fs.readFileSync(file, 'utf8')
     const lines = text.split(/\r?\n/)
     lines.forEach((line, index) => {
@@ -69,20 +97,31 @@ for (const entry of [...ISLAND_GLOBS, RUNTIME_DIR]) {
         // keep scanning; comments can still contain suppressions
       }
       if (BARE_ANY_TYPE_RE.test(line) && ANY_RE.test(line)) {
-        if (!/\bunknown\b/.test(line)) {
-          violations.push(`${path.relative(root, file)}:${index + 1}: bare any — ${trimmed.slice(0, 120)}`)
+        if (!/\bunknown\b/.test(line) && !TYPE_ALIAS_ANY_RE.test(line)) {
+          violations.push(`${rel}:${index + 1}: bare any — ${trimmed.slice(0, 120)}`)
         }
       }
-      if (TYPE_ALIAS_ANY_RE.test(line)) {
-        if (!hasJustification(line)) {
+      const aliasMatch = line.match(TYPE_ALIAS_ANY_RE)
+      if (aliasMatch) {
+        const typeName = aliasMatch[1]
+        const allowed = findTypeAliasWhitelist(rel, typeName)
+        if (!allowed) {
           violations.push(
-            `${path.relative(root, file)}:${index + 1}: type alias any — ${trimmed.slice(0, 120)}`,
+            `${rel}:${index + 1}: type alias any 未登记白名单 — ${trimmed.slice(0, 120)}`,
+          )
+        } else if (isWhitelistExpired(allowed)) {
+          violations.push(
+            `${rel}:${index + 1}: type alias any 白名单已过期(${allowed.expire}) owner=${allowed.owner} — ${typeName}`,
+          )
+        } else if (!allowed.owner || !allowed.expire) {
+          violations.push(
+            `${rel}:${index + 1}: type alias any 白名单缺少 owner/expire — ${typeName}`,
           )
         }
       }
       if (SUPPRESS_RE.test(line) && !hasJustification(line)) {
         violations.push(
-          `${path.relative(root, file)}:${index + 1}: unexplained suppression — ${trimmed.slice(0, 120)}`,
+          `${rel}:${index + 1}: unexplained suppression — ${trimmed.slice(0, 120)}`,
         )
       }
     })

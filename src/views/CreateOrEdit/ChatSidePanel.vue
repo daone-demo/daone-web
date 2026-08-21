@@ -118,6 +118,7 @@ import { detectSlashQuery } from './chat/useChatSkills'
 import { useChatAttachments } from './chat/useChatAttachments'
 import { useChatSessions } from './chat/useChatSessions'
 import { useChatStream } from './chat/useChatStream'
+import { isChatAttachmentSendReady } from './chat/chatAttachmentValidate'
 import ChatPanelHeader from './chat/components/ChatPanelHeader.vue'
 import ChatWelcome from './chat/components/ChatWelcome.vue'
 import ChatMessageList from './chat/components/ChatMessageList.vue'
@@ -346,13 +347,7 @@ const canSend = computed(() => {
     assetMentions.value.length ||
     selectedSkill.value,
   )
-  const attachmentsReady = attachments.value.every((item) => {
-    if (!item.file.type.startsWith('image/')) return true
-    if (item.uploading) return false
-    if (item.uploadError) return false
-    // 图片必须有有效 assetId，避免空文件/远程降级附件误发
-    return Boolean(String(item.assetId ?? '').trim())
-  })
+  const attachmentsReady = attachments.value.every((item) => isChatAttachmentSendReady(item))
   return hasContent && attachmentsReady
 })
 

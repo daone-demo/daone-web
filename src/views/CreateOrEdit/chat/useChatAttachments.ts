@@ -1,5 +1,6 @@
 import { ref, toValue } from 'vue'
 import type { MaybeRefOrGetter } from 'vue'
+import { message } from 'ant-design-vue'
 import { mintMediaProxyCandidates } from '@/components/Canvas/mediaProxy'
 import { uploadAssetFile } from '@/components/Canvas/upload'
 import {
@@ -8,6 +9,7 @@ import {
 } from '@/components/Canvas/promptMention'
 import type { ChatAttachment } from '../chatTypes'
 import { findOwnedAttachmentTarget } from './chatAttachmentOwner'
+import { validateChatImageFile } from './chatAttachmentValidate'
 
 export interface InsertImageToCanvasPayload {
   attachmentId: string
@@ -51,8 +53,10 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
   let attachmentFetchEpoch = 0
   /** previewUrl/assetId/nodeId → 进行中的拉取，避免重复插入上传 */
   const canvasFetchInflight = new Map<string, string>()
-  /** attachmentId → AbortController */
+  /** attachmentId → AbortController（画布拉取） */
   const canvasFetchAbortById = new Map<string, AbortController>()
+  /** attachmentId → AbortController（OSS 直传） */
+  const uploadAbortById = new Map<string, AbortController>()
 
   function currentProjectId() {
     return String(toValue(options.projectId) ?? '').trim()
@@ -80,24 +84,48 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     }
   }
 
-  /** 切项目 / 重置会话时调用：取消所有进行中的画布附件拉取 */
+  function abortAttachmentUpload(attachmentId: string) {
+    const controller = uploadAbortById.get(attachmentId)
+    if (controller) {
+      controller.abort()
+      uploadAbortById.delete(attachmentId)
+    }
+  }
+
+  /** 切项目 / 重置会话时调用：取消所有进行中的画布附件拉取与上传 */
   function invalidateAttachmentFetches() {
     attachmentFetchEpoch += 1
     canvasFetchAbortById.forEach((controller) => controller.abort())
     canvasFetchAbortById.clear()
     canvasFetchInflight.clear()
+    uploadAbortById.forEach((controller) => controller.abort())
+    uploadAbortById.clear()
   }
 
   function createAttachment(file: File, assetId?: string, nodeId?: string): ChatAttachment {
-    const isImage = file.type.startsWith('image/')
+    // 已入库资源（画布回填）跳过本地文件白名单
+    if (assetId) {
+      const isImageMime = String(file.type || '').startsWith('image/')
+      return {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        file,
+        previewUrl: isImageMime && file.size > 0 ? URL.createObjectURL(file) : '',
+        fileName: file.name,
+        assetId,
+        nodeId,
+        uploading: undefined,
+      }
+    }
+    const allowed = validateChatImageFile(file)
     return {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       file,
-      previewUrl: isImage ? URL.createObjectURL(file) : '',
+      previewUrl: allowed.ok ? URL.createObjectURL(file) : '',
       fileName: file.name,
       assetId,
       nodeId,
-      uploading: isImage && !assetId ? true : undefined,
+      uploading: allowed.ok ? true : undefined,
+      uploadError: allowed.ok ? undefined : allowed.reason,
     }
   }
 
@@ -153,6 +181,19 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       attachments.value.find((item) => item.id === attachmentId)
     if (!attachment) return
 
+    const validation = validateChatImageFile(attachment.file)
+    if (!validation.ok) {
+      patchSessionAttachment(ownerSessionId, attachmentId, {
+        uploading: false,
+        uploadError: validation.reason,
+      })
+      return
+    }
+
+    abortAttachmentUpload(attachmentId)
+    const abort = new AbortController()
+    uploadAbortById.set(attachmentId, abort)
+
     patchSessionAttachment(ownerSessionId, attachmentId, {
       uploading: true,
       uploadError: undefined,
@@ -164,7 +205,10 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     try {
       const result = await uploadAssetFile(attachment.file, {
         projectId: ownerProjectId || undefined,
+        signal: abort.signal,
       })
+      if (abort.signal.aborted) return
+
       const nextPreviewUrl = result.url || attachment.previewUrl
       const current = findSessionAttachment(ownerSessionId, attachmentId)
       if (!current) return
@@ -200,10 +244,17 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
         })
       }
     } catch (error) {
+      if (abort.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+        return
+      }
       patchSessionAttachment(ownerSessionId, attachmentId, {
         uploading: false,
         uploadError: error instanceof Error ? error.message : '上传失败',
       })
+    } finally {
+      if (uploadAbortById.get(attachmentId) === abort) {
+        uploadAbortById.delete(attachmentId)
+      }
     }
   }
 
@@ -231,13 +282,29 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
 
   function addAttachments(files: File[], assetId?: string, nodeId?: string) {
     options.ensureActiveSession()
+    let rejectedReason = ''
+    let accepted = 0
     files.forEach((file) => {
+      // 已有 assetId 的画布回填不受本地文件白名单阻断（远端已入库）
+      if (!assetId) {
+        const check = validateChatImageFile(file)
+        if (!check.ok) {
+          rejectedReason = check.reason
+          return
+        }
+      }
       const attachment = createAttachment(file, assetId, nodeId)
       attachments.value.push(attachment)
+      accepted += 1
       if (!assetId) {
         void uploadAttachmentToOss(attachment.id)
       }
     })
+    if (!accepted && rejectedReason) {
+      message.warning(rejectedReason)
+    } else if (rejectedReason && accepted) {
+      message.warning(`部分文件未添加：${rejectedReason}`)
+    }
   }
 
   async function addAttachmentFromCanvas(payload: {
@@ -398,6 +465,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
 
   function removeAttachment(id: string) {
     abortCanvasFetch(id)
+    abortAttachmentUpload(id)
     const index = attachments.value.findIndex((item) => item.id === id)
     const target = index >= 0 ? attachments.value[index] : undefined
     if (target?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(target.previewUrl)
@@ -414,6 +482,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
   function clearAttachments() {
     attachments.value.forEach((item) => {
       abortCanvasFetch(item.id)
+      abortAttachmentUpload(item.id)
       if (item.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(item.previewUrl)
     })
     attachments.value = []

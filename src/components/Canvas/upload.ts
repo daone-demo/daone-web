@@ -12,6 +12,8 @@ import { resolveImageNaturalSizeCached } from './imageDisplayUrl'
 export interface UploadAssetOptions {
   projectId?: string
   onProgress?: (percent: number) => void
+  /** 取消直传（删除附件 / 发送清空时中止，避免孤儿资源） */
+  signal?: AbortSignal
 }
 
 export interface UploadAssetResult {
@@ -287,27 +289,48 @@ function putBinaryToOss(
   file: File,
   headers: Record<string, string>,
   onProgress?: (loaded: number, total: number) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Upload aborted', 'AbortError'))
+      return
+    }
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', url)
     Object.entries(headers).forEach(([key, value]) => {
       xhr.setRequestHeader(key, value)
     })
     xhr.timeout = UPLOAD_HTTP_TIMEOUT
+    const onAbort = () => {
+      xhr.abort()
+      reject(new DOMException('Upload aborted', 'AbortError'))
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
     xhr.upload.onprogress = (event) => {
       if (!event.lengthComputable) return
       onProgress?.(event.loaded, event.total)
     }
     xhr.onload = () => {
+      signal?.removeEventListener('abort', onAbort)
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve()
         return
       }
       reject(new Error(`OSS 上传失败: HTTP ${xhr.status}`))
     }
-    xhr.onerror = () => reject(new Error('OSS 上传网络错误'))
-    xhr.ontimeout = () => reject(new Error('OSS 上传超时'))
+    xhr.onerror = () => {
+      signal?.removeEventListener('abort', onAbort)
+      reject(new Error('OSS 上传网络错误'))
+    }
+    xhr.ontimeout = () => {
+      signal?.removeEventListener('abort', onAbort)
+      reject(new Error('OSS 上传超时'))
+    }
+    xhr.onabort = () => {
+      signal?.removeEventListener('abort', onAbort)
+      reject(new DOMException('Upload aborted', 'AbortError'))
+    }
     xhr.send(file)
   })
 }
@@ -325,6 +348,11 @@ export async function uploadAssetFile(
   const contentType = file.type || 'application/octet-stream'
   const projectId = resolveUploadProjectId(options.projectId)
   const type = resolveAssetType(file)
+  const signal = options.signal
+
+  if (signal?.aborted) {
+    throw new DOMException('Upload aborted', 'AbortError')
+  }
 
   options.onProgress?.(mapUploadProgress(0, 0, 0))
 
@@ -335,6 +363,10 @@ export async function uploadAssetFile(
     fileSize: file.size,
     type,
   })
+
+  if (signal?.aborted) {
+    throw new DOMException('Upload aborted', 'AbortError')
+  }
 
   const putUrl = ticket.uploadUrl || ticket.previewUrl || ticket.url
   if (!putUrl) {
@@ -352,9 +384,19 @@ export async function uploadAssetFile(
     putHeaders.Authorization = authorization
   }
 
-  await putBinaryToOss(putUrl, file, putHeaders, (loaded, total) => {
-    options.onProgress?.(mapUploadProgress(1, loaded, total || file.size))
-  })
+  await putBinaryToOss(
+    putUrl,
+    file,
+    putHeaders,
+    (loaded, total) => {
+      options.onProgress?.(mapUploadProgress(1, loaded, total || file.size))
+    },
+    signal,
+  )
+
+  if (signal?.aborted) {
+    throw new DOMException('Upload aborted', 'AbortError')
+  }
 
   options.onProgress?.(UPLOAD_XHR_MAX_PERCENT)
 
