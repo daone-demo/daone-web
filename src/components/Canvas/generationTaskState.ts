@@ -84,18 +84,28 @@ export function buildSucceededImageGenerationResult(
   return buildImageGenerationSuccessResult(task)
 }
 
-export function findNodeByGenerationTaskId(graph: Graph, taskId: string): Node | null {
+export function findNodesByGenerationTaskId(graph: Graph, taskId: string): Node[] {
   const trimmed = taskId.trim()
-  if (!trimmed) return null
+  if (!trimmed) return []
 
+  const nodes: Node[] = []
   for (const cell of graph.getNodes()) {
+    if (!cell.isNode()) continue
     const data = cell.getData() as CanvasNodeData
     if (String(data.generationTaskId ?? '').trim() === trimmed) {
-      return cell as Node
+      nodes.push(cell as Node)
     }
   }
 
-  return null
+  return nodes.sort(
+    (a, b) =>
+      readGenerationResultIndex(a.getData() as CanvasNodeData)
+      - readGenerationResultIndex(b.getData() as CanvasNodeData),
+  )
+}
+
+export function findNodeByGenerationTaskId(graph: Graph, taskId: string): Node | null {
+  return findNodesByGenerationTaskId(graph, taskId)[0] ?? null
 }
 
 /** 根据 taskId 回写节点任务名（SSE task_status / 轮询中间态） */
@@ -104,26 +114,28 @@ export function updateGenerationTaskNodeTitleByTaskId(
   taskId: string,
   taskName: string,
 ) {
-  const node = findNodeByGenerationTaskId(graph, taskId.trim())
-  if (!node) return
+  const nodes = findNodesByGenerationTaskId(graph, taskId.trim())
+  if (!nodes.length) return
 
   const normalized = String(taskName ?? '').trim()
   if (!normalized || isGenerationProgressTitle(normalized)) return
 
-  const data = { ...(node.getData() as CanvasNodeData) }
-  data.generationTaskName = normalized
+  for (const node of nodes) {
+    const data = { ...(node.getData() as CanvasNodeData) }
+    data.generationTaskName = normalized
 
-  const shouldUpdateTitle =
-    data.imageGenState === 'loading' ||
-    data.textGenState === 'loading' ||
-    data.uploadState === 'uploading' ||
-    isGenerationProgressTitle(data.title)
+    const shouldUpdateTitle =
+      data.imageGenState === 'loading' ||
+      data.textGenState === 'loading' ||
+      data.uploadState === 'uploading' ||
+      isGenerationProgressTitle(data.title)
 
-  if (shouldUpdateTitle) {
-    data.title = normalized
+    if (shouldUpdateTitle) {
+      data.title = normalized
+    }
+
+    setNodeData(node, data)
   }
-
-  setNodeData(node, data)
 }
 
 export function resolveTaskNode(graph: Graph | null, fallback: Node, taskId: string): Node | null {
@@ -132,6 +144,19 @@ export function resolveTaskNode(graph: Graph | null, fallback: Node, taskId: str
     if (found) return found
   }
   return isNodeOnGraph(fallback) ? fallback : null
+}
+
+/** 同一 taskId 下全部结果节点（按 generationResultIndex 排序）；无图时回退到 fallback */
+export function resolveSharedImageTaskNodes(
+  graph: Graph | null,
+  fallback: Node,
+  taskId: string,
+): Node[] {
+  if (graph) {
+    const found = findNodesByGenerationTaskId(graph, taskId)
+    if (found.length) return found
+  }
+  return isNodeOnGraph(fallback) ? [fallback] : []
 }
 
 export function bindGenerationTaskId(

@@ -39,7 +39,9 @@ import {
   notifyGenerationTaskSucceeded,
   buildSucceededImageGenerationResult,
   resolveTaskNode,
+  resolveSharedImageTaskNodes,
   bindGenerationTaskId,
+  readGenerationResultIndex,
   pollGenerationTask,
   resolveGenerationResultPreview,
   updateGenerationTaskNodeTitleByTaskId,
@@ -124,11 +126,6 @@ export function startImageGenerationTaskFollow(
   )
 }
 
-function pickReadyImageResult(task: GenerationTaskDetail, resultIndex = 0) {
-  return pickImageGenerationResults(task)[resultIndex] ?? null
-}
-
-
 async function applyResolvedImageResultToNode(
   node: Node,
   raw: GenerationTaskResult | null,
@@ -164,11 +161,12 @@ export async function pollAndApplyImageTaskOnNode(
   },
 ): Promise<ImageGenerationOnNodeResult> {
   const graph = getNodeGraph(node)
-  const resolveNode = () => resolveTaskNode(graph, node, taskId)
-  const current = resolveNode()
+  const resolveMembers = () => resolveSharedImageTaskNodes(graph, node, taskId)
+  const resolvePrimary = () => resolveMembers()[0] ?? resolveTaskNode(graph, node, taskId)
+  const current = resolvePrimary()
   if (!current) return { success: false }
 
-  bindGenerationTaskId(current, taskId, 'IMAGE')
+  bindGenerationTaskId(current, taskId, 'IMAGE', readGenerationResultIndex(current.getData() as CanvasNodeData))
   options.onTaskBound?.(taskId)
 
   let appliedDuringPoll = false
@@ -188,21 +186,62 @@ export async function pollAndApplyImageTaskOnNode(
     )
     return {
       title,
-      fileName: options.fileName || `${title}.png`,
+      fileName: nodeData.fileName || options.fileName || `${title}.png`,
     }
   }
 
+  /** 按 generationResultIndex 把 results 写回同 taskId 的全部节点 */
+  const applySharedResults = async (task: GenerationTaskDetail): Promise<{
+    anyApplied: boolean
+    allSettled: boolean
+  }> => {
+    const members = resolveMembers()
+    if (!members.length) return { anyApplied: false, allSettled: false }
+
+    const results = pickImageGenerationResults(task)
+    let anyApplied = false
+    let allSettled = true
+
+    for (const member of members) {
+      if (isImageResultApplied(member)) {
+        anyApplied = true
+        continue
+      }
+
+      const resultIndex = readGenerationResultIndex(member.getData() as CanvasNodeData)
+      const raw = results[resultIndex] ?? null
+      if (!raw) {
+        if (isGenerationTaskTerminal(task.status) && task.status === 'SUCCEEDED') {
+          markGenerationNodeFailed(member, '未返回对应结果图片')
+        } else {
+          allSettled = false
+        }
+        continue
+      }
+
+      const applyOptions = buildApplyOptions(task, member)
+      const applied = await applyResolvedImageResultToNode(member, raw, applyOptions)
+      if (applied) {
+        anyApplied = true
+        bindGenerationTaskId(member, taskId, 'IMAGE', resultIndex)
+      } else if (isGenerationTaskTerminal(task.status) && task.status === 'SUCCEEDED') {
+        markGenerationNodeFailed(member, '未返回对应结果图片')
+      } else {
+        allSettled = false
+      }
+    }
+
+    return { anyApplied, allSettled }
+  }
+
   const tryApplyDuringPoll = (task: GenerationTaskDetail) => {
-    const target = resolveNode()
-    if (!target || appliedDuringPoll || resolvingResult || !isGenerationTaskTerminal(task.status)) return
-    const raw = pickReadyImageResult(task)
-    if (!raw) return
+    if (appliedDuringPoll || resolvingResult || !isGenerationTaskTerminal(task.status)) return
+    if (!resolveMembers().length) return
 
     resolvingResult = true
-    const applyOptions = buildApplyOptions(task, target)
-    void applyResolvedImageResultToNode(target, raw, applyOptions)
-      .then((applied) => {
-        if (applied) appliedDuringPoll = true
+    void applySharedResults(task)
+      .then(({ anyApplied, allSettled }) => {
+        if (anyApplied && allSettled) appliedDuringPoll = true
       })
       .finally(() => {
         resolvingResult = false
@@ -217,16 +256,17 @@ export async function pollAndApplyImageTaskOnNode(
       options.initialTask ??
       normalizeGenerationTaskDetail(await getGenerationTaskDetail<GenerationTaskDetail>(taskId))
 
-    const initialTarget = resolveNode()
-    if (!initialTarget) {
+    const initialMembers = resolveMembers()
+    if (!initialMembers.length) {
       return appliedDuringPoll ? buildSuccessResult(first) : { success: false }
     }
 
-    if (isImageResultApplied(initialTarget)) {
+    if (initialMembers.every((member) => isImageResultApplied(member))) {
       return buildSuccessResult(first)
     }
 
-    updateGenerationNodeProgress(initialTarget, first.progress ?? 5)
+    const progressTarget = initialMembers[0]
+    updateGenerationNodeProgress(progressTarget, first.progress ?? 5)
     options.onProgress?.(first.progress ?? 5, first)
     if (graph) {
       const taskName = pickGenerationTaskName(first)
@@ -237,11 +277,11 @@ export async function pollAndApplyImageTaskOnNode(
     const finalTask = isGenerationTaskTerminal(first.status)
       ? first
       : await pollGenerationTask(taskId, {
-        shouldContinue: () => Boolean(resolveNode()),
+        shouldContinue: () => resolveMembers().some((member) => !isImageResultApplied(member)),
         onProgress: (task) => {
-          const target = resolveNode()
-          if (!target) return
-          if (isImageResultApplied(target)) return
+          const members = resolveMembers()
+          if (!members.length) return
+          if (members.every((member) => isImageResultApplied(member))) return
           if (graph) {
             const taskName = pickGenerationTaskName(task)
             if (taskName) updateGenerationTaskNodeTitleByTaskId(graph, taskId, taskName)
@@ -251,8 +291,11 @@ export async function pollAndApplyImageTaskOnNode(
             return
           }
 
-          const data = target.getData() as CanvasNodeData
-          if (data.imageGenState !== 'loading') return
+          const target = members.find((member) => {
+            const data = member.getData() as CanvasNodeData
+            return data.imageGenState === 'loading'
+          })
+          if (!target) return
 
           updateGenerationNodeProgress(target, task.progress ?? 0)
           options.onProgress?.(task.progress ?? 0, task)
@@ -260,8 +303,8 @@ export async function pollAndApplyImageTaskOnNode(
         },
       })
 
-    const finalTarget = resolveNode()
-    if (!finalTarget) {
+    const finalMembers = resolveMembers()
+    if (!finalMembers.length) {
       return appliedDuringPoll ? buildSuccessResult(finalTask) : { success: false }
     }
 
@@ -270,39 +313,45 @@ export async function pollAndApplyImageTaskOnNode(
     }
 
     if (finalTask.status !== 'SUCCEEDED') {
-      if (isImageResultApplied(finalTarget)) {
+      if (finalMembers.every((member) => isImageResultApplied(member))) {
         return buildSuccessResult(finalTask)
       }
       const reason = finalTask.error?.message || '生成任务失败'
-      markGenerationNodeFailed(finalTarget, reason)
+      for (const member of finalMembers) {
+        if (!isImageResultApplied(member)) {
+          markGenerationNodeFailed(member, reason)
+        }
+      }
       options.onError?.(reason)
       return { success: false }
     }
 
-    const primaryResult = pickReadyImageResult(finalTask)
-    if (!primaryResult) {
-      markGenerationNodeFailed(finalTarget, '未返回结果图片')
+    const { anyApplied, allSettled } = await applySharedResults(finalTask)
+    if (!anyApplied && !finalMembers.some((member) => isImageResultApplied(member))) {
+      markGenerationNodeFailed(finalMembers[0], '未返回结果图片')
       options.onError?.('生成完成，但未返回结果图片')
       return { success: false }
     }
 
-    if (!isImageResultApplied(finalTarget)) {
-      const applyOptions = buildApplyOptions(finalTask, finalTarget)
-      const applied = await applyResolvedImageResultToNode(finalTarget, primaryResult, applyOptions)
-      if (!applied) {
-        markGenerationNodeFailed(finalTarget, '未返回结果图片')
-        options.onError?.('生成完成，但未返回结果图片')
-        return { success: false }
+    if (!allSettled && !finalMembers.every((member) => isImageResultApplied(member) || (member.getData() as CanvasNodeData).imageGenState === 'failed')) {
+      // 仍有 loading：再扫一遍缺失结果并标失败
+      for (const member of finalMembers) {
+        if (isImageResultApplied(member)) continue
+        if ((member.getData() as CanvasNodeData).imageGenState === 'failed') continue
+        markGenerationNodeFailed(member, '未返回对应结果图片')
       }
     }
 
     return buildSuccessResult(finalTask)
   } catch (error) {
-    const target = resolveNode()
-    if (target && !isImageResultApplied(target)) {
-      markGenerationNodeFailed(target)
+    const members = resolveMembers()
+    const reason = error instanceof Error ? error.message : '生成任务失败'
+    for (const member of members) {
+      if (!isImageResultApplied(member)) {
+        markGenerationNodeFailed(member, reason)
+      }
     }
-    options.onError?.(error instanceof Error ? error.message : '生成失败，请稍后重试')
+    options.onError?.(reason)
     return { success: false }
   }
 }

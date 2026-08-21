@@ -649,19 +649,26 @@ export function useChatStream(options: UseChatStreamOptions) {
       })
       session.updatedAt = Date.now()
 
+      // 无正文时仍可发送：纯附件 / 素材引用 / Skill（content 允许空字符串，资源走 attachmentAssetIds）
+      const shouldStream = Boolean(
+        text
+        || payloadAttachments.length
+        || assetIds.length
+        || streamOptions.skillName?.trim(),
+      )
+      if (!shouldStream) return
+
       options.message.value = ''
       options.clearAttachments()
       options.clearAssetMentions()
       options.clearSelectedSkill()
       options.saveActiveDraft()
       options.scrollMessagesToBottom()
-      if (text) {
-        options.emitSend({ text, attachments: payloadAttachments })
-        startChatStream(session, text, assetIds, streamOptions, {
-          projectId: requestProjectId,
-          epoch: requestEpoch,
-        })
-      }
+      options.emitSend({ text, attachments: payloadAttachments })
+      startChatStream(session, text, assetIds, streamOptions, {
+        projectId: requestProjectId,
+        epoch: requestEpoch,
+      })
     } catch {
       // ensureChatSession 失败时由请求层提示
     } finally {

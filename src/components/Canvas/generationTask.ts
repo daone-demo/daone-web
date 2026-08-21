@@ -60,6 +60,7 @@ export {
   setGenerationTaskSucceededHandler,
   setGenerationTaskSettledHandler,
   findNodeByGenerationTaskId,
+  findNodesByGenerationTaskId,
   updateGenerationTaskNodeTitleByTaskId,
   bindGenerationTaskId,
   bindSharedGenerationTaskId,
@@ -283,7 +284,7 @@ function resumeGenerationTaskFollow(
   }
 }
 
-/** 画布加载后，恢复所有带 taskId 且仍在生成中的节点 */
+/** 画布加载后，恢复所有带 taskId 且仍在生成中的节点（同 taskId 只轮询一次，结果按 index 分发） */
 export async function resumePendingGenerationTasks(
   graph: Graph,
   options: ResumePendingGenerationTasksOptions = {},
@@ -297,9 +298,11 @@ export async function resumePendingGenerationTasks(
     const taskId = String(data.generationTaskId).trim()
     resumedTaskIds.add(taskId)
     options.onTaskBound?.()
+    // 优先用 resultIndex 最小的节点作为轮询入口，便于按索引分发
     nodesToResume.push({ node, data, taskId })
   })
 
+  // 同 taskId 可能扫到多个 loading 节点，但 shouldResumeNode 已保证每个 taskId 只入队一次
   await Promise.all(
     nodesToResume.map(async ({ node, data, taskId }) => {
       let initialTask: GenerationTaskDetail | undefined
