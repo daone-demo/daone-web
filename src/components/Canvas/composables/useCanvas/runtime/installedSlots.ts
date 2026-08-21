@@ -3,7 +3,7 @@
  * 使用方法语法（对参数双变）以便赋值与调用都能通过。
  * 未声明字段不再经 any 索引变成 any，拼写错误会在 unknown 索引上报错。
  *
- * 已按 任务 / 图节点 / 持久化 / 面板 拆分接口；公共返回别名仍为临时 any；保存/项目切换/生成/上传等高风险槽位已补精确签名。
+ * 已按 任务 / 图节点 / 持久化 / 面板 拆分接口；公共返回别名仍为临时 any；保存/项目切换/生成/上传/对话引用/批处理/面板等高风险槽位已补精确签名。
  * 见 quality-gate ANY_TYPE_ALIAS_WHITELIST（owner=canvas-runtime, expire=2026-09-30）。
  */
 
@@ -11,6 +11,7 @@ import type { Graph, Node } from '@antv/x6'
 import type { ProjectCanvasResponse } from '@/services/api'
 import type { CanvasSnapshot } from '../../../canvasSnapshot'
 import type { GroupAiReferenceContext, GroupAiTask } from '../../../groupExecute/types'
+import type { CanvasAssetDragPayload, CanvasNodeData, ImageSourceRef } from '../../../constants'
 
 /**
  * 动态槽位返回值：跨 install* 赋值前保持宽松。
@@ -20,7 +21,15 @@ type CoreRuntimeSlotReturn = any
 
 /** 生成任务 / 对话 / Prompt 相关槽位 */
 export interface CoreRuntimeTaskSlots {
-  addImageDialogueSourceRef(...args: unknown[]): CoreRuntimeSlotReturn
+  addImageDialogueSourceRef(
+    payload: {
+      nodeId?: string
+      assetId?: string
+      previewUrl: string
+      fileName?: string
+    },
+    targetNodeId?: string,
+  ): void
   addPromptImageSourceRef(...args: unknown[]): CoreRuntimeSlotReturn
   appendImageDialogueDigitalHumanRef(...args: unknown[]): CoreRuntimeSlotReturn
   applyImageDialogueProvenance(...args: unknown[]): CoreRuntimeSlotReturn
@@ -86,7 +95,7 @@ export interface CoreRuntimeTaskSlots {
   persistVideoGenPrompt(...args: unknown[]): CoreRuntimeSlotReturn
   recordGroupTaskFinishedAsset(...args: unknown[]): CoreRuntimeSlotReturn
   refreshPromptSourcePreviews(...args: unknown[]): CoreRuntimeSlotReturn
-  removePromptImageSource(...args: unknown[]): CoreRuntimeSlotReturn
+  removePromptImageSource(sourceNodeId?: string): void
   resetImageDialogue(...args: unknown[]): CoreRuntimeSlotReturn
   resetImageDialogueInputOnSourceNode(...args: unknown[]): CoreRuntimeSlotReturn
   resetSourceImageDialogueAfterSuccess(...args: unknown[]): CoreRuntimeSlotReturn
@@ -96,20 +105,16 @@ export interface CoreRuntimeTaskSlots {
   resolvePromptReferenceAssetIds(...args: unknown[]): CoreRuntimeSlotReturn
   resolveVideoResultLayoutSize(...args: unknown[]): CoreRuntimeSlotReturn
   resolveVideoUpstreamPrompt(...args: unknown[]): CoreRuntimeSlotReturn
-  resumeCanvasGenerationTasks(...args: unknown[]): CoreRuntimeSlotReturn
+  resumeCanvasGenerationTasks(): void
   revealVideoDialogueAfterGenerationFailure(...args: unknown[]): CoreRuntimeSlotReturn
   runBatchDownloadForNodeIds(...args: unknown[]): CoreRuntimeSlotReturn
-  runGroupAiGenerationPipeline(
-    g: Graph,
-    groupId: string,
-    tasks: GroupAiTask[],
-  ): Promise<void>
+  runGroupAiGenerationPipeline(g: Graph, groupId: string, tasks: GroupAiTask[]): Promise<void>
   runImagePromptReverseTask(...args: unknown[]): CoreRuntimeSlotReturn
   runImageTo3DTask(...args: unknown[]): CoreRuntimeSlotReturn
-  seedPromptImageRefs(...args: unknown[]): CoreRuntimeSlotReturn
+  seedPromptImageRefs(data: CanvasNodeData): ImageSourceRef[]
   spawnMediaFilesAtPoint(...args: unknown[]): CoreRuntimeSlotReturn
   submitTextPrompt(...args: unknown[]): CoreRuntimeSlotReturn
-  syncImageDialogueSourceRefs(...args: unknown[]): CoreRuntimeSlotReturn
+  syncImageDialogueSourceRefs(targetNode: Node, sourceRefs: ImageSourceRef[]): void
   updateChatTaskNodeTitleFromPayload(...args: unknown[]): CoreRuntimeSlotReturn
   updateImageGenPromptBarPosition(...args: unknown[]): CoreRuntimeSlotReturn
   updatePromptBarPosition(...args: unknown[]): CoreRuntimeSlotReturn
@@ -122,11 +127,11 @@ export interface CoreRuntimeGraphSlots {
   addFromMenu(...args: unknown[]): CoreRuntimeSlotReturn
   addImageFromAsset(...args: unknown[]): CoreRuntimeSlotReturn
   addImageToMyModels(...args: unknown[]): CoreRuntimeSlotReturn
-  addImagesFromFiles(...args: unknown[]): CoreRuntimeSlotReturn
+  addImagesFromFiles(files: File[]): Promise<Node[]>
   addNode(...args: unknown[]): CoreRuntimeSlotReturn
   addVideoFromAsset(...args: unknown[]): CoreRuntimeSlotReturn
   addVideoToDialog(...args: unknown[]): CoreRuntimeSlotReturn
-  batchInsertAssetsFromLibrary(...args: unknown[]): CoreRuntimeSlotReturn
+  batchInsertAssetsFromLibrary(assets: CanvasAssetDragPayload[]): number
   bindGraphDropListeners(...args: unknown[]): CoreRuntimeSlotReturn
   bindKeyboard(...args: unknown[]): CoreRuntimeSlotReturn
   bindLongPressPan(...args: unknown[]): CoreRuntimeSlotReturn
@@ -138,7 +143,7 @@ export interface CoreRuntimeGraphSlots {
   clearImageElementMarkSelection(...args: unknown[]): CoreRuntimeSlotReturn
   computeImageMarkHintPositions(...args: unknown[]): CoreRuntimeSlotReturn
   copySelectedNode(...args: unknown[]): CoreRuntimeSlotReturn
-  copySelectedNodes(...args: unknown[]): CoreRuntimeSlotReturn
+  copySelectedNodes(): void
   countSkillFiles(...args: unknown[]): CoreRuntimeSlotReturn
   createPastedCanvasNodeId(...args: unknown[]): CoreRuntimeSlotReturn
   dataUrlToFile(...args: unknown[]): CoreRuntimeSlotReturn
@@ -270,7 +275,7 @@ export interface CoreRuntimeGraphSlots {
   removeNodeById(...args: unknown[]): CoreRuntimeSlotReturn
   removeSelectedEdge(...args: unknown[]): CoreRuntimeSlotReturn
   removeSelectedElementMark(...args: unknown[]): CoreRuntimeSlotReturn
-  removeSelectedNodes(...args: unknown[]): CoreRuntimeSlotReturn
+  removeSelectedNodes(): void
   requestCanvasUpload(nodeId: string): void
   resetCanvasInteractionState(...args: unknown[]): CoreRuntimeSlotReturn
   resetCanvasPanCursorState(...args: unknown[]): CoreRuntimeSlotReturn
@@ -383,7 +388,7 @@ export interface CoreRuntimePanelSlots {
   cancelBlankPanGesture(...args: unknown[]): CoreRuntimeSlotReturn
   cancelCurrentOperation(...args: unknown[]): CoreRuntimeSlotReturn
   cancelVideoToolbarDefer(...args: unknown[]): CoreRuntimeSlotReturn
-  closeAddMenu(...args: unknown[]): CoreRuntimeSlotReturn
+  closeAddMenu(): void
   closeAssetCenterPanel(...args: unknown[]): CoreRuntimeSlotReturn
   closeConnectMenu(...args: unknown[]): CoreRuntimeSlotReturn
   closeHistoryPanel(...args: unknown[]): CoreRuntimeSlotReturn
@@ -402,7 +407,7 @@ export interface CoreRuntimePanelSlots {
   closeVideoGenPromptBar(...args: unknown[]): CoreRuntimeSlotReturn
   closeVideoSubPanels(...args: unknown[]): CoreRuntimeSlotReturn
   closeZoomMenu(...args: unknown[]): CoreRuntimeSlotReturn
-  dismissCanvasNodeChromeForShellPanel(...args: unknown[]): CoreRuntimeSlotReturn
+  dismissCanvasNodeChromeForShellPanel(): void
   dismissOneCanvasLayer(...args: unknown[]): CoreRuntimeSlotReturn
   dismissTextPickerPanels(...args: unknown[]): CoreRuntimeSlotReturn
   hideImageMarkHint(...args: unknown[]): CoreRuntimeSlotReturn
@@ -415,7 +420,7 @@ export interface CoreRuntimePanelSlots {
   openFileUploadPicker(...args: unknown[]): CoreRuntimeSlotReturn
   openImageCrop(...args: unknown[]): CoreRuntimeSlotReturn
   openImageCustom(...args: unknown[]): CoreRuntimeSlotReturn
-  openImageDialogue(...args: unknown[]): CoreRuntimeSlotReturn
+  openImageDialogue(nodeId?: string): void
   openImageEditText(...args: unknown[]): CoreRuntimeSlotReturn
   openImageErase(...args: unknown[]): CoreRuntimeSlotReturn
   openImageExpand(...args: unknown[]): CoreRuntimeSlotReturn
@@ -431,15 +436,15 @@ export interface CoreRuntimePanelSlots {
   openVideoDialogue(...args: unknown[]): CoreRuntimeSlotReturn
   openVideoGenPromptBar(...args: unknown[]): CoreRuntimeSlotReturn
   showImageMarkHint(...args: unknown[]): CoreRuntimeSlotReturn
-  toggleAddMenu(...args: unknown[]): CoreRuntimeSlotReturn
+  toggleAddMenu(): void
   toggleAssetCenterPanel(...args: unknown[]): CoreRuntimeSlotReturn
   toggleAssetsPanel(...args: unknown[]): CoreRuntimeSlotReturn
   toggleCanvasBgTheme(...args: unknown[]): CoreRuntimeSlotReturn
   toggleGrid(...args: unknown[]): CoreRuntimeSlotReturn
   toggleHistoryPanel(...args: unknown[]): CoreRuntimeSlotReturn
   toggleImageAddToDialogMenu(...args: unknown[]): CoreRuntimeSlotReturn
-  toggleImageDialogue(...args: unknown[]): CoreRuntimeSlotReturn
-  toggleImageDialogueCanvasPickMode(...args: unknown[]): CoreRuntimeSlotReturn
+  toggleImageDialogue(): void
+  toggleImageDialogueCanvasPickMode(): void
   toggleImageHdMenu(...args: unknown[]): CoreRuntimeSlotReturn
   toggleImageNodeLock(...args: unknown[]): CoreRuntimeSlotReturn
   toggleImageToolbarMoreMenu(...args: unknown[]): CoreRuntimeSlotReturn
@@ -456,8 +461,7 @@ export interface CoreRuntimePanelSlots {
 }
 
 /** 动态安装槽位总览：由四域接口组合 */
-export type CoreRuntimeInstallSlots =
-  CoreRuntimeTaskSlots &
+export type CoreRuntimeInstallSlots = CoreRuntimeTaskSlots &
   CoreRuntimeGraphSlots &
   CoreRuntimePersistenceSlots &
   CoreRuntimePanelSlots

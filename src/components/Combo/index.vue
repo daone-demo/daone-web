@@ -14,30 +14,20 @@
           :class="{ 'combo-modal__dialog--trial': memberTab === 'trial' }"
           @mousedown.stop
         >
-          <button
-            type="button"
-            class="combo-modal__close"
-            aria-label="关闭"
-            @click="close"
-          >
+          <button type="button" class="combo-modal__close" aria-label="关闭" @click="close">
             ×
           </button>
 
           <header class="combo-modal__header">
             <div v-if="memberTab === 'enterprise'" class="combo-modal__header-top">
-              <p class="combo-modal__identity">
-                当前身份：<strong>普通用户</strong>
-              </p>
+              <p class="combo-modal__identity">当前身份：<strong>普通用户</strong></p>
               <a-popover placement="bottom">
                 <template #content>
-                  <img
-                    src="@assets/images/kefu.jpg"
-                    style="width: 160px; height: 160px;"
-                  />
+                  <img src="@assets/images/kefu.jpg" style="width: 160px; height: 160px" />
                 </template>
                 <button type="button" class="combo-modal__service" @click="emit('contact-service')">
-                联系客服
-              </button>
+                  联系客服
+                </button>
               </a-popover>
             </div>
 
@@ -78,7 +68,9 @@
                   @click="billing = 'YEAR'"
                 >
                   年付
-                  <span v-if="billing === 'YEAR'" class="combo-modal__billing-badge">最高 3.75 折</span>
+                  <span v-if="billing === 'YEAR'" class="combo-modal__billing-badge"
+                    >最高 3.75 折</span
+                  >
                 </button>
                 <button
                   type="button"
@@ -98,7 +90,7 @@
               <h2 id="combo-modal-title" class="visually-hidden">会员套餐</h2>
               <div class="combo-modal__plans">
                 <article
-                  v-for="plan in plansList.filter(plan => plan.cycleUnit === billing)"
+                  v-for="plan in plansList.filter((plan) => plan.cycleUnit === billing)"
                   :key="plan.id"
                   class="combo-modal__card"
                   :class="{ 'combo-modal__card--featured': plan.featured }"
@@ -127,11 +119,7 @@
                     <li v-for="line in plan.quotaLines" :key="line">{{ line }}</li>
                   </ul>
 
-                  <button
-                    type="button"
-                    class="combo-modal__activate"
-                    @click="onActivate(plan)"
-                  >
+                  <button type="button" class="combo-modal__activate" @click="onActivate(plan)">
                     立即开通
                   </button>
 
@@ -151,9 +139,7 @@
               <h2 id="combo-modal-title" class="combo-modal__trial-title">申请试用</h2>
 
               <div class="combo-modal__trial-cards">
-                <article
-                  class="combo-modal__trial-card"
-                >
+                <article class="combo-modal__trial-card">
                   <h3 class="combo-modal__trial-card-title">试用权限体验</h3>
                   <p class="combo-modal__trial-card-desc">
                     {{ trialBenefitText }}
@@ -267,7 +253,11 @@
           <footer v-if="memberTab === 'enterprise'" class="combo-modal__footer">
             <p class="combo-modal__personal">
               个人版设计师使用请
-              <button type="button" class="combo-modal__personal-link" @click="emit('view-personal')">
+              <button
+                type="button"
+                class="combo-modal__personal-link"
+                @click="emit('view-personal')"
+              >
                 敬请期待
               </button>
             </p>
@@ -325,12 +315,7 @@
               </button>
             </div>
             <a-flex align="center" justify="center">
-              <img
-                v-if="payUrl"
-                :src="payUrl"
-                alt="支付二维码"
-                class="combo-confirm__pay-qrcode"
-              />
+              <img v-if="payUrl" :src="payUrl" alt="支付二维码" class="combo-confirm__pay-qrcode" />
             </a-flex>
             <p v-if="selectedPayMethod === 'BANK_TRANSFER'" class="combo-confirm__pay-tip">
               提交后客服将与您联系并提供对公转账账户信息
@@ -392,30 +377,24 @@
       </div>
     </Transition>
 
-    <SlideVerifyModal
-      v-model:open="slideVerifyOpen"
-      @success="onSlideVerifySuccess"
-    />
+    <SlideVerifyModal v-model:open="slideVerifyOpen" @success="onSlideVerifySuccess" />
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import {
-  TRIAL_FEATURE_CARDS,
-  type BillingCycle,
-} from './comboData'
-import api, { type TrialApplicationStatus, type TrialApplicationStatusData } from '@/services/api';
-import tools from '@/utils/tools';
-import { message } from 'ant-design-vue';
-import { useUserInfo } from '@/stores/useUserInfo';
-import { useModalStore } from '@stores/useModal';
-import { v4 as uuidv4 } from 'uuid';
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { TRIAL_FEATURE_CARDS, type BillingCycle } from './comboData'
+import api, { type TrialApplicationStatus, type TrialApplicationStatusData } from '@/services/api'
+import tools from '@/utils/tools'
+import { message } from 'ant-design-vue'
+import { useUserInfo } from '@/stores/useUserInfo'
+import { useModalStore } from '@stores/useModal'
+import { v4 as uuidv4 } from 'uuid'
 import { runWithSubmitLock } from '@/utils/submitLock'
 import { createLatestRequestTracker } from '@/utils/latestRequestTracker'
-import QRCode from 'qrcode';
-import SlideVerifyModal from '@/components/SlideVerifyModal/index.vue';
-import { preloadSlideVerifyImages } from '@/utils/slideVerifyImages';
+import QRCode from 'qrcode'
+import SlideVerifyModal from '@/components/SlideVerifyModal/index.vue'
+import { preloadSlideVerifyImages } from '@/utils/slideVerifyImages'
 
 interface PlanItem {
   code: string
@@ -461,7 +440,7 @@ const open = defineModel<boolean>('open', { default: false })
 const plansList = ref<PlanItem[]>([])
 const userInfoStore = useUserInfo()
 const modalStore = useModalStore()
-const currentIdempotencyKey = ref<string | null>(null);
+const currentIdempotencyKey = ref<string | null>(null)
 
 const emit = defineEmits<{
   close: []
@@ -491,9 +470,9 @@ const trialSubmitting = ref(false)
 const trialStatus = ref<TrialApplicationStatus>('NONE')
 const trialRejectReason = ref('')
 const slideVerifyOpen = ref(false)
-const orderNo = ref('');
-const payUrl = ref('');
-const payExpireAt = ref('');
+const orderNo = ref('')
+const payUrl = ref('')
+const payExpireAt = ref('')
 
 let trialCountdownTimer: ReturnType<typeof setInterval> | null = null
 let orderPollingTimer: ReturnType<typeof setInterval> | null = null
@@ -520,10 +499,15 @@ function ensureTrialIdempotencyKey(scope: string): string {
   return trialIdempotencyKey
 }
 
-const trialPlan = computed(() =>
-  plansList.value.find((plan) => plan.code === 'TRIAL_5D')
-    ?? plansList.value.find((plan) => plan.cycleUnit === 'DAY')
-    ?? plansList.value.find((plan) => String(plan.code || '').toUpperCase().includes('TRIAL')),
+const trialPlan = computed(
+  () =>
+    plansList.value.find((plan) => plan.code === 'TRIAL_5D') ??
+    plansList.value.find((plan) => plan.cycleUnit === 'DAY') ??
+    plansList.value.find((plan) =>
+      String(plan.code || '')
+        .toUpperCase()
+        .includes('TRIAL'),
+    ),
 )
 
 const trialBenefitText = computed(() => {
@@ -717,9 +701,8 @@ const confirmPreview = computed(() => {
         ? `升级至 ${plan.name} ${cycleLabel}`
         : `开通 ${plan.name} ${cycleLabel}`
       : '',
-    originalPlanLabel: hasActiveSubscription && currentPlan
-      ? `${currentPlan.name} ${currentCycleLabel}`
-      : '',
+    originalPlanLabel:
+      hasActiveSubscription && currentPlan ? `${currentPlan.name} ${currentCycleLabel}` : '',
     originalPaidYuan: formatYuan(originalPaidFen),
     targetPriceYuan: formatYuan(targetPriceFen),
     payDiffYuan: formatYuan(payDiffFen),
@@ -731,8 +714,6 @@ const confirmPreview = computed(() => {
     productCode: plan?.code ?? plan?.id ?? '',
   }
 })
-
-
 
 const confirmPayLabel = computed(() => {
   if (confirmLoading.value) return '处理中...'
@@ -749,8 +730,8 @@ async function loadUserProfile() {
   }
 
   try {
-    const res:any = await api.getCurrentUser<UserProfile>()
-    userProfile.value = res;
+    const res: any = await api.getCurrentUser<UserProfile>()
+    userProfile.value = res
     if (res.points) {
       userInfoStore.setPointAccount({
         available: res.points.available ?? 0,
@@ -780,23 +761,23 @@ async function onActivate(plan: PlanItem) {
   if (!userInfoStore.isLoggedIn) {
     modalStore.openModal('login')
     return
-  };
+  }
   await loadUserProfile()
   // 打开确认前清掉上一单，避免新套餐标题配旧二维码/旧幂等键
   resetPaymentState()
   selectedPayMethod.value = 'WECHAT'
   selectedPlan.value = plan
-  confirmVisible.value = true;
+  confirmVisible.value = true
 }
 
 async function confirmPay() {
   if (!selectedPlan.value || confirmLoading.value) return
 
   const productCode = confirmPreview.value.productCode
-  
+
   if (!productCode) return
   if (!currentIdempotencyKey.value) {
-    currentIdempotencyKey.value = uuidv4();
+    currentIdempotencyKey.value = uuidv4()
   }
 
   const sessionId = paymentSessionId
@@ -811,13 +792,13 @@ async function confirmPay() {
         orderType: 'PLAN',
         productCode,
       },
-      currentIdempotencyKey.value
+      currentIdempotencyKey.value,
     )
     // 关闭/换套餐后迟到的创建订单响应不得回写
     if (sessionId !== paymentSessionId) return
     if (confirmPreview.value.productCode !== productAtRequest) return
-    orderNo.value = order.orderNo;
-    startOrderPolling();
+    orderNo.value = order.orderNo
+    startOrderPolling()
   } catch (error) {
     if (sessionId !== paymentSessionId) return
     console.error('confirmPay', error)
@@ -833,31 +814,34 @@ const queryOrder = () => {
   const polledOrderNo = orderNo.value
   const sessionId = paymentSessionId
   if (!polledOrderNo) return
-  api.getOrder(polledOrderNo).then((res:any)=>{
-    if (sessionId !== paymentSessionId) return
-    if (orderNo.value !== polledOrderNo) return
-    const status = res?.status
-    if (status === 'PAID') {
-      stopOrderPolling()
-      const plan = selectedPlan.value
-      const cycleLabel = plan ? getCycleLabel(plan) : ''
-      modalStore.openPaymentSuccess({
-        kind: 'plan',
-        productName: plan ? `${plan.name} ${cycleLabel}`.trim() : confirmPreview.value.title,
-        points: confirmPreview.value.actualGrantPoints,
-        pointsStatus: '已发放',
-        expireDate: plan ? getPlanExpireDate(plan) : '',
-        orderNo: polledOrderNo,
-      })
-      loadUserProfile()
-      close()
-    } else if (status === 'REFUNDED') {
-      stopOrderPolling()
-    }
-  }).catch((error) => {
-    if (sessionId !== paymentSessionId) return
-    console.error('queryOrder', error)
-  });
+  api
+    .getOrder(polledOrderNo)
+    .then((res: any) => {
+      if (sessionId !== paymentSessionId) return
+      if (orderNo.value !== polledOrderNo) return
+      const status = res?.status
+      if (status === 'PAID') {
+        stopOrderPolling()
+        const plan = selectedPlan.value
+        const cycleLabel = plan ? getCycleLabel(plan) : ''
+        modalStore.openPaymentSuccess({
+          kind: 'plan',
+          productName: plan ? `${plan.name} ${cycleLabel}`.trim() : confirmPreview.value.title,
+          points: confirmPreview.value.actualGrantPoints,
+          pointsStatus: '已发放',
+          expireDate: plan ? getPlanExpireDate(plan) : '',
+          orderNo: polledOrderNo,
+        })
+        loadUserProfile()
+        close()
+      } else if (status === 'REFUNDED') {
+        stopOrderPolling()
+      }
+    })
+    .catch((error) => {
+      if (sessionId !== paymentSessionId) return
+      console.error('queryOrder', error)
+    })
 }
 
 function startOrderPolling() {
@@ -983,9 +967,8 @@ function applyTrialStatusData(data?: TrialApplicationStatusData | null) {
   trialStatus.value = ['NONE', 'PENDING', 'APPROVED', 'REJECTED', 'PURCHASED'].includes(status)
     ? status
     : 'NONE'
-  trialRejectReason.value = trialStatus.value === 'REJECTED'
-    ? String(data?.rejectReason || '').trim()
-    : ''
+  trialRejectReason.value =
+    trialStatus.value === 'REJECTED' ? String(data?.rejectReason || '').trim() : ''
   const contactName = String(data?.contactName || '').trim()
   const position = String(data?.position || '').trim()
   if (contactName) trialName.value = contactName
@@ -1037,7 +1020,7 @@ watch(open, (visible) => {
     billing.value = 'YEAR'
     resetTrialForm()
   }
-});
+})
 
 watch(
   () => [open.value, memberTab.value, trialIdentityKey()] as const,
@@ -1061,7 +1044,7 @@ const onLoadPayUrl = async () => {
   const currentOrderNo = orderNo.value
   const currentMethod = selectedPayMethod.value
   try {
-    const res:any = await api.createPayment<PaymentResponse>(currentOrderNo, {
+    const res: any = await api.createPayment<PaymentResponse>(currentOrderNo, {
       payType: currentMethod,
     })
     if (seq !== payLoadSeq || sessionId !== paymentSessionId) return
@@ -1088,11 +1071,11 @@ const onLoadPayUrl = async () => {
 
 watch([orderNo, selectedPayMethod], ([no, method]) => {
   if (no && method !== 'BANK_TRANSFER') {
-    onLoadPayUrl();
+    onLoadPayUrl()
   } else {
-    payUrl.value = '';
+    payUrl.value = ''
   }
-});
+})
 
 onBeforeUnmount(() => {
   plansLoadTracker.invalidate()

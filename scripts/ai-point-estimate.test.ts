@@ -12,7 +12,12 @@ import {
 } from '../src/components/Canvas/composables/aiPointEstimateState.ts'
 
 test('参数变化进入 loading 并清空旧积分', () => {
-  let state = { ...createAiPointEstimateState(), seq: 1, estimatedPoints: 120, status: 'ready' as const }
+  let state = {
+    ...createAiPointEstimateState(),
+    seq: 1,
+    estimatedPoints: 120,
+    status: 'ready' as const,
+  }
 
   state = invalidateAiPointEstimate(state)
   assert.equal(state.estimatedPoints, null)
@@ -21,7 +26,12 @@ test('参数变化进入 loading 并清空旧积分', () => {
 })
 
 test('当前序列失败清空积分并标记 error', () => {
-  let state = { ...createAiPointEstimateState(), seq: 2, estimatedPoints: null, status: 'loading' as const }
+  let state = {
+    ...createAiPointEstimateState(),
+    seq: 2,
+    estimatedPoints: null,
+    status: 'loading' as const,
+  }
   state = applyAiPointEstimateFailure(state, 2)
   assert.equal(state.estimatedPoints, null)
   assert.equal(state.status, 'error')

@@ -75,9 +75,7 @@ function hasJustification(line) {
 }
 
 function findTypeAliasWhitelist(relFile, typeName) {
-  return ANY_TYPE_ALIAS_WHITELIST.find(
-    (entry) => entry.file === relFile && entry.name === typeName,
-  )
+  return ANY_TYPE_ALIAS_WHITELIST.find((entry) => entry.file === relFile && entry.name === typeName)
 }
 
 function isWhitelistExpired(entry, now = Date.now()) {
@@ -220,16 +218,16 @@ export function scanSourceForViolations(rel, text, options = {}) {
           `${rel}:${index + 1}: type alias any 白名单已过期(${allowed.expire}) owner=${allowed.owner} — ${typeName}`,
         )
       } else if (!allowed.owner || !allowed.expire) {
-        violations.push(
-          `${rel}:${index + 1}: type alias any 白名单缺少 owner/expire — ${typeName}`,
-        )
+        violations.push(`${rel}:${index + 1}: type alias any 白名单缺少 owner/expire — ${typeName}`)
       }
     }
 
-    if (SUPPRESS_RE.test(trimmedCode) && !hasJustification(line) && !hasJustification(trimmedCode)) {
-      violations.push(
-        `${rel}:${index + 1}: unexplained suppression — ${trimmedCode.slice(0, 120)}`,
-      )
+    if (
+      SUPPRESS_RE.test(trimmedCode) &&
+      !hasJustification(line) &&
+      !hasJustification(trimmedCode)
+    ) {
+      violations.push(`${rel}:${index + 1}: unexplained suppression — ${trimmedCode.slice(0, 120)}`)
     }
   })
 
@@ -247,7 +245,10 @@ function main() {
   }
 
   const nocheckFiles = listFiles(RUNTIME_DIR).filter((file) =>
-    fs.readFileSync(file, 'utf8').split(/\r?\n/).some((line) => NOCHECK_RE.test(line)),
+    fs
+      .readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .some((line) => NOCHECK_RE.test(line)),
   )
   if (nocheckFiles.length > RUNTIME_NOCHECK_BASELINE) {
     violations.push(

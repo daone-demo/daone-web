@@ -14,9 +14,7 @@ export function createAiPointEstimateState(): AiPointEstimateState {
  * 参数变化：作废进行中的预估，并清空旧积分（进入 loading）。
  * 不得把上一组参数价格继续展示为当前结果。
  */
-export function invalidateAiPointEstimate(
-  state: AiPointEstimateState,
-): AiPointEstimateState {
+export function invalidateAiPointEstimate(state: AiPointEstimateState): AiPointEstimateState {
   return { seq: state.seq + 1, estimatedPoints: null, status: 'loading' }
 }
 
@@ -65,8 +63,6 @@ export function applyAiPointEstimateFailure(
 }
 
 /** 主动清空（无能力码 / 无模型等不可预估场景）。 */
-export function clearAiPointEstimate(
-  state: AiPointEstimateState,
-): AiPointEstimateState {
+export function clearAiPointEstimate(state: AiPointEstimateState): AiPointEstimateState {
   return { ...state, estimatedPoints: null, status: 'idle' }
 }

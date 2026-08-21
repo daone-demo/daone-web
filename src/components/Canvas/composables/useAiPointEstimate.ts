@@ -82,11 +82,7 @@ export function useAiPointEstimate(options: {
         { silent: true },
       )
       commit(
-        applyAiPointEstimateSuccess(
-          state,
-          seq,
-          data as PointEstimateResponse | null | undefined,
-        ),
+        applyAiPointEstimateSuccess(state, seq, data as PointEstimateResponse | null | undefined),
       )
     } catch {
       commit(applyAiPointEstimateFailure(state, seq))

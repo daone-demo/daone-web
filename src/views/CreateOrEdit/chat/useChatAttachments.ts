@@ -9,7 +9,22 @@ import {
 } from '@/components/Canvas/promptMention'
 import type { ChatAttachment } from '../chatTypes'
 import { findOwnedAttachmentTarget } from './chatAttachmentOwner'
-import { validateChatImageFile, validateChatImageFileAsync, planChatAttachmentBatch, CHAT_UPLOAD_MAX_CONCURRENCY } from './chatAttachmentValidate'
+import {
+  validateChatImageFile,
+  validateChatImageFileAsync,
+  planChatAttachmentBatch,
+  CHAT_ATTACHMENT_MAX_COUNT,
+  CHAT_UPLOAD_MAX_CONCURRENCY,
+} from './chatAttachmentValidate'
+import {
+  bumpUploadQueueGeneration,
+  completeChatUploadSlot,
+  createChatUploadQueueState,
+  enqueueChatUpload,
+  pumpChatUploadQueue,
+  removeChatUploadFromQueue,
+  type ChatUploadQueueState,
+} from './chatAttachmentUploadQueue'
 
 export interface InsertImageToCanvasPayload {
   attachmentId: string
@@ -36,8 +51,12 @@ function buildCanvasFetchDedupeKey(payload: {
   previewUrl: string
   assetId?: string
   nodeId?: string
+  sessionId?: string
+  projectId?: string
 }) {
   return [
+    String(payload.projectId ?? '').trim(),
+    String(payload.sessionId ?? '').trim(),
     String(payload.assetId ?? '').trim(),
     String(payload.nodeId ?? '').trim(),
     String(payload.previewUrl ?? '').trim(),
@@ -57,12 +76,38 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
   const canvasFetchAbortById = new Map<string, AbortController>()
   /** attachmentId → AbortController（OSS 直传） */
   const uploadAbortById = new Map<string, AbortController>()
-  /** 待直传队列（限制并发，避免拖入大批量时打满连接） */
-  const uploadQueue: string[] = []
-  let activeUploadCount = 0
+  /** 待直传队列（绑定 session/project/generation） */
+  let uploadQueueState: ChatUploadQueueState = createChatUploadQueueState()
+  /** 串行化 addAttachments，避免双 drop 同时突破数量上限 */
+  let addAttachmentsChain: Promise<void> = Promise.resolve()
 
   function currentProjectId() {
     return String(toValue(options.projectId) ?? '').trim()
+  }
+
+  function isOwnerContextValid(owner: { sessionId: string; projectId: string; epoch: number }) {
+    if (owner.epoch !== attachmentFetchEpoch) return false
+    if (owner.projectId !== currentProjectId()) return false
+    return true
+  }
+
+  function getOwnerAttachmentCount(sessionId: string): number {
+    if (sessionId === options.getActiveSessionId()) {
+      return attachments.value.length
+    }
+    return options.getSessionAttachments(sessionId)?.length ?? 0
+  }
+
+  function appendOwnerAttachment(sessionId: string, attachment: ChatAttachment): boolean {
+    if (sessionId === options.getActiveSessionId()) {
+      attachments.value.push(attachment)
+      options.saveActiveDraft()
+      return true
+    }
+    const list = options.getSessionAttachments(sessionId)
+    if (!list) return false
+    list.push(attachment)
+    return true
   }
 
   function isFetchContextValid(owner: {
@@ -71,8 +116,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     epoch: number
     attachmentId: string
   }) {
-    if (owner.epoch !== attachmentFetchEpoch) return false
-    if (owner.projectId !== currentProjectId()) return false
+    if (!isOwnerContextValid(owner)) return false
     return Boolean(findSessionAttachment(owner.sessionId, owner.attachmentId))
   }
 
@@ -93,25 +137,36 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       controller.abort()
       uploadAbortById.delete(attachmentId)
     }
-    const qi = uploadQueue.indexOf(attachmentId)
-    if (qi >= 0) uploadQueue.splice(qi, 1)
+    uploadQueueState = removeChatUploadFromQueue(uploadQueueState, attachmentId)
   }
 
-  function enqueueAttachmentUpload(attachmentId: string) {
-    if (uploadQueue.includes(attachmentId) || uploadAbortById.has(attachmentId)) return
-    uploadQueue.push(attachmentId)
+  function enqueueAttachmentUpload(item: {
+    attachmentId: string
+    sessionId: string
+    projectId: string
+  }) {
+    if (uploadAbortById.has(item.attachmentId)) return
+    uploadQueueState = enqueueChatUpload(uploadQueueState, item)
     pumpUploadQueue()
   }
 
   function pumpUploadQueue() {
-    while (activeUploadCount < CHAT_UPLOAD_MAX_CONCURRENCY && uploadQueue.length) {
-      const nextId = uploadQueue.shift()
-      if (!nextId) break
-      if (!attachments.value.some((item) => item.id === nextId)) continue
-      activeUploadCount += 1
-      void uploadAttachmentToOss(nextId).finally(() => {
-        activeUploadCount = Math.max(0, activeUploadCount - 1)
-        pumpUploadQueue()
+    const pumped = pumpChatUploadQueue(
+      uploadQueueState,
+      (item) => Boolean(findSessionAttachment(item.sessionId, item.attachmentId)),
+      CHAT_UPLOAD_MAX_CONCURRENCY,
+    )
+    uploadQueueState = pumped.state
+    for (const item of pumped.started) {
+      const gen = item.generation
+      void uploadAttachmentToOss(item.attachmentId, {
+        sessionId: item.sessionId,
+        projectId: item.projectId,
+      }).finally(() => {
+        uploadQueueState = completeChatUploadSlot(uploadQueueState, gen)
+        if (gen === uploadQueueState.generation) {
+          pumpUploadQueue()
+        }
       })
     }
   }
@@ -124,8 +179,32 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     canvasFetchInflight.clear()
     uploadAbortById.forEach((controller) => controller.abort())
     uploadAbortById.clear()
-    uploadQueue.length = 0
-    activeUploadCount = 0
+    // bump generation：旧 finally 不得改写新队列计数
+    uploadQueueState = bumpUploadQueueGeneration(uploadQueueState)
+  }
+
+  /** 关闭标签时：取消该会话排队 / 校验中 / 上传中 / 画布拉取任务 */
+  function cancelSessionAttachments(sessionId: string) {
+    const id = String(sessionId || '').trim()
+    if (!id) return
+
+    const draftList =
+      id === options.getActiveSessionId() ? attachments.value : options.getSessionAttachments(id)
+    const attachmentIds = new Set((draftList || []).map((item) => item.id))
+
+    for (const item of uploadQueueState.items) {
+      if (item.sessionId === id) attachmentIds.add(item.attachmentId)
+    }
+
+    attachmentIds.forEach((attachmentId) => {
+      abortAttachmentUpload(attachmentId)
+      abortCanvasFetch(attachmentId)
+    })
+
+    uploadQueueState = {
+      ...uploadQueueState,
+      items: uploadQueueState.items.filter((item) => item.sessionId !== id),
+    }
   }
 
   function createAttachment(file: File, assetId?: string, nodeId?: string): ChatAttachment {
@@ -202,46 +281,64 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
   ) {
     const ownerSessionId = bound?.sessionId || options.ensureActiveSession().id
     const ownerProjectId = bound?.projectId ?? currentProjectId()
-    const attachment =
-      findSessionAttachment(ownerSessionId, attachmentId) ||
-      attachments.value.find((item) => item.id === attachmentId)
-    if (!attachment) return
+    // 捕获启动时 generation：invalidate 后旧任务不得继续上传
+    const uploadGen = uploadQueueState.generation
 
-    const validation = validateChatImageFile(attachment.file)
-    if (!validation.ok) {
-      patchSessionAttachment(ownerSessionId, attachmentId, {
-        uploading: false,
-        uploadError: validation.reason,
-      })
-      return
-    }
-    const deep = await validateChatImageFileAsync(attachment.file)
-    if (!deep.ok) {
-      patchSessionAttachment(ownerSessionId, attachmentId, {
-        uploading: false,
-        uploadError: deep.reason,
-      })
-      return
-    }
-
-    abortAttachmentUpload(attachmentId)
+    // 立即登记取消令牌，覆盖文件头校验等 await 窗口
+    const previous = uploadAbortById.get(attachmentId)
+    if (previous) previous.abort()
     const abort = new AbortController()
     uploadAbortById.set(attachmentId, abort)
 
-    patchSessionAttachment(ownerSessionId, attachmentId, {
-      uploading: true,
-      uploadError: undefined,
-    })
-    if (options.getActiveSessionId() === ownerSessionId) {
-      options.saveActiveDraft()
+    const isUploadStillValid = () => {
+      if (abort.signal.aborted) return false
+      if (uploadGen !== uploadQueueState.generation) return false
+      if (ownerProjectId !== currentProjectId()) return false
+      return Boolean(findSessionAttachment(ownerSessionId, attachmentId))
     }
 
     try {
+      if (!isUploadStillValid()) return
+
+      const attachment =
+        findSessionAttachment(ownerSessionId, attachmentId) ||
+        attachments.value.find((item) => item.id === attachmentId)
+      if (!attachment) return
+
+      const validation = validateChatImageFile(attachment.file)
+      if (!validation.ok) {
+        if (isUploadStillValid()) {
+          patchSessionAttachment(ownerSessionId, attachmentId, {
+            uploading: false,
+            uploadError: validation.reason,
+          })
+        }
+        return
+      }
+
+      const deep = await validateChatImageFileAsync(attachment.file)
+      if (!isUploadStillValid()) return
+      if (!deep.ok) {
+        patchSessionAttachment(ownerSessionId, attachmentId, {
+          uploading: false,
+          uploadError: deep.reason,
+        })
+        return
+      }
+
+      patchSessionAttachment(ownerSessionId, attachmentId, {
+        uploading: true,
+        uploadError: undefined,
+      })
+      if (options.getActiveSessionId() === ownerSessionId) {
+        options.saveActiveDraft()
+      }
+
       const result = await uploadAssetFile(attachment.file, {
         projectId: ownerProjectId || undefined,
         signal: abort.signal,
       })
-      if (abort.signal.aborted) return
+      if (!isUploadStillValid()) return
 
       const nextPreviewUrl = result.url || attachment.previewUrl
       const current = findSessionAttachment(ownerSessionId, attachmentId)
@@ -281,6 +378,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       if (abort.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
         return
       }
+      if (!isUploadStillValid()) return
       patchSessionAttachment(ownerSessionId, attachmentId, {
         uploading: false,
         uploadError: error instanceof Error ? error.message : '上传失败',
@@ -315,49 +413,109 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
   }
 
   function addAttachments(files: File[], assetId?: string, nodeId?: string) {
-    options.ensureActiveSession()
-    // 画布回填（已有 assetId）不受本地批量白名单阻断
+    const ownerSession = options.ensureActiveSession()
+    const ownerSessionId = ownerSession.id
+    const ownerProjectId = currentProjectId()
+    const ownerEpoch = attachmentFetchEpoch
+
+    // 画布回填（已有 assetId）同步写入 owner，不受本地批量白名单阻断
     if (assetId) {
+      if (
+        !isOwnerContextValid({
+          sessionId: ownerSessionId,
+          projectId: ownerProjectId,
+          epoch: ownerEpoch,
+        })
+      ) {
+        return
+      }
       files.forEach((file) => {
         const attachment = createAttachment(file, assetId, nodeId)
-        attachments.value.push(attachment)
+        appendOwnerAttachment(ownerSessionId, attachment)
       })
       return
     }
 
-    void (async () => {
-      const planned = planChatAttachmentBatch(files, attachments.value.length)
-      const accepted: File[] = []
-      let rejectedReason = planned.rejectedReason
+    addAttachmentsChain = addAttachmentsChain
+      .then(() =>
+        runOwnedAddAttachments(files, {
+          sessionId: ownerSessionId,
+          projectId: ownerProjectId,
+          epoch: ownerEpoch,
+          nodeId,
+        }),
+      )
+      .catch(() => {
+        // 单次失败不阻断后续 drop
+      })
+  }
 
-      for (const file of planned.accepted) {
-        const deep = await validateChatImageFileAsync(file)
-        if (!deep.ok) {
-          rejectedReason = deep.reason
-          continue
-        }
-        accepted.push(file)
-      }
+  async function runOwnedAddAttachments(
+    files: File[],
+    owner: {
+      sessionId: string
+      projectId: string
+      epoch: number
+      nodeId?: string
+    },
+  ) {
+    if (!isOwnerContextValid(owner)) {
+      message.warning('会话已切换，未添加图片')
+      return
+    }
 
-      if (!accepted.length) {
-        if (rejectedReason) message.warning(rejectedReason)
+    const planned = planChatAttachmentBatch(files, getOwnerAttachmentCount(owner.sessionId))
+    const accepted: File[] = []
+    let rejectedReason = planned.rejectedReason
+
+    for (const file of planned.accepted) {
+      if (!isOwnerContextValid(owner)) {
+        message.warning('会话已切换，未添加图片')
         return
       }
-
-      accepted.forEach((file) => {
-        const attachment = createAttachment(file, assetId, nodeId)
-        attachments.value.push(attachment)
-        enqueueAttachmentUpload(attachment.id)
-      })
-
-      if (rejectedReason) {
-        message.warning(
-          accepted.length < files.length
-            ? `部分文件未添加：${rejectedReason}`
-            : rejectedReason,
-        )
+      const deep = await validateChatImageFileAsync(file)
+      if (!deep.ok) {
+        rejectedReason = deep.reason
+        continue
       }
-    })()
+      accepted.push(file)
+    }
+
+    if (!isOwnerContextValid(owner)) {
+      message.warning('会话已切换，未添加图片')
+      return
+    }
+
+    // 二次按 owner 当前数量截断，防止异步期间其他同步路径插入
+    const room = Math.max(0, CHAT_ATTACHMENT_MAX_COUNT - getOwnerAttachmentCount(owner.sessionId))
+    const toCommit = accepted.slice(0, room)
+    if (accepted.length > toCommit.length) {
+      rejectedReason = rejectedReason || `最多添加 ${CHAT_ATTACHMENT_MAX_COUNT} 张图片`
+    }
+
+    if (!toCommit.length) {
+      if (rejectedReason) message.warning(rejectedReason)
+      return
+    }
+
+    toCommit.forEach((file) => {
+      const attachment = createAttachment(file, undefined, owner.nodeId)
+      if (!appendOwnerAttachment(owner.sessionId, attachment)) {
+        rejectedReason = '会话草稿不可用，未添加图片'
+        return
+      }
+      enqueueAttachmentUpload({
+        attachmentId: attachment.id,
+        sessionId: owner.sessionId,
+        projectId: owner.projectId,
+      })
+    })
+
+    if (rejectedReason) {
+      message.warning(
+        toCommit.length < files.length ? `部分文件未添加：${rejectedReason}` : rejectedReason,
+      )
+    }
   }
 
   async function addAttachmentFromCanvas(payload: {
@@ -391,7 +549,11 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       return
     }
 
-    const dedupeKey = buildCanvasFetchDedupeKey(payload)
+    const dedupeKey = buildCanvasFetchDedupeKey({
+      ...payload,
+      sessionId: ownerSessionId,
+      projectId: ownerProjectId,
+    })
     if (canvasFetchInflight.has(dedupeKey)) {
       options.focusInput()
       return
@@ -577,6 +739,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     removeAttachment,
     clearAttachments,
     invalidateAttachmentFetches,
+    cancelSessionAttachments,
     openFilePicker,
     onFileInputChange,
     onComposerDrop,

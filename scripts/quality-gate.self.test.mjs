@@ -4,10 +4,7 @@
  */
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import {
-  scanSourceForViolations,
-  stripCommentsForScan,
-} from './quality-gate.mjs'
+import { scanSourceForViolations, stripCommentsForScan } from './quality-gate.mjs'
 
 test('注释中的 type X = any 不应失败', () => {
   const src = `/**

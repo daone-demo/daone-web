@@ -25,6 +25,8 @@ export interface UseChatSessionsOptions {
   cancelAllTypewriters: () => void
   clearAttachments: () => void
   clearAssetMentions: () => void
+  /** 关闭标签时取消该会话附件的排队/校验/上传 */
+  cancelSessionAttachments: (sessionId: string) => void
   clearSelectedSkill: () => void
   closeModelMenu: () => void
   closeSkillMenu: () => void
@@ -44,8 +46,8 @@ export function useChatSessions(options: UseChatSessionsOptions) {
   const isProcessing = ref(false)
 
   const openTabs = computed(() => sessions.value.filter((item) => item.isOpen))
-  const activeSession = computed(() =>
-    sessions.value.find((item) => item.id === activeSessionId.value) ?? null,
+  const activeSession = computed(
+    () => sessions.value.find((item) => item.id === activeSessionId.value) ?? null,
   )
   const messages = computed(() => activeSession.value?.messages ?? [])
   const isActive = computed(() => messages.value.length > 0)
@@ -133,14 +135,11 @@ export function useChatSessions(options: UseChatSessionsOptions) {
       const records = res.records ?? []
       live.messages = records.map((item, index) => {
         const role = String(item.role || '').toUpperCase() === 'USER' ? 'user' : 'assistant'
-        const questionnaire = role === 'assistant'
-          ? extractQuestionnaireFromHistoryItem(item)
-          : undefined
+        const questionnaire =
+          role === 'assistant' ? extractQuestionnaireFromHistoryItem(item) : undefined
         const questionnaireAnswered = Boolean(
-          questionnaire
-          && records.slice(index + 1).some(
-            (next) => String(next.role || '').toUpperCase() === 'USER',
-          ),
+          questionnaire &&
+          records.slice(index + 1).some((next) => String(next.role || '').toUpperCase() === 'USER'),
         )
 
         return {
@@ -161,11 +160,14 @@ export function useChatSessions(options: UseChatSessionsOptions) {
     }
   }
 
-  function openSessionTab(historyItem: ChatHistorySession, tabOptions?: {
-    asDefault?: boolean
-    /** 是否拉取历史消息；初始化/props 同步时不拉，仅用户从历史打开时拉取 */
-    loadMessages?: boolean
-  }) {
+  function openSessionTab(
+    historyItem: ChatHistorySession,
+    tabOptions?: {
+      asDefault?: boolean
+      /** 是否拉取历史消息；初始化/props 同步时不拉，仅用户从历史打开时拉取 */
+      loadMessages?: boolean
+    },
+  ) {
     const shouldLoadMessages = tabOptions?.loadMessages === true
     const existing = sessions.value.find(
       (item) => item.id === historyItem.id || item.chatId === historyItem.id,
@@ -186,10 +188,10 @@ export function useChatSessions(options: UseChatSessionsOptions) {
       loadSessionDraft(existing)
       // 本地已有消息或正在流式输出时，不要被历史拉取覆盖
       if (
-        shouldLoadMessages
-        && !existing.messages.length
-        && !options.isStreaming.value
-        && !isSending.value
+        shouldLoadMessages &&
+        !existing.messages.length &&
+        !options.isStreaming.value &&
+        !isSending.value
       ) {
         void loadSessionMessages(existing)
       }
@@ -265,6 +267,8 @@ export function useChatSessions(options: UseChatSessionsOptions) {
   function closeTab(sessionId: string) {
     const target = sessions.value.find((item) => item.id === sessionId)
     if (!target) return
+
+    options.cancelSessionAttachments(sessionId)
 
     target.draft.attachments.forEach((item) => {
       if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)

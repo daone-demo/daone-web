@@ -215,6 +215,7 @@ const {
   removeAttachment,
   clearAttachments,
   invalidateAttachmentFetches,
+  cancelSessionAttachments,
   onFileInputChange,
   onComposerDrop,
 } = useChatAttachments({
@@ -268,6 +269,7 @@ const {
   cancelAllTypewriters,
   clearAttachments,
   clearAssetMentions,
+  cancelSessionAttachments,
   clearSelectedSkill: () => bridge.clearSelectedSkill(),
   closeModelMenu: () => bridge.closeModelMenu(),
   closeSkillMenu: () => bridge.closeSkillMenu(),
