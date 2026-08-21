@@ -24,7 +24,7 @@ import { nextTick,onBeforeUnmount,onMounted } from 'vue';
  * 迁移策略：先抽 helpers/ports，再按序把下方大块迁到 register*.ts；
  * 本文件在迁移完成前仍承载业务实现，行为与迁出前等价。
  */ import { clearCanvasAssetDrag,setCanvasAssetDropHandler } from '../../../canvasAssetDrag';
-import { attachChatTaskToNode,followChatGenerationTaskOnNode,linkChatTaskNodeToParent,normalizeChatTaskType,resolveChatTaskTargetNode,resolveChatTaskTitle,updateChatTaskNodeTitle,type ChatTaskCreatedPayload,type ChatTaskUpdatedPayload,} from '../../../chatGenerationTask';
+import { attachChatTaskToNode,followChatGenerationTaskOnNode,linkChatTaskNodeToParent,normalizeCanvasNodeId,normalizeChatTaskType,parseChatNodeIdList,resolveChatTaskTargetNode,resolveChatTaskTitle,updateChatTaskNodeTitle,type ChatTaskCreatedPayload,type ChatTaskUpdatedPayload,} from '../../../chatGenerationTask';
 import { normalizeAssetId } from '../../../constants';
 import { addElementGroupRecordToCanvas } from '../../../elementGroupCanvas';
 import { cancelAllGenerationTaskPolling,isGenerationProgressTitle,resetResumedGenerationTaskCache,setGenerationTaskSettledHandler,setGenerationTaskSucceededHandler } from '../../../generationTask';
@@ -441,6 +441,11 @@ export function installGraphLifecycle(ctx: CoreRuntimeContext) {
           return null;
       const existing = resolveChatTaskTargetNode(g, payload);
       if (existing) {
+          if (payload.relinkParentsOnly) {
+              linkChatTaskNodeToParent(g, existing, payload.parentNodeId);
+              ctx.scheduleHistoryPush();
+              return existing;
+          }
           attachChatTaskToNode(g, existing, payload, {
               onError: (reason) => message.error(reason),
               onComplete: () => {
@@ -452,13 +457,16 @@ export function installGraphLifecycle(ctx: CoreRuntimeContext) {
           ctx.scheduleHistoryPush();
           return existing;
       }
+      if (payload.relinkParentsOnly)
+          return null;
       const taskType = normalizeChatTaskType(payload.taskType);
       const title = resolveChatTaskTitle(payload);
       const taskTitleFields = isGenerationProgressTitle(title)
           ? { title }
           : { title, generationTaskName: title };
       const prompt = String(payload.prompt || '').trim();
-      const parentNodeId = String(payload.parentNodeId ?? '').trim();
+      const parentNodeIds = parseChatNodeIdList(payload.parentNodeId);
+      const parentNodeId = parentNodeIds[0] ?? '';
       const parentCell = parentNodeId ? g.getCellById(parentNodeId) : null;
       const parentNode = parentCell?.isNode() ? (parentCell as Node) : null;
       const parentData = parentNode
@@ -473,10 +481,8 @@ export function installGraphLifecycle(ctx: CoreRuntimeContext) {
               inputUpdated: Boolean(parentData.previewUrl),
           }
           : {};
-      const preferredNodeId = String(payload.nodeId ?? '').trim();
-      const canUsePreferredId = Boolean(preferredNodeId)
-          && preferredNodeId !== '字符串值'
-          && !g.getCellById(preferredNodeId);
+      const preferredNodeId = normalizeCanvasNodeId(payload.nodeId);
+      const canUsePreferredId = Boolean(preferredNodeId) && !g.getCellById(preferredNodeId);
       const center = ctx.getGraphCenter();
       const stacking = g.getNodes().filter((node) => {
           const data = node.getData() as CanvasNodeData;
@@ -570,7 +576,7 @@ export function installGraphLifecycle(ctx: CoreRuntimeContext) {
           },
           toHtml: ctx.plainTextToEditorHtml,
       });
-      linkChatTaskNodeToParent(g, node, parentNodeId);
+      linkChatTaskNodeToParent(g, node, payload.parentNodeId);
       ctx.selectGraphNodes(node);
       ctx.syncNodeCount();
       ctx.scheduleHistoryPush();

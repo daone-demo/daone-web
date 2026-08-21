@@ -1,5 +1,9 @@
 import { toValue } from 'vue'
 import type { MaybeRefOrGetter, Ref } from 'vue'
+import {
+  finalizeChatTaskParentNodeIds,
+  resolveChatTaskParentNodeIds,
+} from '@/components/Canvas/chatGenerationTask'
 import api from '@/services/api'
 import { getApiBaseURL, getToken } from '@/utils/request'
 import type {
@@ -213,6 +217,58 @@ export function useChatStream(options: UseChatStreamOptions) {
     const token = getToken()
     const skillName = streamOptions.skillName?.trim()
     const nodeId = streamOptions.nodeId?.trim()
+    const requestNodeIds = nodeId || ''
+    let chatTaskCreatedCount = 0
+    const chatTaskCreatedEvents: Array<{
+      taskId: string | number
+      taskType?: string
+      taskName?: string
+      prompt?: string
+      capabilityCode?: string
+      nodeId?: string
+      serverParentNodeId?: string
+    }> = []
+
+    const emitResolvedTaskCreated = (
+      event: (typeof chatTaskCreatedEvents)[number],
+      parentIds: string[],
+      relinkParentsOnly = false,
+    ) => {
+      options.emitTaskCreated({
+        taskId: event.taskId,
+        taskType: event.taskType,
+        taskName: event.taskName,
+        prompt: event.prompt,
+        capabilityCode: event.capabilityCode,
+        nodeId: event.nodeId,
+        parentNodeId: parentIds.join(',') || undefined,
+        projectId: boundProjectId || undefined,
+        relinkParentsOnly: relinkParentsOnly || undefined,
+      })
+    }
+
+    const finalizeChatTaskParentLinks = () => {
+      const taskCount = chatTaskCreatedEvents.length
+      if (!taskCount) return
+      chatTaskCreatedEvents.forEach((event, taskIndex) => {
+        const finalized = finalizeChatTaskParentNodeIds({
+          serverParentNodeId: event.serverParentNodeId,
+          requestNodeIds,
+          taskIndex,
+          taskCount,
+        })
+        const provisional = resolveChatTaskParentNodeIds({
+          serverParentNodeId: event.serverParentNodeId,
+          requestNodeIds,
+          taskIndex,
+        })
+        // 仅在定稿比临时结果多出父节点时补连（典型：单任务多源）
+        if (finalized.length <= provisional.length) return
+        if (finalized.every((id, index) => id === provisional[index])) return
+        emitResolvedTaskCreated(event, finalized, true)
+      })
+    }
+
     void options.connect({
       url: `${getApiBaseURL().replace(/\/$/, '')}/chat-sessions/${chatId}/messages/stream`,
       method: 'POST',
@@ -249,16 +305,26 @@ export function useChatStream(options: UseChatStreamOptions) {
           } else {
             awaitingRunningTask = true
           }
-          options.emitTaskCreated({
+          const event = {
             taskId: payload.taskId as string | number,
             taskType: payload.taskType,
             taskName: taskName || payload.taskName,
             prompt: payload.prompt,
             capabilityCode: payload.capabilityCode,
             nodeId: payload.nodeId,
-            parentNodeId: payload.parentNodeId,
-            projectId: boundProjectId || undefined,
-          })
+            serverParentNodeId: payload.parentNodeId,
+          }
+          const taskIndex = chatTaskCreatedCount
+          chatTaskCreatedCount += 1
+          chatTaskCreatedEvents.push(event)
+          emitResolvedTaskCreated(
+            event,
+            resolveChatTaskParentNodeIds({
+              serverParentNodeId: event.serverParentNodeId,
+              requestNodeIds,
+              taskIndex,
+            }),
+          )
           options.scrollMessagesToBottom()
           return
         }
@@ -283,6 +349,7 @@ export function useChatStream(options: UseChatStreamOptions) {
 
         // 服务端显式结束流：立即隐藏 thinking / 处理中 tip
         if (eventName === 'done') {
+          finalizeChatTaskParentLinks()
           setMessageTip(assistant, undefined)
           options.scrollMessagesToBottom()
           return
@@ -391,6 +458,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       },
       onDone() {
         if (isStreamStale()) return
+        finalizeChatTaskParentLinks()
         options.cancelTypewriter(assistantId)
         const assistant = resolveAssistant()
         // event=done / 流结束：隐藏 thinking 与处理中 tip（后台任务进度由任务事件单独驱动）
@@ -522,9 +590,15 @@ export function useChatStream(options: UseChatStreamOptions) {
         ].filter((id): id is string => Boolean(id)),
       ),
     )
+    // 多个画布节点一并加入对话框时，按附件顺序用逗号拼接全部 nodeId
     const nodeId =
-      payloadAttachments.map((item) => item.nodeId?.trim()).find((id): id is string => Boolean(id)) ||
-      undefined
+      Array.from(
+        new Set(
+          payloadAttachments
+            .map((item) => item.nodeId?.trim())
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ).join(',') || undefined
     const skillName = String(
       options.selectedSkill.value?.name ?? options.selectedSkill.value?.skillName ?? '',
     ).trim() || undefined
