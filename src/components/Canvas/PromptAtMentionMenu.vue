@@ -110,27 +110,27 @@ function confirmActive() {
   emit('select', item)
 }
 
-function onSearchKeydown(event: KeyboardEvent) {
-  if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    moveActive(1)
-    return
-  }
-  if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    moveActive(-1)
-    return
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    confirmActive()
-    return
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    emit('close')
-  }
-}
+// function onSearchKeydown(event: KeyboardEvent) {
+//   if (event.key === 'ArrowDown') {
+//     event.preventDefault()
+//     moveActive(1)
+//     return
+//   }
+//   if (event.key === 'ArrowUp') {
+//     event.preventDefault()
+//     moveActive(-1)
+//     return
+//   }
+//   if (event.key === 'Enter') {
+//     event.preventDefault()
+//     confirmActive()
+//     return
+//   }
+//   if (event.key === 'Escape') {
+//     event.preventDefault()
+//     emit('close')
+//   }
+// }
 
 defineExpose({
   moveActive,
