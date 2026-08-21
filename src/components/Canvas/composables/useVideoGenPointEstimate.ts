@@ -86,7 +86,8 @@ export function useVideoGenPointEstimate(input: {
 
   const estimatedCreditsLabel = computed(() => {
     const count = resolveVideoCount(input.videoCount())
-    const base = estimate.estimatedPoints.value
+    const base =
+      estimate.estimateStatus.value === 'ready' ? estimate.estimatedPoints.value : null
     if (base != null && Number.isFinite(base)) {
       return String(base * count)
     }

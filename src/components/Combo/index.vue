@@ -502,6 +502,23 @@ const plansLoadTracker = createLatestRequestTracker()
 const trialStatusTracker = createLatestRequestTracker()
 /** 弹窗打开会话：关闭/重开递增，用于丢弃迟到的试用提交回写 */
 let trialUiSessionId = 0
+/** 同一表单业务会话的稳定幂等键：网络失败复用，成功/身份或关键字段变化后失效 */
+let trialIdempotencyKey = ''
+let trialIdempotencyScope = ''
+
+function clearTrialIdempotencyKey() {
+  trialIdempotencyKey = ''
+  trialIdempotencyScope = ''
+}
+
+function ensureTrialIdempotencyKey(scope: string): string {
+  if (trialIdempotencyKey && trialIdempotencyScope === scope) {
+    return trialIdempotencyKey
+  }
+  trialIdempotencyKey = uuidv4()
+  trialIdempotencyScope = scope
+  return trialIdempotencyKey
+}
 
 const trialPlan = computed(() =>
   plansList.value.find((plan) => plan.code === 'TRIAL_5D')
@@ -898,6 +915,8 @@ async function submitTrial() {
     trialName.value.trim(),
     trialPosition.value.trim(),
   ].join('|')
+  const idempotencyScope = `${sessionAtStart}|${identityAtStart}|${formFingerprint}`
+  const idempotencyKey = ensureTrialIdempotencyKey(idempotencyScope)
 
   await runWithSubmitLock(trialSubmitting, async () => {
     try {
@@ -908,7 +927,7 @@ async function submitTrial() {
           contactName: trialName.value.trim(),
           position: trialPosition.value.trim(),
         },
-        uuidv4(),
+        idempotencyKey,
       )
       // 弹窗已关/重开、用户切换或表单已变：丢弃迟到成功，避免关掉新弹窗
       if (sessionAtStart !== trialUiSessionId) return
@@ -921,9 +940,11 @@ async function submitTrial() {
         trialPosition.value.trim(),
       ].join('|')
       if (formFingerprint !== currentFingerprint) return
+      clearTrialIdempotencyKey()
       message.success('操作成功')
       close()
     } catch (err: unknown) {
+      // 网络失败保留幂等键，供超时重试复用
       console.error('submitTrial', err)
     }
   })
@@ -950,6 +971,7 @@ function resetTrialForm() {
   trialRejectReason.value = ''
   slideVerifyOpen.value = false
   trialCodeCountdown.value = 0
+  clearTrialIdempotencyKey()
   if (trialCountdownTimer) {
     clearInterval(trialCountdownTimer)
     trialCountdownTimer = null
@@ -1004,6 +1026,7 @@ watch(open, (visible) => {
   lockBodyScroll(visible)
   if (visible) {
     trialUiSessionId += 1
+    clearTrialIdempotencyKey()
     void preloadSlideVerifyImages()
     void onloadPlans()
   } else {

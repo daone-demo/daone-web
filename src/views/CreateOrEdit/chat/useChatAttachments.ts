@@ -9,7 +9,7 @@ import {
 } from '@/components/Canvas/promptMention'
 import type { ChatAttachment } from '../chatTypes'
 import { findOwnedAttachmentTarget } from './chatAttachmentOwner'
-import { validateChatImageFile } from './chatAttachmentValidate'
+import { validateChatImageFile, validateChatImageFileAsync, planChatAttachmentBatch, CHAT_UPLOAD_MAX_CONCURRENCY } from './chatAttachmentValidate'
 
 export interface InsertImageToCanvasPayload {
   attachmentId: string
@@ -57,6 +57,9 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
   const canvasFetchAbortById = new Map<string, AbortController>()
   /** attachmentId → AbortController（OSS 直传） */
   const uploadAbortById = new Map<string, AbortController>()
+  /** 待直传队列（限制并发，避免拖入大批量时打满连接） */
+  const uploadQueue: string[] = []
+  let activeUploadCount = 0
 
   function currentProjectId() {
     return String(toValue(options.projectId) ?? '').trim()
@@ -90,6 +93,27 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       controller.abort()
       uploadAbortById.delete(attachmentId)
     }
+    const qi = uploadQueue.indexOf(attachmentId)
+    if (qi >= 0) uploadQueue.splice(qi, 1)
+  }
+
+  function enqueueAttachmentUpload(attachmentId: string) {
+    if (uploadQueue.includes(attachmentId) || uploadAbortById.has(attachmentId)) return
+    uploadQueue.push(attachmentId)
+    pumpUploadQueue()
+  }
+
+  function pumpUploadQueue() {
+    while (activeUploadCount < CHAT_UPLOAD_MAX_CONCURRENCY && uploadQueue.length) {
+      const nextId = uploadQueue.shift()
+      if (!nextId) break
+      if (!attachments.value.some((item) => item.id === nextId)) continue
+      activeUploadCount += 1
+      void uploadAttachmentToOss(nextId).finally(() => {
+        activeUploadCount = Math.max(0, activeUploadCount - 1)
+        pumpUploadQueue()
+      })
+    }
   }
 
   /** 切项目 / 重置会话时调用：取消所有进行中的画布附件拉取与上传 */
@@ -100,6 +124,8 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     canvasFetchInflight.clear()
     uploadAbortById.forEach((controller) => controller.abort())
     uploadAbortById.clear()
+    uploadQueue.length = 0
+    activeUploadCount = 0
   }
 
   function createAttachment(file: File, assetId?: string, nodeId?: string): ChatAttachment {
@@ -186,6 +212,14 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       patchSessionAttachment(ownerSessionId, attachmentId, {
         uploading: false,
         uploadError: validation.reason,
+      })
+      return
+    }
+    const deep = await validateChatImageFileAsync(attachment.file)
+    if (!deep.ok) {
+      patchSessionAttachment(ownerSessionId, attachmentId, {
+        uploading: false,
+        uploadError: deep.reason,
       })
       return
     }
@@ -282,29 +316,48 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
 
   function addAttachments(files: File[], assetId?: string, nodeId?: string) {
     options.ensureActiveSession()
-    let rejectedReason = ''
-    let accepted = 0
-    files.forEach((file) => {
-      // 已有 assetId 的画布回填不受本地文件白名单阻断（远端已入库）
-      if (!assetId) {
-        const check = validateChatImageFile(file)
-        if (!check.ok) {
-          rejectedReason = check.reason
-          return
-        }
-      }
-      const attachment = createAttachment(file, assetId, nodeId)
-      attachments.value.push(attachment)
-      accepted += 1
-      if (!assetId) {
-        void uploadAttachmentToOss(attachment.id)
-      }
-    })
-    if (!accepted && rejectedReason) {
-      message.warning(rejectedReason)
-    } else if (rejectedReason && accepted) {
-      message.warning(`部分文件未添加：${rejectedReason}`)
+    // 画布回填（已有 assetId）不受本地批量白名单阻断
+    if (assetId) {
+      files.forEach((file) => {
+        const attachment = createAttachment(file, assetId, nodeId)
+        attachments.value.push(attachment)
+      })
+      return
     }
+
+    void (async () => {
+      const planned = planChatAttachmentBatch(files, attachments.value.length)
+      const accepted: File[] = []
+      let rejectedReason = planned.rejectedReason
+
+      for (const file of planned.accepted) {
+        const deep = await validateChatImageFileAsync(file)
+        if (!deep.ok) {
+          rejectedReason = deep.reason
+          continue
+        }
+        accepted.push(file)
+      }
+
+      if (!accepted.length) {
+        if (rejectedReason) message.warning(rejectedReason)
+        return
+      }
+
+      accepted.forEach((file) => {
+        const attachment = createAttachment(file, assetId, nodeId)
+        attachments.value.push(attachment)
+        enqueueAttachmentUpload(attachment.id)
+      })
+
+      if (rejectedReason) {
+        message.warning(
+          accepted.length < files.length
+            ? `部分文件未添加：${rejectedReason}`
+            : rejectedReason,
+        )
+      }
+    })()
   }
 
   async function addAttachmentFromCanvas(payload: {

@@ -3,9 +3,14 @@
  * 使用方法语法（对参数双变）以便赋值与调用都能通过。
  * 未声明字段不再经 any 索引变成 any，拼写错误会在 unknown 索引上报错。
  *
- * 已按 任务 / 图节点 / 持久化 / 面板 拆分接口；返回值仍为临时 any，
+ * 已按 任务 / 图节点 / 持久化 / 面板 拆分接口；公共返回别名仍为临时 any；保存/项目切换/生成/上传等高风险槽位已补精确签名。
  * 见 quality-gate ANY_TYPE_ALIAS_WHITELIST（owner=canvas-runtime, expire=2026-09-30）。
  */
+
+import type { Graph, Node } from '@antv/x6'
+import type { ProjectCanvasResponse } from '@/services/api'
+import type { CanvasSnapshot } from '../../../canvasSnapshot'
+import type { GroupAiReferenceContext, GroupAiTask } from '../../../groupExecute/types'
 
 /**
  * 动态槽位返回值：跨 install* 赋值前保持宽松。
@@ -29,11 +34,26 @@ export interface CoreRuntimeTaskSlots {
   ensureGenerationResultLoadingNodes(...args: unknown[]): CoreRuntimeSlotReturn
   enterImageDialogueCanvasPickMode(...args: unknown[]): CoreRuntimeSlotReturn
   enterVideoGenCanvasPickMode(...args: unknown[]): CoreRuntimeSlotReturn
-  executeGroupAiImageTask(...args: unknown[]): CoreRuntimeSlotReturn
-  executeGroupAiTask(...args: unknown[]): CoreRuntimeSlotReturn
-  executeGroupAiTextCopyTask(...args: unknown[]): CoreRuntimeSlotReturn
-  executeGroupAiTextImg2PromptTask(...args: unknown[]): CoreRuntimeSlotReturn
-  executeGroupAiVideoTask(...args: unknown[]): CoreRuntimeSlotReturn
+  executeGroupAiImageTask(
+    node: Node,
+    refCtx: GroupAiReferenceContext,
+    options?: { sharedSiblingNodes?: Node[] },
+  ): Promise<boolean>
+  executeGroupAiTask(
+    g: Graph,
+    node: Node,
+    task: GroupAiTask,
+    refCtx: GroupAiReferenceContext,
+    scopeIds: Set<string>,
+    finishedAssets: Map<string, string>,
+  ): Promise<{ success: boolean; resultNodeId: string; sharedResultNodeIds?: string[] }>
+  executeGroupAiTextCopyTask(node: Node): Promise<boolean>
+  executeGroupAiTextImg2PromptTask(
+    g: Graph,
+    node: Node,
+    refCtx?: GroupAiReferenceContext,
+  ): Promise<boolean>
+  executeGroupAiVideoTask(node: Node, refCtx: GroupAiReferenceContext): Promise<boolean>
   exitImageDialogueCanvasPickMode(...args: unknown[]): CoreRuntimeSlotReturn
   exitVideoGenCanvasPickMode(...args: unknown[]): CoreRuntimeSlotReturn
   generateImageFromPrompt(...args: unknown[]): CoreRuntimeSlotReturn
@@ -79,7 +99,11 @@ export interface CoreRuntimeTaskSlots {
   resumeCanvasGenerationTasks(...args: unknown[]): CoreRuntimeSlotReturn
   revealVideoDialogueAfterGenerationFailure(...args: unknown[]): CoreRuntimeSlotReturn
   runBatchDownloadForNodeIds(...args: unknown[]): CoreRuntimeSlotReturn
-  runGroupAiGenerationPipeline(...args: unknown[]): CoreRuntimeSlotReturn
+  runGroupAiGenerationPipeline(
+    g: Graph,
+    groupId: string,
+    tasks: GroupAiTask[],
+  ): Promise<void>
   runImagePromptReverseTask(...args: unknown[]): CoreRuntimeSlotReturn
   runImageTo3DTask(...args: unknown[]): CoreRuntimeSlotReturn
   seedPromptImageRefs(...args: unknown[]): CoreRuntimeSlotReturn
@@ -247,7 +271,7 @@ export interface CoreRuntimeGraphSlots {
   removeSelectedEdge(...args: unknown[]): CoreRuntimeSlotReturn
   removeSelectedElementMark(...args: unknown[]): CoreRuntimeSlotReturn
   removeSelectedNodes(...args: unknown[]): CoreRuntimeSlotReturn
-  requestCanvasUpload(...args: unknown[]): CoreRuntimeSlotReturn
+  requestCanvasUpload(nodeId: string): void
   resetCanvasInteractionState(...args: unknown[]): CoreRuntimeSlotReturn
   resetCanvasPanCursorState(...args: unknown[]): CoreRuntimeSlotReturn
   resetGroupBlankHoverCursor(...args: unknown[]): CoreRuntimeSlotReturn
@@ -315,7 +339,7 @@ export interface CoreRuntimeGraphSlots {
 
 /** 持久化 / 项目切换 / 历史相关槽位 */
 export interface CoreRuntimePersistenceSlots {
-  applyProjectCanvasPayload(...args: unknown[]): CoreRuntimeSlotReturn
+  applyProjectCanvasPayload(payload: ProjectCanvasResponse): boolean
   applyToolbarImageGenerationSnapshot(...args: unknown[]): CoreRuntimeSlotReturn
   drainPendingSaveJobs(...args: unknown[]): CoreRuntimeSlotReturn
   enqueuePendingSaveJob(...args: unknown[]): CoreRuntimeSlotReturn
@@ -332,8 +356,13 @@ export interface CoreRuntimePersistenceSlots {
   recordCanvasDescription(...args: unknown[]): CoreRuntimeSlotReturn
   recordUploadCanvasDescription(...args: unknown[]): CoreRuntimeSlotReturn
   resolveActiveProjectId(...args: unknown[]): CoreRuntimeSlotReturn
-  runRemoteCanvasSaveJob(...args: unknown[]): CoreRuntimeSlotReturn
-  selectProject(...args: unknown[]): CoreRuntimeSlotReturn
+  runRemoteCanvasSaveJob(job: {
+    projectId: string
+    snapshot: CanvasSnapshot
+    type: 'MANUAL' | 'AUTO'
+    changeEpoch?: number
+  }): Promise<boolean>
+  selectProject(projectId: string): Promise<void>
   stopAutoSave(...args: unknown[]): CoreRuntimeSlotReturn
   syncHistoryState(...args: unknown[]): CoreRuntimeSlotReturn
   syncPendingRemoteSaveTypeFlag(...args: unknown[]): CoreRuntimeSlotReturn

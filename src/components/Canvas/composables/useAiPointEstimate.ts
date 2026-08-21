@@ -8,6 +8,7 @@ import {
   createAiPointEstimateState,
   invalidateAiPointEstimate,
   type AiPointEstimateState,
+  type AiPointEstimateStatus,
 } from './aiPointEstimateState'
 
 export type AiPointEstimateRequest = {
@@ -17,8 +18,7 @@ export type AiPointEstimateRequest = {
 
 /**
  * 按能力码 + parameters 动态预估积分。
- * 参数变化时保留上一次有效积分直至新请求返回，避免数字跳动；
- * 从未成功预估过时仍使用静态占位，不影响现有发送流程。
+ * 参数变化或请求失败时清空旧积分，展示静态兜底，避免误导当前费用。
  */
 export function useAiPointEstimate(options: {
   fallbackLabel: string
@@ -26,10 +26,16 @@ export function useAiPointEstimate(options: {
 }) {
   let state = createAiPointEstimateState()
   const estimatedPoints = ref<number | null>(state.estimatedPoints)
+  const estimateStatus = ref<AiPointEstimateStatus>(state.status)
   const estimatedCreditsLabel = computed(() => {
-    if (estimatedPoints.value != null && Number.isFinite(estimatedPoints.value)) {
+    if (
+      estimateStatus.value === 'ready' &&
+      estimatedPoints.value != null &&
+      Number.isFinite(estimatedPoints.value)
+    ) {
       return String(estimatedPoints.value)
     }
+    // loading / error / idle：可靠静态兜底，不展示过期参数价格
     return options.fallbackLabel
   })
 
@@ -38,6 +44,7 @@ export function useAiPointEstimate(options: {
   function commit(next: AiPointEstimateState) {
     state = next
     estimatedPoints.value = state.estimatedPoints
+    estimateStatus.value = state.status
   }
 
   const estimateSignature = computed(() => {
@@ -109,6 +116,7 @@ export function useAiPointEstimate(options: {
 
   return {
     estimatedPoints,
+    estimateStatus,
     estimatedCreditsLabel,
     refreshPointEstimate,
   }

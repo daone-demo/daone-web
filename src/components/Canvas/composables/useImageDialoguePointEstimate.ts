@@ -72,7 +72,8 @@ export function useImageDialoguePointEstimate(input: EstimateParamsInput) {
 
   const estimatedCreditsLabel = computed(() => {
     const count = resolveImageCount(input.imageCount.value)
-    const base = estimate.estimatedPoints.value
+    const base =
+      estimate.estimateStatus.value === 'ready' ? estimate.estimatedPoints.value : null
     if (base != null && Number.isFinite(base)) {
       return String(base * count)
     }
