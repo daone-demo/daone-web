@@ -19,13 +19,14 @@ import { setNodeData, isNodeOnGraph } from './generationTaskApply'
 const userInfoStore = useUserInfo()
 export let generationPollEpoch = 0
 let lastPointAccountQueryAt = 0
-export const activePollingTaskIds = new Set<string>()
+/** taskId → 当前 follow 的 owner token；finally 仅在 owner 仍匹配时删除，避免旧轮询清掉新登记 */
+export const activePollingTaskOwners = new Map<string, string>()
 export const resumedTaskIds = new Set<string>()
 
 export function cancelAllGenerationTaskPolling() {
   generationPollEpoch += 1
   resumedTaskIds.clear()
-  activePollingTaskIds.clear()
+  activePollingTaskOwners.clear()
 }
 
 export async function getGenerationTaskDetail<T = GenerationTaskDetail>(

@@ -32,7 +32,7 @@ import {
   markGenerationNodeFailed,
 } from './generationTaskApply'
 import {
-  activePollingTaskIds,
+  activePollingTaskOwners,
   generationPollEpoch,
   getGenerationTaskDetail,
   notifyGenerationTaskSettled,
@@ -47,19 +47,26 @@ import {
   updateGenerationTaskNodeTitleByTaskId,
 } from './generationTaskState'
 
+let followOwnerSeq = 0
+
 export function scheduleGenerationTaskFollow(taskId: string, follow: () => Promise<unknown>) {
   const key = taskId.trim()
-  if (!key || activePollingTaskIds.has(key)) return false
+  if (!key || activePollingTaskOwners.has(key)) return false
 
+  const owner = `follow-${Date.now()}-${++followOwnerSeq}`
   const epoch = generationPollEpoch
-  activePollingTaskIds.add(key)
+  activePollingTaskOwners.set(key, owner)
   void Promise.resolve()
     .then(async () => {
       if (epoch !== generationPollEpoch) return
+      if (activePollingTaskOwners.get(key) !== owner) return
       await follow()
     })
     .finally(() => {
-      activePollingTaskIds.delete(key)
+      // 仅清除自己登记的 key，避免旧轮询 finally 删掉同 taskId 的新轮询
+      if (activePollingTaskOwners.get(key) === owner) {
+        activePollingTaskOwners.delete(key)
+      }
     })
   return true
 }

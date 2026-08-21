@@ -1,5 +1,6 @@
 import { ref, toValue } from 'vue'
 import type { MaybeRefOrGetter } from 'vue'
+import { mintMediaProxyCandidates } from '@/components/Canvas/mediaProxy'
 import { uploadAssetFile } from '@/components/Canvas/upload'
 import {
   removeImageRefMentionFromPrompt,
@@ -205,23 +206,58 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     const assetId = payload.assetId || undefined
     const nodeId = payload.nodeId?.trim() || undefined
 
-    try {
-      const response = await fetch(payload.previewUrl, { mode: 'cors' })
+    const fetchBlob = async (url: string) => {
+      const response = await fetch(url, {
+        mode: 'cors',
+        credentials: url.startsWith('/') ? 'same-origin' : 'omit',
+      })
       if (!response.ok) throw new Error(`fetch failed: ${response.status}`)
-      const blob = await response.blob()
+      return response.blob()
+    }
+
+    try {
+      let blob: Blob | null = null
+      try {
+        blob = await fetchBlob(payload.previewUrl)
+      } catch {
+        // 直连跨域失败时走同源 media-proxy 再拉一次
+        const proxies = await mintMediaProxyCandidates(payload.previewUrl)
+        for (const proxyUrl of proxies) {
+          try {
+            blob = await fetchBlob(proxyUrl)
+            break
+          } catch {
+            // try next candidate
+          }
+        }
+      }
+      if (!blob) throw new Error('fetch image blob failed')
+
       const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' })
       addAttachments([file], assetId, nodeId)
     } catch (error) {
-      // 跨域/网络失败时不静默丢弃，降级为远程链接附件，保证资源仍出现在对话框中
-      console.warn('[ChatSidePanel] 拉取画布图片失败，降级为远程附件', error)
-      attachments.value.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        file: new File([], fileName, { type: 'image/jpeg' }),
-        previewUrl: payload.previewUrl,
-        fileName,
-        assetId,
-        nodeId,
-      })
+      console.warn('[ChatSidePanel] 拉取画布图片失败', error)
+      if (assetId) {
+        // 已有服务端 assetId，可直接随消息发送，无需本地文件内容
+        attachments.value.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          file: new File([], fileName, { type: 'image/jpeg' }),
+          previewUrl: payload.previewUrl,
+          fileName,
+          assetId,
+          nodeId,
+        })
+      } else {
+        // 无 assetId 且拉流失败：标记错误，禁止误发送空附件
+        attachments.value.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          file: new File([], fileName, { type: 'image/jpeg' }),
+          previewUrl: payload.previewUrl,
+          fileName,
+          nodeId,
+          uploadError: '图片拉取失败，请删除后重试',
+        })
+      }
     }
 
     options.focusInput()

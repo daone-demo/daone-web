@@ -345,8 +345,10 @@ const canSend = computed(() => {
   )
   const attachmentsReady = attachments.value.every((item) => {
     if (!item.file.type.startsWith('image/')) return true
-    if (item.assetId) return true
-    return !item.uploading && !item.uploadError
+    if (item.uploading) return false
+    if (item.uploadError) return false
+    // 图片必须有有效 assetId，避免空文件/远程降级附件误发
+    return Boolean(String(item.assetId ?? '').trim())
   })
   return hasContent && attachmentsReady
 })
