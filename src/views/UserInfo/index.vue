@@ -260,7 +260,7 @@
             <button
               type="button"
               class="user-info__notifications-read-all"
-              :disabled="unreadCount <= 0 || notificationsLoading"
+              :disabled="unreadCount <= 0 || notificationsLoading || notificationMutationGate.isMarkAllBusy()"
               @click="onMarkAllNotificationsRead"
             >
               全部标为已读
@@ -309,7 +309,7 @@
                 type="button"
                 class="user-info__notification-delete"
                 title="删除"
-                :disabled="notificationActionId === item.id"
+                :disabled="notificationMutationGate.isItemBusy(item.id)"
                 @click.stop="onDeleteNotification(item)"
               >
                 删除
@@ -690,8 +690,9 @@ import {
 import { useRoute, useRouter } from 'vue-router';
 import api, { type UnreadCountResponse, type UserNotificationResponse } from '@/services/api';
 import { sanitizeNotificationHtml } from '@/utils/sanitizeHtml';
-import { createLatestRequestTracker } from '@/utils/latestRequestTracker';
-import { useUserInfo } from '@/stores/useUserInfo';
+import { createLatestRequestTracker } from '@/utils/latestRequestTracker'
+import { createNotificationMutationGate } from '@/utils/notificationMutationGate'
+import { useUserInfo } from '@/stores/useUserInfo'
 import tools from '@/utils/tools';
 import dayjs from 'dayjs';
 import { message, type SelectProps } from 'ant-design-vue';
@@ -804,6 +805,7 @@ const showNotificationModal = ref(false)
 const activeNotification = ref<UserNotificationResponse | null>(null)
 const notificationsLoadTracker = createLatestRequestTracker()
 const unreadCountTracker = createLatestRequestTracker()
+const notificationMutationGate = createNotificationMutationGate(() => notificationIdentityKey())
 /** 首屏挂载期间跳过 tab watcher 里的未读数请求，避免与 onMounted 重复 */
 const userInfoBootstrapping = ref(true)
 
@@ -1211,15 +1213,33 @@ const onOpenNotification = async (item: UserNotificationResponse) => {
 
   if (item.isRead) return
 
+  const ticket = notificationMutationGate.beginMarkOne(item.id)
+  if (!ticket) return
+  const targetId = item.id
   try {
     await api.markNotificationRead(item.id)
-    item.isRead = true
-    item.readAt = dayjs().toISOString()
-    if (unreadCount.value > 0) {
-      unreadCount.value -= 1
+    if (!ticket.canCommit()) return
+    // 列表项可能已被替换；按目标 ID 回写，避免改错行
+    const row = notificationList.value.find((rowItem) => rowItem.id === targetId)
+    if (row && !row.isRead) {
+      row.isRead = true
+      row.readAt = dayjs().toISOString()
+      if (unreadCount.value > 0) {
+        unreadCount.value -= 1
+      }
+    }
+    if (activeNotification.value?.id === targetId) {
+      activeNotification.value = {
+        ...activeNotification.value,
+        isRead: true,
+        readAt: row?.readAt || dayjs().toISOString(),
+      }
     }
   } catch (error) {
+    if (!ticket.canCommit()) return
     console.error('onOpenNotification', error)
+  } finally {
+    ticket.end()
   }
 }
 
@@ -1230,8 +1250,11 @@ function closeNotificationModal() {
 
 const onMarkAllNotificationsRead = async () => {
   if (unreadCount.value <= 0 || notificationsLoading.value) return
+  const ticket = notificationMutationGate.beginMarkAll()
+  if (!ticket) return
   try {
     await api.markAllNotificationsRead()
+    if (!ticket.canCommit()) return
     notificationList.value = notificationList.value.map((item) => ({
       ...item,
       isRead: true,
@@ -1240,19 +1263,25 @@ const onMarkAllNotificationsRead = async () => {
     unreadCount.value = 0
     message.success('已全部标为已读')
   } catch (error) {
+    if (!ticket.canCommit()) return
     console.error('onMarkAllNotificationsRead', error)
+  } finally {
+    ticket.end()
   }
 }
 
 const onDeleteNotification = async (item: UserNotificationResponse) => {
-  if (notificationActionId.value === item.id) return
+  const ticket = notificationMutationGate.beginDelete(item.id)
+  if (!ticket) return
   notificationActionId.value = item.id
+  const targetId = item.id
   try {
     await api.deleteNotification(item.id)
+    if (!ticket.canCommit()) return
     const wasUnread = !item.isRead
-    notificationList.value = notificationList.value.filter((row) => row.id !== item.id)
+    notificationList.value = notificationList.value.filter((row) => row.id !== targetId)
     notificationTotal.value = Math.max(0, notificationTotal.value - 1)
-    if (activeNotification.value?.id === item.id) {
+    if (activeNotification.value?.id === targetId) {
       closeNotificationModal()
     }
     if (wasUnread && unreadCount.value > 0) {
@@ -1264,9 +1293,13 @@ const onDeleteNotification = async (item: UserNotificationResponse) => {
     }
     message.success('已删除')
   } catch (error) {
+    if (!ticket.canCommit()) return
     console.error('onDeleteNotification', error)
   } finally {
-    notificationActionId.value = null
+    ticket.end()
+    if (notificationActionId.value === targetId) {
+      notificationActionId.value = null
+    }
   }
 }
 
@@ -1435,6 +1468,7 @@ watch(activeTab, (tab) => {
 onBeforeUnmount(() => {
   notificationsLoadTracker.invalidate()
   unreadCountTracker.invalidate()
+  notificationMutationGate.invalidate()
   stopOrderPolling()
   revokeAvatarPreview()
   if (invoiceTitleSearchTimer) {

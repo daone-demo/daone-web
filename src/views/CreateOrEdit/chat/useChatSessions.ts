@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import type { Ref } from 'vue'
 import { message as antMessage } from 'ant-design-vue'
 import api from '@/services/api'
+import { stripAllImageRefMentionsFromPrompt } from '@/components/Canvas/promptMention'
 import type { ChatAttachment, ChatSession } from '../chatTypes'
 import type { StreamEvent } from './chatStreamParse'
 import { collectGenerationTaskIds } from './chatStreamParse'
@@ -268,11 +269,11 @@ export function useChatSessions(options: UseChatSessionsOptions) {
     const target = sessions.value.find((item) => item.id === sessionId)
     if (!target) return
 
+    // 作废预提交校验链、取消上传，并清空不可恢复的 uploading 草稿与 @图片N
     options.cancelSessionAttachments(sessionId)
-
-    target.draft.attachments.forEach((item) => {
-      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
-    })
+    target.draft.attachments = []
+    // cancel 已 strip；再兜底一次，覆盖未注入 draft message 回调的情况
+    target.draft.message = stripAllImageRefMentionsFromPrompt(target.draft.message || '')
 
     target.isOpen = false
 

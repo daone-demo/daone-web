@@ -225,6 +225,12 @@ const {
   getActiveSessionId: () => activeSessionId.value,
   getSessionAttachments: (sessionId) =>
     sessions.value.find((session) => session.id === sessionId)?.draft.attachments,
+  getSessionDraftMessage: (sessionId) =>
+    sessions.value.find((session) => session.id === sessionId)?.draft.message,
+  setSessionDraftMessage: (sessionId, next) => {
+    const session = sessions.value.find((item) => item.id === sessionId)
+    if (session) session.draft.message = next
+  },
   focusInput: () => bridge.focusInput(),
   saveActiveDraft: () => bridge.saveActiveDraft(),
   getMessage: () => bridge.message?.value ?? '',

@@ -25,6 +25,14 @@ import {
   removeChatUploadFromQueue,
   type ChatUploadQueueState,
 } from './chatAttachmentUploadQueue'
+import {
+  bumpSessionAttachOpGeneration,
+  getSessionAttachOpGeneration,
+  isSessionAttachOpCurrent,
+} from './chatAttachmentSessionOps'
+import {
+  clearSessionDraftAttachmentsState,
+} from './chatAttachmentDraftClear'
 
 export interface InsertImageToCanvasPayload {
   attachmentId: string
@@ -41,6 +49,9 @@ export interface UseChatAttachmentsOptions {
   ensureActiveSession: () => { id: string }
   getActiveSessionId: () => string
   getSessionAttachments: (sessionId: string) => ChatAttachment[] | undefined
+  /** 非活动会话草稿正文；关闭标签清空附件时需同步 strip @图片N */
+  getSessionDraftMessage?: (sessionId: string) => string | undefined
+  setSessionDraftMessage?: (sessionId: string, message: string) => void
   focusInput: () => void
   saveActiveDraft: () => void
   getMessage: () => string
@@ -80,6 +91,8 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
   let uploadQueueState: ChatUploadQueueState = createChatUploadQueueState()
   /** 串行化 addAttachments，避免双 drop 同时突破数量上限 */
   let addAttachmentsChain: Promise<void> = Promise.resolve()
+  /** 每会话附件操作 generation：关闭标签时 bump，作废预提交校验链 */
+  const sessionAttachOpGen = new Map<string, number>()
 
   function currentProjectId() {
     return String(toValue(options.projectId) ?? '').trim()
@@ -89,6 +102,16 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     if (owner.epoch !== attachmentFetchEpoch) return false
     if (owner.projectId !== currentProjectId()) return false
     return true
+  }
+
+  function isOwnedAddStillValid(
+    owner: { sessionId: string; projectId: string; epoch: number },
+    opGeneration: number,
+  ) {
+    if (!isSessionAttachOpCurrent(sessionAttachOpGen, owner.sessionId, opGeneration)) {
+      return false
+    }
+    return isOwnerContextValid(owner)
   }
 
   function getOwnerAttachmentCount(sessionId: string): number {
@@ -181,12 +204,66 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     uploadAbortById.clear()
     // bump generation：旧 finally 不得改写新队列计数
     uploadQueueState = bumpUploadQueueGeneration(uploadQueueState)
+    // 作废所有会话上尚未提交的 add 校验链
+    for (const sessionId of sessionAttachOpGen.keys()) {
+      bumpSessionAttachOpGeneration(sessionAttachOpGen, sessionId)
+    }
   }
 
-  /** 关闭标签时：取消该会话排队 / 校验中 / 上传中 / 画布拉取任务 */
+  /** 清空会话草稿附件并释放 Blob（关闭标签不保留不可恢复 uploading 态） */
+  function clearSessionDraftAttachments(sessionId: string) {
+    const id = String(sessionId || '').trim()
+    if (!id) return
+
+    const isActive = id === options.getActiveSessionId()
+    if (isActive) {
+      clearSessionDraftAttachmentsState({
+        sessionId: id,
+        isActive: true,
+        attachments: attachments.value,
+        getActiveSessionId: options.getActiveSessionId,
+        getMessage: options.getMessage,
+        setMessage: options.setMessage,
+        getSessionDraftMessage: options.getSessionDraftMessage,
+        setSessionDraftMessage: options.setSessionDraftMessage,
+        stripImageMentions: stripAllImageRefMentionsFromPrompt,
+        saveActiveDraft: options.saveActiveDraft,
+        onAbortAttachment: (attachmentId) => {
+          abortAttachmentUpload(attachmentId)
+          abortCanvasFetch(attachmentId)
+        },
+      })
+      // clearSessionDraftAttachmentsState 对传入数组 splice；同步到 ref
+      attachments.value = [...attachments.value]
+      return
+    }
+
+    const draftList = options.getSessionAttachments(id)
+    if (!draftList) return
+    clearSessionDraftAttachmentsState({
+      sessionId: id,
+      isActive: false,
+      attachments: [],
+      inactiveDraftAttachments: draftList,
+      getActiveSessionId: options.getActiveSessionId,
+      getMessage: options.getMessage,
+      setMessage: options.setMessage,
+      getSessionDraftMessage: options.getSessionDraftMessage,
+      setSessionDraftMessage: options.setSessionDraftMessage,
+      stripImageMentions: stripAllImageRefMentionsFromPrompt,
+      onAbortAttachment: (attachmentId) => {
+        abortAttachmentUpload(attachmentId)
+        abortCanvasFetch(attachmentId)
+      },
+    })
+  }
+
+  /** 关闭标签时：作废 add 链、取消排队/校验/上传，并清空不可恢复草稿 */
   function cancelSessionAttachments(sessionId: string) {
     const id = String(sessionId || '').trim()
     if (!id) return
+
+    bumpSessionAttachOpGeneration(sessionAttachOpGen, id)
 
     const draftList =
       id === options.getActiveSessionId() ? attachments.value : options.getSessionAttachments(id)
@@ -205,6 +282,9 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       ...uploadQueueState,
       items: uploadQueueState.items.filter((item) => item.sessionId !== id),
     }
+
+    // 关闭策略：不保留 uploading/失效预览草稿，避免 reopen 后发送门禁卡死
+    clearSessionDraftAttachments(id)
   }
 
   function createAttachment(file: File, assetId?: string, nodeId?: string): ChatAttachment {
@@ -417,15 +497,19 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     const ownerSessionId = ownerSession.id
     const ownerProjectId = currentProjectId()
     const ownerEpoch = attachmentFetchEpoch
+    const opGeneration = getSessionAttachOpGeneration(sessionAttachOpGen, ownerSessionId)
 
     // 画布回填（已有 assetId）同步写入 owner，不受本地批量白名单阻断
     if (assetId) {
       if (
-        !isOwnerContextValid({
-          sessionId: ownerSessionId,
-          projectId: ownerProjectId,
-          epoch: ownerEpoch,
-        })
+        !isOwnedAddStillValid(
+          {
+            sessionId: ownerSessionId,
+            projectId: ownerProjectId,
+            epoch: ownerEpoch,
+          },
+          opGeneration,
+        )
       ) {
         return
       }
@@ -442,6 +526,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
           sessionId: ownerSessionId,
           projectId: ownerProjectId,
           epoch: ownerEpoch,
+          opGeneration,
           nodeId,
         }),
       )
@@ -456,24 +541,34 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       sessionId: string
       projectId: string
       epoch: number
+      opGeneration: number
       nodeId?: string
     },
   ) {
-    if (!isOwnerContextValid(owner)) {
-      message.warning('会话已切换，未添加图片')
-      return
+    const ensureAddAllowed = (warnOnContextLoss: boolean) => {
+      if (
+        !isSessionAttachOpCurrent(sessionAttachOpGen, owner.sessionId, owner.opGeneration)
+      ) {
+        // 标签关闭 / 会话取消：静默丢弃，避免向已关闭草稿写入
+        return false
+      }
+      if (!isOwnerContextValid(owner)) {
+        if (warnOnContextLoss) message.warning('会话已切换，未添加图片')
+        return false
+      }
+      return true
     }
+
+    if (!ensureAddAllowed(true)) return
 
     const planned = planChatAttachmentBatch(files, getOwnerAttachmentCount(owner.sessionId))
     const accepted: File[] = []
     let rejectedReason = planned.rejectedReason
 
     for (const file of planned.accepted) {
-      if (!isOwnerContextValid(owner)) {
-        message.warning('会话已切换，未添加图片')
-        return
-      }
+      if (!ensureAddAllowed(true)) return
       const deep = await validateChatImageFileAsync(file)
+      if (!ensureAddAllowed(false)) return
       if (!deep.ok) {
         rejectedReason = deep.reason
         continue
@@ -481,10 +576,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
       accepted.push(file)
     }
 
-    if (!isOwnerContextValid(owner)) {
-      message.warning('会话已切换，未添加图片')
-      return
-    }
+    if (!ensureAddAllowed(true)) return
 
     // 二次按 owner 当前数量截断，防止异步期间其他同步路径插入
     const room = Math.max(0, CHAT_ATTACHMENT_MAX_COUNT - getOwnerAttachmentCount(owner.sessionId))
@@ -499,6 +591,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
     }
 
     toCommit.forEach((file) => {
+      if (!ensureAddAllowed(false)) return
       const attachment = createAttachment(file, undefined, owner.nodeId)
       if (!appendOwnerAttachment(owner.sessionId, attachment)) {
         rejectedReason = '会话草稿不可用，未添加图片'
@@ -510,6 +603,8 @@ export function useChatAttachments(options: UseChatAttachmentsOptions) {
         projectId: owner.projectId,
       })
     })
+
+    if (!ensureAddAllowed(false)) return
 
     if (rejectedReason) {
       message.warning(
