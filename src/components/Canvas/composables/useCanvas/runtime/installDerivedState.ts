@@ -748,6 +748,8 @@ export function installDerivedState(ctx: CoreRuntimeContext) {
   
   ctx.showNodeToolbar = computed(() => {
       void ctx.toolbarRevision.value;
+      if (ctx.showImageContextMenu.value)
+          return false;
       if (ctx.videoToolbarClickDeferred.value)
           return false;
       if (ctx.showVideoGenCanvasPickMode.value || ctx.showImageDialogueCanvasPickMode.value)

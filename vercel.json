@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/api/v1/:path*",
-      "destination": "https://43.161.199.75/api/api/v1/:path*"
+      "destination": "http://43.161.199.75/api/api/v1/:path*"
     },
     {
       "source": "/media-proxy/sign",
