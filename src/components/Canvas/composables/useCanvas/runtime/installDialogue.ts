@@ -9,12 +9,12 @@ import {message} from 'ant-design-vue';
 import {nextTick,provide} from 'vue';
 import {createDefaultVideoDialogueSettings,IMAGE_GENERAL_CAPABILITY_CODE,isNodeFileUploading,resolveGenerationTaskWorkflowId,resolveImageAssetId,toVideoApiClarity,VIDEO_GENERAL_CAPABILITY_CODE,type ImageDialogueSubmitPayload,type VideoDialogueSubmitPayload} from '../../../constants';
 import {buildImageGenerationParams,buildTextGenerationParams,imageDialogueSettingsFromPayload,persistNodeGenerationSnapshot} from '../../../generationParams';
-import {bindGenerationTaskId,followTextGenerationTaskOnNode,markTextGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,runImageGenerationOnNode,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail} from '../../../generationTask';
+import {bindGenerationTaskId,followTextGenerationTaskOnNode,markGenerationNodeFailed,markTextGenerationNodeFailed,normalizeGenerationTaskDetail,startImageGenerationOnNode,startVideoGenerationTaskFollow,type GenerationTaskDetail} from '../../../generationTask';
 import {createIdempotencyKey} from '../../../idempotency';
 import {toVideoApiPrompt} from '../../../promptMention';
 import {getBoundingBoxCenter} from '../../../viewport';
 import type {CanvasNodeData} from '.././sharedImports';
-import {api,getNodeSize,getScroller,isImageGenerationFailedNode,isVideoGenerationFailedNode,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resolveText2ImageGenerationTargetNode,runUploadSimulation,spawnGenerationResultNode,spawnVideoGenerationResultNode,syncTextNodeImageSource} from '.././sharedImports';
+import {api,getImageGenerationPlaceholderSize,getNodeSize,getScroller,isImageGenerationFailedNode,isVideoGenerationFailedNode,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resolveText2ImageGenerationTargetNode,runUploadSimulation,spawnGenerationResultNode,spawnVideoGenerationResultNode,syncTextNodeImageSource} from '.././sharedImports';
 import type {CoreRuntimeContext} from './context';
 import {installDialoguePromptFieldState} from './dialogue/promptFieldState';
 import {installDialogueElementMarkMode} from './dialogue/elementMarkMode';
@@ -200,14 +200,6 @@ export function installDialogue(ctx: CoreRuntimeContext) {
                   videoDialogueSettings: text2videoSettings,
               });
               const plannedPoints = planOutgoingResultPoints(g, cell as Node, layoutSize, requestedCount, 'right');
-              const resultNode = spawnVideoGenerationResultNode(g, cell as Node, {
-                  title: '文生视频',
-                  fileName: '文生视频.mp4',
-                  videoDialogueText: trimmedPrompt,
-                  videoDialogueSettings: text2videoSettings,
-                  genPrompt: trimmedPrompt,
-                  centerPoint: plannedPoints[0],
-              });
               const videoParameters: Record<string, unknown> = {
                   mode: videoPayload?.mode ?? 'text-to-video',
                   model: videoPayload?.model,
@@ -215,29 +207,40 @@ export function installDialogue(ctx: CoreRuntimeContext) {
                   clarity: toVideoApiClarity(videoPayload?.clarity ?? '720P'),
                   duration: videoPayload?.duration ?? 5,
                   generateAudio: videoPayload?.generateAudio ?? true,
-                  videoCount: videoPayload?.videoCount ?? 1,
+                  videoCount: requestedCount,
               };
-              ctx.applyVideoGenerationProvenance(resultNode, {
-                  prompt: trimmedPrompt,
-                  model: text2videoSettings.modelKey,
-                  ratio: text2videoSettings.aspectRatio,
-                  clarity: text2videoSettings.resolution,
-                  duration: text2videoSettings.duration,
-                  generateAudio: text2videoSettings.generateAudio,
-                  videoCount: text2videoSettings.videoCount,
-                  mode: text2videoSettings.mode,
-              }, [], {
-                  capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
-                  parameters: videoParameters,
-              });
-              ctx.closeTextPromptBar();
-              const idempotencyKey = createIdempotencyKey('text2video');
-              try {
+              const singleVideoParameters = { ...videoParameters, videoCount: 1 };
+              const buildVideoResultNode = (index: number) => {
+                  const resultNode = spawnVideoGenerationResultNode(g, cell as Node, {
+                      title: '文生视频',
+                      fileName: ctx.resolveGenerationResultFileName(() => '文生视频.mp4', '文生视频.mp4', index, requestedCount),
+                      videoDialogueText: trimmedPrompt,
+                      videoDialogueSettings: text2videoSettings,
+                      genPrompt: trimmedPrompt,
+                      centerPoint: plannedPoints[index],
+                  });
+                  ctx.applyVideoGenerationProvenance(resultNode, {
+                      prompt: trimmedPrompt,
+                      model: text2videoSettings.modelKey,
+                      ratio: text2videoSettings.aspectRatio,
+                      clarity: text2videoSettings.resolution,
+                      duration: text2videoSettings.duration,
+                      generateAudio: text2videoSettings.generateAudio,
+                      videoCount: text2videoSettings.videoCount,
+                      mode: text2videoSettings.mode,
+                  }, [], {
+                      capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
+                      parameters: videoParameters,
+                  });
+                  return resultNode;
+              };
+              const startVideoTaskOnNode = async (resultNode: Node, index: number) => {
+                  const idempotencyKey = createIdempotencyKey('text2video', index);
                   const created = normalizeGenerationTaskDetail(await api.createGenerationTask<GenerationTaskDetail>({
                       taskType: 'VIDEO',
                       capabilityCode: VIDEO_GENERAL_CAPABILITY_CODE,
                       prompt: toVideoApiPrompt(trimmedPrompt),
-                      parameters: videoParameters,
+                      parameters: singleVideoParameters,
                       projectId: ctx.activeProjectId.value,
                       nodeId: resultNode.id,
                   }, idempotencyKey));
@@ -253,21 +256,42 @@ export function installDialogue(ctx: CoreRuntimeContext) {
                   });
                   startVideoGenerationTaskFollow(resultNode, taskId, {
                       title: '文生视频',
-                      fileName: '文生视频.mp4',
+                      fileName: ctx.resolveGenerationResultFileName(() => '文生视频.mp4', '文生视频.mp4', index, requestedCount),
                       onError: (reason) => message.error(reason),
                       onComplete: (success) => ctx.handleVideoGenerationTaskComplete(resultNode.id, success),
                   });
-                  ctx.selectedNodeId.value = resultNode.id;
-                  ctx.selectedKind.value = 'video';
-                  ctx.syncNodeSelectionHighlight(resultNode.id);
+                  return resultNode;
+              };
+              ctx.closeTextPromptBar();
+              try {
+                  if (requestedCount === 1) {
+                      const resultNode = buildVideoResultNode(0);
+                      await startVideoTaskOnNode(resultNode, 0);
+                      ctx.selectedNodeId.value = resultNode.id;
+                      ctx.selectedKind.value = 'video';
+                      ctx.syncNodeSelectionHighlight(resultNode.id);
+                  }
+                  else {
+                      const resultNodes = await Promise.all(Array.from({ length: requestedCount }, (_, index) => startVideoTaskOnNode(buildVideoResultNode(index), index)));
+                      ctx.selectedNodeId.value = resultNodes[0].id;
+                      ctx.selectedKind.value = 'video';
+                      ctx.syncNodeSelectionHighlight(resultNodes[0].id);
+                      nextTick(() => {
+                          const scroller = getScroller(g);
+                          if (!scroller)
+                              return;
+                          const center = getBoundingBoxCenter(resultNodes.map((node) => node.getBBox()));
+                          scroller.transitionToPoint(center.x, center.y, {
+                              duration: '280ms',
+                          });
+                      });
+                  }
                   ctx.syncNodeCount();
                   ctx.bumpToolbarRevision();
                   ctx.updateNodeToolbar();
                   ctx.scheduleHistoryPush();
               }
               catch (error) {
-                  markVideoGenerationNodeFailed(resultNode);
-                  ctx.revealVideoDialogueAfterGenerationFailure(resultNode.id);
                   message.error(isRequestError(error) ? error.message : '文生视频失败，请稍后重试');
               }
               return;
@@ -283,37 +307,6 @@ export function installDialogue(ctx: CoreRuntimeContext) {
               ctx.closeTextPromptBar();
               const sourceNode = cell as Node;
               const existingTarget = resolveText2ImageGenerationTargetNode(g, sourceNode);
-              let resultNode: Node;
-              if (existingTarget) {
-                  resultNode = existingTarget;
-                  if (isImageGenerationFailedNode(resultNode.getData() as CanvasNodeData)) {
-                      resetImageGenerationNodeForRetry(resultNode, {
-                          title: '文生图',
-                          fileName: '文生图.png',
-                          prompt: trimmedPrompt,
-                      });
-                  }
-                  else {
-                      prepareImageNodeForInPlaceGeneration(resultNode, {
-                          title: '文生图',
-                          fileName: '文生图.png',
-                          prompt: trimmedPrompt,
-                      });
-                  }
-              }
-              else {
-                  const imagePreviewSize = getNodeSize('image', 'editor', {
-                      kind: 'image',
-                      mode: 'editor',
-                      imageGenState: 'loading',
-                  });
-                  const [imageCenterPoint] = planOutgoingResultPoints(g, sourceNode, imagePreviewSize, 1, 'right');
-                  resultNode = spawnGenerationResultNode(g, sourceNode, {
-                      title: '文生图',
-                      fileName: '文生图.png',
-                      centerPoint: imageCenterPoint,
-                  });
-              }
               const imageParameters: Record<string, unknown> = {
                   model: imagePayload?.model,
                   aspectRatio: imagePayload?.aspectRatio,
@@ -322,6 +315,8 @@ export function installDialogue(ctx: CoreRuntimeContext) {
               if (imagePayload?.resolution) {
                   imageParameters.resolution = imagePayload.resolution;
               }
+              const requestedCount = Math.max(1, Math.floor(Number(imageParameters.count)) || 1);
+              const singleImageParameters = { ...imageParameters, count: 1 };
               const text2ImageSettings = ctx.normalizeImageDialogueSettings(imageDialogueSettingsFromPayload(imagePayload));
               const text2ImageGenerationParams = buildImageGenerationParams({
                   prompt: trimmedPrompt,
@@ -329,74 +324,143 @@ export function installDialogue(ctx: CoreRuntimeContext) {
                   parameters: imageParameters,
                   workflowId: resolveGenerationTaskWorkflowId(imagePayload?.workflowId, imagePayload?.workflow) ?? undefined,
               });
-              ctx.applyImageDialogueProvenance(resultNode, {
-                  prompt: trimmedPrompt,
-                  settings: text2ImageSettings,
-                  sourceRefs: [],
-                  generationParams: text2ImageGenerationParams,
+              const buildText2ImageResultNode = (index: number) => {
+                  if (index === 0 && existingTarget) {
+                      return existingTarget;
+                  }
+                  const imagePreviewSize = getNodeSize('image', 'editor', {
+                      kind: 'image',
+                      mode: 'editor',
+                      imageGenState: 'loading',
+                  });
+                  const plannedPoints = planOutgoingResultPoints(g, sourceNode, imagePreviewSize, requestedCount, 'right');
+                  return spawnGenerationResultNode(g, sourceNode, {
+                      title: '文生图',
+                      fileName: ctx.resolveGenerationResultFileName(() => '文生图.png', '文生图.png', index, requestedCount),
+                      centerPoint: plannedPoints[index],
+                  });
+              };
+              const prepareText2ImageNode = (resultNode: Node, index: number) => {
+                  if (index === 0 && existingTarget) {
+                      if (isImageGenerationFailedNode(resultNode.getData() as CanvasNodeData)) {
+                          resetImageGenerationNodeForRetry(resultNode, {
+                              title: '文生图',
+                              fileName: '文生图.png',
+                              prompt: trimmedPrompt,
+                          });
+                      }
+                      else {
+                          prepareImageNodeForInPlaceGeneration(resultNode, {
+                              title: '文生图',
+                              fileName: '文生图.png',
+                              prompt: trimmedPrompt,
+                          });
+                      }
+                      return;
+                  }
+                  prepareImageNodeForInPlaceGeneration(resultNode, {
+                      title: '文生图',
+                      fileName: ctx.resolveGenerationResultFileName(() => '文生图.png', '文生图.png', index, requestedCount),
+                      prompt: trimmedPrompt,
+                  });
+              };
+              const resultNodes: Node[] = [];
+              for (let index = 0; index < requestedCount; index += 1) {
+                  const resultNode = buildText2ImageResultNode(index);
+                  prepareText2ImageNode(resultNode, index);
+                  ctx.applyImageDialogueProvenance(resultNode, {
+                      prompt: trimmedPrompt,
+                      settings: text2ImageSettings,
+                      sourceRefs: [],
+                      generationParams: text2ImageGenerationParams,
+                  });
+                  resultNodes.push(resultNode);
+              }
+              const startText2ImageTask = (resultNode: Node, index: number) => startImageGenerationOnNode(resultNode, {
+                  title: '文生图',
+                  fileName: ctx.resolveGenerationResultFileName(() => '文生图.png', '文生图.png', index, requestedCount),
+                  createTask: async () => {
+                      const idempotencyKey = createIdempotencyKey('text2image', index);
+                      const created = await api.createGenerationTask<GenerationTaskDetail>({
+                          taskType: 'IMAGE',
+                          capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+                          prompt: trimmedPrompt,
+                          parameters: singleImageParameters,
+                          projectId: ctx.activeProjectId.value,
+                          nodeId: resultNode.id,
+                          workflowId: resolveGenerationTaskWorkflowId(imagePayload?.workflowId, imagePayload?.workflow),
+                      }, idempotencyKey);
+                      ctx.userInfoStore.queryPointAccount();
+                      return created;
+                  },
+                  onTaskBound: () => ctx.persistGenerationTaskBinding(resultNode, {
+                      detail: trimmedPrompt,
+                      taskType: promptTaskType,
+                  }),
+                  onError: (reason) => message.error(reason),
+                  onComplete: async (result) => {
+                      ctx.resetSourceImageDialogueAfterSuccess(sourceNode, resultNode, result);
+                      if (requestedCount > 1 || !result.success || index !== 0)
+                          return;
+                      const extraResults = result.extraResults ?? [];
+                      if (!extraResults.length)
+                          return;
+                      const totalCount = 1 + extraResults.length;
+                      const extraNodes = await ctx.spawnNodesForExtraGenerationResults(g, sourceNode, extraResults, {
+                          title: '文生图',
+                          sourceFileName: '文生图.png',
+                          buildFileName: () => '文生图.png',
+                          resultIndexOffset: 1,
+                          totalCount,
+                          snapshotSourceNode: resultNode,
+                      });
+                      if (extraNodes.length) {
+                          ctx.syncNodeCount();
+                          nextTick(() => {
+                              const scroller = getScroller(g);
+                              if (!scroller)
+                                  return;
+                              const center = getBoundingBoxCenter([resultNode, ...extraNodes].map((node) => node.getBBox()));
+                              scroller.transitionToPoint(center.x, center.y, {
+                                  duration: '280ms',
+                              });
+                          });
+                      }
+                      ctx.bumpToolbarRevision();
+                      ctx.updateNodeToolbar();
+                      ctx.scheduleHistoryPush();
+                  },
               });
               try {
-                  const sourceFileName = '文生图.png';
-                  const started = await startImageGenerationOnNode(resultNode, {
-                      title: '文生图',
-                      fileName: '文生图.png',
-                      createTask: async () => {
-                          const idempotencyKey = createIdempotencyKey('text2image');
-                          const created = await api.createGenerationTask<GenerationTaskDetail>({
-                              taskType: 'IMAGE',
-                              capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
-                              prompt: trimmedPrompt,
-                              parameters: imageParameters,
-                              projectId: ctx.activeProjectId.value,
-                              nodeId: resultNode.id,
-                              workflowId: resolveGenerationTaskWorkflowId(imagePayload?.workflowId, imagePayload?.workflow),
-                          }, idempotencyKey);
-                          ctx.userInfoStore.queryPointAccount();
-                          return created;
-                      },
-                      onTaskBound: () => ctx.persistGenerationTaskBinding(resultNode, {
-                          detail: trimmedPrompt,
-                          taskType: promptTaskType,
-                      }),
-                      onError: (reason) => message.error(reason),
-                      onComplete: async (result) => {
-                          ctx.resetSourceImageDialogueAfterSuccess(sourceNode, resultNode, result);
-                          if (!result.success)
-                              return;
-                          const extraResults = result.extraResults ?? [];
-                          if (extraResults.length) {
-                              const totalCount = 1 + extraResults.length;
-                              const extraNodes = await ctx.spawnNodesForExtraGenerationResults(g, sourceNode, extraResults, {
-                                  title: '文生图',
-                                  sourceFileName,
-                                  buildFileName: () => sourceFileName,
-                                  resultIndexOffset: 1,
-                                  totalCount,
-                                  snapshotSourceNode: resultNode,
-                              });
-                              if (extraNodes.length) {
-                                  ctx.syncNodeCount();
-                                  nextTick(() => {
-                                      const scroller = getScroller(g);
-                                      if (!scroller)
-                                          return;
-                                      const center = getBoundingBoxCenter([resultNode, ...extraNodes].map((node) => node.getBBox()));
-                                      scroller.transitionToPoint(center.x, center.y, {
-                                          duration: '280ms',
-                                      });
-                                  });
+                  if (requestedCount === 1) {
+                      const started = await startText2ImageTask(resultNodes[0], 0);
+                      if (!started.started)
+                          return;
+                  }
+                  else {
+                      const outcomes = await Promise.allSettled(resultNodes.map((resultNode, index) => startText2ImageTask(resultNode, index)));
+                      const started = outcomes.some((outcome) => outcome.status === 'fulfilled' && outcome.value.started);
+                      if (!started) {
+                          resultNodes.forEach((node) => {
+                              if ((node.getData() as CanvasNodeData).imageGenState === 'loading') {
+                                  markGenerationNodeFailed(node);
                               }
-                          }
-                          ctx.bumpToolbarRevision();
-                          ctx.updateNodeToolbar();
-                          ctx.scheduleHistoryPush();
-                      },
-                  });
-                  if (!started.started)
-                      return;
-                  ctx.selectedNodeId.value = resultNode.id;
+                          });
+                          return;
+                      }
+                      nextTick(() => {
+                          const scroller = getScroller(g);
+                          if (!scroller)
+                              return;
+                          const center = getBoundingBoxCenter(resultNodes.map((node) => node.getBBox()));
+                          scroller.transitionToPoint(center.x, center.y, {
+                              duration: '280ms',
+                          });
+                      });
+                  }
+                  ctx.selectedNodeId.value = resultNodes[0].id;
                   ctx.selectedKind.value = 'image';
-                  ctx.syncNodeSelectionHighlight(resultNode.id);
+                  ctx.syncNodeSelectionHighlight(resultNodes[0].id);
                   ctx.syncNodeCount();
                   ctx.bumpToolbarRevision();
                   ctx.updateNodeToolbar();
@@ -509,6 +573,8 @@ export function installDialogue(ctx: CoreRuntimeContext) {
       if (settings.resolution) {
           taskParameters.resolution = settings.resolution;
       }
+      const requestedCount = Math.max(1, Math.floor(Number(taskParameters.count)) || 1);
+      const singleTaskParameters = { ...taskParameters, count: 1 };
       const referenceAssetIds = ctx.resolvePromptReferenceAssetIds(syncedData);
       persistNodeGenerationSnapshot(node, {
           ...buildImageGenerationParams({
@@ -523,41 +589,92 @@ export function installDialogue(ctx: CoreRuntimeContext) {
           genPrompt: prompt,
           genSeed: syncedData.genSeed ?? ctx.imageGenSeed.value,
       });
-      node.setData({
-          ...(node.getData() as CanvasNodeData),
-          imageGenState: 'loading',
-          imageGenProgress: 0,
-          genPrompt: prompt,
-      }, { overwrite: true });
       ctx.closeImageGenPromptBar();
-      const fileName = syncedData.fileName || syncedData.title || '文生图.png';
+      const title = syncedData.title || '文生图';
+      const sourceFileName = syncedData.fileName || syncedData.title || '';
+      const buildIndexedFileName = (index: number) => ctx.resolveGenerationResultFileName(() => `${title}.png`, sourceFileName || `${title}.png`, index, requestedCount);
+      const resultNodes: Node[] = [node];
+      prepareImageNodeForInPlaceGeneration(node, {
+          title,
+          fileName: buildIndexedFileName(0),
+          prompt,
+      });
+      if (requestedCount > 1) {
+          const batchPreviewSize = getImageGenerationPlaceholderSize(node);
+          const plannedPoints = planOutgoingResultPoints(g, node, batchPreviewSize, requestedCount, 'right');
+          for (let index = 1; index < requestedCount; index += 1) {
+              const extraNode = spawnGenerationResultNode(g, node, {
+                  title,
+                  fileName: buildIndexedFileName(index),
+                  centerPoint: plannedPoints[index],
+              });
+              prepareImageNodeForInPlaceGeneration(extraNode, {
+                  title,
+                  fileName: buildIndexedFileName(index),
+                  prompt,
+              });
+              resultNodes.push(extraNode);
+          }
+      }
+      ctx.selectedNodeId.value = nodeId;
+      ctx.selectedKind.value = 'image';
+      ctx.syncNodeSelectionHighlight(nodeId);
+      ctx.syncNodeCount();
+      ctx.bumpToolbarRevision();
+      ctx.updateNodeToolbar();
+      ctx.scheduleHistoryPush();
+      const startPromptGeneration = (resultNode: Node, index: number) => startImageGenerationOnNode(resultNode, {
+          title,
+          fileName: buildIndexedFileName(index),
+          createTask: async () => {
+              const idempotencyKey = createIdempotencyKey('img-prompt', index);
+              const created = await api.createGenerationTask<GenerationTaskDetail>({
+                  taskType: 'IMAGE',
+                  capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
+                  prompt,
+                  parameters: singleTaskParameters,
+                  projectId: ctx.activeProjectId.value,
+                  nodeId: resultNode.id,
+                  referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
+                  workflowId: resolveGenerationTaskWorkflowId(settings.workflowId),
+              }, idempotencyKey);
+              ctx.userInfoStore.queryPointAccount();
+              return created;
+          },
+          onTaskBound: () => ctx.persistGenerationTaskBinding(resultNode, { detail: prompt, taskType: '文生图' }),
+          onError: (reason) => message.error(reason),
+      });
       try {
-          const outcome = await runImageGenerationOnNode(node, {
-              title: syncedData.title || '文生图',
-              fileName,
-              createTask: async () => {
-                  const idempotencyKey = createIdempotencyKey('img-prompt');
-                  const created = await api.createGenerationTask<GenerationTaskDetail>({
-                      taskType: 'IMAGE',
-                      capabilityCode: IMAGE_GENERAL_CAPABILITY_CODE,
-                      prompt,
-                      parameters: { count: 1 },
-                      projectId: ctx.activeProjectId.value,
-                      nodeId: node.id,
-                      referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
-                  }, idempotencyKey);
-                  ctx.userInfoStore.queryPointAccount();
-                  return created;
-              },
-              onTaskBound: () => ctx.persistGenerationTaskBinding(node, { detail: prompt, taskType: '文生图' }),
-              onError: (reason) => message.error(reason),
-          });
-          if (!outcome.success)
-              return;
-          ctx.selectedNodeId.value = nodeId;
-          ctx.selectedKind.value = 'image';
-          ctx.syncNodeSelectionHighlight(nodeId);
+          if (requestedCount === 1) {
+              const started = await startPromptGeneration(node, 0);
+              if (!started.started)
+                  return;
+          }
+          else {
+              const outcomes = await Promise.allSettled(resultNodes.map((resultNode, index) => startPromptGeneration(resultNode, index)));
+              const started = outcomes.some((outcome) => outcome.status === 'fulfilled' && outcome.value.started);
+              if (!started) {
+                  resultNodes.forEach((resultNode) => {
+                      if ((resultNode.getData() as CanvasNodeData).imageGenState === 'loading') {
+                          markGenerationNodeFailed(resultNode);
+                      }
+                  });
+                  return;
+              }
+              nextTick(() => {
+                  const scroller = getScroller(g);
+                  if (!scroller)
+                      return;
+                  const center = getBoundingBoxCenter(resultNodes.map((item) => item.getBBox()));
+                  scroller.transitionToPoint(center.x, center.y, {
+                      duration: '280ms',
+                  });
+              });
+          }
           ctx.scheduleHistoryPush();
+      }
+      catch (error) {
+          message.error(isRequestError(error) ? error.message : '文生图失败，请稍后重试');
       }
       finally {
           ctx.imageGenSubmitting.value = false;

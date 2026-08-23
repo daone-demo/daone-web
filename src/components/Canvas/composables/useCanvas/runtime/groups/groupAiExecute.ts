@@ -6,7 +6,7 @@ import type { Graph,Node } from '@antv/x6';
 import { message } from 'ant-design-vue';
 import { resolveGenerationTaskWorkflowId,resolveImageAssetId,toVideoApiClarity } from '../../../../constants';
 import { buildImageGenerationParams,buildTextGenerationParams,persistNodeGenerationSnapshot } from '../../../../generationParams';
-import { applyGenerationResultToNode,bindGenerationTaskId,followTextGenerationTaskOnNode,followVideoGenerationTaskOnNode,markGenerationNodeFailed,markTextGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,readGenerationResultIndex,resolveGenerationResultPreview,runImageGenerationOnNode,updateGenerationNodeProgress,type GenerationTaskDetail } from '../../../../generationTask';
+import { bindGenerationTaskId,followTextGenerationTaskOnNode,followVideoGenerationTaskOnNode,markGenerationNodeFailed,markTextGenerationNodeFailed,markVideoGenerationNodeFailed,normalizeGenerationTaskDetail,readGenerationResultIndex,runImageGenerationOnNode,type GenerationTaskDetail } from '../../../../generationTask';
 import { findGroupOutgoingAiResultNode,resolveGroupAiReferenceContext,type GroupAiReferenceContext,type GroupAiTask,} from '../../../../groupExecute';
 import { toVideoApiPrompt } from '../../../../promptMention';
 import type { CanvasNodeData } from '../../sharedImports';
@@ -57,6 +57,10 @@ export function installGroupAiExecute(ctx: CoreRuntimeContext) {
               };
           }),
       ];
+      const singleParameters = {
+          ...refCtx.parameters,
+          count: 1,
+      };
       for (const member of sharedMembers) {
           prepareImageNodeForInPlaceGeneration(member.node, {
               title: member.title,
@@ -64,82 +68,43 @@ export function installGroupAiExecute(ctx: CoreRuntimeContext) {
               prompt,
           });
       }
-      const outcome = await runImageGenerationOnNode(node, {
-          title,
-          fileName,
-          createTask: async () => {
-              const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                  ? crypto.randomUUID()
-                  : `group-ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-              const created = await api.createGenerationTask<GenerationTaskDetail>({
-                  taskType: 'IMAGE',
-                  capabilityCode: refCtx.capabilityCode,
-                  prompt,
-                  parameters: refCtx.parameters,
-                  projectId: ctx.activeProjectId.value,
-                  nodeId: node.id,
-                  referenceAssetIds: refCtx.referenceAssetIds.length ? refCtx.referenceAssetIds : undefined,
-                  workflowId: resolveGenerationTaskWorkflowId(refCtx.workflowId),
-              }, idempotencyKey);
-              ctx.userInfoStore.queryPointAccount();
-              return created;
-          },
-          onTaskBound: (taskId) => {
-              // 共享节点一并绑定同一 taskId，便于进度与结果对齐
-              for (const member of sharedMembers) {
+      const outcomes = await Promise.all(sharedMembers.map(async (member) => {
+          const outcome = await runImageGenerationOnNode(member.node, {
+              title: member.title,
+              fileName: member.fileName,
+              createTask: async () => {
+                  const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+                      ? crypto.randomUUID()
+                      : `group-ai-${member.node.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                  const created = await api.createGenerationTask<GenerationTaskDetail>({
+                      taskType: 'IMAGE',
+                      capabilityCode: refCtx.capabilityCode,
+                      prompt,
+                      parameters: singleParameters,
+                      projectId: ctx.activeProjectId.value,
+                      nodeId: member.node.id,
+                      referenceAssetIds: refCtx.referenceAssetIds.length ? refCtx.referenceAssetIds : undefined,
+                      workflowId: resolveGenerationTaskWorkflowId(refCtx.workflowId),
+                  }, idempotencyKey);
+                  ctx.userInfoStore.queryPointAccount();
+                  return created;
+              },
+              onTaskBound: (taskId) => {
                   bindGenerationTaskId(member.node, taskId, 'IMAGE', member.resultIndex);
-              }
-              ctx.persistGenerationTaskBinding(node, { detail: prompt || title, taskType: title });
-          },
-          onProgress: (progress) => {
-              if (sharedMembers.length <= 1)
-                  return;
-              for (const member of sharedMembers) {
-                  if (member.node.id === node.id)
-                      continue;
-                  updateGenerationNodeProgress(member.node, progress);
-              }
-          },
-          onError: (reason) => message.error(reason),
-      });
-      if (!outcome.success) {
-          for (const member of sharedMembers) {
-              if (member.node.id === node.id)
-                  continue;
+                  if (member.node.id === node.id) {
+                      ctx.persistGenerationTaskBinding(node, { detail: prompt || title, taskType: title });
+                  }
+              },
+              onError: (reason) => message.error(reason),
+          });
+          if (!outcome.success && member.node.id !== node.id) {
               if ((member.node.getData() as CanvasNodeData).imageGenState === 'loading') {
                   markGenerationNodeFailed(member.node);
               }
           }
-          return false;
-      }
-      const allResults = outcome.allResults ?? [];
-      const newTaskId = String((node.getData() as CanvasNodeData).generationTaskId ?? '').trim();
-      // 按 generationResultIndex 把同一任务的 results 写回各个共享节点
-      for (const member of sharedMembers) {
-          const raw = allResults[member.resultIndex] ??
-              (member.node.id === node.id ? allResults[0] : undefined);
-          if (!raw) {
-              if (member.node.id !== node.id) {
-                  markGenerationNodeFailed(member.node, '未返回对应结果图片');
-              }
-              continue;
-          }
-          const resolved = await resolveGenerationResultPreview(raw);
-          if (!resolved?.previewUrl?.trim()) {
-              if (member.node.id !== node.id) {
-                  markGenerationNodeFailed(member.node, '未返回对应结果图片');
-              }
-              continue;
-          }
-          await applyGenerationResultToNode(member.node, resolved, {
-              title: member.title,
-              fileName: member.fileName,
-          });
-          if (newTaskId) {
-              bindGenerationTaskId(member.node, newTaskId, 'IMAGE', member.resultIndex);
-          }
-      }
-      return true;
+          return outcome.success;
+      }));
+      return outcomes.every(Boolean);
   };
   
   ctx.executeGroupAiTextImg2PromptTask = async function executeGroupAiTextImg2PromptTask(g: Graph, node: Node, refCtx?: GroupAiReferenceContext): Promise<boolean> {
@@ -279,6 +244,7 @@ export function installGroupAiExecute(ctx: CoreRuntimeContext) {
       try {
           const videoParameters = applyVideoFirstLastFrameParameters({
               ...refCtx.parameters,
+              videoCount: 1,
               clarity: toVideoApiClarity(String(refCtx.parameters.clarity ?? '720P')),
           }, String(refCtx.parameters.mode ?? ''), refCtx.referenceAssetIds);
           const created = normalizeGenerationTaskDetail(await api.createGenerationTask<GenerationTaskDetail>({

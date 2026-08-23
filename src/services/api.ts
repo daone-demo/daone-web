@@ -6,6 +6,7 @@ import {
   type RequestConfig,
 } from '@/utils/request'
 import type { PostSmsLoginRequest, QuerySmsCodeRequest } from '@/types/types'
+import { normalizeGenerationTaskCreateRequest } from './generationTaskRequest'
 
 /**
  * uni.request 全局拦截器所需的最小类型。
@@ -767,9 +768,9 @@ const api = {
   getGenerationTasks<T = unknown>(params?: GenerationTaskListQuery) {
     return http.get<PageResult<T>>('/generation-tasks', { params })
   },
-  /** 创建 AI 生成任务。 */
+  /** 创建 AI 生成任务（单次请求；parameters.count / videoCount 强制为 1）。 */
   createGenerationTask<T = unknown>(data: GenerationTaskCreateRequest, idempotencyKey?: string) {
-    return http.post<T>('/generation-tasks', data, {
+    return http.post<T>('/generation-tasks', normalizeGenerationTaskCreateRequest(data), {
       headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
     })
   },
