@@ -218,9 +218,9 @@ import { Modal, message } from 'ant-design-vue';
 import { useModalStore } from '@stores/useModal';
 import { useProject } from '@stores/useProject';
 import { useNeedReloadStore } from '@stores/useNeedReload';
-import { useUserInfo } from '@/stores/useUserInfo';
+// import { useUserInfo } from '@/stores/useUserInfo';
 
-const userInfoStore = useUserInfo();
+// const userInfoStore = useUserInfo();
 
 const needReloadStore = useNeedReloadStore();
 const modalStore = useModalStore();
@@ -306,10 +306,10 @@ function getNextUntitledProjectTitle() {
 }
 
 function openNewProject() {
-  if (!userInfoStore.userInfo?.vipName) {
-    message.warning('请先开通会员');
-    return;
-  }
+  // if (!userInfoStore.userInfo?.vipName) {
+  //   message.warning('请先开通会员');
+  //   return;
+  // }
   api.createProject({ title: getNextUntitledProjectTitle() }).then((res: any) => {
     router.push({ name: 'createProject', params: { id: res.id } });
   })
