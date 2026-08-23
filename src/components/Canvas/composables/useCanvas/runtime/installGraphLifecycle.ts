@@ -757,7 +757,11 @@ export function installGraphLifecycle(ctx: CoreRuntimeContext) {
       ctx.syncNodeCount();
       ctx.scheduleHistoryPush();
       ensureInfiniteCanvasArea(g);
-      message.success(`已批量插入 ${createdNodes.length} 个素材`);
+      message.success(
+        createdNodes.length > 1
+          ? `已批量插入 ${createdNodes.length} 个素材`
+          : '已插入到画布',
+      );
       return createdNodes.length;
   };
   

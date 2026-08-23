@@ -87,6 +87,7 @@
         :selected-asset-ids="selectedAssetIds"
         @update:selected-asset-ids="selectedAssetIds = $event"
         @update:selectable-asset-ids="selectableAssetIds = $event"
+        @insert-to-canvas="onInsertToCanvas"
       />
     </div>
   </aside>
@@ -177,6 +178,11 @@ function onBatchInsert() {
   if (!payloads.length) return
   emit('batch-insert', payloads)
   exitBatchSelectMode()
+}
+
+function onInsertToCanvas(payload: CanvasAssetDragPayload) {
+  if (!payload.previewUrl) return
+  emit('batch-insert', [payload])
 }
 
 watch(() => props.tab, () => {

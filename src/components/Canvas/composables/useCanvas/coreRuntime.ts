@@ -315,6 +315,7 @@ export function createCoreRuntime(bind: CanvasBindings, ports: CanvasCorePorts) 
     showToolbarFeatureButtons: ctx.showToolbarFeatureButtons,
     showVideoGenPromptBar: ctx.showVideoGenPromptBar,
     showVideoDialoguePanel: ctx.showVideoDialoguePanel,
+    showImageDialoguePanel: ctx.showImageDialoguePanel,
     spawnMediaFilesAtPoint: ctx.spawnMediaFilesAtPoint,
     submitTextPrompt: ctx.submitTextPrompt,
     syncConnectPreviewEdgeTarget: ctx.syncConnectPreviewEdgeTarget,

@@ -52,6 +52,9 @@ export function installAssetCanvasInteraction(ctx: CoreRuntimeContext) {
       if (ctx.showConnectMenu.value) {
           ctx.closeConnectMenu();
       }
+      if (ctx.showImageContextMenu.value) {
+          ctx.closeImageContextMenu();
+      }
       ctx.setTextEditorToolbarActive(false);
       let data = node.getData() as CanvasNodeData;
       if (data.kind === 'video' && data.previewUrl && data.mode === 'picker') {

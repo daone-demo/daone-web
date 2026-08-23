@@ -17,10 +17,10 @@ npm run dev
 npm run build        # 默认
 npm run build:dev    # development
 npm run build:test   # test
-npm run build:prod   # production（会校验产物中写入了绝对 API 基址）
+npm run build:prod   # production（会校验产物 API 基址与体积预算）
 ```
 
-生产使用 `.env.production` 的绝对地址 `VITE_API_BASE_URL`（浏览器直连后端），不依赖站点 Nginx/Vercel 的 `/api` 反代。若改回相对前缀，需同步配置反代。
+生产默认 `VITE_API_BASE_URL=/api/api/v1`（同源相对路径，符合 CSP），由 Vercel `rewrites` 或 Nginx 反代到 `VITE_API_BASE_HOST`。勿在生产 env 使用 `http://` 绝对地址，否则会被浏览器 CSP 拦截。
 
 ## 质量门禁（只读）
 

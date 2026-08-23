@@ -1,6 +1,6 @@
 /**
  * 校验生产构建产物中的 API 基址是否来自 VITE_API_BASE_URL，
- * 避免再次硬编码成仅同源相对前缀导致生产请求落空。
+ * 避免硬编码与 env 不一致导致生产请求落空。
  *
  * 用法：node scripts/check-api-base.mjs [distDir]
  */
@@ -20,9 +20,20 @@ if (!expectedBase) {
   process.exit(1)
 }
 
-if (!expectedBase.startsWith('http://') && !expectedBase.startsWith('https://')) {
+const isRelativeBase = expectedBase.startsWith('/')
+const isAbsoluteBase =
+  expectedBase.startsWith('http://') || expectedBase.startsWith('https://')
+
+if (!isRelativeBase && !isAbsoluteBase) {
   console.error(
-    `[check-api-base] production VITE_API_BASE_URL should be absolute, got: ${expectedBase}`,
+    `[check-api-base] production VITE_API_BASE_URL should be relative or absolute URL, got: ${expectedBase}`,
+  )
+  process.exit(1)
+}
+
+if (isAbsoluteBase && expectedBase.startsWith('http://')) {
+  console.error(
+    `[check-api-base] production VITE_API_BASE_URL must not use plain http (blocked by CSP connect-src). Use "/api/api/v1" with reverse proxy or https absolute URL. Got: ${expectedBase}`,
   )
   process.exit(1)
 }
@@ -59,21 +70,23 @@ if (!matched.length) {
   process.exit(1)
 }
 
-// 相对前缀单独出现且没有绝对基址时才算失败；绝对基址已写入则允许源码里残留注释/字符串片段
-const relativeOnlyHits = []
-for (const file of files) {
-  const content = fs.readFileSync(file, 'utf8')
-  if (!content.includes(expectedBase) && content.includes('"/api/api/v1"')) {
-    relativeOnlyHits.push(file)
+// 仅当生产配置为绝对 https 基址时，禁止产物仍硬编码相对前缀
+if (isAbsoluteBase) {
+  const relativeOnlyHits = []
+  for (const file of files) {
+    const content = fs.readFileSync(file, 'utf8')
+    if (!content.includes(expectedBase) && content.includes('"/api/api/v1"')) {
+      relativeOnlyHits.push(file)
+    }
   }
-}
 
-if (relativeOnlyHits.length) {
-  console.error(
-    '[check-api-base] found hard-coded relative "/api/api/v1" without production absolute base in:\n' +
-      relativeOnlyHits.map((file) => `  - ${path.relative(root, file)}`).join('\n'),
-  )
-  process.exit(1)
+  if (relativeOnlyHits.length) {
+    console.error(
+      '[check-api-base] found hard-coded relative "/api/api/v1" without production absolute base in:\n' +
+        relativeOnlyHits.map((file) => `  - ${path.relative(root, file)}`).join('\n'),
+    )
+    process.exit(1)
+  }
 }
 
 console.log(

@@ -20,6 +20,18 @@
         class="home__inspiration-hover-icon"
       />
     </div>
+    <div
+      class="home__inspiration-hover-btn"
+      title="插入到画布"
+      aria-label="插入到画布"
+      @click="emit('insert-to-canvas')"
+    >
+      <img
+        :src="insertToCanvasIcon"
+        alt=""
+        class="home__inspiration-hover-icon"
+      />
+    </div>
   </div>
 </template>
 
@@ -27,6 +39,7 @@
 import scanIcon from '@assets/images/scan.png'
 import collectIcon from '@assets/images/collect.png'
 import uncollectIcon from '@assets/images/uncollect.png'
+import insertToCanvasIcon from '@assets/images/insertToCanvasIcon.png'
 
 defineProps<{
   favorited?: boolean
@@ -35,5 +48,6 @@ defineProps<{
 const emit = defineEmits<{
   preview: []
   'toggle-favorite': []
+  'insert-to-canvas': []
 }>()
 </script>

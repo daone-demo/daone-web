@@ -688,10 +688,13 @@
   position: absolute;
   inset: 0;
   z-index: 2;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-  justify-content: center;
-  gap: 16px;
+  column-gap: clamp(2px, 6%, 8px);
+  row-gap: 0;
+  padding: 8px clamp(2px, 4%, 6px);
+  box-sizing: border-box;
   background: rgba(15, 23, 42, 0.42);
   opacity: 0;
   transition: opacity 0.2s ease;
@@ -704,29 +707,37 @@
 }
 
 .home__inspiration-hover-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  justify-self: center;
+  width: 100%;
+  // max-width: 30px;
+  // min-width: 0;
+  width: 30px;
+  aspect-ratio: 1;
   padding: 0;
   border: none;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.92);
   cursor: pointer;
-  transition: transform 0.15s ease, background 0.15s ease;
+  overflow: hidden;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 
   &:hover {
-    transform: scale(1.06);
     background: #fff;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
   }
 }
 
 .home__inspiration-hover-icon {
   display: block;
-  width: 20px;
-  height: 20px;
+  width: 58%;
+  height: 58%;
+  max-width: 14px;
+  max-height: 14px;
   object-fit: contain;
+  pointer-events: none;
 }
 
 .home__inspiration-footer {
