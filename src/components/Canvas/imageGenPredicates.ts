@@ -70,6 +70,24 @@ export function isText2ImagePlaceholderNode(data: CanvasNodeData | undefined): b
   return data.title === '文生图'
 }
 
+/**
+ * 源节点连出的图生图占位是否可复用（空占位 / 失败重试）。
+ * 生成中或已成片的节点不可复用，避免二次操作误指向进行中的任务。
+ */
+export function isReusableOutgoingGenNode(data: CanvasNodeData | undefined): boolean {
+  if (!data || data.kind !== 'image') return false
+  if (!data.imageGenTask) return false
+  if (data.imageGenState === 'loading') return false
+  if (data.generationTaskId) return false
+  if (data.previewUrl?.trim() && !isImageGenerationFailedNode(data)) return false
+  return (
+    isPendingImageGenerationTarget(data) ||
+    isText2ImagePlaceholderNode(data) ||
+    isImageGenerationUploadPlaceholderNode(data) ||
+    isImageGenerationFailedNode(data)
+  )
+}
+
 /** 图生图对话提交：待生成 / 上传占位 / 失败重试节点可原地生成；已成片节点新建子节点 */
 export function shouldGenerateImageInPlaceOnNode(
   data: CanvasNodeData,

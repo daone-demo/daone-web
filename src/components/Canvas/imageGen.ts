@@ -16,6 +16,7 @@ import {
   isImageGenerationFailedNode,
   isImageGenerationUploadPlaceholderNode,
   isPendingImageGenerationTarget,
+  isReusableOutgoingGenNode,
   isText2ImagePlaceholderNode,
 } from './imageGenPredicates'
 
@@ -33,6 +34,7 @@ export {
   isImageGenerationFailedNode,
   isImageGenerationUploadPlaceholderNode,
   isPendingImageGenerationTarget,
+  isReusableOutgoingGenNode,
   isText2ImagePlaceholderNode,
   resolveImageGenerationProgressLabel,
   shouldGenerateImageInPlaceOnNode,
@@ -248,7 +250,7 @@ export function findOutgoingGenNode(graph: Graph, sourceId: string) {
     const targetNode = target ? graph.getCellById(target) : null
     if (!targetNode?.isNode()) return false
     const data = targetNode.getData() as CanvasNodeData
-    return Boolean(data.imageGenTask)
+    return isReusableOutgoingGenNode(data)
   })
   if (!edge) return null
   const target = graph.getCellById(edge.getTargetCellId()!)
