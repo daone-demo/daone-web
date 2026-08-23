@@ -1,19 +1,53 @@
 import type { Graph } from '@antv/x6'
 import { getCanvasSnapshot, type CanvasSnapshot, type CanvasSnapshotMeta } from './canvasSnapshot'
-import { ensureInfiniteCanvasArea, getScroller, migrateGraphJsonForHtmlShape } from './graph'
+import {
+  ensureInfiniteCanvasArea,
+  getScroller,
+  migrateGraphJsonForHtmlShape,
+  refreshCanvasNodeViews,
+} from './graph'
 
-export function applyCanvasSnapshot(graph: Graph, snapshot: CanvasSnapshot) {
+export type ApplyCanvasSnapshotOptions = {
+  /** undo/redo 时保持当前缩放与平移，避免画布位置跳动 */
+  preserveViewport?: boolean
+}
+
+function applyHistoryGraphSnapshot(graph: Graph, snapshot: CanvasSnapshot) {
+  const json = migrateGraphJsonForHtmlShape(snapshot.graph)
+  const container = graph.container as HTMLElement | undefined
+  const prevVisibility = container?.style.visibility ?? ''
+  if (container) container.style.visibility = 'hidden'
+  try {
+    graph.batchUpdate('history-restore', () => {
+      graph.fromJSON(json)
+    })
+    refreshCanvasNodeViews(graph)
+  } finally {
+    if (container) container.style.visibility = prevVisibility
+  }
+}
+
+export function applyCanvasSnapshot(
+  graph: Graph,
+  snapshot: CanvasSnapshot,
+  options?: ApplyCanvasSnapshotOptions,
+) {
+  if (options?.preserveViewport) {
+    applyHistoryGraphSnapshot(graph, snapshot)
+    return
+  }
+
   graph.fromJSON(migrateGraphJsonForHtmlShape(snapshot.graph))
   graph.zoomTo(snapshot.viewport.zoom)
   graph.translate(snapshot.viewport.translateX, snapshot.viewport.translateY)
-
-  ensureInfiniteCanvasArea(graph)
 
   const scroller = getScroller(graph)
   if (scroller?.container) {
     scroller.container.scrollLeft = snapshot.viewport.scrollLeft
     scroller.container.scrollTop = snapshot.viewport.scrollTop
   }
+
+  ensureInfiniteCanvasArea(graph)
 }
 
 export function createCanvasHistory(getMeta: () => CanvasSnapshotMeta) {
@@ -52,7 +86,7 @@ export function createCanvasHistory(getMeta: () => CanvasSnapshotMeta) {
     const current = past.pop()!
     future.push(current)
     recording = false
-    applyCanvasSnapshot(graph, past[past.length - 1]!)
+    applyCanvasSnapshot(graph, past[past.length - 1]!, { preserveViewport: true })
     recording = true
     return true
   }
@@ -61,7 +95,7 @@ export function createCanvasHistory(getMeta: () => CanvasSnapshotMeta) {
     if (future.length === 0) return false
     const next = future.pop()!
     recording = false
-    applyCanvasSnapshot(graph, next)
+    applyCanvasSnapshot(graph, next, { preserveViewport: true })
     past.push(next)
     recording = true
     return true

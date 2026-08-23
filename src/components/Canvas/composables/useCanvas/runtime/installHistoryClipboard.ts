@@ -17,6 +17,43 @@ export function installHistoryState(ctx: CoreRuntimeContext) {
 }
 
 export function installHistoryClipboard(ctx: CoreRuntimeContext) {
+  function resetAfterHistoryRestore() {
+    const g = ctx.graph.value
+    if (!g) return
+
+    g.cleanSelection()
+    ctx.selectedNodeId.value = ''
+    ctx.selectedNodeIds.value = []
+    ctx.selectedEdgeId.value = ''
+    ctx.selectedKind.value = null
+    ctx.syncNodeSelectionHighlight([])
+    ctx.clearEdgeHoverState()
+
+    const nodeExists = (id: string) => {
+      const key = String(id || '').trim()
+      if (!key) return true
+      return g.getCellById(key)?.isNode() === true
+    }
+
+    if (!nodeExists(ctx.activeImageGenPromptNodeId.value)) ctx.closeImageGenPromptBar()
+    if (!nodeExists(ctx.activeVideoGenPromptNodeId.value)) ctx.closeVideoGenPromptBar()
+    if (!nodeExists(ctx.activePickerNodeId.value)) ctx.closeTextPromptBar()
+    if (!nodeExists(ctx.textExpandNodeId.value)) ctx.closeTextExpand()
+    if (ctx.showImageCrop.value && !nodeExists(ctx.cropSourceNodeId.value)) ctx.closeImageCrop()
+    if (ctx.showImageContextMenu.value && !nodeExists(ctx.imageContextMenuNodeId.value)) {
+      ctx.closeImageContextMenu()
+    }
+
+    if (ctx.showImageDialogue.value) {
+      const targetId = ctx.getActiveImageDialogueTargetNodeId()
+      if (targetId && !nodeExists(targetId)) ctx.resetImageDialogue()
+    }
+    if (ctx.showVideoDialogue.value) {
+      const targetId = ctx.getActiveVideoTargetNodeId()
+      if (targetId && !nodeExists(targetId)) ctx.resetVideoDialogue()
+    }
+  }
+
   ctx.syncHistoryState = function syncHistoryState() {
       ctx.canUndo.value = ctx.canvasHistory?.canUndo() ?? false;
       ctx.canRedo.value = ctx.canvasHistory?.canRedo() ?? false;
@@ -79,7 +116,7 @@ export function installHistoryClipboard(ctx: CoreRuntimeContext) {
       }
       ctx.syncHistoryState();
       ctx.syncNodeCount();
-      ctx.resetCanvasInteractionState();
+      resetAfterHistoryRestore();
       ctx.triggerAutoSaveIfReady();
       nextTick(() => ctx.updateNodeToolbar());
   };
@@ -93,7 +130,7 @@ export function installHistoryClipboard(ctx: CoreRuntimeContext) {
       }
       ctx.syncHistoryState();
       ctx.syncNodeCount();
-      ctx.resetCanvasInteractionState();
+      resetAfterHistoryRestore();
       ctx.triggerAutoSaveIfReady();
       nextTick(() => ctx.updateNodeToolbar());
   };
