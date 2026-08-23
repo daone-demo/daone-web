@@ -21,6 +21,8 @@ export type UseCanvasShellProjectPanelsOptions = {
   canvasRuntime: {
     batchInsertAssetsFromLibrary?: (assets: CanvasAssetDragPayload[]) => number
     loadProjectCanvasFromVersion?: (detail: ProjectVersionDetailResponse) => boolean
+    /** 切换历史版本前先手动保存并等待落库 */
+    saveCanvasAndWait?: (saveType?: 'MANUAL' | 'AUTO') => Promise<boolean>
   }
   activeProjectId: Ref<string>
   assetsTab: Ref<ProjectTabKey>
@@ -229,6 +231,14 @@ export function useCanvasShellProjectPanels(options: UseCanvasShellProjectPanels
 
     historyRestoring.value = true
     try {
+      // 切换历史前先手动保存当前画布，避免未落库修改被覆盖
+      const saveOk = (await canvasRuntime.saveCanvasAndWait?.('MANUAL')) ?? false
+      if (activeProjectId.value !== projectId) return
+      if (!saveOk) {
+        message.error('保存失败，无法切换历史版本')
+        return
+      }
+
       const detail = await api.getProjectVersion<ProjectVersionDetailResponse>(projectId, versionId)
       if (activeProjectId.value !== projectId) return
       const loaded = canvasRuntime.loadProjectCanvasFromVersion?.(detail)
