@@ -175,6 +175,7 @@
                 :favorited="item.favorited"
                 @preview="openAssetPreview(item)"
                 @toggle-favorite="onDoToggleAssetFavorite(item)"
+                @insert-to-canvas="onInsertAssetToCanvas(item)"
               />
             </div>
           </article>
@@ -286,6 +287,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   'update:selectedAssetIds': [ids: string[]]
   'update:selectableAssetIds': [ids: string[]]
+  'insert-to-canvas': [payload: CanvasAssetDragPayload]
 }>()
 
 const scopeRef = toRef(props, 'scope')
@@ -364,6 +366,20 @@ function canDragMaterial(item: MaterialItem): boolean {
 
 function canDragAsset(item: AssetItem): boolean {
   return Boolean(resolveAssetMediaUrl(item))
+}
+
+function onInsertMaterialToCanvas(item: MaterialItem) {
+  const payload = materialToDragPayload(item)
+  if (!payload.previewUrl) return
+  suppressClick = true
+  emit('insert-to-canvas', payload)
+}
+
+function onInsertAssetToCanvas(item: AssetItem) {
+  const payload = toDragPayload(item)
+  if (!payload.previewUrl) return
+  suppressClick = true
+  emit('insert-to-canvas', payload)
 }
 
 function onMaterialClick(item: MaterialItem) {

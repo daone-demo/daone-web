@@ -87,6 +87,7 @@
         :selected-asset-ids="selectedAssetIds"
         @update:selected-asset-ids="selectedAssetIds = $event"
         @update:selectable-asset-ids="selectableAssetIds = $event"
+        @insert-to-canvas="onInsertToCanvas"
       />
     </div>
   </aside>
@@ -177,6 +178,12 @@ function onBatchInsert() {
   if (!payloads.length) return
   emit('batch-insert', payloads)
   exitBatchSelectMode()
+}
+
+/** 悬停「插入到画布」：复用批量插入链路，单条 payload 即可 */
+function onInsertToCanvas(payload: CanvasAssetDragPayload) {
+  if (!payload?.previewUrl) return
+  emit('batch-insert', [payload])
 }
 
 watch(() => props.tab, () => {
