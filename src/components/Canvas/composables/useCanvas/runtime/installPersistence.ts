@@ -4,15 +4,16 @@
  * 副作用：向 ctx 注册方法/派生状态，部分域会绑定监听或更新画布状态。
  */
 import type { ProjectCanvasResponse,ProjectVersionDetailResponse } from '@/services/api';
-import { isRequestError } from '@/utils/request';
 import type { Edge,Node } from '@antv/x6';
 import { message } from 'ant-design-vue';
 import { nextTick,provide } from 'vue';
 import {
+  CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS,
   decideCanvasSaveDirty,
   decideManualSaveLeaveNext,
   MANUAL_SAVE_LEAVE_MAX_ATTEMPTS,
   MANUAL_SAVE_LEAVE_MAX_WAIT_MS,
+  parseCanvasLatestRevision,
 } from '../../../canvasSaveDirty';
 import { formatCanvasDescription,formatUploadCanvasDescription,resolveCanvasSaveDescription,resolveCanvasSaveType,resolveVideoTaskTypeLabel,} from '../../../canvasDescription';
 import { buildProjectCanvasPayloadFromVersionDetail } from '../../../canvasHistoryRecords';
@@ -305,17 +306,7 @@ export function installPersistence(ctx: CoreRuntimeContext) {
   };
   
   ctx.extractLatestRevision = function extractLatestRevision(error: unknown): number | null {
-      if (!isRequestError(error))
-          return null;
-      if (error.code !== 'CANVAS_REVISION_CONFLICT')
-          return null;
-      const data = error.data;
-      if (data == null || typeof data !== 'object')
-          return null;
-      const latestRevision = (data as {
-          latestRevision?: unknown;
-      }).latestRevision;
-      return typeof latestRevision === 'number' ? latestRevision : null;
+      return parseCanvasLatestRevision(error);
   };
   
   ctx.persistCanvasToServer = async function persistCanvasToServer(projectId: string, snapshot: CanvasSnapshot, saveType: 'MANUAL' | 'AUTO', project?: (typeof ctx.canvasProjects.value)[number], saveEpoch?: number) {
@@ -325,13 +316,14 @@ export function installPersistence(ctx: CoreRuntimeContext) {
               ctx.lastCanvasDescription.value ||
               undefined;
           const type = resolveCanvasSaveType(ctx.graph.value);
+          // silent：冲突由下方重试消化，避免拦截器先弹「版本冲突」
           return api.saveProjectCanvas(projectId, {
               revision,
               saveType,
               canvasData: canvasSnapshot,
               description,
               type,
-          });
+          }, { silent: true });
       };
       const applySuccessfulPersist = (epochCaptured: number) => {
           const decision = decideCanvasSaveDirty(epochCaptured, ctx.localChangeEpoch || 0);
@@ -342,27 +334,31 @@ export function installPersistence(ctx: CoreRuntimeContext) {
               ctx.triggerAutoSaveIfReady();
           }
       };
-      try {
-          const res = await sendSave(ctx.canvasRevision.value, snapshot);
-          if (typeof res.revision === 'number') {
-              ctx.canvasRevision.value = res.revision;
+      let attemptSnapshot = snapshot;
+      let attemptEpoch = epochAtStart;
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS; attempt++) {
+          try {
+              const res = await sendSave(ctx.canvasRevision.value, attemptSnapshot);
+              if (typeof res.revision === 'number') {
+                  ctx.canvasRevision.value = res.revision;
+              }
+              applySuccessfulPersist(attemptEpoch);
+              return;
           }
-          applySuccessfulPersist(epochAtStart);
-          return;
-      }
-      catch (error) {
-          const latestRevision = ctx.extractLatestRevision(error);
-          if (latestRevision == null)
-              throw error;
-          ctx.canvasRevision.value = latestRevision;
-          const freshSnapshot = ctx.buildCanvasSnapshot() ?? snapshot;
-          const retryEpoch = ctx.localChangeEpoch || 0;
-          const res = await sendSave(ctx.canvasRevision.value, freshSnapshot);
-          if (typeof res.revision === 'number') {
-              ctx.canvasRevision.value = res.revision;
+          catch (error) {
+              lastError = error;
+              const latestRevision = ctx.extractLatestRevision(error);
+              if (latestRevision == null)
+                  throw error;
+              if (attempt >= CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS)
+                  break;
+              ctx.canvasRevision.value = latestRevision;
+              attemptSnapshot = ctx.buildCanvasSnapshot() ?? attemptSnapshot;
+              attemptEpoch = ctx.localChangeEpoch || 0;
           }
-          applySuccessfulPersist(retryEpoch);
       }
+      throw lastError;
   };
   
   ctx.resolveActiveProjectId = function resolveActiveProjectId(): string {
@@ -445,6 +441,7 @@ export function installPersistence(ctx: CoreRuntimeContext) {
               snapshot,
               type,
               changeEpoch: latestJob.changeEpoch,
+              manageInFlight: false,
           });
           matchingJobs.forEach((job) => job.resolve(ok));
       }
@@ -455,6 +452,8 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       snapshot: CanvasSnapshot
       type: 'MANUAL' | 'AUTO'
       changeEpoch?: number
+      /** 为 false 时由外层（flush）持有 saveInFlight，避免 drain 间隙并发双写 */
+      manageInFlight?: boolean
   }): Promise<boolean> {
       const projectId = normalizeProjectId(job.projectId);
       if (!projectId)
@@ -467,7 +466,9 @@ export function installPersistence(ctx: CoreRuntimeContext) {
       if (routeId && projectId !== routeId)
           return false;
       const project = ctx.findCanvasProject(projectId);
-      ctx.saveInFlight = true;
+      const manageInFlight = job.manageInFlight !== false;
+      if (manageInFlight)
+          ctx.saveInFlight = true;
       let ok = false;
       try {
           await ctx.persistCanvasToServer(projectId, job.snapshot, job.type, project, job.changeEpoch);
@@ -480,7 +481,8 @@ export function installPersistence(ctx: CoreRuntimeContext) {
           ok = false;
       }
       finally {
-          ctx.saveInFlight = false;
+          if (manageInFlight)
+              ctx.saveInFlight = false;
       }
       return ok;
   };
@@ -514,9 +516,37 @@ export function installPersistence(ctx: CoreRuntimeContext) {
           return ctx.enqueuePendingSaveJob({ projectId, snapshot, type, changeEpoch });
       }
 
-      const ok = await ctx.runRemoteCanvasSaveJob({ projectId, snapshot, type, changeEpoch });
-      await ctx.drainPendingSaveJobs();
-      return ok;
+      // 在任意 await 前占住锁，覆盖整次 flush + drain，杜绝并发双写导致自冲突
+      ctx.saveInFlight = true;
+      try {
+          const ok = await ctx.runRemoteCanvasSaveJob({
+              projectId,
+              snapshot,
+              type,
+              changeEpoch,
+              manageInFlight: false,
+          });
+          await ctx.drainPendingSaveJobs();
+          return ok;
+      }
+      finally {
+          const hasLeftover = Array.isArray(ctx.pendingSaveJobs) && ctx.pendingSaveJobs.length > 0;
+          ctx.saveInFlight = false;
+          // 关锁瞬间若又有入队：只冲刷队列，避免再发一发多余的当前快照
+          if (hasLeftover) {
+              void (async () => {
+                  if (ctx.saveInFlight)
+                      return;
+                  ctx.saveInFlight = true;
+                  try {
+                      await ctx.drainPendingSaveJobs();
+                  }
+                  finally {
+                      ctx.saveInFlight = false;
+                  }
+              })();
+          }
+      }
   };
   
   ctx.handleSaveCanvas = function handleSaveCanvas(saveType: 'MANUAL' | 'AUTO' = 'MANUAL') {

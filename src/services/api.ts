@@ -683,8 +683,8 @@ const api = {
     return http.get<ProjectCanvasResponse>(`/projects/${pathId(projectId)}/canvas`)
   },
   /** 保存指定项目的画布数据。 */
-  saveProjectCanvas(projectId: Id, data: CanvasSaveRequest) {
-    return http.put<CanvasSaveResponse>(`/projects/${pathId(projectId)}/canvas`, data)
+  saveProjectCanvas(projectId: Id, data: CanvasSaveRequest, config?: RequestConfig) {
+    return http.put<CanvasSaveResponse>(`/projects/${pathId(projectId)}/canvas`, data, config)
   },
   /** 分页查询指定项目的历史版本。 */
   getProjectVersions<T = unknown>(projectId: Id, params?: PageQuery) {

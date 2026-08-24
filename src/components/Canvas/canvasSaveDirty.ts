@@ -8,6 +8,30 @@ export type CanvasSaveDirtyDecision = {
   scheduleFollowUpSave: boolean
 }
 
+/** 乐观锁冲突业务码；保存层会静默对齐 revision 后重试 */
+export const CANVAS_REVISION_CONFLICT_CODE = 'CANVAS_REVISION_CONFLICT'
+/** 含首次请求在内的最多尝试次数（冲突时用最新 revision + 当前画布重试） */
+export const CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS = 3
+
+/**
+ * 从 CANVAS_REVISION_CONFLICT 错误中解析服务端最新 revision。
+ * 兼容 number / 数字字符串；不依赖 request 模块，便于 Node 单测直接引用。
+ */
+export function parseCanvasLatestRevision(error: unknown): number | null {
+  if (typeof error !== 'object' || error == null) return null
+  const candidate = error as { code?: unknown; data?: unknown }
+  if (candidate.code !== CANVAS_REVISION_CONFLICT_CODE) return null
+  const data = candidate.data
+  if (data == null || typeof data !== 'object') return null
+  const raw = (data as { latestRevision?: unknown }).latestRevision
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const n = Number(raw)
+    if (Number.isFinite(n)) return n
+  }
+  return null
+}
+
 export function decideCanvasSaveDirty(
   saveEpoch: number,
   currentEpoch: number,

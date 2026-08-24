@@ -422,6 +422,7 @@ export interface CoreRuntimePersistenceSlots {
     snapshot: CanvasSnapshot
     type: 'MANUAL' | 'AUTO'
     changeEpoch?: number
+    manageInFlight?: boolean
   }): Promise<boolean>
   selectProject(projectId: string): Promise<void>
   stopAutoSave(): void
