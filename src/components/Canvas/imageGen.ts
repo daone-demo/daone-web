@@ -501,6 +501,12 @@ export function spawnGenerationResultNode(
     placement?: ResultPlacement
     columnOffset?: number
     centerPoint?: { x: number; y: number }
+    /**
+     * 是否从 sourceNode 连边到新节点。
+     * 多结果里「第一个结果再长出其余结果」时为 false，避免结果节点之间出现竖线。
+     * @default true
+     */
+    connectFromSource?: boolean
   },
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
@@ -528,7 +534,9 @@ export function spawnGenerationResultNode(
     })
 
   const node = addCanvasNode(graph, 'image', point, overrides)
-  connectGenEdge(graph, sourceNode.id, node.id)
+  if (options.connectFromSource !== false) {
+    connectGenEdge(graph, sourceNode.id, node.id)
+  }
   return node
 }
 
@@ -758,6 +766,12 @@ export function spawnVideoGenerationResultNode(
     /** 多图参考来源快照 */
     videoSourceRefs?: CanvasNodeData['videoSourceRefs']
     genPrompt?: string
+    /**
+     * 是否从 sourceNode 连边到新节点。
+     * 多结果 sibling 长出时为 false，避免结果之间竖线。
+     * @default true
+     */
+    connectFromSource?: boolean
   },
 ) {
   const sourceData = sourceNode.getData() as CanvasNodeData
@@ -804,7 +818,9 @@ export function spawnVideoGenerationResultNode(
     })
 
   const node = addCanvasNode(graph, 'video', point, overrides)
-  connectGenEdge(graph, sourceNode.id, node.id)
+  if (options.connectFromSource !== false) {
+    connectGenEdge(graph, sourceNode.id, node.id)
+  }
   return node
 }
 

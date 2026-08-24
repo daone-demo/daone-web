@@ -603,10 +603,12 @@ export function installDialogue(ctx: CoreRuntimeContext) {
           const batchPreviewSize = getImageGenerationPlaceholderSize(node);
           const plannedPoints = planOutgoingResultPoints(g, node, batchPreviewSize, requestedCount, 'right');
           for (let index = 1; index < requestedCount; index += 1) {
+              // node 本身是第一个结果，额外结果不连 sibling 竖线
               const extraNode = spawnGenerationResultNode(g, node, {
                   title,
                   fileName: buildIndexedFileName(index),
                   centerPoint: plannedPoints[index],
+                  connectFromSource: false,
               });
               prepareImageNodeForInPlaceGeneration(extraNode, {
                   title,

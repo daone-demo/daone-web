@@ -151,12 +151,14 @@ export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
               const batchPreviewSize = getImageGenerationPlaceholderSize(sourceNode);
               const plannedPoints = planOutgoingResultPoints(g, sourceNode, batchPreviewSize, requestedCount, 'above');
               for (let index = 1; index < requestedCount; index += 1) {
+                  // sourceNode 已作为第一个结果：不再连 sibling 边，只靠素材→结果的多对多连线
                   const resultNode = spawnGenerationResultNode(g, sourceNode, {
                       title,
                       fileName: buildIndexedFileName(index),
                       centerPoint: plannedPoints[index],
                       layoutSlot: index,
                       layoutTotal: requestedCount,
+                      connectFromSource: false,
                   });
                   preparePrimaryNode(resultNode, buildIndexedFileName(index));
                   resultNodes.push(resultNode);
