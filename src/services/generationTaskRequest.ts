@@ -31,3 +31,12 @@ export function normalizeGenerationTaskCreateRequest<T extends { parameters?: Js
     parameters: normalizeGenerationTaskParameters(data.parameters),
   }
 }
+
+/** 批量拆分时为每次 POST 生成独立幂等键。 */
+export function buildGenerationTaskIdempotencyKey(
+  baseKey: string | undefined,
+  index: number,
+): string | undefined {
+  if (!baseKey) return undefined
+  return `${baseKey}:${index}`
+}

@@ -221,7 +221,7 @@
       :image-edit-text-recognizing="imageEditTextRecognizing"
       :grid-split-rows="gridSplitRows"
       :grid-split-cols="gridSplitCols"
-      :show-image-dialogue="showImageDialoguePanel"
+      :show-image-dialogue="showImageDialogue"
       :show-video-dialogue="showVideoDialoguePanel"
       :show-video-hd-panel="showVideoHdPanel"
       :show-video-frames-panel="showVideoFramesPanel"
@@ -369,7 +369,6 @@
       :is-light="canvasBgTheme === 'light'"
       :node-locked="imageContextMenuLocked"
       @select="onImageContextMenuAction"
-      @dismiss="closeImageContextMenu"
     />
 
     <CanvasAddMenu
@@ -706,7 +705,6 @@ const {
   imageContextMenuKind,
   imageContextMenuLocked,
   imagePreviewKind,
-  closeImageContextMenu,
   onImageContextMenuAction,
   showEdgeDeleteButton,
   imageMarkHintVisible,
@@ -734,7 +732,6 @@ const {
   showImageExpand,
   showImageGridSplit,
   showImageDialogue,
-  showImageDialoguePanel,
   showImageGenPromptBar,
   showImageHdMenu,
   showImageToolbarMore,

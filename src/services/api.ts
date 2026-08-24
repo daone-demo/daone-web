@@ -6,7 +6,11 @@ import {
   type RequestConfig,
 } from '@/utils/request'
 import type { PostSmsLoginRequest, QuerySmsCodeRequest } from '@/types/types'
-import { normalizeGenerationTaskCreateRequest } from './generationTaskRequest'
+import {
+  buildGenerationTaskIdempotencyKey,
+  normalizeGenerationTaskCreateRequest,
+  resolveGenerationTaskRequestCount,
+} from './generationTaskRequest'
 
 /**
  * uni.request 全局拦截器所需的最小类型。
@@ -768,11 +772,30 @@ const api = {
   getGenerationTasks<T = unknown>(params?: GenerationTaskListQuery) {
     return http.get<PageResult<T>>('/generation-tasks', { params })
   },
-  /** 创建 AI 生成任务（单次请求；parameters.count / videoCount 强制为 1）。 */
-  createGenerationTask<T = unknown>(data: GenerationTaskCreateRequest, idempotencyKey?: string) {
-    return http.post<T>('/generation-tasks', normalizeGenerationTaskCreateRequest(data), {
-      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
-    })
+  /** 按 parameters.count / videoCount 顺序发起多次 POST（每次 parameters 归一化为 1）。 */
+  async createGenerationTasks<T = unknown>(
+    data: GenerationTaskCreateRequest,
+    idempotencyKey?: string,
+  ): Promise<T[]> {
+    const requestCount = resolveGenerationTaskRequestCount(data.parameters)
+    const body = normalizeGenerationTaskCreateRequest(data)
+    const results: T[] = []
+    for (let index = 0; index < requestCount; index += 1) {
+      const key = buildGenerationTaskIdempotencyKey(idempotencyKey, index)
+      const result = await http.post<T>('/generation-tasks', body, {
+        headers: key ? { 'Idempotency-Key': key } : undefined,
+      })
+      results.push(result)
+    }
+    return results
+  },
+  /** 创建 AI 生成任务；count / videoCount > 1 时等价于 createGenerationTasks 的首个结果。 */
+  async createGenerationTask<T = unknown>(
+    data: GenerationTaskCreateRequest,
+    idempotencyKey?: string,
+  ): Promise<T> {
+    const tasks = await this.createGenerationTasks<T>(data, idempotencyKey)
+    return tasks[0] as T
   },
   /** 获取指定生成任务的详情和执行状态。 */
   getGenerationTask<T = unknown>(taskId: Id) {

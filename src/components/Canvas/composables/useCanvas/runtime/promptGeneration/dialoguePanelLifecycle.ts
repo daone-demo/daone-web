@@ -25,7 +25,6 @@ export function installPromptDialoguePanelLifecycle(ctx: CoreRuntimeContext) {
   };
   
   ctx.openImageDialogue = function openImageDialogue(nodeId?: string) {
-      ctx.closeImageContextMenu();
       const g = ctx.graph.value;
       if (!g)
           return;
@@ -132,7 +131,6 @@ export function installPromptDialoguePanelLifecycle(ctx: CoreRuntimeContext) {
   };
   
   ctx.openVideoDialogue = function openVideoDialogue(nodeId?: string) {
-      ctx.closeImageContextMenu();
       const g = ctx.graph.value;
       if (!g)
           return;

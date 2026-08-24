@@ -194,8 +194,6 @@ export function installDerivedState(ctx: CoreRuntimeContext) {
   });
   
   ctx.showVideoDialoguePanel = computed(() => {
-      if (ctx.showImageContextMenu.value)
-          return false;
       if (!ctx.showVideoDialogue.value || ctx.selectedKind.value !== 'video')
           return false;
       const g = ctx.graph.value;
@@ -204,14 +202,6 @@ export function installDerivedState(ctx: CoreRuntimeContext) {
           return ctx.showVideoDialogue.value;
       const data = g.getCellById(id)?.getData() as CanvasNodeData | undefined;
       if (isVideoNodeGenerating(data))
-          return false;
-      return true;
-  });
-
-  ctx.showImageDialoguePanel = computed(() => {
-      if (ctx.showImageContextMenu.value)
-          return false;
-      if (!ctx.showImageDialogue.value || ctx.selectedKind.value !== 'image')
           return false;
       return true;
   });
@@ -758,8 +748,6 @@ export function installDerivedState(ctx: CoreRuntimeContext) {
   
   ctx.showNodeToolbar = computed(() => {
       void ctx.toolbarRevision.value;
-      if (ctx.showImageContextMenu.value)
-          return false;
       if (ctx.videoToolbarClickDeferred.value)
           return false;
       if (ctx.showVideoGenCanvasPickMode.value || ctx.showImageDialogueCanvasPickMode.value)

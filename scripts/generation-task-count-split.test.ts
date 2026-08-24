@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  buildGenerationTaskIdempotencyKey,
   normalizeGenerationTaskCreateRequest,
   normalizeGenerationTaskParameters,
   resolveGenerationTaskRequestCount,
@@ -38,4 +39,10 @@ test('normalizeGenerationTaskCreateRequest 归一化请求体 parameters', () =>
   assert.equal(normalized.parameters?.count, 1)
   assert.equal(normalized.parameters?.aspectRatio, '1:1')
   assert.equal(normalized.capabilityCode, 'IMAGE_GENERAL_V1')
+})
+
+test('buildGenerationTaskIdempotencyKey 为批量请求追加序号', () => {
+  assert.equal(buildGenerationTaskIdempotencyKey(undefined, 0), undefined)
+  assert.equal(buildGenerationTaskIdempotencyKey('img-dialogue-abc', 0), 'img-dialogue-abc:0')
+  assert.equal(buildGenerationTaskIdempotencyKey('img-dialogue-abc', 2), 'img-dialogue-abc:2')
 })

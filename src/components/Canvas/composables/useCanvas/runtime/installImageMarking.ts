@@ -441,13 +441,9 @@ export function installImageMarking(ctx: CoreRuntimeContext) {
   };
   
   ctx.closeImageContextMenu = function closeImageContextMenu() {
-      if (!ctx.showImageContextMenu.value)
-          return;
       ctx.showImageContextMenu.value = false;
       ctx.imageContextMenuNodeId.value = '';
       ctx.imageContextMenuKind.value = 'image';
-      ctx.bumpToolbarRevision();
-      ctx.updateNodeToolbar();
   };
   
   ctx.canOpenVideoContextMenu = function canOpenVideoContextMenu(data: CanvasNodeData) {

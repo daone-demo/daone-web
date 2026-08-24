@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed } from 'vue'
 import {
   getMediaContextMenuSections,
   type ImageContextMenuItem,
@@ -50,24 +50,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [key: string]
-  dismiss: []
 }>()
-
-function onDocumentMouseDown(event: MouseEvent) {
-  const target = event.target
-  if (target instanceof Element && target.closest('.canvas__image-context-menu')) {
-    return
-  }
-  emit('dismiss')
-}
-
-onMounted(() => {
-  document.addEventListener('mousedown', onDocumentMouseDown)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocumentMouseDown)
-})
 
 const sections = computed(() => getMediaContextMenuSections(props.kind ?? 'image'))
 
