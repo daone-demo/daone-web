@@ -270,6 +270,62 @@ export function isVideoGenerationFailedNode(data: CanvasNodeData | undefined): b
   )
 }
 
+/**
+ * 图生视频「生成多个」时，是否应移除提交用的中间空壳视频节点。
+ * - picker / 无成片空壳：移除，避免素材→过渡态→多结果的冗余中间层
+ * - 已有成片预览或正在生成：保留（向右长出结果，现有能力不变）
+ */
+export function isRemovableVideoMultiGenIntermediate(
+  data: CanvasNodeData | null | undefined,
+): boolean {
+  if (!data || data.kind !== 'video') return false
+  if (data.previewUrl?.trim()) return false
+  if (isVideoNodeGenerating(data)) return false
+  return data.mode === 'picker' || !data.previewUrl?.trim()
+}
+
+/**
+ * 多结果生成后移除中间过渡视频节点，并把结果节点的 sourceNodeId 改挂到首个参考图。
+ * 单结果、或源节点不可移除时 no-op。
+ */
+export function removeVideoMultiGenIntermediateIfNeeded(
+  graph: Graph,
+  sourceNode: Node,
+  resultNodes: Node[],
+): boolean {
+  if (!Array.isArray(resultNodes) || resultNodes.length <= 1) return false
+  if (resultNodes.some((node) => node.id === sourceNode.id)) return false
+  const sourceData = sourceNode.getData() as CanvasNodeData
+  if (!isRemovableVideoMultiGenIntermediate(sourceData)) return false
+
+  const removedId = sourceNode.id
+  const firstRef = Array.isArray(sourceData.videoSourceRefs)
+    ? sourceData.videoSourceRefs.find((item) => Boolean(item?.nodeId))
+    : undefined
+
+  for (const node of resultNodes) {
+    const data = { ...(node.getData() as CanvasNodeData) }
+    if (data.sourceNodeId !== removedId) continue
+    if (firstRef?.nodeId) {
+      data.sourceNodeId = firstRef.nodeId
+      data.sourcePreviewUrl = firstRef.previewUrl ?? ''
+      data.sourceFileName = firstRef.fileName ?? data.sourceFileName
+      if (firstRef.assetId) data.sourceAssetId = firstRef.assetId
+      else delete data.sourceAssetId
+    } else {
+      delete data.sourceNodeId
+      data.sourcePreviewUrl = ''
+      delete data.sourceAssetId
+    }
+    node.setData(data, { overwrite: true })
+  }
+
+  if (graph.getCellById(removedId)) {
+    graph.removeCell(removedId)
+  }
+  return true
+}
+
 /** 查找可复用的失败生成节点：当前节点本身，或连出的失败子节点 */
 export function findReusableVideoGenerationNode(graph: Graph, sourceNode: Node): Node | null {
   const sourceData = sourceNode.getData() as CanvasNodeData

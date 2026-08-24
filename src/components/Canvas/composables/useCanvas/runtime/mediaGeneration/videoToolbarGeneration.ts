@@ -9,7 +9,7 @@ import {bindGenerationTaskId,markVideoGenerationNodeFailed,normalizeGenerationTa
 import {createIdempotencyKey} from '../../../../idempotency';
 import {toVideoApiPrompt} from '../../../../promptMention';
 import type {CanvasNodeData} from '../../sharedImports';
-import {api,applyVideoFirstLastFrameParameters,connectGenEdge,findImageToVideoEdge,findReusableVideoGenerationNode,getVideoSourceRefs,planOutgoingResultPoints,resetVideoGenerationNodeForRetry,spawnVideoGenerationResultNode,toPersistedVideoSourceRefs} from '../../sharedImports';
+import {api,applyVideoFirstLastFrameParameters,connectGenEdge,findImageToVideoEdge,findReusableVideoGenerationNode,getVideoSourceRefs,planOutgoingResultPoints,removeVideoMultiGenIntermediateIfNeeded,resetVideoGenerationNodeForRetry,spawnVideoGenerationResultNode,toPersistedVideoSourceRefs} from '../../sharedImports';
 import type {CoreRuntimeContext} from '../context';
 
 export function installMediaVideoToolbarGeneration(ctx: CoreRuntimeContext) {
@@ -118,6 +118,10 @@ export function installMediaVideoToolbarGeneration(ctx: CoreRuntimeContext) {
           }
       }
       const primaryNode = resultNodes[0];
+      // 多结果且源为无成片过渡壳时移除中间节点；单结果 / 已有成片保留
+      if (requestedCount > 1 && !reusableNode) {
+          removeVideoMultiGenIntermediateIfNeeded(g, sourceNode, resultNodes);
+      }
       ctx.selectedNodeId.value = primaryNode.id;
       ctx.selectedKind.value = 'video';
       ctx.syncNodeSelectionHighlight(primaryNode.id);

@@ -14,7 +14,7 @@ import {applyImageMarkTaskParameters,canSubmitImageDialogueTask} from '../../../
 import {toVideoApiPrompt} from '../../../../promptMention';
 import {getBoundingBoxCenter} from '../../../../viewport';
 import type {CanvasNodeData} from '../../sharedImports';
-import {api,applyVideoFirstLastFrameParameters,connectGenEdge,findImageToVideoEdge,findReusableImageGenerationNode,findReusableVideoGenerationNode,getImageGenerationPlaceholderSize,getScroller,isImageGenerationFailedNode,isPendingImageGenerationTarget,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,resetImageGenerationNodeForRetry,resetVideoGenerationNodeForRetry,resolveVideoGenerationSubmitContext,shouldGenerateImageInPlaceOnNode,spawnGenerationResultNode,spawnVideoGenerationResultNode,syncPendingImageTargetFromSources} from '../../sharedImports';
+import {api,applyVideoFirstLastFrameParameters,connectGenEdge,findImageToVideoEdge,findReusableImageGenerationNode,findReusableVideoGenerationNode,getImageGenerationPlaceholderSize,getScroller,isImageGenerationFailedNode,isPendingImageGenerationTarget,planOutgoingResultPoints,prepareImageNodeForInPlaceGeneration,removeVideoMultiGenIntermediateIfNeeded,resetImageGenerationNodeForRetry,resetVideoGenerationNodeForRetry,resolveVideoGenerationSubmitContext,shouldGenerateImageInPlaceOnNode,spawnGenerationResultNode,spawnVideoGenerationResultNode,syncPendingImageTargetFromSources} from '../../sharedImports';
 import type {CoreRuntimeContext} from '../context';
 
 export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
@@ -455,14 +455,6 @@ export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
               connectRefsToVideoNode(resultNode);
               resultNodes.push(resultNode);
           }
-          const primaryNode = resultNodes[0];
-          ctx.selectedNodeId.value = primaryNode.id;
-          ctx.selectedKind.value = 'video';
-          ctx.syncNodeSelectionHighlight(primaryNode.id);
-          ctx.syncNodeCount();
-          ctx.bumpToolbarRevision();
-          ctx.updateNodeToolbar();
-          ctx.scheduleHistoryPush();
           resultNodes.forEach((resultNode) => {
               ctx.applyVideoGenerationProvenance(resultNode, {
                   prompt,
@@ -479,6 +471,16 @@ export function installMediaDialogueSubmits(ctx: CoreRuntimeContext) {
                   referenceAssetIds: imageAssetIds.length ? imageAssetIds : undefined,
               });
           });
+          // 多结果：去掉无成片的中间视频壳，素材直连各结果节点（单结果 / 已有成片不改）
+          removeVideoMultiGenIntermediateIfNeeded(g, sourceNode, resultNodes);
+          const primaryNode = resultNodes[0];
+          ctx.selectedNodeId.value = primaryNode.id;
+          ctx.selectedKind.value = 'video';
+          ctx.syncNodeSelectionHighlight(primaryNode.id);
+          ctx.syncNodeCount();
+          ctx.bumpToolbarRevision();
+          ctx.updateNodeToolbar();
+          ctx.scheduleHistoryPush();
           void Promise.all(resultNodes.map(async (resultNode, index) => {
               const nodeFileName = ctx.resolveGenerationResultFileName(buildFileName, sourceFileName, index, requestedCount);
               const idempotencyKey = createIdempotencyKey('video-gen', index);

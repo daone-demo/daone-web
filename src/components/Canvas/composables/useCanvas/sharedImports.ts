@@ -175,6 +175,8 @@ export {
   VIDEO_GEN_TAB_IMAGE_RULES,
   isVideoGenerationFailedNode,
   findReusableVideoGenerationNode,
+  isRemovableVideoMultiGenIntermediate,
+  removeVideoMultiGenIntermediateIfNeeded,
   resolveVideoGenerationSubmitContext,
   resetVideoGenerationNodeForRetry,
   applyVideoFirstLastFrameParameters,
