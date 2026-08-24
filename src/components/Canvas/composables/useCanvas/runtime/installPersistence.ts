@@ -8,8 +8,10 @@ import type { Edge,Node } from '@antv/x6';
 import { message } from 'ant-design-vue';
 import { nextTick,provide } from 'vue';
 import {
+  CANVAS_HTTP_TIMEOUT_MS,
   CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS,
   decideCanvasSaveDirty,
+  decideCanvasSaveRetry,
   decideManualSaveLeaveNext,
   MANUAL_SAVE_LEAVE_MAX_ATTEMPTS,
   MANUAL_SAVE_LEAVE_MAX_WAIT_MS,
@@ -316,14 +318,14 @@ export function installPersistence(ctx: CoreRuntimeContext) {
               ctx.lastCanvasDescription.value ||
               undefined;
           const type = resolveCanvasSaveType(ctx.graph.value);
-          // silent：冲突由下方重试消化，避免拦截器先弹「版本冲突」
+          // silent：冲突/超时由下方重试消化，避免拦截器先弹 toast
           return api.saveProjectCanvas(projectId, {
               revision,
               saveType,
               canvasData: canvasSnapshot,
               description,
               type,
-          }, { silent: true });
+          }, { silent: true, timeout: CANVAS_HTTP_TIMEOUT_MS });
       };
       const applySuccessfulPersist = (epochCaptured: number) => {
           const decision = decideCanvasSaveDirty(epochCaptured, ctx.localChangeEpoch || 0);
@@ -348,12 +350,15 @@ export function installPersistence(ctx: CoreRuntimeContext) {
           }
           catch (error) {
               lastError = error;
-              const latestRevision = ctx.extractLatestRevision(error);
-              if (latestRevision == null)
+              const retry = decideCanvasSaveRetry(error);
+              if (!retry.kind)
                   throw error;
               if (attempt >= CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS)
                   break;
-              ctx.canvasRevision.value = latestRevision;
+              if (retry.kind === 'conflict' && retry.latestRevision != null) {
+                  ctx.canvasRevision.value = retry.latestRevision;
+              }
+              // 冲突与超时均用当前画布再写，避免重试旧快照
               attemptSnapshot = ctx.buildCanvasSnapshot() ?? attemptSnapshot;
               attemptEpoch = ctx.localChangeEpoch || 0;
           }

@@ -10,8 +10,17 @@ export type CanvasSaveDirtyDecision = {
 
 /** 乐观锁冲突业务码；保存层会静默对齐 revision 后重试 */
 export const CANVAS_REVISION_CONFLICT_CODE = 'CANVAS_REVISION_CONFLICT'
-/** 含首次请求在内的最多尝试次数（冲突时用最新 revision + 当前画布重试） */
+/**
+ * 含首次请求在内的最多尝试次数。
+ * 覆盖：revision 冲突对齐重试、偶发网络超时重试。
+ */
 export const CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS = 3
+
+/**
+ * 画布 GET/PUT 体量大且常经远程代理，单独放宽超时（默认全局 60s 不够稳）。
+ * 仍可通过 RequestConfig.timeout 覆盖。
+ */
+export const CANVAS_HTTP_TIMEOUT_MS = 120_000
 
 /**
  * 从 CANVAS_REVISION_CONFLICT 错误中解析服务端最新 revision。
@@ -30,6 +39,35 @@ export function parseCanvasLatestRevision(error: unknown): number | null {
     if (Number.isFinite(n)) return n
   }
   return null
+}
+
+/** axios / 代理层超时（无业务码，通常为 ECONNABORTED） */
+export function isCanvasRequestTimeout(error: unknown): boolean {
+  if (typeof error !== 'object' || error == null) return false
+  const candidate = error as { code?: unknown; message?: unknown }
+  if (candidate.code === 'ECONNABORTED') return true
+  if (typeof candidate.message === 'string' && /timeout/i.test(candidate.message)) return true
+  return false
+}
+
+export type CanvasSaveRetryKind = 'conflict' | 'timeout' | null
+
+/**
+ * 判定本次保存失败是否可重试，以及重试前是否需要对齐 revision。
+ * 非冲突/非超时错误返回 kind=null，调用方应原样抛出。
+ */
+export function decideCanvasSaveRetry(error: unknown): {
+  kind: CanvasSaveRetryKind
+  latestRevision: number | null
+} {
+  const latestRevision = parseCanvasLatestRevision(error)
+  if (latestRevision != null) {
+    return { kind: 'conflict', latestRevision }
+  }
+  if (isCanvasRequestTimeout(error)) {
+    return { kind: 'timeout', latestRevision: null }
+  }
+  return { kind: null, latestRevision: null }
 }
 
 export function decideCanvasSaveDirty(

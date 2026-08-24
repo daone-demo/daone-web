@@ -4,10 +4,13 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
+  CANVAS_HTTP_TIMEOUT_MS,
   CANVAS_REVISION_CONFLICT_CODE,
   CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS,
   decideCanvasSaveDirty,
+  decideCanvasSaveRetry,
   decideManualSaveLeaveNext,
+  isCanvasRequestTimeout,
   parseCanvasLatestRevision,
 } from '../src/components/Canvas/canvasSaveDirty.ts'
 
@@ -41,18 +44,38 @@ test('parseCanvasLatestRevision：支持 number / 数字字符串，忽略非冲
   assert.equal(parseCanvasLatestRevision(fakeConflictError(1, 'INTERNAL')), null)
 })
 
-test('installPersistence：静默保存 + 冲突循环重试 + flush 全程持锁', () => {
+test('decideCanvasSaveRetry：冲突对齐 revision；超时可重试；其他错误不可重试', () => {
+  assert.deepEqual(decideCanvasSaveRetry(fakeConflictError(9)), {
+    kind: 'conflict',
+    latestRevision: 9,
+  })
+  assert.equal(isCanvasRequestTimeout({ code: 'ECONNABORTED', message: 'timeout of 60000ms exceeded' }), true)
+  assert.deepEqual(
+    decideCanvasSaveRetry({ code: 'ECONNABORTED', message: 'timeout of 60000ms exceeded' }),
+    { kind: 'timeout', latestRevision: null },
+  )
+  assert.deepEqual(decideCanvasSaveRetry({ code: 'INTERNAL', message: 'boom' }), {
+    kind: null,
+    latestRevision: null,
+  })
+  assert.equal(CANVAS_HTTP_TIMEOUT_MS >= 60_000, true)
+})
+
+test('installPersistence：静默保存 + 冲突/超时重试 + flush 全程持锁', () => {
   const persistSrc = readSrc(
     'src/components/Canvas/composables/useCanvas/runtime/installPersistence.ts',
   )
 
   assert.match(persistSrc, /from '\.\.\/\.\.\/\.\.\/canvasSaveDirty'/)
   assert.match(persistSrc, /decideCanvasSaveDirty/)
+  assert.match(persistSrc, /decideCanvasSaveRetry/)
   assert.match(persistSrc, /parseCanvasLatestRevision/)
   assert.match(persistSrc, /CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS/)
+  assert.match(persistSrc, /CANVAS_HTTP_TIMEOUT_MS/)
   assert.match(persistSrc, /const epochAtStart = saveEpoch \?\? \(ctx\.localChangeEpoch \|\| 0\)/)
   assert.match(persistSrc, /applySuccessfulPersist\(attemptEpoch\)/)
   assert.match(persistSrc, /silent:\s*true/)
+  assert.match(persistSrc, /timeout:\s*CANVAS_HTTP_TIMEOUT_MS/)
   assert.match(
     persistSrc,
     /for \(let attempt = 1; attempt <= CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS/,
@@ -116,10 +139,26 @@ test('installPersistence：手动保存离开路径会重查 dirty 并跟刷最�
   const persistSrc = readSrc(
     'src/components/Canvas/composables/useCanvas/runtime/installPersistence.ts',
   )
-  assert.match(persistSrc, /import \{\s*CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS,\s*decideCanvasSaveDirty,\s*decideManualSaveLeaveNext/)
+  assert.match(persistSrc, /import \{\s*CANVAS_HTTP_TIMEOUT_MS,\s*CANVAS_REVISION_CONFLICT_MAX_ATTEMPTS,\s*decideCanvasSaveDirty,\s*decideCanvasSaveRetry/)
   assert.match(persistSrc, /decideManualSaveLeaveNext\(/)
   assert.match(persistSrc, /stillDirty: ctx\.hasUnsavedChanges\(\)/)
   assert.match(persistSrc, /for \(let attempt = 1; attempt <= MANUAL_SAVE_LEAVE_MAX_ATTEMPTS/)
+})
+
+test('api：画布读写默认放宽超时，其它接口不受影响', () => {
+  const apiSrc = readSrc('src/services/api.ts')
+  assert.match(apiSrc, /getProjectCanvas\(projectId: Id, config\?: RequestConfig\)/)
+  assert.match(apiSrc, /getProjectVersion<T = unknown>\(projectId: Id, versionId: Id, config\?: RequestConfig\)/)
+  assert.match(
+    apiSrc,
+    /getProjectCanvas[\s\S]*?timeout:\s*120_000/,
+  )
+  assert.match(
+    apiSrc,
+    /saveProjectCanvas[\s\S]*?timeout:\s*120_000/,
+  )
+  // 普通项目接口仍走全局默认，不应被画布超时污染
+  assert.match(apiSrc, /getProject<T = unknown>\(projectId: Id\) \{\s*return http\.get<T>\(`\/projects\/\$\{pathId\(projectId\)\}`\)/)
 })
 
 test('runtime context 不再用 any 动态袋', () => {

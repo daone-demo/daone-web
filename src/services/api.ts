@@ -679,20 +679,30 @@ const api = {
     return http.delete(`/projects/${pathId(projectId)}`)
   },
   /** 获取指定项目的当前画布数据。 */
-  getProjectCanvas(projectId: Id) {
-    return http.get<ProjectCanvasResponse>(`/projects/${pathId(projectId)}/canvas`)
+  getProjectCanvas(projectId: Id, config?: RequestConfig) {
+    return http.get<ProjectCanvasResponse>(`/projects/${pathId(projectId)}/canvas`, {
+      // 大画布经代理偶发超过默认 60s；成功路径不变，仅放宽超时
+      timeout: 120_000,
+      ...config,
+    })
   },
   /** 保存指定项目的画布数据。 */
   saveProjectCanvas(projectId: Id, data: CanvasSaveRequest, config?: RequestConfig) {
-    return http.put<CanvasSaveResponse>(`/projects/${pathId(projectId)}/canvas`, data, config)
+    return http.put<CanvasSaveResponse>(`/projects/${pathId(projectId)}/canvas`, data, {
+      timeout: 120_000,
+      ...config,
+    })
   },
   /** 分页查询指定项目的历史版本。 */
   getProjectVersions<T = unknown>(projectId: Id, params?: PageQuery) {
     return http.get<PageResult<T>>(`/projects/${pathId(projectId)}/versions`, { params })
   },
   /** 获取指定项目历史版本的详情。 */
-  getProjectVersion<T = unknown>(projectId: Id, versionId: Id) {
-    return http.get<T>(`/projects/${pathId(projectId)}/versions/${pathId(versionId)}`)
+  getProjectVersion<T = unknown>(projectId: Id, versionId: Id, config?: RequestConfig) {
+    return http.get<T>(`/projects/${pathId(projectId)}/versions/${pathId(versionId)}`, {
+      timeout: 120_000,
+      ...config,
+    })
   },
   /** 将项目画布恢复到指定历史版本。 */
   restoreProjectVersion<T = unknown>(projectId: Id, versionId: Id) {

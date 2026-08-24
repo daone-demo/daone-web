@@ -76,6 +76,9 @@ export default defineConfig(({ mode, command }) => {
           target: env.VITE_API_BASE_HOST || 'http://43.161.199.75:8088',
           changeOrigin: true,
           secure: false,
+          // 与画布 GET/PUT 客户端 120s 对齐，避免开发代理先掐断
+          timeout: 120_000,
+          proxyTimeout: 120_000,
           configure: (proxy) => {
             const bypass = env.VITE_VERCEL_PROTECTION_BYPASS
             if (!bypass) return
